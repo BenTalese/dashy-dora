@@ -442,8 +442,12 @@ def test__ingest__rejects_price_observations_field(api):
     }
     resp = _post_ingest(key, body)
     assert resp.status_code == 400, resp.text
-    detail = (resp.json().get("errors") or "") + (resp.json().get("detail") or "")
-    assert "price_observations" in detail.lower() or "extra" in detail.lower(), resp.text
+    # Structured per-field errors from the request middleware — the same shape
+    # every route answers with (finalisation 16-R9 / 16-R34); it used to be
+    # one concatenated `str(ValidationError)`.
+    errors = resp.json()["errors"]
+    assert "price_observations" in errors, resp.text
+    assert errors["price_observations"][0]["code"] == "extra_forbidden", resp.text
 
 
 def test__ingest__product_image_round_trips_and_serves(api):

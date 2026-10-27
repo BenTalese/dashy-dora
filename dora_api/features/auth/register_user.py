@@ -1,7 +1,7 @@
 """POST /api/auth/register — self-serve account creation.
 
 Strengthened in A1 to:
-  - Enforce password rules (min 10 chars, ≥1 letter + ≥1 digit).
+  - Enforce the password rule (`auth_helpers.validate_password`: min 8 chars).
   - Validate email format and case-insensitively reject duplicates.
   - Mark new accounts `email_verified=false` and send a verification
     email.
@@ -29,9 +29,12 @@ from dora_api.domain.entities.user import User
 from dora_api.domain.entities.user_llm_provider import UserLlmProvider
 from dora_api.domain.types import EMPTY_UUID
 from dora_api.features.routers import AUTH_ROUTER
-from dora_api.infrastructure.api_response import (business_rule_violation, ok,
-                                                  unprocessable_entity,
-                                                  ProblemDetails)
+from dora_api.infrastructure.api_response import (
+    business_rule_violation,
+    conflict,
+    ok,
+    validation_failed,
+)
 from dora_api.infrastructure.audit import emit as audit_emit
 from dora_api.infrastructure.auth_helpers import (
     VERIFY_EMAIL_TTL, build_verify_url, hash_password, is_valid_email,
@@ -50,7 +53,7 @@ from dora_api.infrastructure.api_response import too_many_requests
 _LOGGER = logging.getLogger(__name__)
 
 
-SESSION_PWD_V_KEY = "pwd_v"  # session-staleness check (see get_me)
+from dora_api.infrastructure.session_user import SESSION_PWD_V_KEY  # noqa: E402 — re-export for the sibling importers
 
 
 @dataclass(frozen=True, slots=True)
@@ -187,7 +190,6 @@ class RegisterUserResponse:
     bootstrap_required: bool = False
     verify_token: str | None = None
     verify_user_email: str | None = None
-    verify_username: str | None = None
 
 
 class RegisterUserHandler:
@@ -238,7 +240,6 @@ class RegisterUserHandler:
             new_user_id=new_user.id,
             verify_token=verify_token,
             verify_user_email=email_norm,
-            verify_username=request.username,
         )
 
 
@@ -262,13 +263,10 @@ def register_user():
     if pwd_error:
         issues["password"] = [pwd_error]
     if issues:
-        return unprocessable_entity(ProblemDetails(
-            detail="See errors property for more details.",
-            errors=issues, status=422, title="Validation failed.",
-            type="https://datatracker.ietf.org/doc/html/rfc4918#section-11.2",
-        ))
+        return validation_failed(issues)
 
-    handler = RegisterUserHandler(SqlAlchemyRepository())
+    repo = SqlAlchemyRepository()
+    handler = RegisterUserHandler(repo)
     response = handler.handle(request_body)
 
     if response.bootstrap_required:
@@ -281,26 +279,15 @@ def register_user():
             "Registration rejected — no admin exists yet; "
             "/bootstrap-admin is the correct endpoint"
         )
-        from flask import jsonify
-        from http.client import CONFLICT
-        body = jsonify(ProblemDetails(
-            detail=(
-                "This installation has no admin account yet. "
-                "POST to /api/auth/bootstrap-admin to create the first "
-                "admin."
-            ),
-            errors={}, status=CONFLICT,
-            title="Setup required.",
-            type="https://datatracker.ietf.org/doc/html/rfc7231#section-6.5.8",
-        ))
-        body.content_type = "application/problem+json"
-        body.status_code = CONFLICT
-        return body
+        return conflict(
+            "This installation has no admin account yet. "
+            "POST to /api/auth/bootstrap-admin to create the first admin.",
+        )
     if response.username_taken:
-        _LOGGER.warning(f"Registration rejected — username taken: {request_body.username}")
+        _LOGGER.warning("Registration rejected — username taken: %s", request_body.username)
         return business_rule_violation(f"Username '{request_body.username}' is already taken.")
     if response.email_taken:
-        _LOGGER.warning(f"Registration rejected — email taken: {request_body.email}")
+        _LOGGER.warning("Registration rejected — email taken: %s", request_body.email)
         return business_rule_violation("That email address is already registered.")
 
     # Auto-login the freshly registered user.
@@ -318,11 +305,11 @@ def register_user():
             html_body=render_template(
                 "verify_email.html",
                 subject="Verify your Dashy Dora account",
-                username=response.verify_username or "there",
+                username=request_body.username,
                 verify_url=build_verify_url(response.verify_token),
             ),
             text_body=(
-                f"Hi {response.verify_username}, verify your Dashy Dora "
+                f"Hi {request_body.username}, verify your Dashy Dora "
                 f"account: {build_verify_url(response.verify_token)} "
                 f"(expires in 24 hours)"
             ),
@@ -336,14 +323,14 @@ def register_user():
         payload={"username": request_body.username},
     )
 
-    _LOGGER.info(f"Registered user {request_body.username} ({response.new_user_id})")
+    _LOGGER.info("Registered user %s (%s)", request_body.username, response.new_user_id)
     # return the full AuthenticatedUserDto so the SPA can hydrate
     # the auth store from a single call (parity with /login and /me). The
     # old ad-hoc dict had drifted: `has_image` and `dashboard_layout` were
     # missing, and a stale `verification_sent` flag rode alongside. Keep
     # the verification flag as an extra alongside the DTO so the SPA can
     # decide whether to surface a "check your email" toast.
-    new_user = SqlAlchemyRepository().get(User).by_id(response.new_user_id)
+    new_user = repo.get(User).by_id(response.new_user_id)
     body = dataclasses.asdict(AuthenticatedUserDto.from_entity(new_user))
     body["user_id"] = str(body["user_id"])
     body["verification_sent"] = bool(response.verify_token)

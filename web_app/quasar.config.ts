@@ -72,6 +72,7 @@ export default defineConfig((ctx): any => {
             // `q-card flat bordered`, which is the one place the app's own
             // card language wasn't being spoken. Same precedent as above.
             'settingsCards.scss',
+            'settings.scss',
             // 2026-09-12 — the meal card's provenance + price chips, drawn by
             // both the desktop week chip and the phone day card. Same
             // precedent as the four above.
@@ -271,34 +272,16 @@ export default defineConfig((ctx): any => {
             manifestFilename: 'manifest.json',
             injectPwaMetaTags: true,
             useCredentialsForManifestTag: false,
+            // `src-pwa/manifest.json` is the manifest (name, colours, display,
+            // icons — finalisation 17-R13; it used to be the untouched Quasar
+            // template that every field below overwrote). Only the two
+            // behaviours that deserve a code comment are added here.
+            // D-rule carve-out: the manifest's theme/background colours are
+            // build-time hex (DS1's primary swatch + page surface) — a manifest
+            // cannot read CSS tokens. The 512 also serves as the maskable icon
+            // until a dedicated safe-area-padded asset exists; the mascot is
+            // centred, so a strict crop degrades gracefully.
             extendManifestJson(json: Record<string, unknown>) {
-                json.name = 'Dashy Dora';
-                json.short_name = 'Dora';
-                json.description = 'Your pantry at your fingertips.';
-                json.theme_color = '#f5c462';        // matches DS1's primary swatch
-                json.background_color = '#f9f6f0';
-                json.display = 'standalone';
-                json.orientation = 'portrait-primary';
-                json.start_url = '.';
-                json.scope = '/';
-                json.icons = [
-                    {
-                        src: 'icons/web-app-manifest-192x192.png',
-                        sizes: '192x192', type: 'image/png', purpose: 'any',
-                    },
-                    {
-                        src: 'icons/web-app-manifest-512x512.png',
-                        sizes: '512x512', type: 'image/png', purpose: 'any',
-                    },
-                    {
-                        // The same 512 also serves as the maskable icon
-                        // until a dedicated safe-area-padded asset exists.
-                        // Browsers that need a strict maskable will crop
-                        // gracefully; the Dora mascot is centered.
-                        src: 'icons/web-app-manifest-512x512.png',
-                        sizes: '512x512', type: 'image/png', purpose: 'maskable',
-                    },
-                ];
                 // IMPL_PLAN_RECIPE_IMPORTER §Chunk 6 — PWA share target.
                 // Installed on Android, Dashy Dora shows up in the system
                 // Share sheet on any recipe page; sharing hands us the

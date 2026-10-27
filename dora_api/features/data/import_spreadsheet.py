@@ -32,23 +32,24 @@ import io
 import logging
 import os
 from dataclasses import dataclass, field
-from datetime import date, datetime
-from typing import Any, Iterator
+from datetime import date, datetime, timezone
+from typing import Any
 
+from flask import Response, request
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import insert, select
 
 from dora_api.app import db
 from dora_api.domain.entities.stock_group import StockGroup
 from dora_api.domain.entities.stock_item import StockItem
 from dora_api.domain.entities.stock_level import StockLevel
-from dora_api.domain.entities.stock_location import StockLocation
+from dora_api.domain.entities.stock_location import LOCATION_KIND_ZONE, StockLocation
 from dora_api.domain.stock_status import StockStatus, level_for_status
 from dora_api.features.app_settings.access import get_or_create_app_setting
 from dora_api.features.auth.admin_gate import require_admin
+from dora_api.features.data._errors import DataError, invalid, respond_to, rolled_back, upload_missing
 from dora_api.features.data.uploads import staged_path
 from dora_api.features.routers import DATA_ROUTER
-from dora_api.infrastructure.api_response import bad_request, internal_server_error, not_found, ok
+from dora_api.infrastructure.api_response import not_found, ok
 from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
@@ -91,7 +92,7 @@ def _is_truthy(value: Any) -> bool:
     return s in {"y", "yes", "true", "1", "t", "on", "x", "✓"}
 
 
-def _coerce_to_date(value: Any) -> date | None:
+def _coerce_to_date(value: Any, day_first: bool = True) -> date | None:
     """Accept date / datetime / ISO string / common locale strings. Returns
     None for empty cells; raises ValueError for unparseable non-empty values.
     """
@@ -105,10 +106,12 @@ def _coerce_to_date(value: Any) -> date | None:
         text = value.strip()
         if not text:
             return None
-        # Try ISO first, then a couple of common fallbacks (au-style D/M/Y
-        # and US-style M/D/Y as a last resort — surface unambiguous formats
-        # cleanly and let weird shapes raise).
-        for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%m/%d/%Y"):
+        # ISO first; then slash / dash dates in the *install's* day-month
+        # order (`AppSetting.locale`, the one authority — finalisation 18-R12:
+        # `03/04/2027` is 3 April on `en-AU` and 4 March on `en-US`), with the
+        # other order as a last resort for the unambiguous cases.
+        regional = ("%d/%m/%Y", "%d-%m-%Y", "%m/%d/%Y") if day_first else ("%m/%d/%Y", "%m-%d-%Y", "%d/%m/%Y")
+        for fmt in ("%Y-%m-%d", *regional):
             try:
                 return datetime.strptime(text, fmt).date()
             except ValueError:
@@ -243,17 +246,17 @@ class InspectSpreadsheetResponse:
 
 
 class InspectSpreadsheetHandler:
-    def handle(self, request: InspectSpreadsheetRequest) -> InspectSpreadsheetResponse | str:
+    def handle(self, request: InspectSpreadsheetRequest) -> InspectSpreadsheetResponse | DataError:
         path = staged_path(request.upload_id)
         if not path.exists():
-            return f"No staged upload found for id {request.upload_id}."
+            return upload_missing(request.upload_id)
         try:
             sheets = _read_sheets(str(path), request.filename)
         except ValueError as exc:
-            return str(exc)
+            return invalid(str(exc))
         except Exception as exc:  # noqa: BLE001
             _LOGGER.exception("Failed to read spreadsheet.")
-            return f"Could not read spreadsheet: {exc}"
+            return invalid(f"Could not read spreadsheet: {exc}")
 
         sheet_names = list(sheets.keys())
         preview_rows: dict[str, list[list[Any]]] = {}
@@ -318,10 +321,8 @@ def inspect_spreadsheet():
         return err
     _Request: InspectSpreadsheetRequest = get_request_body()
     _Result = InspectSpreadsheetHandler().handle(_Request)
-    if isinstance(_Result, str):
-        if _Result.startswith("No staged upload"):
-            return not_found("Upload", _Request.upload_id)
-        return bad_request(_Result)
+    if isinstance(_Result, DataError):
+        return respond_to(_Result)
     # `field`s on the dataclass don't serialise via jsonify directly; convert.
     return ok({
         "sheets": _Result.sheets,
@@ -370,32 +371,35 @@ class CommitSpreadsheetHandler:
     def __init__(self, repository: Repository) -> None:
         self.repository = repository
 
-    def handle(self, request: CommitSpreadsheetRequest) -> CommitSpreadsheetResponse | str:
+    def handle(self, request: CommitSpreadsheetRequest) -> CommitSpreadsheetResponse | DataError:
         path = staged_path(request.upload_id)
         if not path.exists():
-            return f"No staged upload found for id {request.upload_id}."
+            return upload_missing(request.upload_id)
 
         # ── Read spreadsheet ─────────────────────────────────────────
         try:
             sheets = _read_sheets(str(path), request.filename)
         except ValueError as exc:
-            return str(exc)
+            return invalid(str(exc))
         except Exception as exc:  # noqa: BLE001
             _LOGGER.exception("Failed to read spreadsheet on commit.")
-            return f"Could not read spreadsheet: {exc}"
+            return invalid(f"Could not read spreadsheet: {exc}")
 
         if request.sheet not in sheets:
-            return f"Sheet '{request.sheet}' is not in the uploaded file."
+            return invalid(f"Sheet '{request.sheet}' is not in the uploaded file.")
 
         rows = sheets[request.sheet]
         if not rows:
-            return f"Sheet '{request.sheet}' is empty."
+            return invalid(f"Sheet '{request.sheet}' is empty.")
 
         # 2026-08-20 — same install-wide default `create_stock_item` uses, read
         # once for the whole import rather than per row (R-003: one authority
         # for "does a new item join the stocktake rotation").
+        setting = get_or_create_app_setting(self.repository)
+        # Day/month order for slash dates follows the install locale (18-R12).
+        day_first = not (setting.locale or "").lower().startswith("en-us")
         stocktake_opt_in = bool(getattr(
-            get_or_create_app_setting(self.repository),
+            setting,
             "stocktake_new_items_opt_in",
             True,
         ))
@@ -404,12 +408,12 @@ class CommitSpreadsheetHandler:
         # name is mandatory; if the user mapped no Name column we can't
         # do anything useful — fail before touching the DB.
         if not request.column_map.get("name"):
-            return "A column must be mapped to 'name' before importing."
+            return invalid("A column must be mapped to 'name' before importing.")
         for col_name in request.column_map.values():
             if col_name is None:
                 continue
             if col_name not in header:
-                return f"Column '{col_name}' is not in sheet '{request.sheet}'."
+                return invalid(f"Column '{col_name}' is not in sheet '{request.sheet}'.")
 
         col_index: dict[str, int | None] = {
             target: (header.index(col) if col is not None and col in header else None)
@@ -417,17 +421,17 @@ class CommitSpreadsheetHandler:
         }
 
         # ── Index existing entities for FK + duplicate resolution ────
-        existing_items = self.repository.get(StockItem).all()
-        existing_item_names = {
-            (it.name or "").strip().lower(): it.id for it in existing_items
+        # Names only — the ids were never read (finalisation 18-R24).
+        existing_item_names: set[str] = {
+            (it.name or "").strip().lower() for it in self.repository.get(StockItem).all()
         }
         existing_groups = self.repository.get(StockGroup).all()
-        existing_group_names: dict[str, Any] = {
-            (g.name or "").strip().lower(): g.id for g in existing_groups
+        existing_group_names: dict[str, StockGroup] = {
+            (g.name or "").strip().lower(): g for g in existing_groups
         }
         existing_locations = self.repository.get(StockLocation).all()
-        existing_location_names: dict[str, Any] = {
-            (loc.name or "").strip().lower(): loc.id for loc in existing_locations
+        existing_location_names: dict[str, StockLocation] = {
+            (loc.name or "").strip().lower(): loc for loc in existing_locations
         }
         existing_levels = self.repository.get(StockLevel).all()
         level_choices = sorted({lvl.name for lvl in existing_levels})
@@ -475,19 +479,19 @@ class CommitSpreadsheetHandler:
 
                 # Resolve foreign keys.
                 try:
-                    stock_level_id = self._resolve_level(
+                    stock_level = self._resolve_level(
                         row, col_index["level"], existing_levels, level_choices,
                     )
-                    stock_location_id = self._resolve_location(
+                    stock_location = self._resolve_location(
                         row, col_index["location"],
                         existing_location_names, request.options.create_missing_locations,
                     )
-                    stock_group_id = self._resolve_group(
+                    stock_group = self._resolve_group(
                         row, col_index["group"],
                         existing_group_names, request.options.create_missing_groups,
                     )
                     expiry = (
-                        _coerce_to_date(row[col_index["expiry"]])
+                        _coerce_to_date(row[col_index["expiry"]], day_first=day_first)
                         if col_index["expiry"] is not None and col_index["expiry"] < len(row)
                         else None
                     )
@@ -506,35 +510,31 @@ class CommitSpreadsheetHandler:
                         raise _HaltOnError()
                     continue
 
-                # Insert via the StockItem table directly so we don't have
-                # to fully hydrate StockLevel/Location/Group entities just
-                # to call the repository. Mirrors N2's restore path.
-                stock_item_table = db.metadata.tables["StockItem"]
-                from uuid import uuid4
-                db.session.execute(insert(stock_item_table).values(
-                    id=uuid4(),
+                # Through the repository like `create_stock_item` (R-005;
+                # finalisation 18-R20 — this was a raw table insert), with the
+                # UTC stamp every other writer uses (18-R4; it was naive local).
+                self.repository.add(StockItem(
                     name=row_name,
                     notes=None,
+                    stock_group=stock_group,
+                    stock_level=stock_level,
+                    stock_level_last_updated=datetime.now(timezone.utc),
+                    stock_location=stock_location,
                     # Matches the hand-created default (2026-08-17, now the
                     # install-wide `stocktake_new_items_opt_in` setting) — an
                     # imported item is still one the user chose to track.
                     stocktake_alerts_are_enabled=stocktake_opt_in,
-                    stock_level_id=stock_level_id,
-                    stock_location_id=stock_location_id,
-                    stock_group_id=stock_group_id,
-                    stock_level_last_updated=datetime.now(),
                     expiry_date=expiry,
                     is_essential=is_essential,
                     is_open=False,
-                    opened_on=None,
                 ))
-                existing_item_names[row_name.lower()] = True  # mark for downstream dup checks
+                existing_item_names.add(row_name.lower())  # downstream dup checks
                 reports.append(RowReport(
                     row_number=offset, status="created", name=row_name,
                 ))
                 created += 1
 
-            db.session.commit()
+            self.repository.save_changes()
         except _HaltOnError:
             db.session.rollback()
             return CommitSpreadsheetResponse(
@@ -544,7 +544,7 @@ class CommitSpreadsheetHandler:
         except Exception as exc:  # noqa: BLE001
             db.session.rollback()
             _LOGGER.exception("Spreadsheet import failed; rolled back.")
-            return f"Import failed and was rolled back: {exc}"
+            return rolled_back("Import", exc)
 
         # Successful commit — consume the staged file so the upload area
         # doesn't accumulate.
@@ -562,15 +562,12 @@ class CommitSpreadsheetHandler:
     def _resolve_level(
         row: list[Any], idx: int | None,
         existing_levels: list[StockLevel], choices: list[str],
-    ) -> Any:
+    ) -> StockLevel | None:
         # Pick a sensible default — the Stocked level (resolved by status
         # identity, not name) is the "you have it" starting point; users can
         # edit individual items post-import.
         stocked = level_for_status(existing_levels, StockStatus.STOCKED)
-        default = (
-            stocked.id if stocked
-            else (existing_levels[0].id if existing_levels else None)
-        )
+        default = stocked or (existing_levels[0] if existing_levels else None)
         if idx is None or idx >= len(row):
             return default
         raw = row[idx]
@@ -580,12 +577,12 @@ class CommitSpreadsheetHandler:
         # Case-insensitive substring match; "low" matches "Low Stock", etc.
         matches = [lvl for lvl in existing_levels if needle in lvl.name.lower()]
         if len(matches) == 1:
-            return matches[0].id
+            return matches[0]
         if len(matches) > 1:
             # Prefer an exact (case-insensitive) match if one is in the set.
             exact = [lvl for lvl in matches if lvl.name.lower() == needle]
             if exact:
-                return exact[0].id
+                return exact[0]
             raise _RowError(
                 f"Stock level '{raw}' is ambiguous; matches multiple of "
                 f"{', '.join(lvl.name for lvl in matches)}."
@@ -595,11 +592,10 @@ class CommitSpreadsheetHandler:
             f"{', '.join(choices)}."
         )
 
-    @staticmethod
     def _resolve_location(
-        row: list[Any], idx: int | None,
+        self, row: list[Any], idx: int | None,
         existing: dict[str, Any], allow_create: bool,
-    ) -> Any | None:
+    ):
         if idx is None or idx >= len(row):
             return None
         raw = row[idx]
@@ -614,24 +610,15 @@ class CommitSpreadsheetHandler:
                 f"to add it on the fly."
             )
         # Auto-create as a zone (the simplest level of the hierarchy).
-        from uuid import uuid4
-        loc_table = db.metadata.tables["StockLocation"]
-        new_id = uuid4()
-        db.session.execute(insert(loc_table).values(
-            id=new_id,
-            name=str(raw).strip(),
-            kind="zone",
-            parent_id=None,
-            sequence=0,
-        ))
-        existing[key] = new_id
-        return new_id
+        location = StockLocation(name=str(raw).strip(), kind=LOCATION_KIND_ZONE, parent_id=None, sequence=0)
+        self.repository.add(location)
+        existing[key] = location
+        return location
 
-    @staticmethod
     def _resolve_group(
-        row: list[Any], idx: int | None,
+        self, row: list[Any], idx: int | None,
         existing: dict[str, Any], allow_create: bool,
-    ) -> Any | None:
+    ):
         if idx is None or idx >= len(row):
             return None
         raw = row[idx]
@@ -645,14 +632,10 @@ class CommitSpreadsheetHandler:
                 f"Group '{raw}' doesn't exist. Tick 'Create missing groups' "
                 f"to add it on the fly."
             )
-        from uuid import uuid4
-        group_table = db.metadata.tables["StockGroup"]
-        new_id = uuid4()
-        db.session.execute(insert(group_table).values(
-            id=new_id, name=str(raw).strip(),
-        ))
-        existing[key] = new_id
-        return new_id
+        group = StockGroup(name=str(raw).strip())
+        self.repository.add(group)
+        existing[key] = group
+        return group
 
 
 class _RowError(Exception):
@@ -673,12 +656,8 @@ def commit_spreadsheet():
         return err
     _Request: CommitSpreadsheetRequest = get_request_body()
     _Result = CommitSpreadsheetHandler(SqlAlchemyRepository()).handle(_Request)
-    if isinstance(_Result, str):
-        if _Result.startswith("No staged upload"):
-            return not_found("Upload", _Request.upload_id)
-        if _Result.startswith("Import failed and was rolled back"):
-            return internal_server_error(_Result)
-        return bad_request(_Result)
+    if isinstance(_Result, DataError):
+        return respond_to(_Result)
     return ok({
         "summary": _Result.summary,
         "rows": [
@@ -926,7 +905,6 @@ def download_import_template(section: str):
     # parsing (see `_parse_csv` above), so the round-trip is symmetric.
     body = "﻿".encode("utf-8") + buf.getvalue().encode("utf-8")
 
-    from flask import Response
     response = Response(body, mimetype="text/csv; charset=utf-8")
     response.headers["Content-Disposition"] = (
         f'attachment; filename="dora-import-{template.section}.csv"'

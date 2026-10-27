@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from datetime import datetime
-from uuid import UUID
 
 from dora_api.domain.entities.base_entity import BaseEntity
 
@@ -13,7 +12,8 @@ ALLOWED_TRUSTS = (TRUST_HIGH, TRUST_LOW)
 @dataclass
 class IngestionSource(BaseEntity):
     """An admin-minted bearer credential used by an external producer to push
-    products/offers/observations into Dora via `POST /api/ingest`. The raw
+    products and offers into Dora via `POST /api/ingest` (observations left
+    the producer path at J1). The raw
     key is shown once at creation; only its SHA-256 lives at rest. `trust`
     is captured now (high = admin's own data, low = future crowd sources);
     enforcement is deferred per PROPOSAL_INGESTION_API §2.6.

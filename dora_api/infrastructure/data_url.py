@@ -13,8 +13,21 @@ import re
 from typing import Callable
 
 from flask import Response
+from pydantic import Field
 
 SERVABLE_IMAGE_TYPES = frozenset({"image/png", "image/jpeg", "image/webp", "image/gif", "image/avif"})
+
+# The largest `data:` URL a request body may carry for an image (~4.5 MB of
+# raw bytes once base64 is undone). One number for every image-bearing
+# request model — it was written out in eight of them (finalisation 20-R14,
+# R-003); the SPA caps uploads client-side via the image policy before it
+# ever reaches this.
+MAX_IMAGE_DATA_URL_LEN = 6_000_000
+
+
+def image_field():
+    """`image: str | None = image_field()` on a request model."""
+    return Field(default=None, max_length=MAX_IMAGE_DATA_URL_LEN)
 
 _DATA_URL_RE = re.compile(r"^data:(?P<mime>[\w/+.-]+);base64,(?P<data>.+)$", re.DOTALL)
 

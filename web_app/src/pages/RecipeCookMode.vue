@@ -1779,7 +1779,7 @@
     // with them: the list is right there, and the number was the only thing
     // making the three headers different shapes.
     .cook-section__head {
-        font-size: calc(var(--font-size-md) * 1rem);
+        font-size: var(--font-size-md);
         font-weight: 600;
     }
     .cook-section__title {

@@ -21,10 +21,40 @@ from __future__ import annotations
 
 from uuid import UUID
 
+from pydantic import BaseModel, Field, model_validator
+
+from dora_api.domain.entities.ingestion_store_mapping import IngestionStoreMapping
 from dora_api.domain.entities.product import Product
 from dora_api.domain.entities.store import Store
 from dora_api.infrastructure.ports import Repository
 from dora_api.persistence.field import EntityField
+
+
+class StoreRef(BaseModel):
+    """The producer names a store one of two ways — the external name this
+    source maps through, or a Dora store id — and exactly one. Shared by the
+    batch and link-status request models (finalisation 16-R10)."""
+    store: str | None = Field(default=None, min_length=1, max_length=255)
+    store_id: UUID | None = None
+
+    @model_validator(mode="after")
+    def _one_store(self):
+        if (self.store is None) == (self.store_id is None):
+            raise ValueError("Give exactly one of `store` or `store_id`.")
+        return self
+
+
+def find_store_mapping(
+    repository: Repository, source_id: UUID, external_name: str,
+) -> IngestionStoreMapping | None:
+    """The per-source row for an external store name — the one lookup the
+    write side (quarantine), the read side and the admin upsert share
+    (finalisation 16-R6)."""
+    field_src = EntityField(IngestionStoreMapping, IngestionStoreMapping.Fields.SOURCE_ID)
+    field_ext = EntityField(IngestionStoreMapping, IngestionStoreMapping.Fields.EXTERNAL_NAME)
+    return repository.get(IngestionStoreMapping).one(
+        field_src.eq(source_id) & field_ext.eq(external_name)
+    )
 
 
 def find_ingested_product(

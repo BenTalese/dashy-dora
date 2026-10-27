@@ -16,7 +16,7 @@ import type { MealPlanEntry } from 'src/models/mealPlan';
  *
  * * **Supply** — can you make it? `chef_hat`, the app's glyph for the act of
  *   cooking. Green when you have everything, amber when you don't.
- * * **Readiness** — is it already made? `mealsPrepared` (the fridge), already
+ * * **Readiness** — is it already made? `meals_prepared` (the fridge), already
  *   documented as "portions cooked and waiting to be eaten". Green when this
  *   meal has a ready serving behind it, amber when it still has to be cooked.
  * * **Trim** — does this card need anything from you at all? A roll-up, so it

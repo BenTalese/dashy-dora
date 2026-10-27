@@ -130,21 +130,21 @@
         white-space: nowrap;
     }
     .cook-progress__word {
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
         font-weight: 600;
         letter-spacing: 0.12em;
         text-transform: uppercase;
         color: var(--text-secondary);
     }
     .cook-progress__current {
-        font-size: calc(var(--font-size-2xl) * 1rem);
+        font-size: var(--font-size-2xl);
         font-weight: 700;
         line-height: 1;
         color: var(--brand-primary);
         font-variant-numeric: tabular-nums;
     }
     .cook-progress__total {
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         font-weight: 500;
         color: var(--text-secondary);
         font-variant-numeric: tabular-nums;
@@ -245,7 +245,7 @@
             padding: var(--space-1) var(--space-3);
         }
         .cook-progress__current {
-            font-size: calc(var(--font-size-xl) * 1rem);
+            font-size: var(--font-size-xl);
         }
     }
 </style>

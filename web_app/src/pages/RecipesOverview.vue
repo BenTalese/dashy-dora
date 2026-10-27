@@ -143,7 +143,7 @@
             <FilterChip
                 v-if="batchEnabled"
                 v-model="inStockOnly"
-                :icon="ICONS.mealsPrepared"
+                :icon="ICONS.meals_prepared"
                 active-color="primary"
             >
                 Meals prepared
@@ -343,7 +343,7 @@
                 label="Meals prepared ≥"
                 hide-bottom-space
             >
-                <template #prepend><q-icon :name="ICONS.mealsPrepared" size="18px" /></template>
+                <template #prepend><q-icon :name="ICONS.meals_prepared" size="18px" /></template>
             </q-input>
 
             <!-- L310 — tools inclusion/exclusion filter (same tri-state control). -->
@@ -404,7 +404,7 @@
             v-if="(dietaryTagsInclude.length > 0 || dietaryTagsExclude.length > 0) && tagCatalogue?.disclaimer"
             class="text-caption dora-text-muted q-mb-md"
         >
-            <q-icon name="info" size="14px" class="q-mr-xs" />
+            <q-icon :name="ICONS.info" size="14px" class="q-mr-xs" />
             {{ tagCatalogue.disclaimer }}
         </div>
 

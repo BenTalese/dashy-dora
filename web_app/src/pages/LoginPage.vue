@@ -34,29 +34,15 @@
                 @update:model-value="clearField('email')"
             />
 
-            <q-input
+            <PasswordField
                 outlined
                 v-model="form.password"
                 label="Password"
-                :type="showPassword ? 'text' : 'password'"
-                :autocomplete="mode === 'login' ? 'current-password' : 'new-password'"
+                :kind="mode === 'login' ? 'current' : 'new'"
                 :error="!!fieldErrors.password"
                 :error-message="fieldErrors.password"
                 @update:model-value="clearField('password')"
-                :rules="[
-                    (v: string) => !!v || 'Password is required',
-                    (v: string) =>
-                        mode === 'login' || v.length >= 8 || 'At least 8 characters'
-                ]"
-            >
-                <template #append>
-                    <q-icon
-                        :name="showPassword ? 'visibility_off' : 'visibility'"
-                        class="cursor-pointer"
-                        @click="showPassword = !showPassword"
-                    />
-                </template>
-            </q-input>
+            />
 
             <FormErrorSummary :message="generalError" />
 
@@ -91,6 +77,7 @@
     import AuthShell from 'src/components/AuthShell.vue';
     import AuthButton from 'src/components/AuthButton.vue';
     import FormErrorSummary from 'src/components/FormErrorSummary.vue';
+    import PasswordField from 'src/components/PasswordField.vue';
     import AuthApiService from 'src/services/api/authApiService';
     import { NormalisedApiError } from 'src/services/api/axiosHttpClient';
     import { useFormErrors } from 'src/composables/useFormErrors';
@@ -131,7 +118,6 @@
     });
 
     const mode = ref<'login' | 'register'>('login');
-    const showPassword = ref(false);
     const submitting = ref(false);
     // R-001 form-error plumbing.
     const { fieldErrors, generalError, handleSaveError, reset: resetErrors } = useFormErrors();
@@ -165,11 +151,18 @@
                     password: form.password
                 });
             } else {
-                await authStore.registerAsync({
+                const verificationSent = await authStore.registerAsync({
                     username: form.username,
                     password: form.password,
                     email: form.email.length > 0 ? form.email : null
                 });
+                if (verificationSent) {
+                    $q.notify({
+                        type: 'info',
+                        message: 'Check your inbox for a verification link.',
+                        timeout: 6000,
+                    });
+                }
             }
 
             const redirect = (route.query.redirect as string | undefined) ?? '/';

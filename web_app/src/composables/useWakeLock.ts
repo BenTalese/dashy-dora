@@ -21,37 +21,32 @@
 // registers `onUnmounted` to release the lock cleanly even if the caller
 // forgets. No manual `release()` required for the golden path.
 
-import { onUnmounted, ref, watch, type Ref } from 'vue';
+import { onUnmounted, watch, type Ref } from 'vue';
 
-type WakeLockSentinel = { release: () => Promise<void>; released: boolean };
-
+// `WakeLockSentinel` and `navigator.wakeLock` are lib.dom types (TS ≥ 4.4);
+// the local alias + casts went in finalisation 17-R18.
 function isSupported(): boolean {
-    return typeof navigator !== 'undefined'
-        && 'wakeLock' in navigator
-        && typeof (navigator as unknown as { wakeLock?: { request?: unknown } }).wakeLock?.request === 'function';
+    return typeof navigator !== 'undefined' && typeof navigator.wakeLock?.request === 'function';
 }
 
-export function useWakeLock(enabled: Ref<boolean>) {
-    const active = ref(false);
-    const supported = ref(isSupported());
+/** Hold the screen awake while `enabled` is true. Called for the side effect
+ *  — both callers discarded the old `{ active, supported }` return. */
+export function useWakeLock(enabled: Ref<boolean>): void {
+    const supported = isSupported();
 
     let sentinel: WakeLockSentinel | null = null;
     let visibilityHandler: (() => void) | null = null;
 
     async function acquire(): Promise<void> {
-        if (!supported.value) return;
+        if (!supported) return;
         if (sentinel && !sentinel.released) return;
         try {
-            const wl = (navigator as unknown as {
-                wakeLock: { request: (type: 'screen') => Promise<WakeLockSentinel> };
-            }).wakeLock;
-            sentinel = await wl.request('screen');
-            active.value = true;
+            sentinel = await navigator.wakeLock.request('screen');
         } catch {
             // NotAllowedError (permission policy) / SecurityError (insecure
             // context) / AbortError (visibility lost mid-request) — none
             // are worth surfacing to the user.
-            active.value = false;
+            sentinel = null;
         }
     }
 
@@ -62,7 +57,6 @@ export function useWakeLock(enabled: Ref<boolean>) {
             // Ignore.
         }
         sentinel = null;
-        active.value = false;
     }
 
     function onVisibilityChange() {
@@ -98,6 +92,4 @@ export function useWakeLock(enabled: Ref<boolean>) {
         }
         void release();
     });
-
-    return { active, supported };
 }

@@ -303,7 +303,7 @@
     /* Owner 2026-10-15: a step up from subtitle2, which read small once the
        card stopped spanning the phone's full width. */
     .product-card__name {
-        font-size: calc(var(--font-size-md) * 1rem);
+        font-size: var(--font-size-md);
         font-weight: 600;
         line-height: 1.3;
     }
@@ -311,7 +311,7 @@
         display: flex;
         align-items: center;
         gap: var(--space-1);
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
         color: var(--text-secondary);
     }
 
@@ -345,7 +345,7 @@
         right: 0;
         text-align: center;
         padding: var(--space-1) 0;
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
         font-weight: 600;
         color: white;
         background: var(--semantic-negative);

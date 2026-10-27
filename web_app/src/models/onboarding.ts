@@ -1,16 +1,10 @@
 // Mirrors OnboardingStateDto / SeedResultDto from
 // dora_api/features/onboarding/onboarding.py.
 
-export type StoreStatus = {
-    total: number;
-    enabled: number;
-};
-
+/** `{first_user}` only — completion rides `/auth/me` and the old store hint
+ *  had no reader (finalisation 14-R12). */
 export type OnboardingState = {
-    completed: boolean;
-    completed_at: string | null;
     first_user: boolean;
-    store_status: StoreStatus;
 };
 
 export type SeedRequest = {
@@ -25,6 +19,10 @@ export type SeedRequest = {
     // creates its parent zone even when the parent's path isn't listed.
     group_names?: string[] | null;
     location_paths?: string[] | null;
+    // The user's own group / zone names from the stock step, created in the
+    // same unit of work as the defaults (finalisation 14-R19).
+    extra_group_names?: string[] | null;
+    extra_location_names?: string[] | null;
 };
 
 export type SeedResult = {

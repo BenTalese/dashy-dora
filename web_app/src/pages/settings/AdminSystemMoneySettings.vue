@@ -55,5 +55,4 @@
 </script>
 
 <style scoped lang="scss">
-    .settings-page { display: flex; flex-direction: column; }
 </style>

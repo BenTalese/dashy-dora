@@ -26,7 +26,8 @@ from dora_api.domain.entities.store import Store
 from dora_api.features.routers import INGEST_ROUTER
 from dora_api.features.stores.manage_stores import decode_store_image
 from dora_api.infrastructure.api_response import not_found, ok
-from dora_api.infrastructure.ingestion_auth import authenticate_ingestion_request
+from dora_api.infrastructure.ingestion_auth import (authenticate_ingestion_request,
+                                                    stamp_used)
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 
 
@@ -42,9 +43,13 @@ class _IngestStore:
 
 @INGEST_ROUTER.route("/stores", methods=["GET"], endpoint="ingest_list_stores")
 def ingest_list_stores():
-    _source, auth_error = authenticate_ingestion_request()
+    source, auth_error = authenticate_ingestion_request()
     if auth_error is not None:
         return auth_error
+    # A source that only ever syncs stores is still "used" — the other four
+    # bearer routes stamp this; these two didn't (finalisation 16-R4).
+    stamp_used(source)
+    SqlAlchemyRepository().save_changes()
 
     store_table = db.metadata.tables["Store"]
     rows = db.session.execute(
@@ -66,11 +71,14 @@ def ingest_list_stores():
     "/stores/<uuid:store_id>/image", methods=["GET"], endpoint="ingest_store_image",
 )
 def ingest_store_image(store_id: UUID):
-    _source, auth_error = authenticate_ingestion_request()
+    source, auth_error = authenticate_ingestion_request()
     if auth_error is not None:
         return auth_error
+    stamp_used(source)
+    repository = SqlAlchemyRepository()
+    repository.save_changes()
 
-    store = SqlAlchemyRepository().get(Store).by_id(store_id)
+    store = repository.get(Store).by_id(store_id)
     if store is None:
         return not_found(Store.__name__, store_id)
     decoded = decode_store_image(store)

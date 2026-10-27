@@ -21,7 +21,7 @@
     background: var(--surface-sunken);
     border: 1px solid var(--border-default);
     color: var(--text-secondary);
-    font-size: calc(var(--font-size-xs) * 1rem);
+    font-size: var(--font-size-xs);
     font-weight: 600;
     line-height: 1.7;
     white-space: nowrap;

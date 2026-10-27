@@ -1,6 +1,5 @@
 """Helpers shared by every CSV / print-view export endpoint."""
 import re
-from datetime import datetime
 
 from dora_api.features.app_settings.clock import household_today
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository

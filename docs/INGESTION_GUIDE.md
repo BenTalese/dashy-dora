@@ -43,22 +43,41 @@ disabled or revoked key is rejected with **401** on the next call.
 
 ## Step 2 — map the stores you plan to push
 
-Dora **never auto-creates merchants** when you push (FU-190). For each store
-name your external source uses, you map it to one of your Dora merchants
-through the **Store mappings** panel on the source's row.
+Dora **never auto-creates stores** when you push (FU-190). A record names its
+store one of two ways — exactly one:
 
-Two ways the panel populates:
+- **`store_id`** — a Dora store's id, read from `GET /api/ingest/stores`
+  (below). Nothing to map; this is the path to prefer.
+- **`store`** — the external store *name* your source uses, resolved through
+  the **Store mappings** panel on the source's row.
+
+For the `store` path the panel populates two ways:
 
 - **You pre-map it.** Open the source → Store mappings → assign each external
-  name to a Dora merchant via the picker.
+  name to a Dora store via the picker.
 - **You push and let Dora flag it.** The first time you push a record for an
-  unknown external name, Dora creates a **quarantined** mapping
-  (`merchant_id` is null), skips that record with reason `store_not_mapped`,
-  and surfaces a `pending` badge on the source's header. Open the panel,
-  assign it, and re-push.
+  unknown external name, Dora creates a **quarantined** mapping (no store
+  assigned), skips that record with reason `store_not_mapped`, and surfaces a
+  `pending` badge on the source's header. Open the panel, assign it, and
+  re-push.
 
 Either way, **stores are never created on the fly**. The picker only shows
-merchants that already exist in this install.
+stores that already exist in this install.
+
+### The read side
+
+The same bearer key also reads, so a producer can sync against what Dora
+already holds:
+
+| Endpoint | What it answers |
+|---|---|
+| `GET /api/ingest/stores` | Dora's stores (`store_id`, `name`, `has_image`) — the source of truth for `store_id` |
+| `GET /api/ingest/stores/<store_id>/image` | the store's logo bytes, if it has one |
+| `GET /api/ingest/products?store_id=…` | the ingested products already in Dora for a store (paged) |
+| `POST /api/ingest/link-status` | for a list of `{ref, store|store_id, merchant_stockcode?, name?}`: whether each is in Dora, its product id, and which stock items it is linked to |
+| `DELETE /api/ingest/products/<product_id>` | remove an ingested product (never a hand-entered custom one — 403) |
+
+Every one of these stamps the source's `last_used_at`.
 
 ## Step 3 — push records
 
@@ -105,18 +124,20 @@ source's id if omitted). Empty arrays are fine — push only what you have.
 |-----------------------|----------|------------------------------------|
 | `ref`                 | yes      | Stable id in this batch — referenced by `offers` |
 | `name`                | yes      |                                    |
-| `merchant`            | yes      | The external store name; resolved via the store mapping |
-| `merchant_stockcode`  | no       | Primary dedupe key when present    |
+| `store` / `store_id`  | one of   | The external store name (resolved via the store mapping) **or** a Dora store id from `GET /api/ingest/stores`. Exactly one. |
+| `merchant_stockcode`  | no       | Primary dedupe key when present (the producer's SKU code, kept verbatim) |
 | `brand`               | no       |                                    |
 | `size`, `size_unit`, `size_value` | no | Free strings + numeric size. `size_value` is the **total across the bundle** for multipacks (e.g. 4×125g yoghurt → `size_value=500`). |
 | `pack_count`          | no       | Integer > 0; informational multipack count (e.g. `4` for a 4-pack). Drives the obs-list "4 × 125g" label and the PriceEntry multipack disclosure. Omit / `null` for single-packs. |
 | `web_url`             | no       |                                    |
 | `source`              | no       | Provenance string                  |
+| `image`               | no       | The product picture as a `data:image/…;base64,…` URL (≤ 6 MB). A later push with one replaces it; absent leaves the stored picture alone. |
 
-Dedupe — a product is matched on **`(merchant_id, merchant_stockcode)`**
-first; failing that, **`(merchant_id, name)`**. Source is provenance, **not
-identity** — pushing the same product from two different IngestionSources
-collapses to one `Product` row (shared catalogue).
+Dedupe — a product is matched on **`(store_id, merchant_stockcode)`** first;
+failing that, **`(store_id, name)`**. Hand-entered (custom) products are never
+matched or touched. Source is provenance, **not identity** — pushing the same
+product from two different IngestionSources collapses to one `Product` row
+(shared catalogue).
 
 **`offers`** — append a price point and move the catalogue's "current" price.
 
@@ -169,7 +190,8 @@ Bad records never fail the batch. The response groups every record into
 
 Stable `reason` codes (will only grow, not change meaning):
 
-- `store_not_mapped` — the external `merchant` name has no resolved mapping.
+- `store_not_mapped` — the external `store` name has no resolved mapping.
+- `store_unknown` — the `store_id` names no store in this install.
 - `duplicate` — same `(product, observed_at, price)` already on file.
 - `product_unknown` — an offer referenced a `ref` not in this batch's
   products and no existing product matched.

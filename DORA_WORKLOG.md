@@ -333,6 +333,182 @@ work at all (Applied ⬜). All three are handled in this session's close-gate.
 web_app/src-capacitor/www/index.html` is staged (17-R3 done). `scratchpad/rm_unused.py` + `logger_sweep.py` were the
 codemods used (session scratchpad, not in repo).
 
+**Resumed 2026-10-27 on the Windows box** from the WIP commit `8e842389` (units 12–23). Baseline there: pytest 2534 passed /
+1 skip / 1 xfail (system `python -m pytest`; `.venv` lacks dotenv), vitest 779/80 + **1 pre-existing failure** — the R-060
+ratchet (`designTokensDeclared.spec.ts`) still listed `--surface`, `--surface-base`, `--negative` after unit 23 fixed them;
+trimmed. vue-tsc + `npm run lint` clean. Worktree note: this checkout is CRLF on disk against an LF index (`core.autocrlf`
+false), so every file this session touches is normalised back to LF before hand-off, or the diff reads as whole-file churn.
+- **Unit 24 — chunk 13 remainder + chunk 14 (onboarding) execute list, done (2026-10-27).** Chunk 13 (R1–R13, R16-part,
+  R20–R25, R27–R31, R33–R38, R41, R43 had landed in units 4/12/13 or the settings rebuild): **13-R14** `api_response.
+  validation_failed(errors)` replaces 7 hand-built RFC-4918 422 literals (bootstrap ×2, change-password, email-flows'
+  `_validation_failure`, register, admin-create ×2, admin-reset) and `auth_helpers.mint_one_time_password()` the two 12-char
+  generators; **13-R15** admin `clear_image` finally has a caller ("Remove picture" in the Users overflow, shown when the row
+  has a picture) and the never-called `image` (set) half of the admin request is gone (+1 test); **13-R16** `HealthInfo.features`
+  admits the two string-valued flags + `schema_version_db`, `UpdateMeCommand.nutrition_mode` (server forbids it) deleted;
+  **13-R17 (type half)** one `VocabItem`; **13-R18** `ChannelSetupNote` renders `SettingsNotice` (one banner anatomy, D-015);
+  **13-R19** `app_settings/probe_llm.py` + its two tests + the route-auth row (15-R12) + the audit-completeness entry deleted
+  (feature modules are auto-discovered, so the file is the registration). Left as FUs: 13-R17's slot/rename-mode half,
+  13-R26 (`useConfirm` — the §0 sweep), 13-R39 (FU-671 sweep), 13-R42 (`User` god-object TODO). Chunk 14 (R1/R2/R8 had
+  landed): **14-R3** About → "Welcome tour" section with *Run the welcome tour again* (`restartAsync` → refresh → `/welcome`;
+  the two comments that promised an Account entry now point here); **14-R5** the wizard's theme cards take their keys from
+  `themeKeyFor` / `THEME_FAMILIES[0]` (no bare `'system'`); **14-R6** `_stocked_level` via `level_for_status`; **14-R7**
+  `_demo_slot_name` — the install's "Dinner" slot, else the last by sequence; **14-R9** `models/regionChoices.deviceTimezone`
+  / `filterTimezones` + `models/household.normaliseHeadcount` (+spec) shared by the wizard, Region and Cooking pages;
+  **14-R10** one repository; **14-R12** `/onboarding/state` is `{first_user}` (TS type trimmed, DTO snapshot refreshed);
+  **14-R13** `OnboardingLoop` loses its unread `autoplay`/`interactive` props and the constant `doraMood` computed;
+  **14-R14** the pre-FU-195 legacy draft fold deleted; **14-R15** module docstring describes the seven live endpoints;
+  **14-R16** comments (loop CSS, showcase seed); **14-R19** `SeedRequest.extra_group_names` / `extra_location_names` — the
+  user's own entries ride the seed's unit of work, deduped by name (the wizard's `createOwnGroupsAndLocations` and its
+  post-commit per-name GET/POST loop are gone; +1 test); **14-R20** `_load_seed` is `lru_cache`d; **14-R21/R27** `WelcomeLayout`
+  + confetti on tokens; **14-R22** icons via `ICONS`; **14-R23** `_Request` in the two seed routes; **14-R24**
+  `ICONS.meals_prepared` (the registry's one camelCase key, 5 sites); **14-R25** zones indexed once (`_find_existing` gone);
+  **14-R26** draft autosave debounced 300 ms; **14-R30** `# R-021 carve-out` on the four seeder dates. Not done (FUs):
+  14-R11 (seed-builder DRY, dev-only, M), 14-R17 (wizard split, M), 14-R18 (`ThemePreviewCard`). Tests: users-admin +1,
+  seed unit-of-work +1, `household.spec.ts` (2); targeted suites 128 + 93 passed; vitest 782/81; vue-tsc + lint clean.
+  **Full backend after unit 24: 2534 passed / 1 skip / 1 xfail.**
+- **Unit 25 — chunk 15 (auth shell) execute list, done (2026-10-27).** (15-R1/R2 landed in unit 6; 15-R12 with 13-R19;
+  15-R29/FU-654 in unit 12.) **15-R3** the register response's `verification_sent` finally has a reader: `RegisterResult`
+  type, `authStore.registerAsync` returns the flag, Login toasts "Check your inbox for a verification link."; **15-R4**
+  logout clears the CSRF cookie (`csrf.clear_cookie` had no caller) and reads the session through `current_user_id`;
+  **15-R5** a silent 401 now sends the user to `/login?redirect=<path>` (hash assignment from the store; the router can't be
+  imported there) — `router/publicRoutes.ts` is the one public-route list the guard and the store share; **15-R6**
+  `ErrorNotFound.vue` is `AuthShell` + `AuthButton` with page typography only (237 → 55 lines; the duplicated DEC-2 ladder,
+  blobs, mascot and card are gone — also the "404 page theme" feedback bullet); **15-R7** `api_response.gone()` replaces
+  bootstrap's hand-rolled 410 and `conflict()` the register route's inline 409 (`validation_failed` landed in unit 24);
+  **15-R8** `components/PasswordField.vue` (reveal toggle + `MIN_PASSWORD_LENGTH` rule from `models/password.ts`) used by
+  Login, Setup and `PasswordSetter` (two hard-coded `8`s gone); **15-R9** `composables/useChangeInstance.promptAndSaveInstanceUrl`
+  shared by About and the splash; **15-R10** `--auth-shell-on-accent / -on-amber / -on-canvas` in the ladder, 7 hex leaks
+  gone (AuthButton, two badges, splash ×4); **15-R11** `AuthBadge.vue` replaces the two `.setup-badge` copies; **15-R13**
+  `CSRF_EXEMPT_ENDPOINTS = PUBLIC_ENDPOINTS` (the union was a no-op; also 16-R16); **15-R14** `SESSION_PWD_V_KEY` moves to
+  `infrastructure/session_user.py` beside the user-id key (register re-exports it), middleware reads both constants;
+  **15-R15** `verify_username` and the `PURPOSE_*` re-exports dropped; **15-R16** the backend-setup probe goes through
+  `AuthApiService.getMeAsync()` (no second bare axios); **15-R17** four stale comments (10-char policy ×2, "one flag",
+  the retired change-email flow); **15-R18** register and change-password reuse the handler's repository; **15-R19**
+  module-level imports in login; **15-R20** `ICONS.auto_awesome / dns / mail_lock` (+registry entries); **15-R21** `%s`
+  logging ×9; **15-R22** `Field(` style; **15-R23** `find_active_token` filters on `token_hash` in SQL and keeps the
+  constant-time compare. Waived 15-R24. Tests: the 9 auth/users/inventory suites 102 passed; vitest 782/81; vue-tsc + lint
+  clean. (A full-suite run launched before an import repair reported 1430 setup errors — noise; re-run after unit 26.)
+- **Unit 26 — chunk 16 (ingestion seam) execute list, done (2026-10-27).** (16-R2/R3/R7/R8/R29 landed in unit 2; 16-R16 with
+  15-R13; 16-R12/R22/R11 are the §0 sweeps.) **16-R1** `docs/INGESTION_GUIDE.md` documents the live payload — `store` *or*
+  `store_id` (was `merchant`), `image`, the dedupe on `(store_id, stockcode)` then name, the `store_unknown` reason, and a
+  new "read side" table for the five bearer endpoints; `PROPOSAL_INGESTION_API §2.2` carries an "as built" note; **16-R4**
+  `/ingest/stores` + `/stores/<id>/image` stamp `last_used_at` like the other four bearer routes; **16-R6** one
+  `product_identity.find_store_mapping` (was written in the batch handler, link-status and the admin upsert); **16-R9 /
+  16-R34** both bearer routes take their body through `has_request_body` — a malformed payload now answers the structured
+  per-field 400 every route uses, not `str(ValidationError)` (the text the owner saw ×5 in the companion; the ingest test
+  asserts `errors.price_observations[0].code == "extra_forbidden"`); **16-R10** `product_identity.StoreRef` (the
+  one-of-`store`/`store_id` validator) is the base of both request models; **16-R13** orphan `scrapedProductOfferLogic.ts`
+  deleted; **16-R14/R15** `ApiAccessSettings` loses the dead expansion-item props, `captionFor` and the `formatDate` wrapper;
+  **16-R18** two stale docstrings; **16-R23** the page reads stores through `StoresApiService` (`DoraStore` +
+  `listStoresAsync` deleted); **16-R25** `offer_mapping.py` moves to `features/products/` (`git mv`; typed on the `Repository`
+  port); **16-R26** `ingestion_auth` imports at module level; **16-R27** `ok` locals → `deleted`; **16-R28**
+  `UpsertStoreMappingResult` replaces the `(dto, "error-string")` tuple (R-010); **16-R30** one `in_` fetch for the mapping
+  list's stores; R-035 nits: the disabled badge paints `dora-bg-sunken dora-text-secondary` (no `grey`/`white`), the menu
+  width is a class. Waived 16-R21/R31/R32/R33. FUs: 16-R5 (`is_available` across the wire — next companion pass), 16-R20
+  (572-line page split), 16-R24 (→ FU-923 list), 16-R17 (documented seam). Tests: the 8 ingestion/product suites 102 passed
+  (+ 158 with route-inventory/fuzz/contracts); vue-tsc + eslint clean. **Full backend after unit 26: see the next line.**
+- **Unit 27 — chunk 17 (offline / PWA / native) execute list, done (2026-10-27).** (17-R1/R2/R3/R5/R6/R7/R8/R9/R15 landed
+  in unit 7; 17-R23 with 13-R37.) **17-R4** the finalisation plan's "bad network" row describes read-only offline (R-052),
+  not the deleted queue; **17-R11** `helpers/offlineCopy.OFFLINE_COPY` — the banner and the five connectivity toasts read
+  one set of sentences (the 2026-08-23 correction was applied in two files by hand); **17-R12** `components/ShellBanner.vue`
+  (`tone` negative | accent, icon, text slot, `#actions`) — `OfflineBanner` and `UpdateBanner` are callers, their duplicated
+  40-line CSS is gone; **17-R13** `src-pwa/manifest.json` is the manifest (name, colours, display, orientation, icons — it was
+  the Quasar template with `#027be3` and icon files that don't exist, rewritten field-by-field in the config);
+  `extendManifestJson` keeps only `share_target` + `shortcuts` with their comments and the D-rule carve-out for the build-time
+  hex; **17-R14** one `STORAGE_KEY`; **17-R16** `register-service-worker.ts` keeps `error()` (warn) — the eight empty
+  template stubs are gone, the lifecycle is read in `usePwaLifecycle`; **17-R17** `lastSeenOnline` dropped (no reader);
+  **17-R18** `useWakeLock` returns nothing and uses lib.dom's `WakeLockSentinel` / `navigator.wakeLock` (the local alias +
+  two casts gone); **17-R20** `helpers/platform.ts` (`isNativePlatform`, `isIosSafari`, `isSecureContext`) — `backendUrl`
+  and `usePwaLifecycle` re-export for their existing importers, the four non-URL importers read the helper directly;
+  **17-R21** `ICONS.wifi_off` / `sync_problem` (+ registry). Waived 17-R19/R24; 17-R10 stays the device-walk FU. vitest
+  782/81; vue-tsc + `npm run lint` clean.
+- **Unit 28 — chunk 18 (backup / restore / import) execute list, done (2026-10-27).** (18-R1/R2/R3/R4/R6 landed in unit 2;
+  18-R5's `html: true` dialogs went with 06-R40; 18-R9/R13 are the §0 sweeps.) **18-R7 / FU-716** `services/api/dataApiService.ts`
+  (sections, library list/create/download/restore/delete, inspect, restore-upload, templates, spreadsheet inspect/commit) +
+  `uploadsApiService.ts` (start / chunk as `FormData` / finish / abort) on `AxiosHttpClient`; every raw `fetch` on the two
+  data pages and in `useChunkedUpload` is gone (0 left of 21), captions and report headlines via `toastCaption`, the three
+  `describeError` copies deleted; the chunk-offset mismatch is read from the structured `errors.received[0].msg`; **18-R8**
+  `downloadHelpers.downloadCsv(header, rows, filename)` (RFC-4180 escape once) — the pages import `triggerSave` /
+  `parseFilename` instead of re-implementing them; **18-R11** `features/data/_errors.py` — handlers return `… | DataError`
+  (`invalid` / `upload_missing` / `rolled_back`), routes `respond_to` it (400 / 404 / 500); the five `startswith` dispatches
+  and the id-parsed-out-of-the-message are gone, and a consumed upload is now a **404** (test updated); **18-R12** the import's
+  slash-date order follows `AppSetting.locale` (`en-US` month-first, else day-first; `tests/test_import_dates.py` ×3);
+  **18-R14** download verifies `sha256` against the row — a changed file flips `status` to `failed` and answers 409;
+  **18-R17** `inFlight` / `lastUploadId` dropped from the composable; **18-R20** the import's three raw inserts go through
+  `repository.add(StockItem/StockGroup/StockLocation)` with the entities' own defaults, the username lookup is one
+  `in_`; **18-R21** `/data/backups` paginates through `parse_query_options` + `repository.paginate` (`_FIELD_MAP`, sorted
+  `created_at desc`; the SPA passes `?limit=200`), 18-R6's delete removes the row before the file; **18-R22** module-level
+  imports; **18-R23** `LOCATION_KIND_ZONE`; **18-R24** `existing_item_names: set[str]`; **18-R28** PK-only preload
+  (`select(pk cols)`), empty sections skipped; R-035 nits: `ICONS.check_circle` / `ICONS.error` in both report dialogs, the two
+  inline `style=` fields on the library-settings form are classes. Waived 18-R15/R16/R27/R29/R30; 18-R25 was already
+  module-level. FUs: 18-R10 (inspect `_summarise` dedupe, S), 18-R18/R19 (page splits, M); `text-color="dark|white"` chips stay
+  for the FU-671 sweep. Tests: data/import/route-inventory/contracts/fuzz 101 passed; full backend suite 2537 passed / 1
+  skipped / 1 xfail; vitest 782/81; vue-tsc + `npm run lint` clean.
+- **Unit 29 — chunk 19 (ops / self-host) execute list, done (2026-10-27).** (19-R1/R2/R3/R4/R6/R9/R20/R21/R26 + the
+  `packaging.version` swap landed in unit 2.) **19-R5** `DoraConfig.get_log_level` is the one resolver (env > JSON > profile
+  default, `logging.getLevelNamesMapping`, an unknown name warns once and falls back to the profile default instead of
+  NOTSET) and `configure_logging(level=…)` takes its result — the JSON `LOG_LEVEL` key does something again, the env
+  re-read inside `logging_setup` is gone; **19-R8** `gunicorn.conf._int` explained in place (import-light carve-out);
+  **19-R10** `profile.env_flag(name, default)` — the eight hand-written `{"1","true","yes","on"}` sets (config ×5, profile
+  ×2, middleware's three-word one) read through it; **19-R11** `profile._print_banner` frames both stderr notices;
+  **19-R12** `server_settings.py` deleted; **19-R13** `get_web_app_host/port`, `_save_configuration`,
+  `is_modification_tracking_enabled`, `is_reloader_enabled` deleted (`app.run(use_reloader=False)` with the reason;
+  `Config` keeps `API_HOST/API_PORT/LOG_LEVEL`; the compose-coverage omit list loses the two names); **19-R14** the
+  `dora_config:/app/config` volume dropped with a NOTE for existing deployments; **19-R15** Piper's user-facing 503 hint and
+  module docstring point at Settings → Admin → System → Voice (not the removed `DORA_PIPER_BIN`), `auth_helpers` names
+  `AppSetting.public_url`, `profile` docstring example, `dora.spec` says `TimedRotatingFileHandler` and drops the
+  `webview.platforms.gtk` hidden import (the bundle opens the default browser — `desktop_app.py:314`); **19-R16**
+  `.dockerignore` loses `**/p2ptest`, `**/.buildozer` and two duplicate lines; **19-R17** `startup.sh` defaults
+  `DORA_LOG_DIR` to `/app/logs` like compose, the Dockerfile and `.env.example`; **19-R18** `git mv
+  infrastructure/audit_retention.py → features/audit/prune_audit_events.py` (module-level import of the resolver; the cycle
+  it dodged no longer exists); **19-R19** `dora_api/jobs.py` — `JOBS` is a table of `Job(id, func, trigger, why)`,
+  `demo_reset_job()` the conditional sixth, `register_jobs(scheduler)` adds them and logs the table once (FU-720's cheapest
+  shape); `bootstrap()` is 80 lines + six function-level imports shorter; **FU-719** `_iter_submodules` passes
+  `onerror=_raise_import_failure` (logs with traceback, re-raises — a feature package that can't import fails the boot);
+  `register_routers` logs the router + `/api/` route count; **19-R22** the global handler logs through `_LOGGER`;
+  **19-R23** unreachable `return` deleted; **19-R24** `"dora_api.features"` as a string; **19-R25** the KEK moves under
+  "Secrets / auth" marked required-for-email/push/AI-keys; **security** `.secret_key` / `.secret_encryption_key` are
+  `touch(mode=0o600)`ed before the key lands (`app.py`, `desktop_app.py`); **19-R7** AppImage banner says Dashy Dora,
+  CLAUDE.md Naming + the compose comment say the GitHub repo is `BenTalese/dashy-dora` (only the local folder is
+  `DiscountDora/`); `DemoBanner` reads `ICONS.visibility`. Waived 19-R27; 19-D1..D4/D6 stay decisions (see FU-929 notes);
+  `pywebview==5.4` is still pinned in `requirements.txt` though nothing imports it — left for the owner (FU-949). Tests:
+  new `tests/test_config_flags.py` (log-level resolver ×4, `env_flag` ×9); the 8 ops/audit/health/logging/route-inventory/
+  injection suites 74 passed; full backend suite 2547 passed / 1 skipped / 1 xfail + one red that passes alone (`test__get_changelog…` reads
+  `CHANGELOG.md` through `Path()`, i.e. the process cwd — order-dependent, not a regression; green again in the unit-30 run);
+  vue-tsc + `npm run lint` clean.
+- **Unit 30 — chunk 20 (cross-cutting) sweeps, done (2026-10-27).** (20-R1/R2/R3/R4/R5/R7/R8/R9/R10/R18/R19/R21/R25 landed in
+  units 10 and 12; 20-R6 and 20-R28 turned out already done — no `toLocaleDateString` left, every session read goes through
+  `SESSION_USER_ID_KEY`.) **20-R11 / 20-R23 / 13-R26 / 16-R22 / 18-R9** new `composables/useConfirm.ts` — `confirm` /
+  `prompt` / `choose` / `chooseMany` as promises over Quasar's `Dialog` plugin, carrying the dialog conventions once (flat
+  Cancel, filled primary OK, `negative` when `destructive`, Escape and backdrop cancel unless `persistent`, never
+  `html: true`); all 46 `$q.dialog` sites in 25 files migrated (24 Promise-wrapped ones by a small parser, 20 callback ones
+  by hand), the four page-local wrappers (`confirmAsync`, `confirmDialog`, `confirmDestructive`, `promptForName`) folded
+  into their callers, `useChangeInstance` lost its `$q` parameter, seven files lost an unused `$q`; the one `$q.dialog`
+  left is the custom `MarkOpenExpiryDialog` component (`useStockItemActions`). Spec: `test/unit/useConfirm.spec.ts` ×8;
+  the unsaved-changes-guard spec now mocks `Dialog.create`. Untitled deletes ("Delete …?" with no OK label) gained
+  `okLabel: 'Delete', destructive: true`; the stock-item delete says "This can't be undone." **20-R12** `--font-size-*`
+  are rem lengths with `xs` floored at `max(12px, 0.75rem)` (D-003); the 199 `calc(var(…) * 1rem)` consumers read the
+  token bare; the R-060 ratchet pins the new convention. **20-R13** the last three bare icon strings (`info`, `warning` ×2)
+  read `ICONS`. **20-R14** `data_url.MAX_IMAGE_DATA_URL_LEN` + `image_field()` replace the eight `6_000_000` literals.
+  **20-R15 / 13-R9 / 18-R13** `css/settings.scss` — `.settings-page`, `.settings-actions`, `.settings-list` once, globally;
+  the scoped copies stripped from 29 pages (three keep a one-line `position: relative`). **20-R29/R30/R31** trivia.
+  **FU-671 (part)** `text-color="dark"` on the six warning / severity chips that still used white (price history, backup
+  duplicate chip, API-access pending + unmapped badges, audit log ×2); the primary / accent / positive / series-colour sites
+  stay (primary+white is the `--text-on-primary` pairing; the rest want the owner's tint-vs-solid call). **outline: none
+  ×21:** 16 sit in `:focus-visible` rules that already paint a replacement ring/border/box-shadow (left as is); the five
+  that shared a hover rule (`DoraBubble` launcher, mobile-focus Add, onboarding loop node, settings file drop, week-day
+  Add) now get a separate `:focus-visible` outline from `--focus-ring` (D-016). Not executed: 20-R16 (FU-848 segmented
+  merge — its own unit), 20-R22 keep, 20-R26/R32/R33/R34 waived. Tests: vitest 790 passed / 82 files; vue-tsc + `npm run lint` clean;
+  the 15 product / recipe / store / contract / fuzz suites 239 passed; full backend suite 2548 passed, 1 skipped, 1 xfailed.
+- **Stage 2 close-gate (2026-10-27).** Register `Applied` is ✅ on all 20 rows: chunks 6, 9 and 10 flip with their
+  leftovers in FUs (06-R13 + 06-R21 → FU-950; 06-R32 → FU-934; 06-R16 → FU-932; 10-R13/R45 → FU-931; 10-R33 → FU-671;
+  10-R20/R27 landed with chunk 6); chunk 20 as above. **FU-929 → RESOLVED** (the umbrella's "close when Applied ✅ on all
+  20 rows" condition is met; what Stage 2 did not execute lives in the per-chunk FUs 931–950 and the owner-decision list in
+  `FINALISATION_REVIEW.md` §0). `PROJECT_STATE.md` hand-refreshed (owner's no-subagent constraint for this job): the
+  stamp, the Finalisation workstream row and the Stage-1 attention paragraph. Every modified file normalised to LF.
+  **Nothing committed** — the owner commits.
+
+
 ---
 
 ## 2026-10-23: **Finalisation Stage 1 — all 20 chunks analysed; master docs assembled; Stage 2 started**
@@ -524,7 +700,14 @@ FU-724, FU-836 (+ A8 note in the design guide), FU-853 → `DORA_FOLLOWUPS_RESOL
 **DORA_VERIFY:** new "Finalisation Stage 2 — units 1–10" section (27 checks). **PROJECT_STATE** dashboard row + stamp
 hand-edited (register rows unchanged). **CHANGELOG `[Unreleased]`** gains a "Fixed — Finalisation sweep, Stage 2" block.
 
-**Next up:** the §0 opening order is exhausted (every verified bug in rows 1–11 is landed or explicitly deferred above). What
+**Next up (2026-10-27, after Stage 2):** Stage 2 is closed. What follows is the owner's: (1) **commit** the tree (units
+24–30 are uncommitted on top of `8e842389`); (2) walk `DORA_VERIFY.md` — units 7–30 all owe a browser / operator pass; (3) the
+decisions the review surfaced (`FINALISATION_REVIEW.md` §0: 20-D4 Help IA gates the 100 help drafts, 13-D4 text-size
+range, 16-D1 store mapping, 19-D1 secure-cookie default, 19-D4 4xx logging, 20-D2 toast tiers, 18-D2 export, plus FU-949's
+pywebview pin). Agent-sized follow-ups, in order of value: FU-848 (one segmented control), FU-934 + FU-948 + FU-942 (page
+splits), FU-671's tint-vs-solid call once the owner picks, FU-923's last raw-table sites, FU-720's post-deploy assertion.
+
+**Next up (older):** the §0 opening order is exhausted (every verified bug in rows 1–11 is landed or explicitly deferred above). What
 remains of Stage 2 is the per-chunk execute lists beyond C1 — in order of value: (a) the S-blast leftovers still open after
 unit 11 (06-R3…R6 level-sequence DTOs + one invalidation path + one mark-restocked, 06-R16 dirty-form hydrate, 08-R8 `isToday`
 with the chunk-9 alerts pass, 07-R2 overlay via `levels_by_item`, 01-R3 waived); (b) the §0 sweeps

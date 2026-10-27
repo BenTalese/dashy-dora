@@ -120,7 +120,7 @@ def seed_dense_data(qa_fixtures: bool = False, money_on: bool = True):
     """
     repo = SqlAlchemyRepository()
     now = datetime.now(UTC)
-    today = date.today()
+    today = date.today()  # R-021 carve-out: dev fixture, server-local date is fine
     monday = today - timedelta(days=today.weekday())
 
     # Same autoflush choreography as the load seed: children are constructed
@@ -1384,6 +1384,7 @@ def seed_dense_data(qa_fixtures: bool = False, money_on: bool = True):
         markers) would have been reasoning about impossible data."""
         row = MealPlanEntry(
             recipe=recipe, scheduled_for=day, servings=servings, slot=slot,
+            # R-021 carve-out: dev fixture, a 19:00 UTC stamp is fine
             consumed_at=(datetime(day.year, day.month, day.day, 19, 0, tzinfo=UTC)
                          if consumed else None),
             cook_batch_id=batch,

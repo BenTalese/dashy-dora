@@ -47,7 +47,7 @@ body {
 // with more than a few words wants this — a per-call class would just be the
 // same rule copied at each site (R-003).
 .q-tooltip {
-    font-size: calc(var(--font-size-sm) * 1rem);
+    font-size: var(--font-size-sm);
     max-width: 280px;
     white-space: normal;
     line-height: 1.35;

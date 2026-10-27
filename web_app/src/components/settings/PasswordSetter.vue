@@ -1,35 +1,22 @@
 <template>
     <div class="password-setter">
-        <q-input
+        <!-- Revealing is the point here: the admin is typing a password
+             they're about to say out loud to the person standing next to
+             them. `PasswordField` owns the toggle + the length rule
+             (finalisation 15-R8). -->
+        <PasswordField
             v-if="!generate"
             :model-value="modelValue"
             outlined
             :label="label"
-            :type="reveal ? 'text' : 'password'"
-            autocomplete="new-password"
+            kind="new"
             :autofocus="autofocus"
             :error="!!error || tooShort"
             :error-message="error || (tooShort ? PASSWORD_HINT : '')"
             :hint="error || tooShort ? '' : PASSWORD_HINT"
+            lazy-rules
             @update:model-value="onInput"
-        >
-            <template #append>
-                <!-- Revealing is the point here: the admin is typing a password
-                     they're about to say out loud to the person standing next
-                     to them, so a hidden field they can't proof-read is the
-                     wrong default-only option. Starts masked all the same. -->
-                <q-icon
-                    :name="reveal ? ICONS.visibility_off : ICONS.visibility"
-                    class="cursor-pointer"
-                    role="button"
-                    tabindex="0"
-                    :aria-label="reveal ? 'Hide password' : 'Show password'"
-                    @click="reveal = !reveal"
-                    @keydown.enter.prevent="reveal = !reveal"
-                    @keydown.space.prevent="reveal = !reveal"
-                />
-            </template>
-        </q-input>
+        />
 
         <!-- Owner 2026-09-03 — this used to be a `dense` toggle carrying a
              paragraph that appeared only once it was on, so the dialog changed
@@ -55,9 +42,9 @@
      * and `generate` (whether to ignore it and ask the server for one), so it
      * can decide what to send without reaching back in here.
      */
-    import { ICONS } from 'src/style/icons';
+    import PasswordField from 'src/components/PasswordField.vue';
     import { PASSWORD_HINT, MIN_PASSWORD_LENGTH } from 'src/models/password';
-    import { computed, ref } from 'vue';
+    import { computed } from 'vue';
 
     const props = withDefaults(
         defineProps<{
@@ -82,8 +69,6 @@
         (e: 'update:generate', value: boolean): void;
         (e: 'input'): void;
     }>();
-
-    const reveal = ref(false);
 
     // Only nag once they've started typing — an empty field on a freshly
     // opened dialog isn't an error, it's the starting state.

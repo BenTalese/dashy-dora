@@ -69,7 +69,7 @@ def seed_dev_data(
     """
     repo = SqlAlchemyRepository()
     now = datetime.now(UTC)
-    today = date.today()
+    today = date.today()  # R-021 carve-out: dev fixture, server-local date is fine
 
     # Build with autoflush off: we add child rows (e.g. RecipeIngredient) before
     # their parent exists to link them, and an autoflush in that gap would try to

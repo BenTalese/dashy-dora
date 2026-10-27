@@ -50,7 +50,7 @@
                                 size="sm"
                                 color="warning"
                                 text-color="dark"
-                                icon="warning"
+                                :icon="ICONS.warning"
                             >
                                 Sensitive
                                 <BaseTooltip max-width="300px">
@@ -110,7 +110,7 @@
                     rounded
                 >
                     <template #avatar>
-                        <q-icon name="warning" color="warning" />
+                        <q-icon :name="ICONS.warning" color="warning" />
                     </template>
                     This backup will include {{ createSensitiveLabel }}.
                 </q-banner>
@@ -224,7 +224,7 @@
                                     dense
                                     size="sm"
                                     color="warning"
-                                    text-color="white"
+                                    text-color="dark"
                                     class="q-ml-sm"
                                 >
                                     duplicate
@@ -266,7 +266,7 @@
         <BaseDialog v-model="reportOpen" card-style="min-width: 360px; max-width: 600px">
                 <q-card-section class="row items-center q-gutter-md">
                     <q-icon
-                        :name="report?.ok ? 'check_circle' : 'error'"
+                        :name="report?.ok ? ICONS.check_circle : ICONS.error"
                         :color="report?.ok ? 'positive' : 'negative'"
                         size="32px"
                     />
@@ -341,7 +341,7 @@
                     dense
                     min="1"
                     max="100"
-                    style="max-width: 120px"
+                    class="backup-settings-retention"
                 />
             </SettingsRow>
             <SettingsRow
@@ -354,7 +354,7 @@
                     dense
                     clearable
                     placeholder="(default: DORA_DATA_DIR/backups)"
-                    style="min-width: 280px"
+                    class="backup-settings-path"
                 />
             </SettingsRow>
             <div class="settings-actions">
@@ -391,30 +391,22 @@
     import { useQuasar } from 'quasar';
     import { computed, onMounted, ref } from 'vue';
     import { useChunkedUpload } from 'src/composables/useChunkedUpload';
-    import { csrfHeader, resolveBaseURL } from 'src/services/api/axiosHttpClient';
-    import DataApiService, { type BackupSection } from 'src/services/api/dataApiService';
+    import DataApiService, { type BackupRow, type BackupSection } from 'src/services/api/dataApiService';
+    import { triggerSave } from 'src/services/files/downloadHelpers';
     import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { useAuthStore } from 'src/stores/authStore';
     import { useAppSettingsStore } from 'src/stores/appSettingsStore';
+    import { useConfirm } from 'src/composables/useConfirm';
 
     const $q = useQuasar();
+
+    const { confirm } = useConfirm();
     const authStore = useAuthStore();
     const appSettingsStore = useAppSettingsStore();
 
     // library-facing state. Old download-only path retired;
     // "Create backup" now POSTs the library create endpoint, and the
     // list at the top of the page shows every persisted backup.
-    interface BackupRow {
-        backup_id: string;
-        created_at: string;
-        created_by_user_id: string | null;
-        created_by_username: string | null;
-        size_bytes: number;
-        sections: string[];
-        sha256: string;
-        status: string;
-        trigger_kind: string;
-    }
     const library = ref<BackupRow[]>([]);
     const libraryLoading = ref(false);
     const generating = ref(false);
@@ -685,19 +677,12 @@
     async function loadLibrary(): Promise<void> {
         libraryLoading.value = true;
         try {
-            const baseUrl = resolveBaseURL();
-            const response = await fetch(`${baseUrl}/data/backups?size=200`, {
-                method: 'GET',
-                credentials: 'include',
-            });
-            if (!response.ok) throw new Error(`List failed (${response.status})`);
-            const body = await response.json();
-            library.value = (body.items ?? []) as BackupRow[];
+            library.value = await dataApi.listBackupsAsync();
         } catch (err) {
             $q.notify({
                 type: 'negative',
                 message: "Couldn't load backups.",
-                caption: err instanceof Error ? err.message : String(err),
+                caption: toastCaption(err),
             });
         } finally {
             libraryLoading.value = false;
@@ -711,17 +696,7 @@
     async function onGenerate() {
         generating.value = true;
         try {
-            const baseUrl = resolveBaseURL();
-            const response = await fetch(`${baseUrl}/data/backups`, {
-                method: 'POST',
-                credentials: 'include',
-                headers: { 'Content-Type': 'application/json', ...csrfHeader() },
-                body: JSON.stringify({ sections: selectedBackupKeys.value }),
-            });
-            if (!response.ok) {
-                const body = await response.json().catch(() => ({}));
-                throw new Error(body.detail ?? `Backup failed (${response.status})`);
-            }
+            await dataApi.createBackupAsync(selectedBackupKeys.value);
             $q.notify({
                 type: 'positive',
                 message: 'Backup saved to the library.',
@@ -733,7 +708,7 @@
             $q.notify({
                 type: 'negative',
                 message: "Couldn't create backup.",
-                caption: err instanceof Error ? err.message : String(err),
+                caption: toastCaption(err),
             });
         } finally {
             generating.value = false;
@@ -742,21 +717,13 @@
 
     async function onDownloadRow(row: BackupRow) {
         try {
-            const baseUrl = resolveBaseURL();
-            const response = await fetch(
-                `${baseUrl}/data/backups/${encodeURIComponent(row.backup_id)}/download`,
-                { method: 'GET', credentials: 'include' },
-            );
-            if (!response.ok) throw new Error(`Download failed (${response.status})`);
-            const filename = parseFilename(response.headers.get('content-disposition'))
-                ?? `dora-backup-${row.created_at.slice(0, 10)}.json`;
-            const blob = await response.blob();
-            triggerSave(blob, filename);
+            const { blob, filename } = await dataApi.downloadBackupAsync(row.backup_id);
+            triggerSave(blob, filename ?? `dora-backup-${row.created_at.slice(0, 10)}.json`);
         } catch (err) {
             $q.notify({
                 type: 'negative',
                 message: "Couldn't download backup.",
-                caption: err instanceof Error ? err.message : String(err),
+                caption: toastCaption(err),
             });
         }
     }
@@ -765,59 +732,47 @@
         // Confirm — restore inserts arbitrary rows across every table; the
         // library fast-path skips inspect/preview, so a two-step confirm is
         // the correct friction.
-        const ok = await confirmAsync(
-            'Restore this backup?',
-            `This will import every section in the ${formatBackupTimestamp(row.created_at)} backup, skipping any rows that already exist. Users, settings, or historic offers included in the file will be applied if you saved them.`,
-            'Restore',
-        );
+        const ok = await confirm({
+            title: 'Restore this backup?',
+            message: `This will import every section in the ${formatBackupTimestamp(row.created_at)} backup, skipping any rows that already exist. Users, settings, or historic offers included in the file will be applied if you saved them.`,
+            okLabel: 'Restore',
+            persistent: true,
+        });
         if (!ok) return;
         try {
-            const baseUrl = resolveBaseURL();
-            const response = await fetch(
-                `${baseUrl}/data/backups/${encodeURIComponent(row.backup_id)}/restore`,
-                { method: 'POST', credentials: 'include' },
-            );
-            const body = await response.json().catch(() => ({}));
-            if (!response.ok) {
-                throw new Error(body.detail ?? `Restore failed (${response.status})`);
-            }
+            const summary = await dataApi.restoreBackupAsync(row.backup_id);
             $q.notify({
                 type: 'positive',
                 message: 'Restore complete.',
-                caption: summarizeRestore(body),
+                caption: summarizeRestore(summary),
                 timeout: 4000,
             });
         } catch (err) {
             $q.notify({
                 type: 'negative',
                 message: "Restore failed.",
-                caption: err instanceof Error ? err.message : String(err),
+                caption: toastCaption(err),
             });
         }
     }
 
     async function onDeleteRow(row: BackupRow) {
-        const ok = await confirmAsync(
-            'Delete this backup?',
-            `The ${formatBackupTimestamp(row.created_at)} backup will be removed from the library and the file will be deleted from disk. This can't be undone.`,
-            'Delete',
-        );
+        const ok = await confirm({
+            title: 'Delete this backup?',
+            message: `The ${formatBackupTimestamp(row.created_at)} backup will be removed from the library and the file will be deleted from disk. This can't be undone.`,
+            okLabel: 'Delete',
+            destructive: true,
+            persistent: true,
+        });
         if (!ok) return;
         try {
-            const baseUrl = resolveBaseURL();
-            const response = await fetch(
-                `${baseUrl}/data/backups/${encodeURIComponent(row.backup_id)}`,
-                { method: 'DELETE', credentials: 'include' },
-            );
-            if (!response.ok && response.status !== 204) {
-                throw new Error(`Delete failed (${response.status})`);
-            }
+            await dataApi.deleteBackupAsync(row.backup_id);
             library.value = library.value.filter((r) => r.backup_id !== row.backup_id);
         } catch (err) {
             $q.notify({
                 type: 'negative',
                 message: "Couldn't delete backup.",
-                caption: err instanceof Error ? err.message : String(err),
+                caption: toastCaption(err),
             });
         }
     }
@@ -845,21 +800,6 @@
         return total === 0
             ? 'No new rows. Everything was a duplicate.'
             : `${total} row${total === 1 ? '' : 's'} imported.`;
-    }
-
-    // Confirm dialog — used by restore + delete. Quasar's dialog plugin
-    // returns a Promise via its `.onOk` / `.onCancel` — wrap it so the
-    // handler can await.
-    function confirmAsync(title: string, message: string, ok: string): Promise<boolean> {
-        return new Promise((resolve) => {
-            $q.dialog({
-                title,
-                message,
-                ok: { label: ok, color: 'primary' },
-                cancel: { noCaps: true },
-                persistent: true,
-            }).onOk(() => resolve(true)).onCancel(() => resolve(false)).onDismiss(() => resolve(false));
-        });
     }
 
     // ── Library settings (retention + storage path) ───────────────────
@@ -918,22 +858,6 @@
         await Promise.all([loadSections(), loadLibrary(), loadLibrarySettings()]);
     });
 
-    function parseFilename(header: string | null): string | null {
-        if (!header) return null;
-        const match = /filename="?([^";]+)"?/i.exec(header);
-        return match?.[1] ?? null;
-    }
-
-    function triggerSave(blob: Blob, filename: string) {
-        const url = URL.createObjectURL(blob);
-        const anchor = document.createElement('a');
-        anchor.href = url;
-        anchor.download = filename;
-        document.body.appendChild(anchor);
-        anchor.click();
-        document.body.removeChild(anchor);
-        URL.revokeObjectURL(url);
-    }
 
     // ── Restore: pick → chunked upload → inspect → tree → commit ──────
     async function onFilePicked(file: File | null) {
@@ -948,7 +872,6 @@
         }
 
         inspecting.value = true;
-        const baseUrl = resolveBaseURL();
 
         try {
             // ── Upload via the shared chunked-upload composable ──────
@@ -956,16 +879,7 @@
             uploadId.value = id;
 
             // ── Inspect (server stream-parses the staged file) ───────
-            const inspectResponse = await fetch(`${baseUrl}/data/backup/inspect`, {
-                method: 'POST',
-                credentials: 'include',
-                headers: { 'Content-Type': 'application/json', ...csrfHeader() },
-                body: JSON.stringify({ upload_id: id }),
-            });
-            if (!inspectResponse.ok) {
-                throw new Error(await describeError(inspectResponse));
-            }
-            preview.value = await inspectResponse.json();
+            preview.value = await dataApi.inspectUploadAsync<InspectResponse>(id);
 
             // Default expansion: first 3 pickable sections with rows.
             const sectionsWithRows = pickableKeys.value.filter((k) =>
@@ -977,17 +891,12 @@
             $q.notify({
                 type: 'negative',
                 message: "Couldn't read that backup file.",
-                caption: err instanceof Error ? err.message : String(err),
+                caption: toastCaption(err),
             });
             await onClearPick();
         } finally {
             inspecting.value = false;
         }
-    }
-
-    async function describeError(response: Response): Promise<string> {
-        const body = await response.json().catch(() => null);
-        return body?.detail ?? body?.title ?? `HTTP ${response.status}`;
     }
 
     async function onClearPick() {
@@ -1028,23 +937,16 @@
         await confirmAndRestore('all_skip_duplicates');
     }
 
-    function confirmAndRestore(mode: 'partial' | 'all_skip_duplicates') {
-        return new Promise<void>((resolve) => {
-            const summary = mode === 'partial'
-                ? `${selectedCount.value} selected item(s) will be imported. Duplicates will be skipped.`
-                : `Everything in the backup will be imported, except rows that already exist locally.`;
-            $q.dialog({
-                title: 'Confirm restore',
-                message: `${summary} This can't be undone.`,
-                ok: { label: 'Restore', color: 'primary' },
-                cancel: { label: 'Cancel', flat: true },
-            }).onOk(() => {
-                void (async () => {
-                    await doRestore(mode);
-                    resolve();
-                })();
-            }).onCancel(() => resolve());
+    async function confirmAndRestore(mode: 'partial' | 'all_skip_duplicates'): Promise<void> {
+        const summary = mode === 'partial'
+            ? `${selectedCount.value} selected item(s) will be imported. Duplicates will be skipped.`
+            : `Everything in the backup will be imported, except rows that already exist locally.`;
+        const ok = await confirm({
+            title: 'Confirm restore',
+            message: `${summary} This can't be undone.`,
+            okLabel: 'Restore',
         });
+        if (ok) await doRestore(mode);
     }
 
     async function doRestore(mode: 'partial' | 'all_skip_duplicates') {
@@ -1062,27 +964,11 @@
                     selection[section].push(id);
                 }
             }
-            const baseUrl = resolveBaseURL();
-            const response = await fetch(`${baseUrl}/data/backup/restore`, {
-                method: 'POST',
-                credentials: 'include',
-                headers: { 'Content-Type': 'application/json', ...csrfHeader() },
-                body: JSON.stringify({
-                    upload_id: uploadId.value,
-                    selection,
-                    mode,
-                }),
+            const summary = await dataApi.restoreUploadAsync({
+                upload_id: uploadId.value,
+                selection,
+                mode,
             });
-            if (!response.ok) {
-                const body = await response.json().catch(() => null);
-                const detail = body?.detail ?? body?.title ?? `HTTP ${response.status}`;
-                throw new Error(detail);
-            }
-            const summary = await response.json() as {
-                created: Record<string, number>;
-                skipped: Record<string, number>;
-                warnings: string[];
-            };
             const totalCreated = Object.values(summary.created).reduce((a, b) => a + b, 0);
             const totalSkipped = Object.values(summary.skipped).reduce((a, b) => a + b, 0);
 
@@ -1119,7 +1005,7 @@
         } catch (err) {
             report.value = {
                 ok: false,
-                headline: err instanceof Error ? err.message : String(err),
+                headline: toastCaption(err),
                 rows: [],
                 warnings: [],
             };
@@ -1156,16 +1042,14 @@
 </script>
 
 <style scoped lang="scss">
-    .settings-page {
-        display: flex;
-        flex-direction: column;
+    .backup-settings-retention {
+        max-width: 120px;
     }
-    .settings-actions {
-        display: flex;
-        justify-content: flex-end;
-        gap: var(--space-2);
-        margin-top: var(--space-3);
+
+    .backup-settings-path {
+        min-width: 280px;
     }
+
 
     // ── Backup library states ─────────────────────────────────────────
     .backup-state {

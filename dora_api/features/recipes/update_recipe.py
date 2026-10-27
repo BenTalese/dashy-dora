@@ -46,6 +46,7 @@ from dora_api.features.recipes._recipe_errors import (RecipeWriteOutcome,
 from dora_api.features.recipes.recipe_requests import (RecipeIngredientRequest,
                                                      RecipeSectionRequest,
                                                      RecipeStepRequest)
+from dora_api.infrastructure.data_url import image_field
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -84,7 +85,7 @@ class UpdateRecipeRequest(BaseModel):
     tool_ids: List[UUID] | None = None
     # data-URL image string; explicit null clears it. Omit to
     # leave the existing image untouched.
-    image: str | None = Field(default = None, max_length = 6_000_000)
+    image: str | None = image_field()
     # structured steps. When present (even as []), the full
     # step set is replaced. Omit to leave existing steps untouched. An empty
     # list clears all structure (recipe falls back to plain `instructions`).

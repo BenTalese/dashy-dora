@@ -119,6 +119,6 @@
      * legible. One place, so the nineteen consumers can't drift (D-015).
      */
     .dora-segmented-btn :deep(.q-btn__content) {
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
     }
 </style>

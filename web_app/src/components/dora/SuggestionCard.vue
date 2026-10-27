@@ -63,16 +63,16 @@
     }
     .dora-suggestion-title {
         font-weight: 600;
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
     }
     .dora-suggestion-body {
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         color: var(--text-muted);
         margin-top: 2px;
     }
     .dora-suggestion-why :deep(.dora-suggestion-why-header) {
         min-height: 24px;
         padding: 0;
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
     }
 </style>

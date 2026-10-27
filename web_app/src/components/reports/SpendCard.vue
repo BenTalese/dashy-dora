@@ -244,7 +244,7 @@
         gap: var(--space-2);
         align-items: center;
         padding: var(--space-1) 0;
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
     }
     /* The compare axis has no swatch — there is no bar above it to key to. */
     .spend-legend--compare li {
@@ -278,7 +278,7 @@
     }
     .spend-legend__meta {
         color: var(--text-secondary);
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         font-variant-numeric: tabular-nums;
     }
     .spend-skeleton {
@@ -294,6 +294,6 @@
     .spend-support {
         margin-top: var(--space-3);
         color: var(--text-secondary);
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
     }
 </style>

@@ -137,6 +137,7 @@
     import { cartStateFor, type ActiveListInfo, type Membership } from 'src/models/shoppingList';
     import { useShoppingListStore } from 'src/stores/shoppingListStore';
     import { useStockItemStore } from 'src/stores/stockItemStore';
+    import { useConfirm } from 'src/composables/useConfirm';
 
     /**
      * `stockItemId` — single-anchor variants (row / toolbar / menu).
@@ -166,6 +167,8 @@
     );
 
     const $q = useQuasar();
+
+    const { choose } = useConfirm();
     const shoppingListApi = new ShoppingListApiService();
     const shoppingListStore = useShoppingListStore();
     const { membership: storeMembership } = storeToRefs(shoppingListStore);
@@ -381,25 +384,15 @@
         if (drafts.length === 1) {
             targetListId = drafts[0]!.shopping_list_id;
         } else {
-            targetListId = await new Promise<string | null>((resolve) => {
-                $q.dialog({
-                    title: 'Which list?',
-                    message: 'Add this product to which draft list?',
-                    options: {
-                        type: 'radio',
-                        model: drafts[0]!.shopping_list_id,
-                        items: drafts.map((d) => ({
-                            label: d.name,
-                            value: d.shopping_list_id,
-                        })),
-                    },
-                    cancel: { noCaps: true },
-                    ok: { label: 'Add', noCaps: true, color: 'primary' },
-                    persistent: false,
-                })
-                    .onOk((val: string) => resolve(val))
-                    .onCancel(() => resolve(null))
-                    .onDismiss(() => {});
+            targetListId = await choose({
+                title: 'Which list?',
+                message: 'Add this product to which draft list?',
+                items: drafts.map((d) => ({
+                    label: d.name,
+                    value: d.shopping_list_id,
+                })),
+                initial: drafts[0]!.shopping_list_id,
+                okLabel: 'Add',
             });
             if (!targetListId) return;
         }
@@ -573,25 +566,15 @@
                             }
                             const chosen = candidates.length === 1
                                 ? candidates[0]!.shopping_list_id
-                                : await new Promise<string | null>((resolve) => {
-                                    $q.dialog({
-                                        title: 'Add to which list?',
-                                        message: 'Pick another active list.',
-                                        options: {
-                                            type: 'radio',
-                                            model: candidates[0]!.shopping_list_id,
-                                            items: candidates.map((c) => ({
-                                                label: c.name,
-                                                value: c.shopping_list_id,
-                                            })),
-                                        },
-                                        cancel: { noCaps: true },
-                                        ok: { noCaps: true, label: 'Add', color: 'primary' },
-                                        persistent: false,
-                                    })
-                                        .onOk((val: string) => resolve(val))
-                                        .onCancel(() => resolve(null))
-                                        .onDismiss(() => {});
+                                : await choose({
+                                    title: 'Add to which list?',
+                                    message: 'Pick another active list.',
+                                    items: candidates.map((c) => ({
+                                        label: c.name,
+                                        value: c.shopping_list_id,
+                                    })),
+                                    initial: candidates[0]!.shopping_list_id,
+                                    okLabel: 'Add',
                                 });
                             if (!chosen) return;
                             busy.value = true;

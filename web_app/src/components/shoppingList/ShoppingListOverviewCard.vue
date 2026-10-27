@@ -599,12 +599,12 @@
         padding-right: 44px;
     }
     .sl-overview__label {
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
         color: var(--text-secondary);
         line-height: 1.3;
     }
     .sl-overview__amount {
-        font-size: calc(var(--font-size-2xl) * 1rem);
+        font-size: var(--font-size-2xl);
         font-weight: 700;
         line-height: 1.1;
         letter-spacing: -0.02em;
@@ -615,7 +615,7 @@
             gap: var(--space-2) var(--space-5);
         }
         .sl-overview__amount {
-            font-size: calc(var(--font-size-xl) * 1rem);
+            font-size: var(--font-size-xl);
         }
     }
     .sl-overview__approx {
@@ -627,7 +627,7 @@
         align-items: center;
         gap: 4px;
         margin-top: 2px;
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
         color: var(--text-secondary);
     }
     /* Mid-shop progress: a bar the width of the card with the count inside it.
@@ -659,7 +659,7 @@
         align-items: center;
         justify-content: center;
         height: 100%;
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         font-weight: 600;
         font-variant-numeric: tabular-nums;
         color: var(--text-primary);
@@ -725,7 +725,7 @@
         display: flex;
         align-items: baseline;
         gap: var(--space-1);
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         font-variant-numeric: tabular-nums;
     }
 
@@ -742,7 +742,7 @@
         border-radius: var(--radius-pill);
         padding: var(--space-1) var(--space-3);
         min-height: 28px;
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         font-weight: 600;
         line-height: 1.2;
         white-space: nowrap;

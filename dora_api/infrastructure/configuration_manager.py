@@ -6,15 +6,13 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from dora_api.infrastructure.profile import (Profile, current_profile,
-                                             is_production, is_test)
+                                             env_flag, is_production)
 
 
 class Config(BaseModel):
     API_HOST: str = "0.0.0.0"
     API_PORT: int = 5170
     LOG_LEVEL: str = "ERROR"
-    WEB_APP_HOST: str = "0.0.0.0"
-    WEB_APP_PORT: int = 5174
 
 
 # D3: per-profile defaults for things that meaningfully differ between
@@ -188,39 +186,31 @@ class DoraConfig:
         return _default_postgres_url()
 
     def get_log_level(self) -> int:
-        # D3: layered resolution — env > JSON > profile default. JSON
-        # default is "ERROR" (legacy); when the JSON has the legacy
-        # value we treat it as "use the profile default" so dev
-        # actually gets DEBUG logs without an explicit override.
+        """Root log level: `DORA_LOG_LEVEL` > JSON `LOG_LEVEL` > the profile
+        default. The JSON default is "ERROR" (legacy); that value means "use
+        the profile default" so dev gets DEBUG without an explicit override.
+        An unknown name is warned about once and falls back to the profile
+        default rather than silently resolving to NOTSET. This is the one
+        resolver — `configure_logging` takes its result (finalisation 19-R5;
+        it used to re-read the env var itself and ignore the JSON layer)."""
         env_value = _env("DORA_LOG_LEVEL")
         json_value = self._config.LOG_LEVEL
         profile_default = _PROFILE_DEFAULTS[current_profile()]["log_level"]
         if env_value:
-            _LogLevel = env_value.upper()
-        elif json_value and json_value != "ERROR":
-            _LogLevel = json_value.upper()
+            name = env_value.strip().upper()
+        elif json_value and json_value.upper() != "ERROR":
+            name = json_value.strip().upper()
         else:
-            _LogLevel = profile_default
+            name = profile_default
 
-        if _LogLevel == "INFO":
-            return logging.INFO
-
-        if _LogLevel == "DEBUG":
-            return logging.DEBUG
-
-        if _LogLevel == "WARNING":
-            return logging.WARNING
-
-        if _LogLevel == "ERROR":
-            return logging.ERROR
-
-        if _LogLevel == "CRITICAL":
-            return logging.CRITICAL
-
-        if _LogLevel == "FATAL":
-            return logging.FATAL
-
-        return logging.NOTSET
+        level = logging.getLevelNamesMapping().get(name)
+        if level is None:
+            logging.getLogger(__name__).warning(
+                "Unknown log level %r; using the %s profile default %s",
+                name, current_profile().value, profile_default,
+            )
+            level = logging.getLevelNamesMapping()[profile_default]
+        return level
 
     def get_cors_origins(self) -> list[str]:
         """Comma-separated list from DORA_CORS_ORIGINS; falls back to
@@ -248,7 +238,7 @@ class DoraConfig:
         regardless of DORA_ALLOW_DESTRUCTIVE."""
         if is_production():
             return False
-        return _env("DORA_ALLOW_DESTRUCTIVE", "false").lower() in {"1", "true", "yes", "on"}
+        return env_flag("DORA_ALLOW_DESTRUCTIVE")
 
     def is_demo_mode_enabled(self) -> bool:
         """Demo / sellable-showcase mode (FU-392). When on, the install
@@ -262,7 +252,7 @@ class DoraConfig:
         seed this is allowed to (re)seed destructively in ANY profile,
         including production-like ones a public demo would run under for
         HTTPS/secure-cookie reasons — the dataset is disposable by design."""
-        return _env("DORA_DEMO_MODE", "false").lower() in {"1", "true", "yes", "on"}
+        return env_flag("DORA_DEMO_MODE")
 
     def get_demo_reset_minutes(self) -> int:
         """How often the demo dataset is reset back to the curated showcase
@@ -315,7 +305,7 @@ class DoraConfig:
         purchase/waste history no API can create. Off by default so an
         interactive dev pantry isn't cluttered; the Playwright webServer
         sets DORA_SEED_QA_FIXTURES=true."""
-        return _env("DORA_SEED_QA_FIXTURES", "false").lower() in {"1", "true", "yes", "on"}
+        return env_flag("DORA_SEED_QA_FIXTURES")
 
     def is_seed_money_on(self) -> bool:
         """FU-592 — whether the dev seed boots with money + nutrition features
@@ -328,13 +318,7 @@ class DoraConfig:
         **Applies to the `bulk` dataset only.** The `dense` dataset boots money
         on unconditionally (see `seed_dense_data`), so this flag is not read on
         that path — don't reach for it expecting to turn money off there."""
-        return _env("DORA_SEED_MONEY_ON", "false").lower() in {"1", "true", "yes", "on"}
-
-    def get_web_app_host(self) -> str:
-        return _env("DORA_WEB_APP_HOST", self._config.WEB_APP_HOST) or self._config.WEB_APP_HOST
-
-    def get_web_app_port(self) -> int:
-        return _env_int("DORA_WEB_APP_PORT", self._config.WEB_APP_PORT)
+        return env_flag("DORA_SEED_MONEY_ON")
 
     def get_data_dir(self) -> Path:
         """Persistent runtime data — sqlite db, secret_key, staged
@@ -403,20 +387,9 @@ class DoraConfig:
 
     def is_debug_mode_enabled(self) -> bool:
         # D3: explicit env wins; otherwise pick the profile default.
-        raw = _env("DORA_DEBUG")
-        if raw is not None:
-            return raw.lower() in {"1", "true", "yes", "on"}
-        return bool(_PROFILE_DEFAULTS[current_profile()]["debug"])
-
-    def is_modification_tracking_enabled(self) -> bool:
-        return True
-
-    def is_reloader_enabled(self) -> bool:
-        return False
-
-    def _save_configuration(self) -> None:
-        with open(self._config_path, 'w') as _AppSettings:
-            _AppSettings.write(self._config.model_dump_json(indent = 4))
+        if _env("DORA_DEBUG") is None:
+            return bool(_PROFILE_DEFAULTS[current_profile()]["debug"])
+        return env_flag("DORA_DEBUG")
 
 
 DORA_CONFIG = DoraConfig()

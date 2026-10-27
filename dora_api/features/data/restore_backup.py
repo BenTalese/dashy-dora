@@ -21,7 +21,6 @@ import json
 import logging
 import os
 from typing import Any
-from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import insert, select
@@ -30,6 +29,7 @@ from dora_api.app import db
 from dora_api.features.auth.admin_gate import require_admin
 from dora_api.features.data.backup import BACKUP_SCHEMA_VERSION
 from dora_api.features.data.uploads import staged_path
+from dora_api.features.data._errors import DataError, invalid, respond_to, rolled_back, upload_missing
 from dora_api.features.data.restore_shared import (
     BACKUP_KEY_BY_TABLE_NAME,
     CHILD_AUTO_INCLUDE,
@@ -45,10 +45,9 @@ from dora_api.features.data.restore_shared import (
     primary_key_columns,
 )
 from dora_api.features.routers import DATA_ROUTER
-from dora_api.infrastructure.api_response import bad_request, internal_server_error, ok
+from dora_api.infrastructure.api_response import ok
 from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.utils import get_request_body
-from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -129,7 +128,7 @@ class RestoreSummary(BaseModel):
 
 
 class RestoreBackupHandler:
-    def handle(self, request: RestoreBackupRequest) -> RestoreSummary | str:
+    def handle(self, request: RestoreBackupRequest) -> RestoreSummary | DataError:
         # ── Resolve the backup document ───────────────────────────────
         backup, err = self._resolve_backup(request)
         if err is not None:
@@ -138,14 +137,14 @@ class RestoreBackupHandler:
         # ── Validate envelope ─────────────────────────────────────────
         version = backup.get("schema_version")
         if not isinstance(version, int):
-            return "Backup is missing 'schema_version'."
+            return invalid("Backup is missing 'schema_version'.")
         if version > BACKUP_SCHEMA_VERSION:
-            return (
+            return invalid(
                 f"Backup schema_version {version} is newer than this server "
                 f"supports ({BACKUP_SCHEMA_VERSION})."
             )
         if request.mode not in ALLOWED_MODES:
-            return f"Unknown mode '{request.mode}'."
+            return invalid(f"Unknown mode '{request.mode}'.")
 
         # ── Index backup rows by (key, id) ────────────────────────────
         rows_by_key: dict[str, list[dict[str, Any]]] = {}
@@ -153,7 +152,7 @@ class RestoreBackupHandler:
         for backup_key, table_name in TABLE_NAME_BY_BACKUP_KEY.items():
             section = backup.get(backup_key, [])
             if not isinstance(section, list):
-                return f"Section '{backup_key}' must be a list."
+                return invalid(f"Section '{backup_key}' must be a list.")
             rows_by_key[backup_key] = section
             table = db.metadata.tables[table_name]
             pk_cols = primary_key_columns(table)
@@ -167,16 +166,20 @@ class RestoreBackupHandler:
         for backup_key, table_name in TABLE_NAME_BY_BACKUP_KEY.items():
             table = db.metadata.tables[table_name]
             pk_cols = primary_key_columns(table)
-            existing_rows = db.session.execute(select(table)).all()
-            column_names = [c.name for c in table.columns]
+            # Only the PK columns for presence — every section's whole table
+            # used to be loaded, historic offers included, whether or not the
+            # backup carried a row for it (finalisation 18-R28). Full rows are
+            # read only for the sections that compute a duplicate key.
+            pk_rows = db.session.execute(
+                select(*[table.c[name] for name in pk_cols])
+            ).all()
             existing_pks[backup_key] = {
-                composite_key(
-                    {col: r[idx] for idx, col in enumerate(column_names)}, pk_cols
-                )
-                for r in existing_rows
+                composite_key(dict(zip(pk_cols, r)), pk_cols) for r in pk_rows
             }
             if backup_key in DUPLICATE_KEY_BY_BACKUP_KEY:
                 key_fn = DUPLICATE_KEY_BY_BACKUP_KEY[backup_key]
+                column_names = [c.name for c in table.columns]
+                existing_rows = db.session.execute(select(table)).all()
                 existing_dup_keys[backup_key] = {
                     key_fn({col: r[idx] for idx, col in enumerate(column_names)})
                     for r in existing_rows
@@ -196,7 +199,7 @@ class RestoreBackupHandler:
         else:
             for backup_key, ids in request.selection.items():
                 if backup_key not in selected:
-                    return f"Unknown selection section '{backup_key}'."
+                    return invalid(f"Unknown selection section '{backup_key}'.")
                 # IDs come from the SPA as strings; m2m composite IDs come
                 # as "<id>|<id>" so we round-trip the same string here.
                 for raw_id in ids:
@@ -313,32 +316,32 @@ class RestoreBackupHandler:
         except Exception as exc:  # noqa: BLE001
             db.session.rollback()
             _LOGGER.exception("Restore failed; rolled back.")
-            return f"Restore failed and was rolled back: {exc}"
+            return rolled_back("Restore", exc)
 
         return RestoreSummary(created=created, skipped=skipped, warnings=warnings)
 
     @staticmethod
-    def _resolve_backup(req: RestoreBackupRequest) -> tuple[dict | None, str | None]:
+    def _resolve_backup(req: RestoreBackupRequest) -> tuple[dict | None, DataError | None]:
         """Pull the backup document out of either the inline body or a
         staged upload. Consumes (unlinks) the staged file on success so
         the upload area doesn't accumulate one stale .bin per restore.
         """
         if req.backup is not None and req.upload_id is not None:
-            return None, "Provide exactly one of 'backup' or 'upload_id'."
+            return None, invalid("Provide exactly one of 'backup' or 'upload_id'.")
         if req.backup is not None:
             return req.backup, None
         if req.upload_id is None:
-            return None, "Either 'backup' or 'upload_id' is required."
+            return None, invalid("Either 'backup' or 'upload_id' is required.")
         path = staged_path(req.upload_id)
         if not path.exists():
-            return None, f"No staged upload found for id {req.upload_id}."
+            return None, upload_missing(req.upload_id)
         try:
             with open(path, "rb") as fh:
                 doc = json.load(fh)
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            return None, f"Could not parse staged upload as JSON ({exc})."
+            return None, invalid(f"Could not parse staged upload as JSON ({exc}).")
         if not isinstance(doc, dict):
-            return None, "Staged upload is not a JSON object."
+            return None, invalid("Staged upload is not a JSON object.")
         # Consume — the upload was successfully loaded; subsequent calls
         # with the same id will 404 (which is the intent).
         try:
@@ -424,12 +427,9 @@ def restore_backup():
         return err
     _Request: RestoreBackupRequest = get_request_body()
     _Result = RestoreBackupHandler().handle(_Request)
-    if isinstance(_Result, str):
-        _LOGGER.warning("Restore validation failed: %s", _Result)
-        # User-facing errors land as 400; "rolled back" as 500.
-        if _Result.startswith("Restore failed and was rolled back"):
-            return internal_server_error(_Result)
-        return bad_request(_Result)
+    if isinstance(_Result, DataError):
+        _LOGGER.warning("Restore validation failed: %s", _Result.detail)
+        return respond_to(_Result)
     summary = _Result.model_dump()
     _LOGGER.info(
         "Restore complete: created=%s skipped=%s warnings=%d",

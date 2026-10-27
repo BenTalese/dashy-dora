@@ -185,8 +185,8 @@ class User(BaseEntity):
     font_size: str = FONT_SIZE_MD
     # NULL until the user finishes (or skips) the welcome wizard. The
     # auth/router guard reads this on every navigation to decide whether
-    # to bounce them to /welcome. Cleared by the Settings → Account
-    # "Restart onboarding" entry.
+    # to bounce them to /welcome. Cleared by `POST /onboarding/restart`
+    # (About → "Run the welcome tour again", and the 24-hour skip banner).
     onboarding_completed_at: datetime | None = None
     # A1: marks whether the user has clicked the verify-email link sent on
     # registration. First-user-is-admin auto-verifies so a fresh install

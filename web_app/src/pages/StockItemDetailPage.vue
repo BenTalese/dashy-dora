@@ -1432,6 +1432,7 @@
     import { useRoute, useRouter } from 'vue-router';
     import { describeApiError, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { isOnSpecial } from 'src/helpers/offerLogic';
+    import { useConfirm } from 'src/composables/useConfirm';
 
     const props = defineProps<{ idOverride?: string; embedded?: boolean }>();
 
@@ -1453,6 +1454,7 @@
     const route = useRoute();
     const router = useRouter();
     const $q = useQuasar();
+    const { confirm } = useConfirm();
     // Recipe photos on the "Recipes using this" cards follow the user's own
     // preference — this isn't the cookbook, so the cookbook's cards/compact
     // switch has no say here.
@@ -2466,15 +2468,16 @@
 
     // ── Delete ───────────────────────────────────────────────────────────
     const blockedByRecipes = ref<string[]>([]);
-    function confirmDelete() {
+    async function confirmDelete() {
         if (!detail.value) return;
         const item = detail.value;
-        $q.dialog({
+        const ok = await confirm({
             title: 'Delete stock item',
-            message: `Delete "${item.name}"?`,
-            ok: { label: 'Delete', color: 'negative', noCaps: true },
-            cancel: { noCaps: true },
-        }).onOk(() => void doDelete(item.stock_item_id));
+            message: `Delete "${item.name}"? This can't be undone.`,
+            okLabel: 'Delete',
+            destructive: true,
+        });
+        if (ok) await doDelete(item.stock_item_id);
     }
     async function doDelete(id: string) {
         try {
@@ -2710,7 +2713,7 @@
         min-width: 0;
     }
     .stock-detail__caption {
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
     }
     .stock-detail__qr {
         width: 256px;
@@ -2743,12 +2746,12 @@
     .nutrition-suggestion__tag {
         background: var(--surface-raised);
         color: var(--text-secondary);
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
         font-weight: 600;
         padding: 1px var(--space-2);
     }
     .nutrition-suggestion__meta {
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
         line-height: 1.35;
         margin-top: 2px;
     }

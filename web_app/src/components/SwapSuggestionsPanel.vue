@@ -287,13 +287,13 @@
     .swap-panel__warn { color: var(--semantic-warning); }
     .swap-panel__headline {
         flex: 1 1 auto;
-        font-size: calc(var(--font-size-md) * 1rem);
+        font-size: var(--font-size-md);
         font-weight: 600;
     }
     .swap-panel__count {
         flex: 0 0 auto;
         color: var(--text-secondary);
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
     }
     .swap-panel__chevron {
         flex: 0 0 auto;
@@ -302,7 +302,7 @@
     }
     .swap-panel__chevron--open { transform: rotate(180deg); }
     .swap-panel__lede {
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         padding: var(--space-2);
     }
     .swap-panel__undo {

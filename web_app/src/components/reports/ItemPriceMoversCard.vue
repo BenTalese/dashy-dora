@@ -283,7 +283,7 @@
     }
     .pm-headline {
         margin: 0;
-        font-size: calc(var(--font-size-md) * 1rem);
+        font-size: var(--font-size-md);
         line-height: 1.4;
     }
     .pm-columns {
@@ -298,7 +298,7 @@
     }
     .pm-heading {
         margin: 0 0 var(--space-2);
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         font-weight: 600;
         color: var(--text-secondary);
         text-transform: uppercase;
@@ -353,7 +353,7 @@
     .pm-row__detail {
         grid-column: 1 / -1;
         color: var(--text-secondary);
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         font-variant-numeric: tabular-nums;
     }
     .pm-chart {
@@ -370,7 +370,7 @@
         display: inline-block;
         margin-top: var(--space-2);
         color: var(--brand-primary);
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
     }
     /* A6 — the row buttons already carry a ring; this link did not. */
     .pm-chart__link:focus-visible {

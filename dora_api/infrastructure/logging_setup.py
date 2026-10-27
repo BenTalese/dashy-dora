@@ -28,7 +28,6 @@ Noise control:
 from __future__ import annotations
 
 import logging
-import os
 import sys
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
@@ -49,6 +48,7 @@ def configure_logging(
     service_name: str,
     log_dir: Path | str,
     *,
+    level: int | None = None,
     debug: bool = False,
     quiet_modules: tuple[str, ...] = ("sqlalchemy.engine",),
     werkzeug_level: int = logging.WARNING,
@@ -71,6 +71,9 @@ def configure_logging(
         service_name: Short identifier ("dapi"). Used for the log file name.
         log_dir: Directory the rotating log file goes in. Created if
             missing.
+        level: The root level, already resolved (`DoraConfig.get_log_level`:
+            env > JSON > profile default). None → DEBUG when `debug`, else
+            INFO — the historical default for callers that pass no level.
         debug: Pull root + module loggers up to DEBUG. Off in production.
         quiet_modules: Loggers pinned to WARNING regardless of root. The
             default silences SQLAlchemy's raw-SQL echo.
@@ -87,19 +90,12 @@ def configure_logging(
     for handler in list(root.handlers):
         root.removeHandler(handler)
 
-    # `DORA_LOG_LEVEL` (e.g. WARNING) overrides the debug→level default so a
-    # runtime can stay in debug/seed MODE while logging quietly — the e2e
-    # backend needs debug mode (create_all + seed) but the per-request DEBUG
-    # body-dumps + INFO request lines, each written to the rotating FILE
-    # handler, dominate its latency and degrade the long single-worker run
-    # (FU-591). Unset → the historical debug/INFO default.
-    _level_override = os.environ.get("DORA_LOG_LEVEL", "").strip().upper()
-    _resolved_level = getattr(logging, _level_override, None) if _level_override else None
-    root.setLevel(
-        _resolved_level
-        if isinstance(_resolved_level, int)
-        else (logging.DEBUG if debug else logging.INFO)
-    )
+    # The level is independent of debug MODE so a runtime can stay in
+    # debug/seed mode while logging quietly — the e2e backend needs debug
+    # mode (create_all + seed) but the per-request DEBUG body-dumps + INFO
+    # request lines, each written to the rotating FILE handler, dominate its
+    # latency and degrade the long single-worker run (FU-591).
+    root.setLevel(level if level is not None else (logging.DEBUG if debug else logging.INFO))
 
     formatter = logging.Formatter(_FORMAT)
     context_filter = LogContextFilter()

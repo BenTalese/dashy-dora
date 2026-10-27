@@ -13,11 +13,12 @@ booted with ``DORA_DEMO_MODE=true``. It is deliberately *separate* from
     week's meal plan and shopping story, and no test-only noise. It is what a
     salesperson would want on screen.
 
-Both seeds duplicate a handful of tiny local builders (``make_product``,
-``make_item``, ``make_recipe`` …). That duplication is intentional for now —
-the two datasets have different shapes and the dev seed must not be perturbed
-by showcase changes (scope discipline). Factoring the builders into a shared
-module is logged as a DRY follow-up rather than done inline.
+The row builders the seeds share live in ``seed_builders`` (FU-556). What is
+still duplicated across ``seed.py`` / ``seed_dense.py`` / this file — the three
+``StockLevel`` rows, the substitute-pair loop, the belief-shop + cook-consume
+helpers and the QA-cheese fixture — is tracked by finalisation 14-R11; the
+datasets have different shapes and the dev seed must not be perturbed by
+showcase changes (scope discipline).
 
 The demo user is ``demo`` / ``demo`` (admin, so every settings/admin screen is
 reachable in the showcase). The whole dataset is disposable — demo mode
@@ -79,7 +80,7 @@ def seed_showcase_data():
     """
     repo = SqlAlchemyRepository()
     now = datetime.now(UTC)
-    today = date.today()
+    today = date.today()  # R-021 carve-out: dev fixture, server-local date is fine
 
     # See seed_dev_data() for why autoflush is disabled during the build.
     db.session.autoflush = False

@@ -62,7 +62,7 @@
     }
     .dora-card-title {
         margin: 0;
-        font-size: calc(var(--font-size-md) * 1rem);
+        font-size: var(--font-size-md);
         font-weight: 600;
         flex: 1;
         letter-spacing: 0.005em;

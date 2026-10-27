@@ -11,7 +11,7 @@
 // The native app is unaffected: Capacitor serves the SPA from
 // `https://localhost`, which is a secure origin.
 
-import { isNativePlatform } from 'src/services/api/backendUrl';
+import { isNativePlatform } from 'src/helpers/platform';
 
 export type CameraUnavailable = {
     kind: 'insecure-context' | 'unsupported';

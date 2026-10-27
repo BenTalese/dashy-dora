@@ -13,8 +13,6 @@ web_app/.env.*
 .pytest_cache
 .vscode
 **/__pycache__
-**/__pycache__
-**/.buildozer
 **/.image_cache
 **/*.db
 **/*.log
@@ -23,9 +21,7 @@ web_app/.env.*
 **/dist
 **/instance
 **/logs
-**/logs
 **/node_modules
-**/p2ptest
 compose*.yml
 Dockerfile
 env

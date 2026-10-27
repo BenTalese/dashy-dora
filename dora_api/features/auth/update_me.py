@@ -15,8 +15,7 @@ from dora_api.features.tts.voice_catalog import VOICE_IDS
 from dora_api.features.auth.register_user import (AuthenticatedUserDto,
                                                   SESSION_USER_ID_KEY)
 from dora_api.features.routers import AUTH_ROUTER
-from dora_api.infrastructure.api_response import (bad_request,
-                                                  business_rule_violation, ok,
+from dora_api.infrastructure.api_response import (business_rule_violation, ok,
                                                   unauthorized)
 from dora_api.infrastructure.auth_helpers import is_valid_email, normalise_email
 from dora_api.infrastructure.decorators import has_request_body
@@ -24,6 +23,7 @@ from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
+from dora_api.infrastructure.data_url import image_field
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -79,7 +79,7 @@ class UpdateMeRequest(BaseModel):
     # set, `clear_image: true` to remove. Mirrors the Store image contract:
     # `image=None` without the clear flag means "leave untouched". Cap mirrors
     # the StockItem ceiling (~4.5 MB of base64).
-    image: str | None = Field(default=None, max_length=6_000_000)
+    image: str | None = image_field()
     clear_image: bool = False
     # Dashboard rebuild Phase 2 — per-user dashboard layout JSON (card order +
     # hidden set). Present-in-body sets it; sending `null` clears it back to

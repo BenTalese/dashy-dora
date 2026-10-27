@@ -494,7 +494,7 @@
                 <q-space />
                 <BaseButton
                     variant="primary"
-                    :icon-right="isLastStep ? 'check' : 'arrow_forward'"
+                    :icon-right="isLastStep ? ICONS.check : ICONS.arrow_forward"
                     :label="isLastStep ? 'Finish' : 'Next'"
                     :loading="completing"
                     @click="advance"
@@ -518,7 +518,9 @@
     import OnboardingStepRail from 'src/components/onboarding/OnboardingStepRail.vue';
     import OnboardingStory from 'src/pages/onboarding/OnboardingStory.vue';
     import { storeToRefs } from 'pinia';
-    import { fontFamilyOptions, coalesceFontFamily } from 'src/services/themeService';
+    import {
+        THEME_FAMILIES, coalesceFontFamily, fontFamilyOptions, themeKeyFor,
+    } from 'src/services/themeService';
     import type { ProcessedImage } from 'src/services/files/imageService';
     import type { AppSettings, UpdateAppSettingsCommand } from 'src/services/api/appSettingsApiService';
     import { useAppSettingsStore } from 'src/stores/appSettingsStore';
@@ -526,7 +528,10 @@
     import { refreshCookingPolicy } from 'src/composables/useCookingPolicy';
     import { useMeasurementSystem } from 'src/composables/useMeasurementSystem';
     import type { DoraSegmentedOption } from 'src/components/settings/DoraSegmented.vue';
-    import { MEASUREMENT_SYSTEM_CHOICES, TIMEZONE_CHOICES } from 'src/models/regionChoices';
+    import {
+        MEASUREMENT_SYSTEM_CHOICES, TIMEZONE_CHOICES, deviceTimezone, filterTimezones,
+    } from 'src/models/regionChoices';
+    import { normaliseHeadcount } from 'src/models/household';
     import type { MeasurementSystem } from 'src/generated/units_table';
     import type { FontFamilyPreference, ThemePreference } from 'src/models/auth';
     import type {
@@ -571,15 +576,19 @@
     // theme(s) each card's mini mock-up is painted in: the halves carry a
     // `data-theme` attribute, so they read that theme's real tokens rather
     // than a copied palette (R-002). System shows both, split.
+    const PESTO = THEME_FAMILIES[0]!;
     const THEME_OPTIONS: {
         label: string;
         value: ThemePreference;
         icon: string;
         previews: string[];
     }[] = [
-        { label: 'System', value: 'system', icon: ICONS.brightness_auto, previews: ['pesto', 'pesto-dark'] },
-        { label: 'Light', value: 'pesto', icon: ICONS.light_mode, previews: ['pesto'] },
-        { label: 'Dark', value: 'pesto-dark', icon: ICONS.dark_mode, previews: ['pesto-dark'] },
+        // Keys come from themeService (R-003; finalisation 14-R5): the bare
+        // 'system' the wizard used to store only survived via the legacy
+        // branch, while Preferences stored 'system-pesto' for the same choice.
+        { label: 'System', value: themeKeyFor('system', PESTO), icon: ICONS.brightness_auto, previews: [PESTO.light, PESTO.dark] },
+        { label: 'Light', value: PESTO.light as ThemePreference, icon: ICONS.light_mode, previews: [PESTO.light] },
+        { label: 'Dark', value: PESTO.dark as ThemePreference, icon: ICONS.dark_mode, previews: [PESTO.dark] },
     ];
     // Font options + the `coalesceFontFamily` fold are the shared FU-614 source
     // in themeService (R-003). The wizard uses the full "Plus Jakarta Sans" label
@@ -798,7 +807,7 @@
             apply: (on) => ({ auto_add_mode: on ? 'essential_only' : 'off' }),
         },
         {
-            key: 'batch', title: 'Batch cooking', icon: ICONS.mealsPrepared,
+            key: 'batch', title: 'Batch cooking', icon: ICONS.meals_prepared,
             description: 'Cook once, eat for days: Dora tracks the leftovers.',
             read: (s) => s.batch_features_enabled,
             apply: (on) => ({ batch_features_enabled: on }),
@@ -835,27 +844,12 @@
     let savedHousehold: Partial<HouseholdDraft> | null = null;
     const UNIT_OPTIONS: DoraSegmentedOption<MeasurementSystem>[] =
         MEASUREMENT_SYSTEM_CHOICES.map((c) => ({ label: c.short, value: c.value }));
+    // Shared with the Region / Cooking settings pages (R-003; finalisation 14-R9).
     const timezoneOptions = ref<string[]>([...TIMEZONE_CHOICES]);
     function onTimezoneFilter(val: string, update: (cb: () => void) => void) {
         update(() => {
-            const needle = val.toLowerCase();
-            timezoneOptions.value = needle
-                ? TIMEZONE_CHOICES.filter((t) => t.toLowerCase().includes(needle))
-                : [...TIMEZONE_CHOICES];
+            timezoneOptions.value = filterTimezones(val);
         });
-    }
-    function deviceTimezone(): string {
-        try {
-            return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-        } catch {
-            return 'UTC';
-        }
-    }
-    function normaliseHeadcount(value: number | null): number | null {
-        if (value === null || value === undefined || !Number.isFinite(value) || value < 1) {
-            return null;
-        }
-        return Math.min(99, Math.floor(value));
     }
     const changedHouseholdSettings = computed<UpdateAppSettingsCommand>(() => {
         const base = householdBaseline.value;
@@ -967,15 +961,9 @@
     // per-name picks over the bundled catalogues. Keys are
     // lowercased (name for groups; "zone" or "zone/child" path for
     // locations). Default state (populated on catalog load) has every
-    // name ticked — matches the pre-FU-195 "seedGroups=true" behaviour.
+    // name ticked.
     const groupPicks = reactive<Record<string, boolean>>({});
     const locationPicks = reactive<Record<string, boolean>>({});
-
-    // honoured when the catalogue lands + the
-    // pick maps get seeded, so a pre-FU-195 "seedGroups=false" resumes as
-    // "no groups picked".
-    let legacyGroupsOff = false;
-    let legacyLocationsOff = false;
 
     // The user's own entries on the stock step, created on Finish.
     const customGroups = ref<string[]>([]);
@@ -1005,8 +993,8 @@
     // resumed draft) is left alone so the user's choice survives reload.
     function seedDefaultPicks() {
         if (!catalog.value) return;
-        const groupsDefault = legacyGroupsOff ? false : true;
-        const locationsDefault = legacyLocationsOff ? false : true;
+        const groupsDefault = true;
+        const locationsDefault = true;
         for (const name of catalog.value.groups) {
             const key = name.toLowerCase();
             if (!(key in groupPicks)) groupPicks[key] = groupsDefault;
@@ -1058,11 +1046,6 @@
                 household?: Partial<HouseholdDraft>;
                 customGroups?: string[];
                 customLocations?: string[];
-                // Legacy pre-FU-195 draft booleans — folded into the pick
-                // maps once the catalogue lands (seedDefaultPicks respects
-                // whatever the pick maps already say).
-                seedGroups?: boolean;
-                seedLocations?: boolean;
             };
             const {
                 stepIndex: savedIndex,
@@ -1076,8 +1059,6 @@
                 household: savedHouseholdDraft,
                 customGroups: savedCustomGroups,
                 customLocations: savedCustomLocations,
-                seedGroups: legacySeedGroups,
-                seedLocations: legacySeedLocations,
                 ...formFields
             } = parsed;
             Object.assign(form, formFields);
@@ -1112,13 +1093,6 @@
             }
             if (Array.isArray(savedCustomGroups)) customGroups.value = savedCustomGroups;
             if (Array.isArray(savedCustomLocations)) customLocations.value = savedCustomLocations;
-            // Legacy pre-FU-195: the booleans became pick maps. If the
-            // legacy master was explicitly off, honour that by defaulting
-            // any not-yet-populated pick to false (seedDefaultPicks fills
-            // absent keys with true; overriding it after mount would race
-            // the catalogue fetch).
-            legacyGroupsOff = legacySeedGroups === false;
-            legacyLocationsOff = legacySeedLocations === false;
         } catch {
             // Bad draft — ignore.
         }
@@ -1131,14 +1105,20 @@
             // Best effort.
         }
     }
-    // Auto-save the draft on any form change so a refresh resumes.
+    // Auto-save the draft on any form change so a refresh resumes — debounced,
+    // so typing a name doesn't serialise the whole draft per keystroke
+    // (finalisation 14-R26).
+    let saveDraftTimer: ReturnType<typeof setTimeout> | null = null;
     watch(
         [
             form, stepIndex, draftItems, view, storySceneIndex,
             packItemSelected, groupPicks, locationPicks, featurePicks,
             household, customGroups, customLocations,
         ],
-        saveDraft,
+        () => {
+            if (saveDraftTimer) clearTimeout(saveDraftTimer);
+            saveDraftTimer = setTimeout(saveDraft, 300);
+        },
         { deep: true },
     );
 
@@ -1338,7 +1318,9 @@
         // implicit: it's true whenever any pick under it survives.
         const groupsWanted = groupPickCount.value > 0;
         const locationsWanted = locationPickCount.value > 0;
-        if (groupsWanted || locationsWanted) {
+        const ownGroups = customGroups.value.map((n) => n.trim()).filter(Boolean);
+        const ownLocations = customLocations.value.map((n) => n.trim()).filter(Boolean);
+        if (groupsWanted || locationsWanted || ownGroups.length > 0 || ownLocations.length > 0) {
             const totalGroups = catalog.value?.groups.length ?? 0;
             const totalLocations = locationLeafPaths.value.length;
             const allGroupsPicked = groupPickCount.value === totalGroups;
@@ -1353,9 +1335,12 @@
                     ? pickedGroupNames.value : null,
                 location_paths: locationsWanted && !allLocationsPicked
                     ? pickedLocationPaths.value : null,
+                // The user's own entries, in the same unit of work and deduped
+                // by name server-side (finalisation 14-R19).
+                extra_group_names: ownGroups.length > 0 ? ownGroups : null,
+                extra_location_names: ownLocations.length > 0 ? ownLocations : null,
             });
         }
-        await createOwnGroupsAndLocations();
         // Pack picks + own items, created by NAME (server resolves group /
         // location against the just-seeded catalogues — FU-191 — and dedupes).
         const items = [
@@ -1380,28 +1365,6 @@
         // exists) so a re-finish never duplicates.
         if (form.seedDemo) {
             await onboardingApi.seedDemoAsync();
-        }
-    }
-
-    // The user's own groups and locations, through the same create endpoints
-    // the stock pages use. Runs after the defaults are seeded so a name that
-    // now exists (seeded, or there from before) is skipped, not duplicated.
-    async function createOwnGroupsAndLocations() {
-        if (customGroups.value.length > 0) {
-            await loadStockGroups();
-            const existing = stockGroups.value.map((g) => g.name);
-            for (const name of customGroups.value) {
-                if (!hasName(existing, name)) await stockGroupStore.createAsync(name);
-            }
-        }
-        if (customLocations.value.length > 0) {
-            await stockLocationStore.getStockLocationsAsync();
-            const existing = stockLocationStore.stockLocations.map((l) => l.name);
-            for (const name of customLocations.value) {
-                if (!hasName(existing, name)) {
-                    await stockLocationStore.createStockLocationAsync({ name });
-                }
-            }
         }
     }
 

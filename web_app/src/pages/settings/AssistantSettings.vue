@@ -705,7 +705,6 @@
 </script>
 
 <style scoped lang="scss">
-    .settings-page { display: flex; flex-direction: column; }
     /* Owner 2026-09-03: the mode picker stays on the right at every width, so
        it can't carry a fixed 220px floor — that would overflow the row's
        control column on a 375px viewport. */

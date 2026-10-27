@@ -37,7 +37,6 @@ from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.ingestion_auth import (hash_ingestion_key,
                                                     mint_ingestion_key)
 from dora_api.infrastructure.utils import get_request_body
-from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 
@@ -215,8 +214,8 @@ def delete_ingestion_source(source_id: UUID):
     _, err = require_admin()
     if err is not None:
         return err
-    ok = DeleteIngestionSourceHandler(SqlAlchemyRepository()).handle(source_id)
-    if not ok:
+    deleted = DeleteIngestionSourceHandler(SqlAlchemyRepository()).handle(source_id)
+    if not deleted:
         return not_found("IngestionSource", source_id)
     _LOGGER.info("Revoked IngestionSource %s", source_id)
     return no_content()

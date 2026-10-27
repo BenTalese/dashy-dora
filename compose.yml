@@ -14,8 +14,8 @@
 #   - bump healthcheck intervals
 
 # Project name. Without this Compose derives it from the checkout directory,
-# which is still `DiscountDora/` (the GitHub repo + local clone were never
-# renamed with the product — see CLAUDE.md → Naming). That leaked the retired
+# which is still `DiscountDora/` (the local clone was never renamed with the
+# product — see CLAUDE.md → Naming). That leaked the retired
 # name into every generated resource: `discountdora_dora_logs`,
 # `discountdora_dora_data`, and so on. Pinning it here decouples the deployment
 # from the directory name entirely, so a future repo rename is a no-op.
@@ -179,7 +179,11 @@ services:
       - dora_data:/app/data       # sqlite + uploads
       - dora_cache:/app/cache     # image cache + scraped json
       - dora_logs:/app/logs       # application logs
-      - dora_config:/app/config   # appsettings JSON (legacy fallback for un-env'd vars)
+      # NOTE for existing deployments: the `dora_config:/app/config` volume is
+      # gone. `dapi.appsettings.json` lives at `<DORA_DATA_DIR>/config/` (inside
+      # `dora_data`) and has since 2026-05; `/app/config` was only the legacy
+      # source the boot-time migration moved it *out of*. A leftover named
+      # volume is harmless — `docker volume rm <project>_dora_config` to drop it.
 
     # Container-level healthcheck — hits nginx's lightweight /healthz
     # so a wedged Python API doesn't take down the whole container
@@ -197,4 +201,3 @@ volumes:
   dora_data:
   dora_cache:
   dora_logs:
-  dora_config:

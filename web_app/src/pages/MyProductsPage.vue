@@ -564,8 +564,11 @@
     import { computed, onMounted, ref } from 'vue';
     import { useRouter } from 'vue-router';
     import { isOnSpecial } from 'src/helpers/offerLogic';
+    import { useConfirm } from 'src/composables/useConfirm';
 
     const $q = useQuasar();
+
+    const { confirm } = useConfirm();
     const router = useRouter();
     const productApi = new ProductApiService();
     const stockItemApi = new StockItemApiService();
@@ -807,22 +810,6 @@
         return products.value.filter((p) => selectedIds.value.has(p.product_id));
     }
 
-    /** One confirm shape for every destructive path here. Red OK button, and
-     *  never default-focused (D-008). */
-    function confirmDestructive(title: string, message: string, okLabel: string) {
-        return new Promise<boolean>((resolve) => {
-            $q.dialog({
-                title,
-                message,
-                ok: { label: okLabel, color: 'negative', noCaps: true },
-                cancel: { noCaps: true, flat: true },
-            })
-                .onOk(() => resolve(true))
-                .onCancel(() => resolve(false))
-                .onDismiss(() => resolve(false));
-        });
-    }
-
     // ── Bulk add on-deal to a list ──────────────────────────────────────
     const bulkAddOpen = ref(false);
     const bulkAddTargetListId = ref<string | null>(null);
@@ -841,7 +828,7 @@
         ),
     );
 
-    function onBulkAddOnDeal() {
+    async function onBulkAddOnDeal() {
         if (bulkAddCandidates.value.length === 0) {
             $q.notify({
                 type: 'info',
@@ -852,12 +839,12 @@
         bulkAddTargetListId.value =
             shoppingListStore.quickAddTargetListId ?? activeListOptions.value[0]?.value ?? null;
         if (!bulkAddTargetListId.value) {
-            $q.dialog({
+            const go = await confirm({
                 title: 'No active shopping list',
                 message: 'Create or unarchive one first.',
-                ok: { label: 'Open lists', color: 'primary', noCaps: true },
-                cancel: { noCaps: true },
-            }).onOk(() => { void router.push('/shopping-lists'); });
+                okLabel: 'Open lists',
+            });
+            if (go) void router.push('/shopping-lists');
             return;
         }
         bulkAddOpen.value = true;
@@ -891,11 +878,12 @@
             });
             return;
         }
-        const ok = await confirmDestructive(
-            `Unlink ${targets.length} product${targets.length === 1 ? '' : 's'}?`,
-            'They stay in My Products, but stop showing on the stock items they were linked to.',
-            'Unlink',
-        );
+        const ok = await confirm({
+            title: `Unlink ${targets.length} product${targets.length === 1 ? '' : 's'}?`,
+            message: 'They stay in My Products, but stop showing on the stock items they were linked to.',
+            okLabel: 'Unlink',
+            destructive: true,
+        });
         if (!ok) return;
         bulkBusy.value = true;
         try {
@@ -963,9 +951,12 @@
         + 'Finished shopping lists keep their record of it.';
 
     async function onDeleteSingle(product: Product) {
-        const ok = await confirmDestructive(
-            `Delete ${product.name}?`, DELETE_CONSEQUENCE, 'Delete',
-        );
+        const ok = await confirm({
+            title: `Delete ${product.name}?`,
+            message: DELETE_CONSEQUENCE,
+            okLabel: 'Delete',
+            destructive: true,
+        });
         if (!ok) return;
         try {
             await productStore.deleteProductAsync(product.product_id);
@@ -985,11 +976,12 @@
     async function onBulkDelete() {
         const targets = selectedProducts();
         if (targets.length === 0) return;
-        const ok = await confirmDestructive(
-            `Delete ${targets.length} product${targets.length === 1 ? '' : 's'}?`,
-            DELETE_CONSEQUENCE,
-            'Delete',
-        );
+        const ok = await confirm({
+            title: `Delete ${targets.length} product${targets.length === 1 ? '' : 's'}?`,
+            message: DELETE_CONSEQUENCE,
+            okLabel: 'Delete',
+            destructive: true,
+        });
         if (!ok) return;
         bulkBusy.value = true;
         try {

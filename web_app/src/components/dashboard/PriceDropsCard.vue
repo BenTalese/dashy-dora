@@ -116,7 +116,7 @@
         white-space: nowrap;
     }
     .dora-deal-meta {
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
         color: var(--text-secondary);
         overflow: hidden;
         text-overflow: ellipsis;
@@ -131,7 +131,7 @@
         color: var(--text-primary);
     }
     .dora-deal-was {
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
         color: var(--text-secondary);
         text-decoration: line-through;
         margin-left: var(--space-1);

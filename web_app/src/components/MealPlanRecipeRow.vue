@@ -258,7 +258,7 @@
        Resolved as the brief recommended: use the token. A 280px rail is not
        where a 0.05rem parity is legible, and the scale is the rule. */
     .mp-row__name {
-        font-size: calc(var(--font-size-md) * 1rem);
+        font-size: var(--font-size-md);
         font-weight: 500;
         line-height: 1.3;
         /* Name may take two lines, then clamps — a long recipe name must not
@@ -273,7 +273,7 @@
 
     .mp-row__meta {
         margin-top: 2px;
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         color: var(--text-secondary);
         display: flex;
         align-items: center;

@@ -336,8 +336,8 @@ there is worth extracting, that's fine — no section needed.
 ## Naming
 
 Product is **Dashy Dora** (renamed via P8-01, landed 2026-07-01). The GitHub
-repo + local checkout are still under `DiscountDora/` — those are external
-identifiers renamed by hand, tracked as a follow-up. Internal identifiers
+repo is `BenTalese/dashy-dora` (`version_info.GITHUB_REPO` is the one place
+the slug lives); only the local checkout folder is still `DiscountDora/`. Internal identifiers
 (`dashy-dora` package name, `dashy_dora` container, `DashyDora-*` User-Agents,
 Docker image ref, PWA appId) are already flipped; don't reintroduce
 "Discount Dora" / "DiscountDora" in new code, copy, or comments. When

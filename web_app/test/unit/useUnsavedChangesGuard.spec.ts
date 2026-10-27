@@ -4,9 +4,10 @@
 // → confirm dialog) and browser refresh/close (beforeunload → native prompt).
 // A guard that fails open silently discards the user's work.
 //
-// The router guard hooks and Quasar's dialog are mocked at the module boundary
-// so no real router instance is needed — we capture the registered guard
-// callback and invoke it directly with a dirty / clean predicate.
+// The router guard hooks and Quasar's Dialog plugin (which `useConfirm` wraps)
+// are mocked at the module boundary so no real router instance is needed — we
+// capture the registered guard callback and invoke it directly with a dirty /
+// clean predicate.
 import { enableAutoUnmount, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { defineComponent, h, ref } from 'vue';
@@ -24,8 +25,8 @@ vi.mock('vue-router', () => ({
     onBeforeRouteUpdate: (cb: Guard) => { g.updateGuard = cb; },
 }));
 vi.mock('quasar', () => ({
-    useQuasar: () => ({
-        dialog: g.dialog.mockImplementation(() => {
+    Dialog: {
+        create: g.dialog.mockImplementation(() => {
             const chain = {
                 onOk: (cb: () => void) => { if (g.dialogResult === 'ok') cb(); return chain; },
                 onCancel: (cb: () => void) => { if (g.dialogResult === 'cancel') cb(); return chain; },
@@ -33,7 +34,7 @@ vi.mock('quasar', () => ({
             };
             return chain;
         }),
-    }),
+    },
 }));
 
 import { useUnsavedChangesGuard } from 'src/composables/useUnsavedChangesGuard';

@@ -40,15 +40,15 @@
 }
 .dora-signal-card__headline {
     font-weight: 600;
-    font-size: calc(var(--font-size-sm) * 1rem);
+    font-size: var(--font-size-sm);
 }
 .dora-signal-card__body {
     margin-top: var(--space-2);
-    font-size: calc(var(--font-size-sm) * 1rem);
+    font-size: var(--font-size-sm);
     line-height: 1.45;
 }
 .dora-signal-card__meta {
-    font-size: calc(var(--font-size-xs) * 1rem);
+    font-size: var(--font-size-xs);
     margin-top: 2px;
 }
 /* A reason's sub-line, indented under its icon (badge popover + card). */

@@ -59,3 +59,30 @@ def test__seed_onboarding__seed_default_groups__commits_them(api):
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["groups_created"] + body["groups_skipped"] >= 1, body
+
+
+def test__seed_onboarding__own_group_and_zone_names__created_once_in_the_same_call(api):
+    """Finalisation 14-R19: the user's own entries from the stock step ride the
+    seed's unit of work (the wizard used to create them client-side after the
+    seed had committed). Deduped by name like the defaults."""
+    unique = uuid.uuid4().hex[:6]
+    body = {
+        "groups": False, "locations": False,
+        "extra_group_names": [f"Own group {unique}"],
+        "extra_location_names": [f"Own zone {unique}"],
+    }
+
+    first = requests.post(SEED, json=body)
+    assert first.status_code == 200, first.text
+    assert first.json()["groups_created"] == 1
+    assert first.json()["locations_created"] == 1
+
+    second = requests.post(SEED, json=body)
+    assert second.status_code == 200, second.text
+    assert second.json()["groups_created"] == 0
+    assert second.json()["groups_skipped"] == 1
+    assert second.json()["locations_created"] == 0
+    assert second.json()["locations_skipped"] == 1
+
+    zones = requests.get(f"{BASE}/locations").json()
+    assert f"Own zone {unique}" in {z["name"] for z in zones}

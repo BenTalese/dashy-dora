@@ -1,9 +1,7 @@
 <template>
     <AuthShell backdrop="blobs" mascot="top-right">
         <template #card-head>
-            <div class="setup-badge" role="status">
-                <q-icon name="auto_awesome" size="14px" /> One-time setup
-            </div>
+            <AuthBadge :icon="ICONS.auto_awesome">One-time setup</AuthBadge>
             <div class="setup-title" style="font-family: 'Cute Dino'">
                 Dashy Dora
             </div>
@@ -37,28 +35,15 @@
                 @update:model-value="clearField('email')"
             />
 
-            <q-input
+            <PasswordField
                 outlined
                 v-model="form.password"
                 label="Password"
-                :type="showPassword ? 'text' : 'password'"
-                autocomplete="new-password"
+                kind="new"
                 :error="!!fieldErrors.password"
                 :error-message="fieldErrors.password"
                 @update:model-value="clearField('password')"
-                :rules="[
-                    (v: string) => !!v || 'Password is required',
-                    (v: string) => v.length >= 8 || 'At least 8 characters',
-                ]"
-            >
-                <template #append>
-                    <q-icon
-                        :name="showPassword ? 'visibility_off' : 'visibility'"
-                        class="cursor-pointer"
-                        @click="showPassword = !showPassword"
-                    />
-                </template>
-            </q-input>
+            />
 
             <FormErrorSummary :message="generalError" />
 
@@ -74,9 +59,12 @@
 
 <script lang="ts" setup>
     import { useQuasar } from 'quasar';
+    import { ICONS } from 'src/style/icons';
     import AuthShell from 'src/components/AuthShell.vue';
     import AuthButton from 'src/components/AuthButton.vue';
+    import AuthBadge from 'src/components/AuthBadge.vue';
     import FormErrorSummary from 'src/components/FormErrorSummary.vue';
+    import PasswordField from 'src/components/PasswordField.vue';
     import { useFormErrors } from 'src/composables/useFormErrors';
     import { useAuthStore } from 'src/stores/authStore';
     import { reactive, ref } from 'vue';
@@ -86,7 +74,6 @@
     const authStore = useAuthStore();
     const router = useRouter();
 
-    const showPassword = ref(false);
     const submitting = ref(false);
     const { fieldErrors, generalError, handleSaveError, reset: resetErrors } = useFormErrors();
 
@@ -136,21 +123,6 @@
     /* Page-specific typography + the one-time-setup badge. All chrome
        + button treatment lives on AuthShell / AuthButton. Fixes FU-440
        (was verbatim copy of LoginPage's private colour ladder). */
-    .setup-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        padding: 4px 10px;
-        margin-bottom: 10px;
-        border-radius: 999px;
-        background: linear-gradient(135deg, var(--auth-shell-accent-strong), var(--auth-shell-accent));
-        color: #fff;
-        font-size: 0.72rem;
-        font-weight: 600;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        box-shadow: 0 6px 14px -6px rgba(0, 106, 128, 0.6);
-    }
     .setup-title {
         font-size: 2.1rem;
         line-height: 1.1;

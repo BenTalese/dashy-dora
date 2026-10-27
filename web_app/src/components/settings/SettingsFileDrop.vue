@@ -170,7 +170,10 @@
         border-color: var(--brand-primary);
         background: color-mix(in srgb, var(--brand-primary) 5%, var(--surface-elevated));
         color: var(--text-primary);
-        outline: none;
+    }
+    .file-drop:focus-within:not(.file-drop--disabled):not(.file-drop--busy) {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
     }
     .file-drop--dragging {
         border-color: var(--brand-primary);

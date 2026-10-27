@@ -28,8 +28,10 @@
 
 <style scoped>
     .welcome-layout {
-        background: #1e2a26;
-        color: #ffffff;
+        /* The layout pins `data-theme="pesto-dark"`, so the tokens are the
+           right values (R-002; finalisation 14-R21). */
+        background: var(--surface-page);
+        color: var(--text-primary);
         min-height: 100vh;
     }
 </style>

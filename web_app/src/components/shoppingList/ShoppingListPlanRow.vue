@@ -544,7 +544,7 @@
         background: var(--surface-sunken);
         color: var(--text-primary);
         font: inherit;
-        font-size: calc(var(--font-size-md) * 1rem);
+        font-size: var(--font-size-md);
         font-weight: 700;
         font-variant-numeric: tabular-nums;
         letter-spacing: -0.02em;
@@ -616,7 +616,7 @@
        controls — the exact "slightly nicer than before" outcome v4 §5 warns
        about. Scoped specificity beats `.q-btn`, so these land. */
     .sl-row__metabtn {
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
         font-weight: 400;
         color: var(--text-secondary);
         min-height: 20px;

@@ -329,7 +329,6 @@
 </script>
 
 <style scoped lang="scss">
-    .settings-page { display: flex; flex-direction: column; }
     // The sections here are short (a heading + one input), so the shared
     // section rhythm (24px bottom padding) stacked with the dividers left big
     // empty bands. Tighten both — scoped to this page only.

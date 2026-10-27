@@ -210,26 +210,5 @@ def test__patch_app_settings__NonHttpProductSearchUrl__400InvalidSettings(api):
 
 #endregion PATCH validation
 
-#region ---------------- probe ----------------
-
-
-def test__probe_llm__UnreachableUrl__200ReachableFalse(api):
-    # Server-side connection test; a dead endpoint is a *result*, not an
-    # error. Port 9 (discard) refuses immediately — no live LLM needed.
-    resp = requests.post(f"{APP_SETTINGS}/probe",
-                         json={"base_url": "http://127.0.0.1:9"})
-
-    assert resp.status_code == 200, resp.text
-    body = resp.json()
-    assert set(body.keys()) == {"reachable", "models", "error"}
-    assert body["reachable"] is False
-    assert body["models"] == []
-    assert body["error"]
-
-
-def test__probe_llm__MissingBaseUrl__400(api):
-    assert_problem(requests.post(f"{APP_SETTINGS}/probe", json={}), 400,
-                   field="base_url")
-
-
-#endregion probe
+# The `/app-settings/probe` region went with its route (finalisation 13-R19 —
+# the Assistant page probes per-user providers via `/assistant/probe`).

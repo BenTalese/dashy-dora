@@ -256,6 +256,7 @@
     import type { LinkedProduct, PreferredBuy } from 'src/models/stockItemDetail';
     import { useStockItemStore } from 'src/stores/stockItemStore';
     import { useStockLevelStore } from 'src/stores/stockLevelStore';
+    import { useConfirm } from 'src/composables/useConfirm';
     import type {
         IngredientForm,
         IngredientPatch,
@@ -279,6 +280,8 @@
     }>();
 
     const $q = useQuasar();
+
+    const { confirm } = useConfirm();
     const stockItemStore = useStockItemStore();
     const stockLevelStore = useStockLevelStore();
     const { stockItems } = storeToRefs(stockItemStore);
@@ -473,33 +476,34 @@
      *  put the choice in a dropdown the user had to read to know it existed
      *  (and, worse, never rendered when nothing matched). Persistent, because
      *  a dismissed dialog would leave the typed text nowhere. */
-    function onUseTyped() {
+    async function onUseTyped() {
         const text = typed.value.trim();
         if (!text || !draft.value) return;
-        $q.dialog({
+        const track = await confirm({
             title: `Add "${text}" to your pantry?`,
             message: 'Tracked items let Dora tell you whether you have this and put it on a shopping list. '
                 + 'Free text just reads as part of the recipe.',
+            okLabel: 'Add to pantry',
+            cancelLabel: 'Keep as free text',
             persistent: true,
-            ok: { label: 'Add to pantry', color: 'primary', noCaps: true },
-            cancel: { label: 'Keep as free text', flat: true, noCaps: true },
-        })
-            .onOk(() => { void createItem(text); })
-            .onCancel(() => {
-                if (!draft.value) return;
-                draft.value.stock_item_id = null;
-                draft.value.raw_text = text;
-                typed.value = '';
-                // Symmetric with `createItem` below: answering the question
-                // *is* the choice, whichever way it was answered, so the menu
-                // that asked it closes. It used to close on "Add to pantry"
-                // only, leaving the free-text path staring at an open list of
-                // pantry items it had just declined to pick from (owner
-                // 2026-09-09). `true` skips re-filtering, so the box shows the
-                // free text rather than re-offering "Use …" against itself.
-                itemSelect.value?.updateInputValue(text, true);
-                itemSelect.value?.hidePopup();
-            });
+        });
+        if (track) {
+            await createItem(text);
+            return;
+        }
+        if (!draft.value) return;
+        draft.value.stock_item_id = null;
+        draft.value.raw_text = text;
+        typed.value = '';
+        // Symmetric with `createItem` below: answering the question
+        // *is* the choice, whichever way it was answered, so the menu
+        // that asked it closes. It used to close on "Add to pantry"
+        // only, leaving the free-text path staring at an open list of
+        // pantry items it had just declined to pick from (owner
+        // 2026-09-09). `true` skips re-filtering, so the box shows the
+        // free text rather than re-offering "Use …" against itself.
+        itemSelect.value?.updateInputValue(text, true);
+        itemSelect.value?.hidePopup();
     }
 
     async function createItem(name: string) {

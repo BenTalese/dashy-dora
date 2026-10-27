@@ -6,7 +6,7 @@
         rounded
         role="alert"
     >
-        <template v-slot:avatar>
+        <template #avatar>
             <q-icon :name="ICONS.error" color="negative" />
         </template>
         {{ message }}

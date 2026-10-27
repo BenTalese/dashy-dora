@@ -167,15 +167,14 @@ def test__reset_password__weak_password__is_422(api):
     assert response.status_code == 422
 
 
-# ── FU-197 — verified change-email flow + CSRF defence ────────────────
+# ── FU-197 — email on `/auth/me` + CSRF defence ────────────────────────
 #
 # These reuse the session-scoped `api` (the bootstrapped `dora`/`dora`
 # user) rather than registering fresh accounts so we don't burn through
 # the `auth.register` per-IP rate limit (10/min) — that bucket is shared
-# across every test in the file. None of these flows actually mutate
-# dora's address: the change-email request only issues an auth-token row
-# and queues an email; the address itself flips on confirmation, which
-# lives in a separate confirmation flow.
+# across every test in the file. (The verified change-email confirmation
+# flow this block once described was retired — FU-620; a PATCH of `email`
+# now applies directly and simply un-verifies the address.)
 
 
 def test__update_me__email__round_trips_and_validates(api):

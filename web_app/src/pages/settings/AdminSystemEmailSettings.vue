@@ -269,7 +269,6 @@
 </script>
 
 <style scoped lang="scss">
-    .settings-page { display: flex; flex-direction: column; }
     .gmail-steps {
         margin: 0;
         padding-left: 20px;

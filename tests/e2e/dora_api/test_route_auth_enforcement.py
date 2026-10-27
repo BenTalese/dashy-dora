@@ -174,7 +174,6 @@ PINNED_ADMIN_ENDPOINTS: list[tuple[str, str, dict | None]] = [
     # app settings — dora_api/features/app_settings/*.py
     ("GET",    "/api/app-settings", None),                              # get_app_settings.py:134
     ("PATCH",  "/api/app-settings", {}),                                # update_app_settings.py:417
-    ("POST",   "/api/app-settings/probe", {"base_url": "http://127.0.0.1:9"}),  # probe_llm.py:41
     # nutrition dataset import — dora_api/features/nutrition/nutrition_endpoints.py
     # (GET /api/nutrition/sources is deliberately NOT admin-gated: every member
     # needs to know whether a lookup can answer. Only the import is admin.)

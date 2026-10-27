@@ -192,8 +192,11 @@
     import { useMealPlanTemplateSetStore } from 'src/stores/mealPlanTemplateSetStore';
     import { computed, onMounted, ref } from 'vue';
     import { useRouter } from 'vue-router';
+    import { useConfirm } from 'src/composables/useConfirm';
 
     const $q = useQuasar();
+
+    const { confirm } = useConfirm();
     const router = useRouter();
     const templateStore = useMealPlanTemplateStore();
     const setStore = useMealPlanTemplateSetStore();
@@ -246,18 +249,17 @@
         }
     }
 
-    function confirmDeleteTemplate(t: { meal_plan_template_id: string; name: string }) {
+    async function confirmDeleteTemplate(t: { meal_plan_template_id: string; name: string }) {
         // A template a set rotates through is still deletable; the set keeps its
         // slot and renders "(deleted template)", which `templateNameFor` has
         // always handled.
-        $q.dialog({
+        const ok = await confirm({
             title: 'Delete template',
             message: `Delete the template "${t.name}"? Weeks you've already planned from it are unaffected.`,
-            cancel: { label: 'Cancel', flat: true, noCaps: true },
-            ok: { label: 'Delete', noCaps: true, color: 'negative' },
-        }).onOk(() => void run(
-            () => templateStore.deleteAsync(t.meal_plan_template_id), 'Deleted.',
-        ));
+            okLabel: 'Delete',
+            destructive: true,
+        });
+        if (ok) await run(() => templateStore.deleteAsync(t.meal_plan_template_id), 'Deleted.');
     }
 
     // ── Sets ─────────────────────────────────────────────────────────────────
@@ -318,13 +320,14 @@
             savingSet.value = false;
         }
     }
-    function deleteSet(s: { meal_plan_template_set_id: string; name: string }) {
-        $q.dialog({
+    async function deleteSet(s: { meal_plan_template_set_id: string; name: string }) {
+        const ok = await confirm({
             title: 'Delete set',
             message: `Delete the set "${s.name}"? (The templates in it are kept.)`,
-            cancel: { noCaps: true },
-            ok: { label: 'Delete', noCaps: true, color: 'negative' },
-        }).onOk(() => void run(() => setStore.deleteAsync(s.meal_plan_template_set_id), 'Deleted.'));
+            okLabel: 'Delete',
+            destructive: true,
+        });
+        if (ok) await run(() => setStore.deleteAsync(s.meal_plan_template_set_id), 'Deleted.');
     }
 
     async function run(action: () => Promise<unknown>, successMessage: string) {

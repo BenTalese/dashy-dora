@@ -12,6 +12,7 @@ import { useShoppingListStore } from 'src/stores/shoppingListStore';
 import { useStockItemStore } from 'src/stores/stockItemStore';
 import { useRouter } from 'vue-router';
 import { formatDate } from 'src/composables/useDateFormat';
+import { useConfirm } from 'src/composables/useConfirm';
 
 const shoppingListApi = new ShoppingListApiService();
 
@@ -25,6 +26,7 @@ const shoppingListApi = new ShoppingListApiService();
  */
 export function useStockItemActions() {
     const $q = useQuasar();
+    const { confirm, choose } = useConfirm();
     const router = useRouter();
     const stockItemStore = useStockItemStore();
     const shoppingListStore = useShoppingListStore();
@@ -87,38 +89,28 @@ export function useStockItemActions() {
             // and we always ask which list.
             let outcome = await shoppingListApi.quickAddAsync(stockItemId);
             if (outcome.result === 'no_draft') {
-                $q.dialog({
+                const go = await confirm({
                     title: 'No draft list',
                     message:
                         'You have no draft shopping list. Create one to use the cart shortcut.',
-                    ok: { label: 'Open lists', noCaps: true, color: 'primary' },
-                    cancel: { noCaps: true },
-                }).onOk(() => void router.push('/shopping-lists'));
+                    okLabel: 'Open lists',
+                });
+                if (go) void router.push('/shopping-lists');
                 return null;
             }
             if (outcome.result === 'ambiguous') {
-                const choice = await new Promise<string | null>((resolve) => {
-                    $q.dialog({
-                        title: 'Which list?',
-                        message: 'You have more than one draft list. Pick one.',
-                        options: {
-                            type: 'radio',
-                            model: outcome.result === 'ambiguous'
-                                ? outcome.candidates[0]?.shopping_list_id ?? ''
-                                : '',
-                            items: outcome.result === 'ambiguous'
-                                ? outcome.candidates.map((c) => ({
-                                      label: c.name,
-                                      value: c.shopping_list_id,
-                                  }))
-                                : [],
-                        },
-                        cancel: { noCaps: true },
-                        persistent: false,
-                    })
-                        .onOk((val: string) => resolve(val))
-                        .onCancel(() => resolve(null))
-                        .onDismiss(() => resolve(null));
+                const choice = await choose({
+                    title: 'Which list?',
+                    message: 'You have more than one draft list. Pick one.',
+                    items: outcome.result === 'ambiguous'
+                        ? outcome.candidates.map((c) => ({
+                              label: c.name,
+                              value: c.shopping_list_id,
+                          }))
+                        : [],
+                    initial: outcome.result === 'ambiguous'
+                        ? outcome.candidates[0]?.shopping_list_id ?? ''
+                        : '',
                 });
                 if (!choice) return null;
                 outcome = await shoppingListApi.quickAddAsync(stockItemId, choice);

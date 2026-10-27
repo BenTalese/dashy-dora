@@ -220,7 +220,7 @@
     }
     .rcost__total { display: flex; flex-direction: column; gap: 2px; }
     .rcost__k {
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
         font-weight: 700;
         letter-spacing: 0.07em;
         text-transform: uppercase;
@@ -249,7 +249,7 @@
 
     .rcost__body { max-height: 52vh; overflow-y: auto; }
     .rcost__listhead {
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
         font-weight: 700;
         letter-spacing: 0.06em;
         text-transform: uppercase;
@@ -305,7 +305,7 @@
 
     .rcost__grouphead {
         margin-top: var(--space-4, 16px);
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
         font-weight: 700;
         letter-spacing: 0.06em;
         text-transform: uppercase;

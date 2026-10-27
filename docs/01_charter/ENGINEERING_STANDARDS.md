@@ -3449,6 +3449,28 @@ one-off, or purely product/UX decisions (those go to the Charter check + worklog
   in a feature module other than `_line_price.py`.
 - **Established:** 2026-10-27 (finalisation 12-R10). See ADR-096.
 
+### R-100: A yes-or-no question, a name prompt or a pick goes through `useConfirm`
+- **Rule:** the SPA asks the user to confirm, to type a name, or to pick one
+  or more options through `composables/useConfirm.ts` (`confirm`, `prompt`,
+  `choose`, `chooseMany`), which return promises. No page or composable
+  calls `$q.dialog({...})` for those shapes; `$q.dialog({ component })` with
+  a purpose-built dialog component stays the escape hatch for anything with
+  more than two outcomes or its own form.
+- **Why:** the same confirm was written 46 times in 25 files, four of them
+  behind page-local Promise wrappers, and they disagreed on everything the
+  design guide fixes — which button is flat, whether a delete is red,
+  whether Escape cancels, `noCaps` — and one of them rendered a sheet name
+  as HTML (finalisation 20-R11, 13-R26, 16-R22, 18-R9, 18-R5).
+- **How to comply:** `const { confirm } = useConfirm();` then
+  `if (!await confirm({ title, message, okLabel, destructive })) return;`.
+  Copy carries the consequence ("This can't be undone."); `destructive` only
+  colours the button. `persistent: true` only when the question must be
+  answered (the answer *is* a choice, as in "Add to pantry / Keep as free
+  text").
+- **Violation signal:** `$q.dialog({` with `ok:` / `cancel:` / `prompt:` /
+  `options:` keys; a `new Promise<boolean>((resolve) => $q.dialog(…))` wrapper.
+- **Established:** 2026-10-27 (finalisation 20-R11). See ADR-097.
+
 
 ### ADR-001 — Adopt engineering standards + mandatory explain-or-flag gate
 - **Date / task:** 2026-06-06 (user request after repeated theme/component regressions)
@@ -6336,3 +6358,24 @@ A non-binding cookbook of solutions to recurring problems. Not rules — just a
 - **Consequences:** a report reads rows and aggregates in Python, which is
   O(lines in the window): fine at household scale, revisit if a report ever
   spans many households (Path A).
+
+### ADR-097: One dialog primitive for confirm / prompt / pick (promotes R-100)
+- **Date / task:** 2026-10-27 (finalisation Stage 2, chunk 20)
+- **Status:** accepted
+- **Context:** 46 hand-rolled `$q.dialog` confirms across 25 files, each
+  restating the button conventions and each wrapping the callback API in its
+  own Promise; the conventions had drifted and one site used `html: true` on
+  user text.
+- **Decision:** `useConfirm` wraps Quasar's `Dialog` plugin once with the
+  D-008 / D-015 conventions baked in and resolves promises (`confirm` →
+  boolean, `prompt` → trimmed string or null, `choose` / `chooseMany` → the
+  pick or null); every confirm / prompt / pick site calls it (R-100). It is
+  built on `Dialog.create`, not `useQuasar()`, so it works from composables
+  and stores as well as `setup()`.
+- **Alternatives considered:** a `ConfirmDialog.vue` component mounted per
+  page. Rejected: it needs a ref and `v-model` on every page for a one-line
+  question; the plugin already renders on demand.
+- **Consequences:** a dialog with three outcomes or its own form (the
+  mark-open expiry prompt) stays a component passed to `$q.dialog({
+  component })`; the copy still has to say what is lost — the colour is not
+  the warning.

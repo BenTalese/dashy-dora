@@ -15,8 +15,6 @@ session for that user (see the staleness check in `get_me`) — the point of an
 admin-driven change is usually that the old credential is compromised or lost.
 """
 import logging
-import secrets
-import string
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import UUID
@@ -27,10 +25,9 @@ from dora_api.domain.entities.audit_event import SEVERITY_AUDIT
 from dora_api.domain.entities.user import User
 from dora_api.features.routers import USER_ROUTER
 from dora_api.features.auth.admin_gate import require_admin
-from dora_api.infrastructure.api_response import (not_found, ok, ProblemDetails,
-                                                  unprocessable_entity)
+from dora_api.infrastructure.api_response import not_found, ok, validation_failed
 from dora_api.infrastructure.audit import emit as audit_emit
-from dora_api.infrastructure.auth_helpers import hash_password, validate_password
+from dora_api.infrastructure.auth_helpers import hash_password, mint_one_time_password, validate_password
 from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
@@ -38,10 +35,6 @@ from dora_api.infrastructure.ports import Repository
 
 _LOGGER = logging.getLogger(__name__)
 
-
-# 12-char alphanumeric — readable enough to relay over chat, strong enough
-# as a one-time pad until the user changes it themselves.
-_RESET_ALPHABET = string.ascii_letters + string.digits
 
 
 class AdminSetPasswordRequest(BaseModel):
@@ -67,9 +60,7 @@ class ResetUserPasswordHandler:
         if _Target is None:
             return ResetPasswordResponse(user_not_found=True)
 
-        new_password = chosen or "".join(
-            secrets.choice(_RESET_ALPHABET) for _ in range(12)
-        )
+        new_password = chosen or mint_one_time_password()
         _Target.password_hash = hash_password(new_password)
         # Sign every existing session for this user out. Was missing before —
         # an admin-driven change is the *most* likely case to want it.
@@ -96,12 +87,7 @@ def reset_user_password(user_id: UUID):
     if _Chosen:
         pwd_error = validate_password(_Chosen)
         if pwd_error:
-            return unprocessable_entity(ProblemDetails(
-                detail="See errors property for more details.",
-                errors={"password": [pwd_error]},
-                status=422, title="Validation failed.",
-                type="https://datatracker.ietf.org/doc/html/rfc4918#section-11.2",
-            ))
+            return validation_failed({"password": [pwd_error]})
 
     _Response = ResetUserPasswordHandler(SqlAlchemyRepository()).handle(
         user_id, _Chosen,

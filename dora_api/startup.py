@@ -11,20 +11,18 @@ _LOGGER = logging.getLogger(__name__)
 load_dotenv(find_dotenv(), override=False)
 
 from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.cron import CronTrigger
-from apscheduler.triggers.interval import IntervalTrigger
 from flask_cors import CORS
 from flask_migrate import upgrade
 from werkzeug.exceptions import HTTPException
 
 from dora_api.app import app, db
 from dora_api.infrastructure.api_response import internal_server_error
-from dora_api.infrastructure.audit_retention import prune_audit_events
 from dora_api.infrastructure.configuration_manager import DORA_CONFIG
 from dora_api.infrastructure.logging_setup import configure_logging
 from dora_api.infrastructure.middleware import MIDDLEWARE
 from dora_api.infrastructure.profile import is_test
 from dora_api.infrastructure.utils import get_attributes_ending_with
+from dora_api.jobs import register_jobs
 from dora_api.persistence.seed import seed_dev_data
 from dora_api.persistence.seed_dense import seed_dense_data
 from dora_api.persistence.seed_showcase import reset_showcase
@@ -87,6 +85,7 @@ def bootstrap(is_test_env: bool = False):
     configure_logging(
         "dapi",
         DORA_CONFIG.get_log_dir(),
+        level=DORA_CONFIG.get_log_level(),
         debug=DORA_CONFIG.is_debug_mode_enabled(),
     )
     register_routers()
@@ -100,91 +99,11 @@ def bootstrap(is_test_env: bool = False):
     # that needs the worker-split / externalised-scheduler work parked in
     # OPTIONAL_SAAS_AND_MANAGED_DEPLOYMENT.md.
     if not is_test_env and not is_test():
-        # Nightly audit-log retention sweep. Hour 3 local time keeps it
-        # well clear of the 07:00 deals-email send. Tests skip the
-        # scheduler entirely — they don't run long enough to trip it,
-        # and we don't want a background thread surviving the test
-        # session.
+        # Tests skip the scheduler entirely — they don't run long enough to
+        # trip it, and we don't want a background thread surviving the test
+        # session. The job table is `dora_api/jobs.py`.
         scheduler = BackgroundScheduler()
-        scheduler.add_job(
-            prune_audit_events,
-            CronTrigger(hour=3, minute=0),
-            id="audit_retention",
-            replace_existing=True,
-        )
-        # (No alerts email digest — cut at Step-0 Q4,
-        # `IMPL_PLAN_STOCK_SIGNAL_CONSOLIDATION.md`. Web push already delivers
-        # the same set instantly and needs no SMTP, and the 19:00 daily brief
-        # covers the "what's coming" digest shape that was actually asked for.)
-
-        # Daily prune of elapsed suggestion snoozes. Moved off the
-        # GET /api/suggestions read path per FU-513 (2026-07-08); the
-        # read filter already ignores expired snoozes for correctness,
-        # this just keeps the table from accreting stale rows. 03:30
-        # staggers cleanly from the 03:00 audit sweep.
-        from dora_api.features.suggestions.prune_expired_snoozes import \
-            prune_expired_snoozes
-        scheduler.add_job(
-            prune_expired_snoozes,
-            CronTrigger(hour=3, minute=30),
-            id="suggestions_snooze_cleanup",
-            replace_existing=True,
-        )
-        # alerts web-push. Hourly at :30 so it staggers from the
-        # email digest's 07:00 fire. The job self-gates when VAPID isn't
-        # configured (returns 0 without mutating the ledger) so an
-        # unconfigured install spends nothing.
-        from dora_api.features.alerts.send_alerts_push import \
-            send_alerts_push
-        scheduler.add_job(
-            send_alerts_push,
-            CronTrigger(minute=30),
-            id="alerts_push",
-            replace_existing=True,
-        )
-        # Daily brief push. Registered **hourly** rather than pinned to the
-        # send hour: this cron fires in the *server's* timezone, while the
-        # brief must land at 19:00 **household** time (R-021), and the
-        # household timezone is a runtime AppSetting. The job gates on the
-        # household clock internally, so changing the timezone in Settings
-        # takes effect that same evening instead of at the next restart.
-        # Minute 45 staggers it off the :30 alerts push. Self-gates when
-        # VAPID isn't configured, same as its sibling.
-        from dora_api.features.alerts.send_daily_brief import send_daily_brief
-        scheduler.add_job(
-            send_daily_brief,
-            CronTrigger(minute=45),
-            id="daily_brief",
-            replace_existing=True,
-        )
-        # Weekly deals email (FU-789). Hourly for the same reason the brief is:
-        # the send hour is household-local (R-021) and each subscriber picks
-        # their own weekday, both of which are runtime settings the startup-time
-        # cron can't see. The job gates on all of it internally and self-gates
-        # when SMTP or the install-wide flag is off, so an install that never
-        # configured email spends one cheap check an hour. Minute 15 staggers it
-        # off the :30 alerts push and the :45 brief.
-        from dora_api.features.deals.send_deals_email import send_deals_email
-        scheduler.add_job(
-            send_deals_email,
-            CronTrigger(minute=15),
-            id="deals_email",
-            replace_existing=True,
-        )
-        # Demo / sellable-showcase auto-reset (FU-392). When the install is
-        # booted in demo mode, wipe + re-seed the curated showcase dataset on
-        # a fixed interval so anyone poking at the demo starts from a clean,
-        # coherent state. DORA_DEMO_RESET_MINUTES=0 disables the reset (the
-        # boot-time seed still runs), leaving a static demo.
-        if DORA_CONFIG.is_demo_mode_enabled():
-            _reset_minutes = DORA_CONFIG.get_demo_reset_minutes()
-            if _reset_minutes > 0:
-                scheduler.add_job(
-                    reset_showcase,
-                    IntervalTrigger(minutes=_reset_minutes),
-                    id="demo_reset",
-                    replace_existing=True,
-                )
+        register_jobs(scheduler)
         scheduler.start()
 
 
@@ -201,7 +120,9 @@ def startup(is_test_env: bool = False):
             DORA_CONFIG.get_api_host(),
             DORA_CONFIG.get_api_port(),
             DORA_CONFIG.is_debug_mode_enabled(),
-            use_reloader = DORA_CONFIG.is_reloader_enabled()
+            # Never the reloader: it double-boots the app and the in-process
+            # scheduler with it; `scripts/dev-restart.sh` is the restart path.
+            use_reloader=False,
         )
 
 
@@ -370,9 +291,16 @@ def register_routers():
                 "reconcile_consumed_meals failed; serving stale pool counts"
             )
 
-    for _Router in get_attributes_ending_with('router', Path() / 'dora_api' / 'features'):
+    routers = get_attributes_ending_with('router', 'dora_api.features')
+    for _Router in routers:
         app.register_blueprint(_Router)
     app.register_blueprint(MIDDLEWARE)
+    # FU-720's cheapest shape: a deploy that lost a feature directory (FU-717)
+    # shows up as a lower count in the boot log.
+    _LOGGER.info(
+        "Registered %d router(s), %d route(s)",
+        len(routers), sum(1 for rule in app.url_map.iter_rules() if rule.rule.startswith("/api/")),
+    )
 
 
 @app.errorhandler(Exception)
@@ -395,8 +323,8 @@ def handle_global_exception(error: Exception):
     try:
         db.session.rollback()
     except Exception:  # noqa: BLE001
-        logging.getLogger().exception("rollback in global handler failed")
-    logging.getLogger().exception("Unhandled exception", exc_info=error)
+        _LOGGER.exception("rollback in global handler failed")
+    _LOGGER.exception("Unhandled exception", exc_info=error)
     return internal_server_error("An unexpected error occurred.")
 
 

@@ -274,7 +274,7 @@
     }
     .dora-score-hero__number {
         /* A2's ladder tops out at `--font-size-3xl` (30px). */
-        font-size: calc(var(--font-size-3xl) * 1rem);
+        font-size: var(--font-size-3xl);
         font-weight: 600;
         line-height: 1;
         color: var(--text-primary);
@@ -285,7 +285,7 @@
         gap: var(--space-2);
     }
     .dora-score-hero__window {
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         color: var(--text-secondary);
     }
 
@@ -295,7 +295,7 @@
         gap: var(--space-1);
         padding: var(--space-1) var(--space-2);
         border-radius: var(--radius-pill);
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
         font-weight: 500;
     }
     /* A1 soft-token rule: a `-soft` token is a background only; the text on it
@@ -355,7 +355,7 @@
     .dora-score-component__score--dormant {
         /* Words, not a number, so it takes the caption scale and the readable
            secondary token rather than sitting at the score's weight. */
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
         font-weight: 500;
         text-transform: uppercase;
         letter-spacing: 0.06em;
@@ -394,7 +394,7 @@
 
     .dora-score-component__reason {
         margin-top: var(--space-1);
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
         /* Was `--text-muted` while it shared a line with a green action link.
            With the link gone the reason is the only sentence in the box and the
            thing you actually read, so it takes the readable secondary token

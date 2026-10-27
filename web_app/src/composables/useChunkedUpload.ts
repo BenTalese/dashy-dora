@@ -5,13 +5,14 @@
  *
  * Used by both BackupRestore and DataImport — both flows upload once and
  * then reference the staged file via upload_id in subsequent inspect /
- * commit calls.
+ * commit calls. Calls go through `UploadsApiService` (finalisation 18-R7:
+ * they were raw `fetch`es with their own CSRF header and error reader);
+ * `inFlight` / `lastUploadId` were dropped — neither page read them
+ * (18-R17).
  */
 import { ref } from 'vue';
-// FU-571: these calls bypass axios (hand-rolled fetch for chunk streaming),
-// so the interceptor that normally attaches the double-submit CSRF header
-// never runs — without csrfHeader() every upload 403s.
-import { csrfHeader, resolveBaseURL } from 'src/services/api/axiosHttpClient';
+import UploadsApiService from 'src/services/api/uploadsApiService';
+import { NormalisedApiError } from 'src/services/api/axiosHttpClient';
 
 // Defaults match the server-side constants in
 // dora_api/features/data/uploads.py — overrideable per-call.
@@ -23,60 +24,30 @@ export interface ChunkedUploadOptions {
     maxAttempts?: number;
 }
 
+const uploads = new UploadsApiService();
+
 export function useChunkedUpload() {
     // 0..1 inclusive. Stays at 0 until the first chunk lands.
     const progress = ref(0);
-    const inFlight = ref(false);
-    const lastUploadId = ref<string | null>(null);
 
     async function upload(file: File, options: ChunkedUploadOptions = {}): Promise<string> {
-        const baseUrl = resolveBaseURL();
         const chunkSize = options.chunkSize ?? DEFAULT_CHUNK_BYTES;
         const maxAttempts = options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
 
         progress.value = 0;
-        inFlight.value = true;
-        try {
-            const startResponse = await fetch(`${baseUrl}/data/uploads/start`, {
-                method: 'POST',
-                credentials: 'include',
-                headers: { 'Content-Type': 'application/json', ...csrfHeader() },
-                body: JSON.stringify({ expected_size: file.size }),
-            });
-            if (!startResponse.ok) {
-                throw new Error(await describeError(startResponse));
-            }
-            const startBody = await startResponse.json() as {
-                upload_id: string;
-                chunk_size: number;
-            };
-            lastUploadId.value = startBody.upload_id;
-            // The server can dictate a larger chunk size than the caller
-            // suggested; honour whichever is larger to avoid extra round-trips.
-            const effectiveChunkSize = Math.max(startBody.chunk_size, chunkSize);
+        const started = await uploads.startAsync(file.size);
+        // The server can dictate a larger chunk size than the caller
+        // suggested; honour whichever is larger to avoid extra round-trips.
+        const effectiveChunkSize = Math.max(started.chunk_size, chunkSize);
 
-            for (let offset = 0; offset < file.size; offset += effectiveChunkSize) {
-                const end = Math.min(offset + effectiveChunkSize, file.size);
-                const slice = file.slice(offset, end);
-                await uploadChunkWithRetry(
-                    baseUrl, startBody.upload_id, offset, slice, maxAttempts,
-                );
-                progress.value = end / file.size;
-            }
-
-            const finishResponse = await fetch(`${baseUrl}/data/uploads/finish`, {
-                method: 'POST',
-                credentials: 'include',
-                headers: { 'Content-Type': 'application/json', ...csrfHeader() },
-                body: JSON.stringify({ upload_id: startBody.upload_id }),
-            });
-            if (!finishResponse.ok) {
-                throw new Error(await describeError(finishResponse));
-            }
-            return startBody.upload_id;
-        } finally {
-            inFlight.value = false;
+        for (let offset = 0; offset < file.size; offset += effectiveChunkSize) {
+            const end = Math.min(offset + effectiveChunkSize, file.size);
+            await uploadChunkWithRetry(started.upload_id, offset, file.slice(offset, end), maxAttempts);
+            progress.value = end / file.size;
         }
+
+        await uploads.finishAsync(started.upload_id);
+        return started.upload_id;
     }
 
     /** Best-effort abort. Safe to call with a stale id (the server returns
@@ -84,11 +55,7 @@ export function useChunkedUpload() {
     async function abort(uploadId: string | null): Promise<void> {
         if (!uploadId) return;
         try {
-            const baseUrl = resolveBaseURL();
-            await fetch(
-                `${baseUrl}/data/uploads/${encodeURIComponent(uploadId)}`,
-                { method: 'DELETE', credentials: 'include', headers: csrfHeader() },
-            );
+            await uploads.abortAsync(uploadId);
         } catch {
             // Ignored — TTL sweep will catch it eventually.
         }
@@ -96,14 +63,12 @@ export function useChunkedUpload() {
 
     function reset() {
         progress.value = 0;
-        lastUploadId.value = null;
     }
 
-    return { progress, inFlight, lastUploadId, upload, abort, reset };
+    return { progress, upload, abort, reset };
 }
 
 async function uploadChunkWithRetry(
-    baseUrl: string,
     id: string,
     offset: number,
     chunk: Blob,
@@ -111,33 +76,20 @@ async function uploadChunkWithRetry(
 ): Promise<void> {
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
         try {
-            const form = new FormData();
-            form.append('upload_id', id);
-            form.append('offset', String(offset));
-            form.append('chunk', chunk);
-            const response = await fetch(`${baseUrl}/data/uploads/chunk`, {
-                method: 'POST',
-                credentials: 'include',
-                headers: csrfHeader(),
-                body: form,
-            });
-            if (response.ok) return;
-            const body = await response.json().catch(() => null);
-            const received = body?.errors?.received?.[0];
-            if (response.status === 400 && received !== undefined) {
-                throw new Error(
-                    `Chunk offset mismatch (server has ${received} bytes). Retry the upload.`,
-                );
-            }
-            throw new Error(body?.detail ?? body?.title ?? `HTTP ${response.status}`);
+            await uploads.chunkAsync(id, offset, chunk);
+            return;
         } catch (err) {
+            // An offset the server didn't expect is not retryable: say how far
+            // it got so the user restarts the upload rather than hammering it.
+            if (err instanceof NormalisedApiError && err.status === 400) {
+                const errors = err.details?.errors as Record<string, { msg?: string }[]> | undefined;
+                const mismatch = errors?.received?.[0]?.msg;
+                if (mismatch) {
+                    throw new Error(`Chunk offset mismatch (server has ${mismatch} bytes). Retry the upload.`);
+                }
+            }
             if (attempt >= maxAttempts) throw err;
             await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
         }
     }
-}
-
-async function describeError(response: Response): Promise<string> {
-    const body = await response.json().catch(() => null);
-    return body?.detail ?? body?.title ?? `HTTP ${response.status}`;
 }

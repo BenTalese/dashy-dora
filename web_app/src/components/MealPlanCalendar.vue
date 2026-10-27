@@ -424,7 +424,7 @@
     .cal__dows {
         margin-bottom: 4px;
         text-align: center;
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
         font-weight: 600;
         color: var(--text-secondary);
     }
@@ -483,7 +483,7 @@
     }
 
     .cal-day__dd {
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
         line-height: 1;
         /* Real dates in every cell now, so the column of numbers has to align —
            the old grid showed a number only on Mondays. */

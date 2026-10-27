@@ -101,7 +101,7 @@
         margin-bottom: var(--space-2);
     }
     .toggle-group__label {
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         font-weight: 500;
         flex: 1 1 auto;
     }
@@ -129,12 +129,12 @@
                     border-color var(--motion-fast) var(--motion-ease);
     }
     .toggle-card__label {
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         font-weight: 600;
         line-height: 1.2;
     }
     .toggle-card__caption {
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
         color: var(--text-muted);
         line-height: 1.2;
     }

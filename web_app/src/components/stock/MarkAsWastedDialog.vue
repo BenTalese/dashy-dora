@@ -137,7 +137,7 @@
         gap: var(--space-2);
     }
     .mark-wasted__tile-label {
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         text-align: center;
         line-height: 1.2;
     }

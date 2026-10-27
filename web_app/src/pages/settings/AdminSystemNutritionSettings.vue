@@ -463,7 +463,6 @@
 </script>
 
 <style scoped lang="scss">
-    .settings-page { display: flex; flex-direction: column; }
     .settings-page__note {
         font-size: 0.8125rem;
         line-height: 1.4;

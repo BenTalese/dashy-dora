@@ -1,7 +1,7 @@
 """Shared building blocks for the A1 auth surface.
 
 All five new auth endpoints reuse this module:
-  - Password rule validation (min 10 chars, ≥1 letter + ≥1 digit).
+  - Password rule validation (`validate_password`: min 8 chars, no composition rule).
   - Token generation, hashing, persistence, and constant-time lookup.
   - Anti-enumeration helpers (always pretend success on
     forgot-password / resend-verification).
@@ -9,7 +9,8 @@ All five new auth endpoints reuse this module:
   - Public URL resolution so verification / reset links work for whatever
     deployment surface is in use — PWA on https://, a self-hosted desktop
     Electron app on file://-loaded code, or a mobile shell pointing at
-    https://. Pulled from DORA_PUBLIC_URL with sensible fallbacks.
+    https://. Resolved from `AppSetting.public_url` with request-derived
+    fallbacks (see `public_base_url`).
 
 Tokens live in a single `AuthToken` table keyed by purpose, hashed at
 rest (SHA-256). The raw token only appears in the outbound email. Token
@@ -24,11 +25,11 @@ import logging
 import os
 import re
 import secrets
+import string
 import time
 from collections import deque
 from datetime import datetime, timedelta, timezone
 from threading import Lock
-from typing import Any
 from uuid import UUID, uuid4
 
 from flask import request
@@ -36,9 +37,7 @@ from sqlalchemy import select
 from werkzeug.security import generate_password_hash
 
 from dora_api.app import db
-from dora_api.domain.entities.auth_token import (
-    ALLOWED_PURPOSES, AuthToken, PURPOSE_RESET_PASSWORD, PURPOSE_VERIFY_EMAIL,
-)
+from dora_api.domain.entities.auth_token import ALLOWED_PURPOSES, AuthToken
 
 
 # ── Password rules ─────────────────────────────────────────────────────
@@ -106,6 +105,16 @@ PASSWORD_RULES_DOC = (
 # hashes — a user's next successful login can be used to lazily upgrade
 # their hash if we ever want to (not doing that yet).
 PASSWORD_HASH_METHOD = "scrypt:32768:8:1"
+
+
+# 12-char alphanumeric — readable enough to relay over chat, strong enough as
+# a one-time pad until the user changes it. One minter for admin-create and
+# admin-reset (finalisation 13-R14).
+_ONE_TIME_ALPHABET = string.ascii_letters + string.digits
+
+
+def mint_one_time_password(length: int = 12) -> str:
+    return "".join(secrets.choice(_ONE_TIME_ALPHABET) for _ in range(length))
 
 
 def hash_password(value: str) -> str:
@@ -192,9 +201,14 @@ def find_active_token(raw: str, purpose: str) -> AuthToken | None:
     table = db.metadata.tables["AuthToken"]
     candidate_hash = _hash_token(raw)
     now = datetime.now(timezone.utc)
+    # Equality on the hash in SQL is safe — the digest is deterministic and
+    # a wrong guess learns nothing from a row count that is 0 or 1 — and it
+    # stops the lookup loading every live token of the purpose (finalisation
+    # 15-R23). The constant-time compare stays as the final check.
     rows = db.session.execute(
         select(table).where(
             table.c.purpose == purpose,
+            table.c.token_hash == candidate_hash,
             table.c.consumed_at.is_(None),
             table.c.expires_at > now,
         )
@@ -390,7 +404,6 @@ __all__ = [
     "PASSWORD_HASH_METHOD", "hash_password",
     "is_valid_email", "normalise_email",
     "VERIFY_EMAIL_TTL", "RESET_PASSWORD_TTL",
-    "PURPOSE_VERIFY_EMAIL", "PURPOSE_RESET_PASSWORD",
     "issue_token", "find_active_token", "consume_token",
     "revoke_tokens_for_user",
     "public_base_url", "spa_deep_link", "build_verify_url", "build_reset_url",

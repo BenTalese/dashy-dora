@@ -77,7 +77,6 @@
     import { useSettingsSave } from 'src/composables/useSettingsSave';
     import AppSpinner from 'src/components/AppSpinner.vue';
     import { ICONS } from 'src/style/icons';
-    import { useQuasar } from 'quasar';
     import { computed, onMounted, ref, watch } from 'vue';
     import { useRouter } from 'vue-router';
     import type { LocationKind, LocationNode } from 'src/models/location';
@@ -87,6 +86,7 @@
     import BaseButton from 'src/components/BaseButton.vue';
     import LocationZoneCard from 'src/components/settings/LocationZoneCard.vue';
     import SettingsPageHeader from 'src/components/settings/SettingsPageHeader.vue';
+    import { useConfirm } from 'src/composables/useConfirm';
 
     // Which zones the user left open. Presentation state, so it belongs to the
     // client (R-003).
@@ -102,7 +102,8 @@
     // rule requires.
     const EXPANDED_STORAGE_KEY = 'dora.settings.stockLocations.expandedZones';
 
-    const $q = useQuasar();
+
+    const { confirm, prompt } = useConfirm();
     const router = useRouter();
     const locationStore = useLocationStore();
 
@@ -164,22 +165,6 @@
 
     const { notifyError } = useSettingsSave();
 
-    /** Prompt for a name. Matches the create/rename convention the sibling
-     *  taxonomy pages use (VocabListEditor) — one anatomy per job, D-015. */
-    function promptForName(title: string, message: string, initial = ''): Promise<string | null> {
-        return new Promise((resolve) => {
-            $q.dialog({
-                title,
-                message,
-                prompt: { model: initial, type: 'text' },
-                cancel: { noCaps: true },
-            })
-                .onOk((v: string) => resolve(v.trim()))
-                .onCancel(() => resolve(null))
-                .onDismiss(() => resolve(null));
-        });
-    }
-
     function childKind(parentKind: LocationKind | null): LocationKind | null {
         if (parentKind === null) return 'zone';
         if (parentKind === 'zone') return 'area';
@@ -190,7 +175,10 @@
     async function onAddChild(parent: LocationNode | null, forcedKind?: LocationKind) {
         const kind = forcedKind ?? childKind(parent?.kind ?? null);
         if (!kind) return;
-        const name = await promptForName(`New ${kind}`, `What's this ${kind} called?`);
+        const name = await prompt({
+            title: `New ${kind}`,
+            message: `What's this ${kind} called?`,
+        });
         if (!name) return;
         try {
             await locationStore.createAsync({
@@ -214,11 +202,11 @@
         // Explicit dialog rather than the old inline field: that one saved on
         // blur, so clicking any other control on the page silently committed
         // whatever was typed.
-        const next = await promptForName(
-            `Rename ${node.kind}`,
-            `What should "${node.name}" be called?`,
-            node.name,
-        );
+        const next = await prompt({
+            title: `Rename ${node.kind}`,
+            message: `What should "${node.name}" be called?`,
+            initial: node.name,
+        });
         if (!next || next === node.name) return;
         try {
             await locationStore.updateAsync(node.location_id, { name: next });
@@ -245,16 +233,11 @@
             messageParts.push('Nothing is stored here.');
         }
 
-        const ok = await new Promise<boolean>((resolve) => {
-            $q.dialog({
-                title: `Delete "${node.name}"?`,
-                message: messageParts.join(' '),
-                cancel: { noCaps: true },
-                ok: { label: 'Delete', color: 'negative', noCaps: true },
-            })
-                .onOk(() => resolve(true))
-                .onCancel(() => resolve(false))
-                .onDismiss(() => resolve(false));
+        const ok = await confirm({
+            title: `Delete "${node.name}"?`,
+            message: messageParts.join(' '),
+            okLabel: 'Delete',
+            destructive: true,
         });
         if (!ok) return;
         try {
@@ -288,7 +271,7 @@
 </script>
 
 <style scoped lang="scss">
-    .settings-page { display: flex; flex-direction: column; position: relative; }
+    .settings-page { position: relative; }
     .zone-list {
         display: flex;
         flex-direction: column;

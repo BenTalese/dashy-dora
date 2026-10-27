@@ -63,22 +63,16 @@
 
 <script setup lang="ts">
     import AuthShell from 'src/components/AuthShell.vue';
+    import { promptAndSaveInstanceUrl } from 'src/composables/useChangeInstance';
     import AuthButton from 'src/components/AuthButton.vue';
     import logoSrc from 'src/assets/logo-mascot.png';
     import offlineSrc from 'src/assets/dora/dorabot-fatal-error-or-offline.png';
     import { onBeforeUnmount, ref, watch } from 'vue';
-    import { useQuasar } from 'quasar';
-    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
-    import {
-        backendBaseUrlIsUserSet,
-        getBackendBaseUrl,
-        setBackendBaseUrl,
-    } from 'src/services/api/backendUrl';
+    import { backendBaseUrlIsUserSet } from 'src/services/api/backendUrl';
 
     const props = defineProps<{ error: string | null }>();
     const emit = defineEmits<{ retry: [] }>();
 
-    const $q = useQuasar();
 
     // FU-574 — only offer the change-URL recovery when a runtime override is
     // actually in play (native always; a browser/PWA user who saved one). A
@@ -87,45 +81,13 @@
     // has already populated the cache from storage before we mount.
     const showChangeUrl = backendBaseUrlIsUserSet();
 
-    // Mirror of AboutSettings.onChangeInstance — but usable while the app is
-    // un-bootstrapped (the router-driven About screen is unreachable behind
-    // this same error overlay), so it can't depend on the router.
+    // Shared with About (finalisation 15-R9); the splash can't depend on the
+    // router, so it reloads outright.
     async function onChangeInstance(): Promise<void> {
-        const initial = getBackendBaseUrl();
-        const url = await new Promise<string | null>((resolve) => {
-            $q.dialog({
-                title: 'Change instance URL',
-                message:
-                    "Enter the URL of the Dora server you want to use.",
-                prompt: {
-                    model: initial,
-                    type: 'url',
-                    isValid: (v: string) => v.trim().length > 0,
-                },
-                ok: { label: 'Save', color: 'primary', noCaps: true },
-                cancel: { noCaps: true },
-            })
-                .onOk((v: string) => resolve(v))
-                .onCancel(() => resolve(null))
-                .onDismiss(() => resolve(null));
-        });
-        if (!url) return;
-        try {
-            await setBackendBaseUrl(url);
-            $q.notify({
-                type: 'positive', 
-                message: 'Instance URL saved. Refreshing…',
-                timeout: 1500,
-            });
-            // Full reload so the boot probe re-runs against the new backend.
-            setTimeout(() => window.location.reload(), 400);
-        } catch (err) {
-            $q.notify({
-                type: 'negative', 
-                message: 'Could not save the URL.',
-                caption: toastCaption(err),
-            });
-        }
+        const saved = await promptAndSaveInstanceUrl();
+        if (!saved) return;
+        // Full reload so the boot probe re-runs against the new backend.
+        setTimeout(() => window.location.reload(), 400);
     }
 
     // Loading flavour text. Cycled while the boot probe is in flight so the
@@ -239,7 +201,7 @@
     .splash-loading-message {
         margin: 0;
         font-size: 0.95rem;
-        color: #ffffff;
+        color: var(--auth-shell-on-canvas);
         opacity: 0.85;
         animation: splash-fade-in 0.4s ease;
     }
@@ -248,13 +210,13 @@
         margin: 0;
         font-size: 1.15rem;
         font-weight: 600;
-        color: #ffffff;
+        color: var(--auth-shell-on-canvas);
     }
 
     .splash-error-detail {
         margin: 0;
         font-size: 0.95rem;
-        color: #ffffff;
+        color: var(--auth-shell-on-canvas);
         opacity: 0.85;
         line-height: 1.4;
     }
@@ -271,7 +233,7 @@
         max-width: 260px;
     }
     .splash-change-url :deep(.dora-auth-btn--ghost) {
-        color: #ffffff;
+        color: var(--auth-shell-on-canvas);
         opacity: 0.85;
     }
     .splash-change-url :deep(.dora-auth-btn--ghost:hover) {

@@ -45,12 +45,7 @@ export function dismissUpdate(): void {
     updateDismissed.value = true;
 }
 
-export function isIosSafari(): boolean {
-    if (typeof navigator === 'undefined') return false;
-    const ua = navigator.userAgent;
-    const isIOS = /iPad|iPhone|iPod/.test(ua) && !(/CriOS|FxiOS|EdgiOS/.test(ua));
-    return isIOS && /Safari/.test(ua);
-}
+export { isIosSafari } from 'src/helpers/platform';
 
 /**
  * Why the install button isn't offered, when it isn't.

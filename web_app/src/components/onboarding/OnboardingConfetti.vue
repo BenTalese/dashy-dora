@@ -22,7 +22,7 @@
         'var(--brand-primary)',
         'var(--brand-accent)',
         'var(--brand-secondary)',
-        'var(--q-info)',
+        'var(--semantic-info)',
     ];
     const COUNT = 40;
 

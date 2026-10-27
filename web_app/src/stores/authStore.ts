@@ -1,4 +1,5 @@
 import { acceptHMRUpdate, defineStore } from 'pinia';
+import { PUBLIC_ROUTES, currentHashPath } from 'src/router/publicRoutes';
 import type { AuthenticatedUser } from 'src/models/auth';
 import type {
     BootstrapAdminCommand,
@@ -107,8 +108,13 @@ export const useAuthStore = defineStore('auth', () => {
         currentUser.value = await authApiService.loginAsync(command);
     };
 
-    const registerAsync = async (command: RegisterCommand) => {
-        currentUser.value = await authApiService.registerAsync(command);
+    /** Resolves to whether a verification mail went out, so the page can say
+     *  "check your inbox" (finalisation 15-R3). */
+    const registerAsync = async (command: RegisterCommand): Promise<boolean> => {
+        const result = await authApiService.registerAsync(command);
+        const { verification_sent, ...user } = result;
+        currentUser.value = user;
+        return verification_sent === true;
     };
 
     /** FU-200 — create the first admin and auto-login. The server 410s
@@ -165,6 +171,14 @@ export const useAuthStore = defineStore('auth', () => {
         // don't hand them the previous user's filter shape.
         clearAllListState();
         void clearApiResponseCache();
+        // Send them to sign in with a way back (finalisation 15-R5): clearing
+        // the user alone left emptied cards on screen until the next
+        // navigation. A hash assignment, because the store can't import the
+        // router without a cycle; the router guard does the rest.
+        const path = currentHashPath();
+        if (typeof window !== 'undefined' && !PUBLIC_ROUTES.has(path)) {
+            window.location.hash = `#/login?redirect=${encodeURIComponent(path)}`;
+        }
     };
     setUnauthorizedHandler(handleSessionExpired);
 

@@ -188,7 +188,7 @@
                                     dense
                                     size="sm"
                                     color="warning"
-                                    text-color="white"
+                                    text-color="dark"
                                     class="q-ml-xs"
                                     :icon="ICONS.trending_up"
                                 >

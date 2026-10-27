@@ -112,7 +112,7 @@
         border-radius: var(--radius-pill);
         background: var(--surface-sunken);
         color: var(--text-secondary);
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         font-weight: 600;
         font-variant-numeric: tabular-nums;
         text-align: center;

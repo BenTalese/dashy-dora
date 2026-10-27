@@ -484,7 +484,7 @@
         display: flex;
         align-items: center;
         gap: var(--space-1);
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         font-weight: 600;
         color: var(--accent-ink);
     }

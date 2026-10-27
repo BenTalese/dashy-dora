@@ -120,9 +120,8 @@
 </script>
 
 <style scoped lang="scss">
-    .settings-page { display: flex; flex-direction: column; }
     .settings-page__note {
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         line-height: 1.4;
         margin-top: var(--space-1);
     }

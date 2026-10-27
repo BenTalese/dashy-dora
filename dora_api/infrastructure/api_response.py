@@ -1,7 +1,7 @@
 from dataclasses import dataclass
-from http.client import (BAD_REQUEST, CREATED, FORBIDDEN, INTERNAL_SERVER_ERROR,
-                         NO_CONTENT, NOT_FOUND, OK, UNAUTHORIZED,
-                         UNPROCESSABLE_ENTITY)
+from http.client import (BAD_REQUEST, CREATED, FORBIDDEN, GONE,
+                         INTERNAL_SERVER_ERROR, NO_CONTENT, NOT_FOUND, OK,
+                         UNAUTHORIZED, UNPROCESSABLE_ENTITY)
 from typing import Any
 from uuid import UUID
 
@@ -207,6 +207,18 @@ def not_found(entity_name: str, id: UUID) -> Response:
     return response
 
 
+def gone(detail: str, title: str = "Gone.") -> Response:
+    """410 (RFC 7231 §6.5.9): the resource existed and deliberately no longer
+    answers — e.g. first-admin bootstrap once an account exists."""
+    response = jsonify(ProblemDetails(
+        detail=detail, errors={}, status=GONE, title=title,
+        type="https://datatracker.ietf.org/doc/html/rfc7231#section-6.5.9",
+    ))
+    response.content_type = 'application/problem+json'
+    response.status_code = GONE
+    return response
+
+
 def too_many_requests(retry_after: int) -> Response:
     """429 (RFC 6585 §4) with a `Retry-After` header: the one shape every
     rate-limited endpoint answers with."""
@@ -258,3 +270,16 @@ def unprocessable_entity(problem_details: ProblemDetails) -> Response:
     response.content_type = 'application/problem+json'
     response.status_code = UNPROCESSABLE_ENTITY
     return response
+
+
+def validation_failed(errors: dict) -> Response:
+    """The field-validation 422: `errors` maps field → messages. Seven
+    feature modules used to build this ProblemDetails literal by hand
+    (finalisation 13-R14); this is the one copy of its title/type."""
+    return unprocessable_entity(ProblemDetails(
+        detail="See errors property for more details.",
+        errors=errors,
+        status=UNPROCESSABLE_ENTITY,
+        title="Validation failed.",
+        type="https://datatracker.ietf.org/doc/html/rfc4918#section-11.2",
+    ))

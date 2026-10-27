@@ -176,7 +176,7 @@
         min-width: 0;
     }
     .entry-chip__slot {
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.02em;
@@ -203,7 +203,7 @@
         white-space: normal;
         word-break: break-word;
         line-height: 1.25;
-        font-size: calc(var(--font-size-md) * 1rem);
+        font-size: var(--font-size-md);
         font-weight: 600;
     }
     .entry-chip__pill {
@@ -213,6 +213,6 @@
         border-radius: var(--radius-md);
         padding: 2px 8px;
         font-weight: 700;
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
     }
 </style>

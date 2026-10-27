@@ -12,6 +12,10 @@ from flask import session
 from dora_api.domain.entities.user import User
 
 SESSION_USER_ID_KEY = "user_id"
+# Snapshot of `password_changed_at` taken at login; `get_me` compares it so a
+# cookie minted before a password change reads as stale (finalisation 15-R14 —
+# lived in `auth/register_user.py`, which `middleware` could not import).
+SESSION_PWD_V_KEY = "pwd_v"
 
 
 def current_user_id() -> UUID | None:

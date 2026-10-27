@@ -91,7 +91,7 @@
     .rail-disc__label {
         flex: 1 1 auto;
         min-width: 0;
-        font-size: calc(var(--font-size-md) * 1rem);
+        font-size: var(--font-size-md);
         font-weight: 500;
         line-height: 1.3;
     }

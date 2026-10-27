@@ -183,6 +183,23 @@
 
         <hr class="settings-divider settings-divider--spaced" />
 
+        <!-- Finalisation 14-R3: two comments promised a "Restart onboarding"
+             entry that never existed; `/onboarding/restart` was reachable only
+             from the 24-hour skip banner. -->
+        <SettingsSection>
+            <template #title>Welcome tour</template>
+            <template #description>
+                Walk the first-run tour again. Nothing you've set up changes.
+            </template>
+            <BaseButton
+                variant="secondary"
+                :icon="ICONS.replay"
+                label="Run the welcome tour again"
+                :loading="restartingTour"
+                @click="onRestartTour"
+            />
+        </SettingsSection>
+
         <SettingsSection>
             <template #title>Technical details</template>
             <template #description>
@@ -229,6 +246,7 @@
 
 <script lang="ts" setup>
     import BaseButton from 'src/components/BaseButton.vue';
+    import { promptAndSaveInstanceUrl } from 'src/composables/useChangeInstance';
     import { ICONS } from 'src/style/icons';
     import { useQuasar } from 'quasar';
     import PwaInstallPrompt from 'src/components/PwaInstallPrompt.vue';
@@ -239,15 +257,14 @@
     import SettingsSection from 'src/components/settings/SettingsSection.vue';
     import { useSupportChannel, supportHref } from 'src/composables/useSupportChannel';
     import { useFeatureFlags } from 'src/composables/useFeatureFlags';
+    import OnboardingApiService from 'src/services/api/onboardingApiService';
+    import { useAuthStore } from 'src/stores/authStore';
     import DashboardApiService from 'src/services/api/dashboardApiService';
     import type { UsageStats } from 'src/services/api/dashboardApiService';
     import { formatMoney } from 'src/composables/useMoney';
     import { PRIMARY_DONATION } from 'src/config/donationLinks';
-    import {
-        getBackendBaseUrl,
-        isNativePlatform,
-        setBackendBaseUrl,
-    } from 'src/services/api/backendUrl';
+    import { getBackendBaseUrl } from 'src/services/api/backendUrl';
+    import { isNativePlatform } from 'src/helpers/platform';
 
     // Public repo (source-code link). The bug-report target comes from the
     // gated support channel, not hardcoded here.
@@ -255,6 +272,26 @@
 
     const $q = useQuasar();
     const router = useRouter();
+
+    // Finalisation 14-R3 — same shape as the dashboard's skip-banner action:
+    // clear the completion stamp, refresh the cached user so the router guard
+    // sees it, then enter the wizard.
+    const onboardingApi = new OnboardingApiService();
+    const authStore = useAuthStore();
+    const restartingTour = ref(false);
+    async function onRestartTour() {
+        if (restartingTour.value) return;
+        restartingTour.value = true;
+        try {
+            await onboardingApi.restartAsync();
+            await authStore.refreshAsync();
+            void router.push('/welcome');
+        } catch (err) {
+            $q.notify({ type: 'negative', message: "Couldn't restart the tour.", caption: toastCaption(err) });
+        } finally {
+            restartingTour.value = false;
+        }
+    }
 
     const { channel, hasChannel } = useSupportChannel();
     const reportHref = computed(() => supportHref(channel.value));
@@ -353,57 +390,24 @@
     const currentBackend = ref(getBackendBaseUrl());
     const doraApiUrl = computed(() => currentBackend.value || 'not configured');
 
+    // Shared with the splash's cannot-connect overlay (finalisation 15-R9).
     async function onChangeInstance() {
-        const initial = getBackendBaseUrl();
-        const url = await new Promise<string | null>((resolve) => {
-            $q.dialog({
-                title: 'Change instance URL',
-                message:
-                    "Point this app at a different Dora backend. Enter the "
-                    + "full URL you'd type in a browser. /api is added "
-                    + "automatically if you leave it off.",
-                prompt: {
-                    model: initial,
-                    type: 'url',
-                    isValid: (v: string) => v.trim().length > 0,
-                },
-                ok: { label: 'Save', color: 'primary', noCaps: true },
-                cancel: { noCaps: true },
-            })
-                .onOk((v: string) => resolve(v))
-                .onCancel(() => resolve(null))
-                .onDismiss(() => resolve(null));
-        });
-        if (!url) return;
-        try {
-            const normalised = await setBackendBaseUrl(url);
-            currentBackend.value = normalised;
-            $q.notify({
-                type: 'positive', 
-                message: 'Instance URL saved. Refreshing…',
-                timeout: 1500,
-            });
-            // Full reload so every cached query + auth state is rebuilt
-            // against the new backend — a soft nav would keep the old
-            // Pinia stores alive and cause hard-to-debug staleness.
-            setTimeout(() => {
-                void router.replace('/');
-                window.location.reload();
-            }, 400);
-        } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not save the URL.',
-                caption: toastCaption(err),
-            });
-        }
+        const normalised = await promptAndSaveInstanceUrl();
+        if (!normalised) return;
+        currentBackend.value = normalised;
+        // Full reload so every cached query + auth state is rebuilt
+        // against the new backend — a soft nav would keep the old
+        // Pinia stores alive and cause hard-to-debug staleness.
+        setTimeout(() => {
+            void router.replace('/');
+            window.location.reload();
+        }, 400);
     }
 
     const buildLabel = computed(() => (import.meta.env.PROD ? 'production' : 'dev'));
 </script>
 
 <style scoped lang="scss">
-    .settings-page { display: flex; flex-direction: column; }
 
     .about-hero {
         display: flex;

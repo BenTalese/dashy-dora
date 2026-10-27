@@ -292,14 +292,17 @@
     --seg-active-ink: var(--text-on-primary);
 
     /* ────────────────────────────── Font-size scale ──────────────── */
-    /* Unitless ratios against --dora-base-font-size (set by
-       themeService.ts based on the user's font_size preference). */
-    --font-size-xs: 0.75;
-    --font-size-sm: 0.875;
-    --font-size-md: 1;
-    --font-size-lg: 1.125;
-    --font-size-xl: 1.25;
-    --font-size-2xl: 1.5;
+    /* Lengths in rem against --dora-base-font-size (set by themeService.ts
+       from the user's font_size preference). `xs` is floored at 12px: at the
+       "small" root (14px) a plain 0.75rem is 10.5px, under D-003's caption
+       floor (finalisation 20-R12). They were unitless ratios every consumer
+       multiplied by 1rem itself; a floor can't be expressed that way. */
+    --font-size-xs: max(12px, 0.75rem);
+    --font-size-sm: 0.875rem;
+    --font-size-md: 1rem;
+    --font-size-lg: 1.125rem;
+    --font-size-xl: 1.25rem;
+    --font-size-2xl: 1.5rem;
     --font-size-3xl: 1.875;
 
     /* ────────────────────────────── Elevation ────────────────────── */

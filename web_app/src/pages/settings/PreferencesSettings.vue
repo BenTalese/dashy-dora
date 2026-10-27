@@ -230,10 +230,6 @@
 </script>
 
 <style scoped lang="scss">
-    .settings-page {
-        display: flex;
-        flex-direction: column;
-    }
 
     /* Keeps the inline-flex segmented control hugging its content on the left.
        Without a wrapper the control is a direct child of the section body

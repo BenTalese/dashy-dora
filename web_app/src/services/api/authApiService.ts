@@ -11,6 +11,8 @@ import AxiosHttpClient, { NormalisedApiError } from './axiosHttpClient';
  *  raw; 404 when unset). Pass a `version` (a counter bumped after upload /
  *  clear) to bust the browser cache. */
 export type LoginCommand = { username: string; password: string };
+export type RegisterResult = AuthenticatedUser & { verification_sent?: boolean };
+
 export type RegisterCommand = {
     username: string;
     password: string;
@@ -52,9 +54,6 @@ export type UpdateMeCommand = {
     inference_recipes_enabled?: boolean;
     inference_shopping_enabled?: boolean;
     inference_meal_plan_enabled?: boolean;
-    /** C-cross Chunk 3 — per-user nutrition mode. Server rejects `complex`
-     *  when no nutrition source has been configured (admin seam). */
-    nutrition_mode?: 'off' | 'simple' | 'complex';
     /** Settings rebuild Phase 4 — profile picture. Data-URL string to set,
      *  `clear_image: true` to remove. Omitting both leaves it untouched. */
     image?: string | null;
@@ -91,8 +90,11 @@ export default class AuthApiService {
     loginAsync = async (command: LoginCommand): Promise<AuthenticatedUser> =>
         await this.httpClient.post<AuthenticatedUser, LoginCommand>('/auth/login', command);
 
-    registerAsync = async (command: RegisterCommand): Promise<AuthenticatedUser> =>
-        await this.httpClient.post<AuthenticatedUser, RegisterCommand>('/auth/register', command);
+    /** The register body is the signed-in user plus `verification_sent`
+     *  (an address was given and a verification mail went out — finalisation
+     *  15-R3, R-057: the flag was emitted but never read). */
+    registerAsync = async (command: RegisterCommand): Promise<RegisterResult> =>
+        await this.httpClient.post<RegisterResult, RegisterCommand>('/auth/register', command);
 
     /** FU-200 — fresh-install probe. Returns `{ required: true }` when the
      *  DB has no users yet; the router uses this to route to /setup

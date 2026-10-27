@@ -121,7 +121,7 @@
        wash to say it opens. A `q-btn` at this size would otherwise announce
        itself with padding, a min-height and a caret sized for a real button. */
     .line-choice {
-        font-size: calc(var(--font-size-lg) * 1rem);
+        font-size: var(--font-size-lg);
         font-weight: 500;
         letter-spacing: -0.005em;
         color: var(--text-primary);
@@ -136,7 +136,7 @@
        picker reads a size larger than the plain names around it. */
     @media (max-width: 599px) {
         .line-choice {
-            font-size: calc(var(--font-size-md) * 1rem);
+            font-size: var(--font-size-md);
         }
     }
     .line-choice:hover {

@@ -18,29 +18,21 @@ not a user count — never leaks the population size.
 import logging
 import os
 from datetime import datetime, timezone
-from http.client import GONE
 
-from flask import jsonify, session
+from flask import session
 from pydantic import BaseModel, ConfigDict, Field
 from dora_api.domain.entities.audit_event import SEVERITY_AUDIT, SEVERITY_WARN
 from dora_api.domain.entities.user import User
-from dora_api.features.auth.register_user import (AuthenticatedUserDto,
-                                                  SESSION_PWD_V_KEY,
-                                                  SESSION_USER_ID_KEY)
+from dora_api.features.auth.register_user import AuthenticatedUserDto
 from dora_api.features.routers import AUTH_ROUTER
-from dora_api.infrastructure.api_response import (ProblemDetails, ok,
-                                                  unprocessable_entity)
-from dora_api.infrastructure.audit import emit as audit_emit
-from dora_api.infrastructure.auth_helpers import (hash_password,
-                                                  is_valid_email,
-                                                  normalise_email,
-                                                  rate_limit,
-                                                  rate_limit_remaining_seconds,
+from dora_api.infrastructure.api_response import gone, ok, too_many_requests, validation_failed
+from dora_api.infrastructure.auth_helpers import (is_valid_email, normalise_email,
+                                                  rate_limit, rate_limit_remaining_seconds,
                                                   validate_password)
 from dora_api.infrastructure.decorators import has_request_body
+from dora_api.infrastructure.session_user import SESSION_PWD_V_KEY, SESSION_USER_ID_KEY
 from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
-from dora_api.infrastructure.api_response import too_many_requests
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -62,14 +54,7 @@ class BootstrapAdminRequest(BaseModel):
 
 
 def _gone(detail: str):
-    response = jsonify(ProblemDetails(
-        detail=detail, errors={}, status=GONE,
-        title="Setup already complete.",
-        type="https://datatracker.ietf.org/doc/html/rfc7231#section-6.5.9",
-    ))
-    response.content_type = "application/problem+json"
-    response.status_code = GONE
-    return response
+    return gone(detail, title="Setup already complete.")
 
 
 def _user_count() -> int:
@@ -115,11 +100,7 @@ def bootstrap_admin():
     if pwd_error:
         issues["password"] = [pwd_error]
     if issues:
-        return unprocessable_entity(ProblemDetails(
-            detail="See errors property for more details.",
-            errors=issues, status=422, title="Validation failed.",
-            type="https://datatracker.ietf.org/doc/html/rfc4918#section-11.2",
-        ))
+        return validation_failed(issues)
 
     email_norm = normalise_email(request_body.email)
     required_email = _bootstrap_email_required()
@@ -155,14 +136,7 @@ def bootstrap_admin():
     from dora_api.persistence.field import EntityField
     username_field = EntityField(User, User.Fields.USERNAME)
     if repo.get(User).one(username_field.eq(request_body.username)):
-        return unprocessable_entity(ProblemDetails(
-            detail="See errors property for more details.",
-            errors={"username": [
-                f"Username '{request_body.username}' is already taken."
-            ]},
-            status=422, title="Validation failed.",
-            type="https://datatracker.ietf.org/doc/html/rfc4918#section-11.2",
-        ))
+        return validation_failed({"username": [ f"Username '{request_body.username}' is already taken." ]})
 
     now = datetime.now(timezone.utc)
     new_user = User(

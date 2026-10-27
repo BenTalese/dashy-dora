@@ -31,7 +31,7 @@ import hashlib
 import json
 import logging
 import os
-from dataclasses import asdict, dataclass
+from dataclasses import replace, asdict, dataclass
 from datetime import datetime
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -40,9 +40,9 @@ from flask import Response, request, send_file
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 
-from dora_api.app import db
 from dora_api.domain.entities.backup import (
     Backup,
+    STATUS_FAILED,
     STATUS_READY,
     TRIGGER_MANUAL,
 )
@@ -53,11 +53,13 @@ from dora_api.features.data.backup import (
     GetBackupHandler,
     resolve_selected_sections,
 )
+from dora_api.features.data._errors import DataError, respond_to
 from dora_api.features.data.restore_shared import SECTIONS
 from dora_api.features.data.restore_backup import RestoreBackupHandler, RestoreBackupRequest
 from dora_api.features.routers import DATA_ROUTER
 from dora_api.infrastructure.api_response import (
     bad_request,
+    conflict,
     internal_server_error,
     no_content,
     not_found,
@@ -65,11 +67,19 @@ from dora_api.infrastructure.api_response import (
     paginated,
 )
 from dora_api.infrastructure.configuration_manager import DORA_CONFIG
+from dora_api.infrastructure.query_options import InvalidQueryParameter, SortClause, parse_query_options
+from dora_api.persistence.field import EntityField
 from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 
 _LOGGER = logging.getLogger(__name__)
+
+# API field names the list accepts in `sort=` / `filter=` → entity fields
+# (the `paginate` convention every other list uses — finalisation 18-R21).
+_FIELD_MAP: dict[str, EntityField] = {
+    "backup_id": EntityField(Backup, "id"),
+}
 
 
 # ── Request/response shapes ────────────────────────────────────────────
@@ -289,39 +299,29 @@ def list_backups():
     if err is not None:
         return err
 
+    # The same `page` / `limit` / `sort` grammar every other list takes
+    # (finalisation 18-R21 — this route parsed `page`/`size` by hand and
+    # sorted the whole table in Python). Newest first unless asked otherwise.
     try:
-        page = int(request.args.get("page", "1"))
-    except ValueError:
-        return bad_request("page must be an integer.")
-    try:
-        size = int(request.args.get("size", "50"))
-    except ValueError:
-        return bad_request("size must be an integer.")
-    if page < 1 or size < 1 or size > 200:
-        return bad_request("page ≥ 1, 1 ≤ size ≤ 200.")
+        options = parse_query_options(request.args)
+    except InvalidQueryParameter as exc:
+        return bad_request(str(exc))
+    if options.sort is None:
+        options = replace(options, sort=SortClause(field="created_at", direction="desc"))
 
     repository = SqlAlchemyRepository()
-    all_rows = repository.get(Backup).all()
-    all_sorted = sorted(all_rows, key=lambda r: r.created_at, reverse=True)
-    total = len(all_sorted)
-    start = (page - 1) * size
-    page_rows = all_sorted[start:start + size]
+    page = repository.get(Backup).paginate(options, lambda row: row, field_map=_FIELD_MAP)
+    page_rows: list[Backup] = list(page.items)
 
-    # Bulk-fetch usernames for the visible page in one query.
+    # Usernames for the visible page, through the repository.
     actor_ids = {r.created_by_user_id for r in page_rows if r.created_by_user_id is not None}
     username_by_id: dict[UUID, str] = {}
     if actor_ids:
-        user_table = db.metadata.tables["User"]
-        rows = db.session.execute(
-            select(user_table.c.id, user_table.c.username).where(
-                user_table.c.id.in_(list(actor_ids)),
-            )
-        ).all()
-        for uid, uname in rows:
-            username_by_id[uid] = uname
+        for user in repository.get(User).all(EntityField(User, "id").in_(list(actor_ids))):
+            username_by_id[user.id] = user.username
 
     items = [_row_to_dto(r, username_by_id) for r in page_rows]
-    return paginated(items, total, page, size)
+    return paginated(items, page.total, page.page, page.limit)
 
 
 @DATA_ROUTER.route("/backups/<uuid:backup_id>/download", methods=["GET"])
@@ -337,6 +337,16 @@ def download_backup(backup_id: UUID):
     path = Path(row.storage_path)
     if not path.exists():
         return not_found("Backup file", backup_id)
+    # The checksum captured on write is checked on read — the entity's own
+    # promise ("the library can flag corruption"), which nothing honoured
+    # (finalisation 18-R14). A mismatch marks the row failed and refuses.
+    if row.sha256 and _sha256_of(path) != row.sha256:
+        repository = SqlAlchemyRepository()
+        failed = repository.get(Backup).by_id(backup_id)
+        if failed is not None:
+            failed.status = STATUS_FAILED
+            repository.save_changes()
+        return conflict("This backup file on disk doesn't match its recorded checksum.")
 
     filename = f"dora-backup-{row.created_at.date().isoformat()}.json"
     return send_file(
@@ -375,11 +385,9 @@ def restore_saved_backup(backup_id: UUID):
         backup=body,
     )
     _Result = RestoreBackupHandler().handle(restore_request)
-    if isinstance(_Result, str):
-        _LOGGER.warning("Library restore failed: %s", _Result)
-        if _Result.startswith("Restore failed and was rolled back"):
-            return internal_server_error(_Result)
-        return bad_request(_Result)
+    if isinstance(_Result, DataError):
+        _LOGGER.warning("Library restore failed: %s", _Result.detail)
+        return respond_to(_Result)
 
     return ok(_Result.model_dump())
 
@@ -390,17 +398,17 @@ def delete_backup(backup_id: UUID):
     if err is not None:
         return err
 
-    row = _resolve_backup(backup_id)
-    if isinstance(row, Response):
-        return row
-
-    _unlink_quiet(row.storage_path)
+    # One repository, row first, file second (finalisation 18-R6): the route
+    # used to unlink the file and then re-fetch the row through a second
+    # repository, so a miss left a row pointing at nothing.
     repository = SqlAlchemyRepository()
-    row = repository.get(Backup).by_id(row.id)
+    row = repository.get(Backup).by_id(backup_id)
     if row is None:
         return not_found("Backup", backup_id)
+    storage_path = row.storage_path
     repository.remove(row)
     repository.save_changes()
+    _unlink_quiet(storage_path)
     _LOGGER.info("Deleted backup %s", backup_id)
     return no_content()
 

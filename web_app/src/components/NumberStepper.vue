@@ -194,12 +194,12 @@
         background: var(--surface-elevated);
     }
     .num-stepper--pill .num-stepper__label {
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         color: var(--text-secondary);
     }
     .num-stepper--pill .num-stepper__value {
         min-width: 1.75rem;
-        font-size: calc(var(--font-size-xl) * 1rem);
+        font-size: var(--font-size-xl);
         font-weight: 600;
     }
     /* D-004 — reached for one-handed, so the targets clear 44px rather than

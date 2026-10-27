@@ -124,7 +124,7 @@
         border-top: 1px solid color-mix(in srgb, var(--text-primary) 12%, transparent);
     }
     .stock-row-legend__title {
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         font-weight: 600;
         color: var(--text-secondary);
         margin-bottom: var(--space-2);
@@ -138,7 +138,7 @@
        their own column of items. */
     .stock-row-legend__section-label {
         flex-basis: 100%;
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.04em;
@@ -151,7 +151,7 @@
         min-height: 22px;
     }
     .stock-row-legend__text {
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         color: var(--text-secondary);
     }
 

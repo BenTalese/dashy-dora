@@ -79,11 +79,10 @@
     import AppSpinner from 'src/components/AppSpinner.vue';
     import BaseButton from 'src/components/BaseButton.vue';
     import { ICONS } from 'src/style/icons';
-    import { useQuasar } from 'quasar';
     import { ref } from 'vue';
     import SettingsPageHeader from 'src/components/settings/SettingsPageHeader.vue';
-
-    type VocabItem = { id: string; name: string; usage_count?: number };
+    import type { VocabItem } from 'src/components/settings/TaxonomyManagerPage.vue';
+    import { useConfirm } from 'src/composables/useConfirm';
 
     const props = withDefaults(
         defineProps<{
@@ -132,23 +131,17 @@
         return `${count} ${plural(props.usageLabel, count)}`;
     }
 
-    const $q = useQuasar();
+
+    const { confirm, prompt } = useConfirm();
     const editingId = ref<string | null>(null);
     const renameDraft = ref('');
 
     async function onCreate() {
-        const name = await new Promise<string | null>((resolve) => {
-            $q.dialog({
-                title: `New ${props.noun}`,
-                message: `What is this ${props.noun} called?${
-                    props.createHint ? ` (e.g. ${props.createHint})` : ''
-                }`,
-                prompt: { model: '', type: 'text' },
-                cancel: { noCaps: true },
-            })
-                .onOk((v: string) => resolve(v.trim()))
-                .onCancel(() => resolve(null))
-                .onDismiss(() => resolve(null));
+        const name = await prompt({
+            title: `New ${props.noun}`,
+            message: `What is this ${props.noun} called?${
+                props.createHint ? ` (e.g. ${props.createHint})` : ''
+            }`,
         });
         if (name) emit('create', name);
     }
@@ -170,18 +163,13 @@
         const usageMessage = props.preservesLabel
             ? `${used} use this ${props.noun}; they'll keep the label.`
             : `${used} using this ${props.noun} will lose it. The ${plural(props.usageLabel, 2)} themselves stay.`;
-        const ok = await new Promise<boolean>((resolve) => {
-            $q.dialog({
-                title: `Delete "${item.name}"?`,
-                message:
-                    count > 0
-                        ? usageMessage
-                        : `Nothing currently uses this ${props.noun}.`,
-                cancel: { noCaps: true },
-            })
-                .onOk(() => resolve(true))
-                .onCancel(() => resolve(false))
-                .onDismiss(() => resolve(false));
+        const ok = await confirm({
+            title: `Delete "${item.name}"?`,
+            message: count > 0
+                    ? usageMessage
+                    : `Nothing currently uses this ${props.noun}.`,
+            okLabel: 'Delete',
+            destructive: true,
         });
         if (ok) emit('delete', item.id);
     }
@@ -189,8 +177,6 @@
 
 <style scoped lang="scss">
     .settings-page {
-        display: flex;
-        flex-direction: column;
         position: relative;
     }
     .vocab-list {

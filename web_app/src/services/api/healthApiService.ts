@@ -18,10 +18,17 @@ export interface HealthInfo {
         email: boolean;
         // True iff DORA_SECRET_ENCRYPTION_KEY is set on the backend.
         secret_encryption_configured: boolean;
+        // Two string-valued "flags" ride in the same map (finalisation 13-R16):
+        // the nutrition depth and the rating scheme the install shows.
+        nutrition_mode?: string;
+        nutrition_rating_scheme?: string;
         // Open shape — later additions like `reports`, `substitutes`
         // can land without breaking existing clients.
-        [key: string]: boolean;
+        [key: string]: boolean | string;
     };
+    /** Alembic head the running DB is at (null when unreadable); compare
+     *  against `schema_version` to spot an un-migrated DB. */
+    schema_version_db?: string | null;
     // install-wide image compression knobs the client applies
     // at upload time. Optional in the type because older backends won't
     // emit it; callers default to 85 / 1920.

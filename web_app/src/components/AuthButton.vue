@@ -73,7 +73,7 @@
     /* Primary — teal gradient (identical to today's .login-submit). */
     .dora-auth-btn--primary {
         background: linear-gradient(135deg, var(--auth-shell-accent-strong), var(--auth-shell-accent));
-        color: #fff;
+        color: var(--auth-shell-on-accent);
         box-shadow: 0 10px 24px -10px rgba(0, 106, 128, 0.55);
     }
     .dora-auth-btn--primary:hover {
@@ -84,7 +84,7 @@
        §LOGIN). Two-stop via D10's --auth-shell-accent-amber-strong. */
     .dora-auth-btn--secondary {
         background: linear-gradient(135deg, var(--auth-shell-accent-amber-strong), var(--auth-shell-blob-2));
-        color: #3a2a08;
+        color: var(--auth-shell-on-amber);
         box-shadow: 0 10px 24px -10px rgba(200, 138, 30, 0.55);
     }
     .dora-auth-btn--secondary:hover {

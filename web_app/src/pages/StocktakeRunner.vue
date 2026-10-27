@@ -374,8 +374,11 @@
     import { needsRestockSequence } from 'src/helpers/stockStatus';
     import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { useFeatureFlags } from 'src/composables/useFeatureFlags';
+    import { useConfirm } from 'src/composables/useConfirm';
 
     const $q = useQuasar();
+
+    const { confirm } = useConfirm();
     // 2026-08-20 — install-wide stocktake switch. Off ⇒ the runner shows its
     // own off-state above (the server already resolves an empty queue).
     const { stocktake: stocktakeEnabled } = useFeatureFlags();
@@ -658,42 +661,38 @@
 
     /** Mute is nuclear (persistent, only un-mutable from item detail), so it
      *  always confirms first; the walk card and the sweep share the wording. */
-    function confirmMute(name: string, onConfirm: () => void) {
-        $q.dialog({
+    function confirmMute(name: string): Promise<boolean> {
+        return confirm({
             title: `Mute ${name}?`,
             message:
                 "Dora will stop asking about this item entirely. You can un-mute it later from the item's detail page.",
-            cancel: { noCaps: true },
-            persistent: false,
-            ok: { label: 'Mute', color: 'negative', unelevated: true, noCaps: true },
-        }).onOk(onConfirm);
+            okLabel: 'Mute',
+            destructive: true,
+        });
     }
 
-    function onMute() {
+    async function onMute() {
         if (!current.value) return;
         const stockItemId = current.value.stock_item_id;
         const itemName = current.value.name;
-        confirmMute(itemName, () => {
-            void (async () => {
-                busy.value = true;
-                try {
-                    await stockItemStore.updateStockItemAsync({
-                        stock_item_id: stockItemId,
-                        stocktake_alerts_are_enabled: false,
-                    });
-                    summary.muted += 1;
-                    advance();
-                } catch (err) {
-                    $q.notify({
-                        type: 'negative',
-                        position: 'top',
-                        message: 'Could not mute.',
-                        caption: toastCaption(err),
-                    });
-                } finally { busy.value = false; }
-            })();
-        });
-    }
+        if (!await confirmMute(itemName)) return;
+        busy.value = true;
+        try {
+            await stockItemStore.updateStockItemAsync({
+                stock_item_id: stockItemId,
+                stocktake_alerts_are_enabled: false,
+            });
+            summary.muted += 1;
+            advance();
+        } catch (err) {
+            $q.notify({
+                type: 'negative',
+                position: 'top',
+                message: 'Could not mute.',
+                caption: toastCaption(err),
+            });
+        } finally { busy.value = false; }
+        }
 
     // ── Phase 1 — Review (D-3) ──────────────────────────────────────────────
 
@@ -761,56 +760,50 @@
         changeOpen.value = true;
     }
 
-    function onSweepMute(item: StocktakeSweptItem) {
-        confirmMute(item.name, () => {
-            void (async () => {
-                busy.value = true;
-                try {
-                    await stockItemStore.updateStockItemAsync({
-                        stock_item_id: item.stock_item_id,
-                        stocktake_alerts_are_enabled: false,
-                    });
-                    summary.muted += 1;
-                    dropFromSweep(item.stock_item_id);
-                } catch (err) {
-                    $q.notify({
-                        type: 'negative',
-                        position: 'top',
-                        message: 'Could not mute.',
-                        caption: toastCaption(err),
-                    });
-                } finally { busy.value = false; }
-            })();
-        });
-    }
+    async function onSweepMute(item: StocktakeSweptItem) {
+        if (!await confirmMute(item.name)) return;
+        busy.value = true;
+        try {
+            await stockItemStore.updateStockItemAsync({
+                stock_item_id: item.stock_item_id,
+                stocktake_alerts_are_enabled: false,
+            });
+            summary.muted += 1;
+            dropFromSweep(item.stock_item_id);
+        } catch (err) {
+            $q.notify({
+                type: 'negative',
+                position: 'top',
+                message: 'Could not mute.',
+                caption: toastCaption(err),
+            });
+        } finally { busy.value = false; }
+        }
 
-    function onSweepDelete(item: StocktakeSweptItem) {
+    async function onSweepDelete(item: StocktakeSweptItem) {
         // Deletion is the one irreversible action in the runner, and it's being
         // offered about an item the user may simply have forgotten they own —
         // so the confirm names it and says what goes with it.
-        $q.dialog({
+        const ok = await confirm({
             title: `Delete ${item.name}?`,
             message:
                 'This removes the item and its history for good. If you just want Dora to stop asking about it, mute it instead.',
-            cancel: { noCaps: true },
-            persistent: false,
-            ok: { label: 'Delete', color: 'negative', unelevated: true, noCaps: true },
-        }).onOk(() => {
-            void (async () => {
-                busy.value = true;
-                try {
-                    await stockItemStore.deleteStockItemAsync(item.stock_item_id);
-                    dropFromSweep(item.stock_item_id);
-                } catch (err) {
-                    $q.notify({
-                        type: 'negative',
-                        position: 'top',
-                        message: 'Could not delete.',
-                        caption: toastCaption(err),
-                    });
-                } finally { busy.value = false; }
-            })();
+            okLabel: 'Delete',
+            destructive: true,
         });
+        if (!ok) return;
+        busy.value = true;
+        try {
+            await stockItemStore.deleteStockItemAsync(item.stock_item_id);
+            dropFromSweep(item.stock_item_id);
+        } catch (err) {
+            $q.notify({
+                type: 'negative',
+                position: 'top',
+                message: 'Could not delete.',
+                caption: toastCaption(err),
+            });
+        } finally { busy.value = false; }
     }
 
     function onSweepFinish() {
@@ -896,7 +889,7 @@
        fix the B2 tint chips took: the tint and the hairline carry the tone, the
        glyph stays saturated, and the words are page ink. */
     .runner-belief {
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
         line-height: 1.35;
         color: var(--text-primary);
         text-align: left;
@@ -936,11 +929,11 @@
         line-height: 1.15;
     }
     .runner-change-level__level {
-        font-size: calc(var(--font-size-md) * 1rem);
+        font-size: var(--font-size-md);
         font-weight: 600;
     }
     .runner-change-level__hint {
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
         opacity: 0.85;
     }
     /* Out-of-stock / unknown level → neutral state. Uses theme tokens
@@ -976,7 +969,7 @@
         gap: var(--space-3);
     }
     .runner-summary__count {
-        font-size: calc(var(--font-size-md) * 1rem);
+        font-size: var(--font-size-md);
         font-weight: 600;
         min-width: 24px;
         text-align: right;

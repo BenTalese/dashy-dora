@@ -128,12 +128,12 @@
         color: var(--brand-primary);
     }
     .rating-chip__value {
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         font-weight: 600;
         font-variant-numeric: tabular-nums;
     }
     .rating-chip__part {
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         color: var(--text-secondary);
         line-height: 1;
     }
@@ -146,7 +146,7 @@
         gap: var(--space-1);
     }
     .rating-chip__tip-text {
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         text-align: center;
         max-width: 220px;
     }

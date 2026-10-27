@@ -17,22 +17,19 @@
 // per request, so a runtime change (Settings → save) applies to the next
 // request without any client rebuild.
 
-import { Capacitor } from '@capacitor/core';
 import { Preferences } from '@capacitor/preferences';
+import { isNativePlatform } from 'src/helpers/platform';
 
-const PREF_KEY = 'dora.backendBaseUrl';
-const LS_KEY = 'dora.backendBaseUrl';
+// One key, whichever store holds it (Capacitor Preferences natively,
+// localStorage in a browser) — finalisation 17-R14.
+const STORAGE_KEY = 'dora.backendBaseUrl';
 
 let cache: string | null = null;
 let loaded = false;
 
-export function isNativePlatform(): boolean {
-    try {
-        return Capacitor.isNativePlatform();
-    } catch {
-        return false;
-    }
-}
+// `isNativePlatform` lives in `helpers/platform.ts` (finalisation 17-R20);
+// re-exported for the callers that only ever reached it from here.
+export { isNativePlatform } from 'src/helpers/platform';
 
 function envDefault(): string {
     const env = import.meta.env.VITE_API_BASE_URL;
@@ -84,10 +81,10 @@ export async function setBackendBaseUrl(raw: string): Promise<string> {
     cache = url;
     loaded = true;
     if (isNativePlatform()) {
-        await Preferences.set({ key: PREF_KEY, value: url });
+        await Preferences.set({ key: STORAGE_KEY, value: url });
     } else {
         try {
-            localStorage.setItem(LS_KEY, url);
+            localStorage.setItem(STORAGE_KEY, url);
         } catch {
             // Storage disabled — the in-memory cache still holds for this session.
         }
@@ -99,10 +96,10 @@ export async function clearBackendBaseUrl(): Promise<void> {
     cache = null;
     loaded = true;
     if (isNativePlatform()) {
-        await Preferences.remove({ key: PREF_KEY });
+        await Preferences.remove({ key: STORAGE_KEY });
     } else {
         try {
-            localStorage.removeItem(LS_KEY);
+            localStorage.removeItem(STORAGE_KEY);
         } catch {
             // Ignore.
         }
@@ -113,14 +110,14 @@ export async function loadBackendBaseUrl(): Promise<string | null> {
     if (loaded) return cache;
     if (isNativePlatform()) {
         try {
-            const { value } = await Preferences.get({ key: PREF_KEY });
+            const { value } = await Preferences.get({ key: STORAGE_KEY });
             if (value && value.length > 0) cache = value;
         } catch {
             // Preferences not available (e.g. web fallback failure).
         }
     } else {
         try {
-            const value = localStorage.getItem(LS_KEY);
+            const value = localStorage.getItem(STORAGE_KEY);
             if (value && value.length > 0) cache = value;
         } catch {
             // Ignore.

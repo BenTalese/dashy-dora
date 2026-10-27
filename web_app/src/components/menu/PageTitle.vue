@@ -17,7 +17,7 @@
     .dora-pageTitle {
         font-family: 'Cute Dino', sans-serif;
         /* A6 — scale token (was fixed 24px) so it follows the text-size pref. */
-        font-size: calc(var(--font-size-2xl) * 1rem);
+        font-size: var(--font-size-2xl);
         margin-top: 4px;
         opacity: 0.9;
         min-width: 0;
@@ -28,7 +28,7 @@
        token step (2xl → xl) — still well clear of the 12px D-003 floor. */
     @media (max-width: 1023px) {
         .dora-pageTitle {
-            font-size: calc(var(--font-size-xl) * 1rem);
+            font-size: var(--font-size-xl);
         }
     }
 </style>

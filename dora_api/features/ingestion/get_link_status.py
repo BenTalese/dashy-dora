@@ -32,21 +32,20 @@ import logging
 from dataclasses import asdict, dataclass
 from uuid import UUID
 
-from flask import request
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 from dora_api.domain.entities.ingestion_source import IngestionSource
-from dora_api.domain.entities.ingestion_store_mapping import \
-    IngestionStoreMapping
 from dora_api.domain.entities.product import Product
-from dora_api.features.ingestion.product_identity import find_ingested_product
+from dora_api.features.ingestion.product_identity import (StoreRef, find_ingested_product,
+                                                          find_store_mapping)
 from dora_api.features.products.product_links import linked_stock_items
 from dora_api.features.routers import INGEST_ROUTER
 from dora_api.infrastructure.api_response import ok
+from dora_api.infrastructure.decorators import has_request_body
+from dora_api.infrastructure.utils import get_request_body
 from dora_api.infrastructure.ingestion_auth import (
     authenticate_ingestion_request, stamp_used)
 from dora_api.infrastructure.ports import Repository
-from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 
 
@@ -58,22 +57,14 @@ _LOGGER = logging.getLogger(__name__)
 _MAX_ITEMS = 200
 
 
-class _LookupItem(BaseModel):
+class _LookupItem(StoreRef):
     model_config = ConfigDict(extra="forbid")
 
     ref: str = Field(min_length=1, max_length=255)
-    # Exactly one, matching `/api/ingest`'s product identity: the external
-    # name (resolved through this source's mapping) or a Dora store id.
-    store: str | None = Field(default=None, min_length=1, max_length=255)
-    store_id: UUID | None = None
+    # `store` / `store_id` — exactly one — come from `StoreRef`, matching
+    # `/api/ingest`'s product identity.
     merchant_stockcode: str | None = Field(default=None, max_length=255)
     name: str | None = Field(default=None, max_length=255)
-
-    @model_validator(mode="after")
-    def _one_store(self) -> "_LookupItem":
-        if (self.store is None) == (self.store_id is None):
-            raise ValueError("Give exactly one of `store` or `store_id`.")
-        return self
 
 
 class _LinkStatusRequest(BaseModel):
@@ -161,15 +152,7 @@ class GetLinkStatusHandler:
         if external_name in cache:
             return cache[external_name]
 
-        field_src = EntityField(
-            IngestionStoreMapping, IngestionStoreMapping.Fields.SOURCE_ID
-        )
-        field_ext = EntityField(
-            IngestionStoreMapping, IngestionStoreMapping.Fields.EXTERNAL_NAME
-        )
-        mapping = self.repository.get(IngestionStoreMapping).one(
-            field_src.eq(source.id) & field_ext.eq(external_name)
-        )
+        mapping = find_store_mapping(self.repository, source.id, external_name)
         store_id = mapping.store_id if mapping and mapping.store_id else None
         cache[external_name] = store_id
         return store_id
@@ -212,6 +195,7 @@ class GetLinkStatusHandler:
 
 
 @INGEST_ROUTER.route("/link-status", methods=["POST"], endpoint="ingest_link_status")
+@has_request_body(_LinkStatusRequest)
 def ingest_link_status():
     # FU-866 — one shared check: authenticate, then honour the
     # install-wide ingestion switch. Both live in `ingestion_auth` so a
@@ -220,10 +204,9 @@ def ingest_link_status():
     if auth_error is not None:
         return auth_error
 
-    try:
-        payload = _LinkStatusRequest.model_validate(request.get_json(silent=True) or {})
-    except Exception as exc:  # noqa: BLE001 — pydantic surface, mirrors submit_ingestion_batch
-        return ({"detail": "Malformed payload.", "errors": str(exc)}, 400)
+    # Validated by the request middleware (`has_request_body`) — structured
+    # per-field errors, not `str(ValidationError)` (finalisation 16-R9 / 16-R34).
+    payload: _LinkStatusRequest = get_request_body()
 
     repository = SqlAlchemyRepository()
     results = GetLinkStatusHandler(repository).handle(source, payload)

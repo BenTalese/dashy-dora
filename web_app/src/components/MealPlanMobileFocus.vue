@@ -458,7 +458,7 @@
     }
     /* `.planner-toolbar__range` / `.cal__month`'s voice. */
     .mobile-focus__weeknav-label {
-        font-size: calc(var(--font-size-md) * 1rem);
+        font-size: var(--font-size-md);
         font-weight: 700;
         letter-spacing: 0.06em;
         text-transform: uppercase;
@@ -597,6 +597,9 @@
         color: var(--brand-primary);
         border-color: var(--brand-primary);
         background: var(--surface-sunken);
-        outline: none;
+    }
+    .mobile-focus__add:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
     }
 </style>

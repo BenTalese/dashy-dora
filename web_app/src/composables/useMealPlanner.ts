@@ -29,6 +29,7 @@ import { useStockItemStore } from 'src/stores/stockItemStore';
 import { useStockLevelStore } from 'src/stores/stockLevelStore';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { useConfirm } from 'src/composables/useConfirm';
 
 /* The recipe trays (and their `RecipeTray` type) were retired on 2026-08-30
    with Unit 2 of BRIEF_MEAL_PLANNER_RAIL_AND_SHELL: the rail's four collapsible
@@ -48,6 +49,7 @@ export type WeekDay = { label: string; iso: string };
  */
 export function useMealPlanner() {
     const $q = useQuasar();
+    const { confirm } = useConfirm();
     const router = useRouter();
     const route = useRoute();
     const planExport = useMealPlanExport();
@@ -426,19 +428,13 @@ export function useMealPlanner() {
                 (e) => e.meal_plan_entry_id !== entry.meal_plan_entry_id,
             );
             if (leftovers.length > 0) {
-                const ok = await new Promise<boolean>((resolve) => {
-                    $q.dialog({
-                        title: 'Remove this cook?',
-                        message: `${entry.recipe_name} is cooked once for `
-                            + `${members.length} days. Removing the cook removes `
-                            + `${leftovers.length === 1 ? 'its leftover day' : `its ${leftovers.length} leftover days`} too.`,
-                        cancel: { noCaps: true },
-                        ok: { label: 'Remove all', noCaps: true, color: 'negative' },
-                        persistent: false,
-                    })
-                        .onOk(() => resolve(true))
-                        .onCancel(() => resolve(false))
-                        .onDismiss(() => resolve(false));
+                const ok = await confirm({
+                    title: 'Remove this cook?',
+                    message: `${entry.recipe_name} is cooked once for `
+                        + `${members.length} days. Removing the cook removes `
+                        + `${leftovers.length === 1 ? 'its leftover day' : `its ${leftovers.length} leftover days`} too.`,
+                    okLabel: 'Remove all',
+                    destructive: true,
                 });
                 if (!ok) return;
                 leftovers.forEach((e) => batchIds.add(e.meal_plan_entry_id));
@@ -838,14 +834,16 @@ export function useMealPlanner() {
         }
     }
 
-    function confirmClearWeek() {
+    async function confirmClearWeek() {
         const plan = focusedPlan.value;
         if (!plan) return;
-        $q.dialog({
+        const ok = await confirm({
             title: 'Clear this week',
             message: `Remove all meals from the week of ${formatDate(plan.start_date)}?`,
-            cancel: { noCaps: true },
-        }).onOk(() => void doClearWeek(plan.meal_plan_id));
+            okLabel: 'Clear',
+            destructive: true,
+        });
+        if (ok) await doClearWeek(plan.meal_plan_id);
     }
     async function doClearWeek(planId: string) {
         await mealPlanStore.deleteMealPlanAsync(planId);
@@ -884,18 +882,11 @@ export function useMealPlanner() {
             (e) => !e.consumed_at && !isPastDay(toIso(e.scheduled_for)),
         ).length;
         if (futureCount === 0) return true;
-        return await new Promise<boolean>((resolve) => {
-            $q.dialog({
-                title: 'Replace this week?',
-                message: `This week has ${futureCount} planned meal${futureCount === 1 ? '' : 's'}. `
-                    + `Applying the template will replace ${futureCount === 1 ? 'it' : 'them'}.`,
-                cancel: { noCaps: true },
-                ok: { label: 'Replace', noCaps: true, color: 'primary' },
-                persistent: false,
-            })
-                .onOk(() => resolve(true))
-                .onCancel(() => resolve(false))
-                .onDismiss(() => resolve(false));
+        return await confirm({
+            title: 'Replace this week?',
+            message: `This week has ${futureCount} planned meal${futureCount === 1 ? '' : 's'}. `
+                + `Applying the template will replace ${futureCount === 1 ? 'it' : 'them'}.`,
+            okLabel: 'Replace',
         });
     }
 
@@ -1020,7 +1011,7 @@ export function useMealPlanner() {
             .filter((c) => !isPastDay(c.scheduled_for));
     }
 
-    function confirmDuplicateToNextWeek() {
+    async function confirmDuplicateToNextWeek() {
         if (!focusedPlan.value) return;
         const commands = nextWeekCommands();
         if (commands.length === 0) {
@@ -1034,15 +1025,15 @@ export function useMealPlanner() {
         const existing = mealPlans.value.find((p) => mondayOf(p.start_date) === nextMonday);
         const replacing = (existing?.entries ?? []).filter(isForwardEditable).length;
         const plural = commands.length === 1 ? '' : 's';
-        $q.dialog({
+        const ok = await confirm({
             title: 'Duplicate to next week',
             message: replacing > 0
                 ? `Copy ${commands.length} meal${plural} to the week of ${formatDate(nextMonday)}. `
                     + `This replaces the ${replacing} meal${replacing === 1 ? '' : 's'} already planned there.`
                 : `Copy ${commands.length} meal${plural} to the week of ${formatDate(nextMonday)}.`,
-            cancel: { noCaps: true },
-            ok: { label: replacing > 0 ? 'Replace' : 'Copy', noCaps: true, color: 'primary' },
-        }).onOk(() => void doDuplicateToNextWeek(commands, nextMonday, existing?.meal_plan_id));
+            okLabel: replacing > 0 ? 'Replace' : 'Copy',
+        });
+        if (ok) await doDuplicateToNextWeek(commands, nextMonday, existing?.meal_plan_id);
     }
 
     async function doDuplicateToNextWeek(

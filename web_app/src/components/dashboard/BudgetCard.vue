@@ -146,16 +146,16 @@
         flex-wrap: wrap;
     }
     .dora-budget-spent {
-        font-size: calc(var(--font-size-2xl) * 1rem);
+        font-size: var(--font-size-2xl);
         font-weight: 700;
     }
     .dora-budget-of {
-        font-size: calc(var(--font-size-md) * 1rem);
+        font-size: var(--font-size-md);
         color: var(--text-secondary);
     }
     .dora-budget-remaining {
         margin-left: auto;
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         font-weight: 600;
     }
     /* The reworded active-lists row. A tinted well with its own icon, not a
@@ -174,7 +174,7 @@
         border-radius: var(--radius-md);
         background: var(--surface-sunken);
         color: var(--text-secondary);
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
     }
     .dora-budget-pending .q-icon {
         color: var(--text-secondary);

@@ -460,10 +460,6 @@
 </script>
 
 <style scoped lang="scss">
-    .settings-page {
-        display: flex;
-        flex-direction: column;
-    }
     /* Stays on the right at every width (owner 2026-09-03), so no fixed floor
        that would overflow the control column on a phone. */
     .deals-day-select {
@@ -471,13 +467,13 @@
         max-width: 100%;
     }
     .settings-page__note {
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         line-height: 1.4;
         margin-top: var(--space-1);
     }
     .settings-page__subhead {
         margin-top: var(--space-3);
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         font-weight: 600;
         color: var(--text-secondary);
     }

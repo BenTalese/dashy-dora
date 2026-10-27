@@ -189,7 +189,7 @@
         gap: var(--space-3);
         /* Was 11.5px — under D-003's floor, on the card's own decoder ring
            (D-013). The legend must be the most legible thing here. */
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
         color: var(--text-secondary);
     }
     .dora-cal-leg {
@@ -241,7 +241,7 @@
        calendar cells labelled rather than reduced to bare dots, and a 14-cell
        grid of numbers alone is genuinely hard to read. */
     .dora-cal-dow {
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
         letter-spacing: 0.06em;
         text-transform: uppercase;
         color: var(--text-secondary);
@@ -252,7 +252,7 @@
         font-weight: 700;
     }
     .dora-cal-num {
-        font-size: calc(var(--font-size-md) * 1rem);
+        font-size: var(--font-size-md);
         line-height: 1;
     }
     .dora-cal-dots {
@@ -288,7 +288,7 @@
     }
     .dora-cal-hint {
         margin-top: var(--space-3);
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         color: var(--text-secondary);
     }
     .dora-cal-detail {
@@ -309,7 +309,7 @@
         /* One step up the ladder, and the accent ink every other
            accent-coloured string on this page uses (R-069) — the date is this
            panel's heading, not a bold line of its body. */
-        font-size: calc(var(--font-size-lg) * 1rem);
+        font-size: var(--font-size-lg);
         font-weight: 700;
         line-height: 1.2;
         color: var(--accent-ink);
@@ -328,7 +328,7 @@
         display: flex;
         align-items: center;
         gap: var(--space-2);
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.06em;
@@ -348,7 +348,7 @@
         border-radius: var(--radius-md);
         color: var(--text-primary);
         text-decoration: none;
-        font-size: calc(var(--font-size-md) * 1rem);
+        font-size: var(--font-size-md);
     }
     .dora-cal-item:hover {
         /* The panel already sits on `--surface-sunken`, so a row inside it
@@ -376,7 +376,7 @@
         background: var(--surface-component);
         border: 1px solid var(--border-default);
         color: var(--text-secondary);
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
         line-height: 1.8;
     }
     .dora-cal-item:hover .dora-cal-slot {

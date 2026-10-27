@@ -86,6 +86,22 @@ export const MEASUREMENT_SYSTEM_CHOICES: ReadonlyArray<{
 type IntlWithSupported = typeof Intl & { supportedValuesOf?: (key: string) => string[] };
 const supportedValuesOf = (Intl as IntlWithSupported).supportedValuesOf;
 /** Every IANA timezone this browser knows, or just UTC on one that can't list them. */
+/** The device's IANA zone, 'UTC' when the runtime can't say (finalisation
+ *  14-R9 — was copied in the wizard and the Region settings page). */
+export function deviceTimezone(): string {
+    try {
+        return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    } catch {
+        return 'UTC';
+    }
+}
+
+/** The zone picker's filter: a case-insensitive substring over every choice. */
+export function filterTimezones(needle: string): string[] {
+    const q = needle.trim().toLowerCase();
+    return q ? TIMEZONE_CHOICES.filter((t) => t.toLowerCase().includes(q)) : [...TIMEZONE_CHOICES];
+}
+
 export const TIMEZONE_CHOICES: readonly string[] = supportedValuesOf
     ? supportedValuesOf('timeZone')
     : ['UTC'];

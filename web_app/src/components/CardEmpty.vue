@@ -60,7 +60,7 @@
     .card-empty__line {
         margin: 0;
         max-width: 46ch;
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         line-height: 1.4;
     }
 </style>

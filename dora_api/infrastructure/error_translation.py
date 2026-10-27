@@ -15,10 +15,7 @@ constraint context (e.g. ``min_length`` from ``ctx``) in the first pass:
 "Can't be empty." reads better than "Must be at least 1 character." in
 the common case, and we don't currently ship a schema with a non-trivial
 ``min_length``. Extend ``ctx`` handling here when a real schema needs it.
-
-The map mirrors the small client-side translation file (FU-097 pattern
-for ``format_quantity``) — but only one side translates. The server is
-authoritative.
+The server is the one translator; the client renders what it is sent.
 """
 from __future__ import annotations
 

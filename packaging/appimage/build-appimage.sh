@@ -37,7 +37,7 @@ ARCH=$(uname -m)
 OUT="dist/Dora-v${VERSION}-${ARCH}.AppImage"
 APPDIR="dist/Dora.AppDir"
 
-echo "[appimage] Discount Dora — packaging v${VERSION} for ${ARCH}"
+echo "[appimage] Dashy Dora — packaging v${VERSION} for ${ARCH}"
 
 # ── 1. Build the AppDir tree ─────────────────────────────────────────
 echo "[appimage] Building AppDir at $APPDIR"

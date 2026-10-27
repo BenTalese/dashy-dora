@@ -95,7 +95,7 @@
         gap: var(--space-1);
     }
     .card-load-error__line {
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         line-height: 1.35;
     }
 </style>

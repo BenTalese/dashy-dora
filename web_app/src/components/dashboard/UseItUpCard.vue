@@ -178,7 +178,7 @@
         align-items: center;
         justify-content: space-between;
         gap: var(--space-2);
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
         font-weight: 700;
         letter-spacing: 0.08em;
         text-transform: uppercase;
@@ -231,7 +231,7 @@
     .dora-use-recipe__uses {
         margin-inline-start: auto;
         white-space: nowrap;
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
         color: var(--text-secondary);
     }
 </style>

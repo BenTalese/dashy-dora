@@ -22,9 +22,8 @@ from dora_api.domain.entities.auth_token import (
 )
 from dora_api.domain.entities.user import User
 from dora_api.features.routers import AUTH_ROUTER
-from dora_api.infrastructure.api_response import (
-    bad_request, no_content, ok, ProblemDetails, unprocessable_entity,
-)
+from dora_api.infrastructure.api_response import (bad_request, no_content, ok,
+                                                  too_many_requests, validation_failed)
 from dora_api.infrastructure.audit import emit as audit_emit
 from dora_api.infrastructure.auth_helpers import (
     RESET_PASSWORD_TTL, VERIFY_EMAIL_TTL,
@@ -38,18 +37,13 @@ from dora_api.infrastructure.email_sender import render_template, send_email
 from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
-from dora_api.infrastructure.api_response import too_many_requests
 
 
 _LOGGER = logging.getLogger(__name__)
 
 
 def _validation_failure(errors: dict):
-    return unprocessable_entity(ProblemDetails(
-        detail="See errors property for more details.",
-        errors=errors, status=422, title="Validation failed.",
-        type="https://datatracker.ietf.org/doc/html/rfc4918#section-11.2",
-    ))
+    return validation_failed(errors)
 
 
 # ── /verify-email ──────────────────────────────────────────────────────

@@ -22,6 +22,66 @@ top-to-bottom.
 
 ---
 
+## Finalisation Stage 2 — unit 30 (cross-cutting sweeps), browser-verify owed (2026-10-27) — origin FU-929
+- [ ] Any delete (a recipe, a store, a shopping list, a template, a stock item from the stocktake sweep): the dialog shows a flat Cancel and a red filled OK; Escape and a backdrop tap cancel; the delete only happens on OK.
+- [ ] Settings → Kitchen setup → Stores / Locations / a vocabulary page: "New …" asks for a name in a text prompt; an empty answer does nothing; the rename prompt is pre-filled.
+- [ ] Add-to-list with two draft lists (cart shortcut, the Add-to-list button, stock overview bulk add): the "Which list?" radio dialog picks the first by default and cancelling adds nothing.
+- [ ] Meal plan → a cooked entry → "Cook once for more days": the checkbox dialog is pre-ticked with the days already covered.
+- [ ] Recipe page: edit, then Back — the "Unsaved changes" dialog's Stay keeps you on the page, Leave without saving leaves.
+- [ ] Settings → Appearance → text size *Small*: captions and chip labels are still 12px (not 10.5px); *Large* and *X-large* scale as before.
+- [ ] Price history (a product priced above baseline), Backup & restore (a duplicate row in the preview), API access (pending / unmapped badges), Audit log severity chips: dark ink on the amber chips.
+- [ ] Tab to Dora's launcher, a planner day's Add button, an onboarding loop node and the settings file-drop zone: a visible focus ring, distinct from hover.
+- [ ] Every settings page still lays out as a column with its actions right-aligned (the chrome moved from 29 scoped copies to one global stylesheet).
+
+## Finalisation Stage 2 — unit 29 (ops / self-host), operator checks owed (2026-10-27) — origin FU-929
+- [ ] Boot the compose stack: `docker logs` shows one "Scheduled 5 job(s): audit_retention [cron…]; …" line and one "Registered N router(s), M route(s)" line (6 jobs with `DORA_DEMO_MODE=true`).
+- [ ] Boot with `DORA_LOG_LEVEL=LOUD`: one "Unknown log level 'LOUD'; using the production profile default INFO" warning and the app still boots at INFO.
+- [ ] Boot with `DORA_ENV=production` and a required var blank: the boxed "Refusing to start" banner on stderr, exit non-zero; with `DORA_SECURE_COOKIES=false`: the boxed WARNING banner, same frame.
+- [ ] `docker compose up` on an existing deployment after the `dora_config` volume removal: boots clean; `dapi.appsettings.json` is still at `<data>/config/`.
+- [ ] Rename `dora_api/features/alerts/__init__.py` aside and boot: the boot fails with "Feature package dora_api.features.alerts failed to import" + traceback (then put it back).
+- [ ] Fresh dev boot with no `DORA_SECRET_KEY`: `data/.secret_key` is created `-rw-------` (Linux/macOS; Windows ignores the mode).
+- [ ] Settings → Voice with Piper absent: the 503 hint names Settings → Admin → System → Voice.
+- [ ] Desktop bundle (`build-windows.ps1` / `build-linux.sh`) still builds without the `webview.platforms.gtk` hidden import and opens the browser.
+
+## Finalisation Stage 2 — unit 28 (backup / import), browser-verify owed (2026-10-27) — origin FU-929
+- [ ] Settings → Admin → Data → Backup & restore: the library lists newest first; New backup (defaults) → Download → Restore this backup → Delete each work and each failure toast carries a reference id.
+- [ ] Backup & restore: drop a backup file → preview tree → Restore selection; drop the same file again after a restore and confirm the "upload is gone" case reads as a not-found caption, not "HTTP 404".
+- [ ] Backup & restore: edit a saved backup file on disk by hand, then Download it — a 409 toast, and the row shows a failed status after reload.
+- [ ] Import: download a template, upload a CSV with `03/04/2027` in a date column on an en-AU install → 3 April; switch locale to en-US → 4 March.
+- [ ] Import: the result dialog's "Download error rows" CSV opens with `row_number,name,reason` and quotes a reason containing a comma.
+- [ ] Import / Backup: kill the API mid-upload — "Upload failed." toast with a friendly caption; retrying the drop works.
+
+## Finalisation Stage 2 — unit 27 (offline / PWA), browser-verify owed (2026-10-27) — origin FU-929
+- [ ] Built PWA: go offline (DevTools → Network → Offline): the red banner reads "You're offline. You can look around, but not make changes." with Retry; stop the API only: "Can't reach Dora…" with Retry; back online: a green "Back online." toast at the top.
+- [ ] Built PWA with a newer build cached: the accent "A new version of Dora is ready" strip shows Reload + dismiss, under the header, same shape as the offline strip.
+- [ ] Chrome → Application → Manifest: name "Dashy Dora", short name "Dora", theme colour #f5c462, two 192/512 icons + maskable; install prompt still offered over https.
+- [ ] Cook mode and a shopping list in shop mode still keep the screen awake on a phone (wake lock) and release it on leaving.
+- [ ] Android shell: About shows the "Dora API endpoint" row and no install section; camera availability unchanged.
+
+## Finalisation Stage 2 — unit 26 (ingestion seam), browser-verify owed (2026-10-27) — origin FU-929
+- [ ] Companion → push a product with an unknown field: the companion shows a per-field message naming the field, not "Extra inputs are not permitted" repeated.
+- [ ] Settings → API access: a key the companion has only used to list stores shows a "Last used" time, not "Never used".
+- [ ] Settings → API access → Store mappings: the store picker lists every Dora store (more than 50 if you have them); assigning and clearing a mapping still works.
+- [ ] Settings → API access: a disabled source's "Disabled" badge reads in dark themes (sunken tint, no white-on-grey).
+
+## Finalisation Stage 2 — unit 25 (auth shell), browser-verify owed (2026-10-27) — origin FU-929
+- [ ] Register with an email address (SMTP configured): an info toast "Check your inbox for a verification link." shows; without an address, no toast.
+- [ ] Signed in on a page, expire the session (restart the API with a new secret, or delete the cookie) then click anything: you land on `/login?redirect=…` and, after signing in, back on that page.
+- [ ] Sign out: DevTools → Application → Cookies shows no `dora_csrf` cookie afterwards.
+- [ ] Visit a typo'd URL signed out and signed in: the 404 uses the login look (blobs, mascot, glass card) and "Take me home" works.
+- [ ] Login, Setup and Users → Add user / Change password: the eye toggle reveals the password; typing 7 characters on a *new* password shows "At least 8 characters"; sign-in's current-password field shows no length hint.
+- [ ] About → Change (native) and the cannot-connect splash → Change instance URL: same dialog, saving reloads against the new URL.
+- [ ] Setup pages: the "One-time setup" / "Choose your Dora" pill renders as before; primary/secondary button ink and the splash text are unchanged (tokens, not hex).
+
+## Finalisation Stage 2 — unit 24 (settings shell + onboarding), browser-verify owed (2026-10-27) — origin FU-929
+- [ ] Settings → Users: a user with a photo shows "Remove picture" in the ⋮ menu; using it clears the avatar; a user without one doesn't show the item.
+- [ ] Settings → Notifications with SMTP / VAPID unset: the "isn't set up on this install yet" card still renders as the warning banner with the admin's "Set up" button.
+- [ ] Settings → About → "Run the welcome tour again" lands on `/welcome`; finishing it returns to the dashboard with your data intact.
+- [ ] Welcome tour, stock step: add your own group and zone, finish — both exist once under Settings → Kitchen setup; run the tour again and add the same names — no duplicates.
+- [ ] Welcome tour, welcome step: pick Light, then open Settings → Preferences — the picker shows Pesto / Light (no legacy "system" key).
+- [ ] Welcome tour: typing a name in the stock step doesn't stutter (draft autosave is debounced).
+- [ ] Welcome layout in a dark theme and the confetti colours still read correctly (tokens, not hex).
+
 ## Finalisation Stage 2 — unit 23 (reports, budget, waste), browser-verify owed (2026-10-27) — origin FU-929
 - [ ] Reports (30 days): spend-by-store total, spend-by-category total and the budget card's spend agree for a week with one finished shop.
 - [ ] Reports: every card that names the window reads the same words ("in the last 90 days"); Price changes says "since you started logging prices" on All.

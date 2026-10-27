@@ -15,6 +15,7 @@ The profile drives:
 See `validate_production_requirements()` for the boot-time gate.
 """
 import os
+import sys
 from enum import Enum
 from typing import Sequence
 
@@ -35,6 +36,20 @@ _ALIASES = {
     "testing": Profile.TEST,
     "ci": Profile.TEST,
 }
+
+
+_TRUTHY = frozenset({"1", "true", "yes", "on"})
+
+
+def env_flag(name: str, default: bool = False) -> bool:
+    """Read a boolean env var. Empty / unset → `default`; otherwise true for
+    `1`, `true`, `yes`, `on` (any case). The one truthy parser — it used to be
+    written out eight times across the config, profile and middleware modules
+    (finalisation 19-R10, R-003)."""
+    raw = (os.environ.get(name) or "").strip().lower()
+    if not raw:
+        return default
+    return raw in _TRUTHY
 
 
 def current_profile() -> Profile:
@@ -73,14 +88,25 @@ PRODUCTION_REQUIRED_VARS: tuple[str, ...] = (
 )
 
 
+_BANNER_RULE = "═" * 63
+
+
+def _print_banner(title: list[str], body: list[str]) -> None:
+    """Boxed stderr notice shared by the boot-time gate and the insecure-
+    cookie warning (finalisation 19-R11). stderr so container runtimes
+    capture it even before the logger is wired up."""
+    lines = ["", _BANNER_RULE, *title, _BANNER_RULE, "", *body, _BANNER_RULE, ""]
+    print("\n".join(lines), file=sys.stderr, flush=True)
+
+
 def validate_production_requirements(extra: Sequence[str] = ()) -> None:
     """Refuse to boot when in production and any required env var is
     missing. Prints a friendly multi-line error listing every missing
     var, then exits.
 
-    `extra` lets a caller add service-specific requirements without
-    touching the shared list (e.g. a future SMTP fan-in could require
-    SMTP_HOST when DORA_EMAIL_ENABLED=true).
+    `extra` lets a caller add deployment-specific requirements without
+    touching the shared list (SMTP, push and AI keys live in Settings, not
+    env — see `IMPL_PLAN_ENV_TO_APPSETTING.md`).
 
     Bypassed when DORA_SKIP_PROD_VALIDATION=true — the desktop bundle
     sets this because its required-vars story is different (no public
@@ -89,7 +115,7 @@ def validate_production_requirements(extra: Sequence[str] = ()) -> None:
     """
     if not is_production():
         return
-    if (os.environ.get("DORA_SKIP_PROD_VALIDATION") or "").lower() in {"1", "true", "yes", "on"}:
+    if env_flag("DORA_SKIP_PROD_VALIDATION"):
         return
 
     required = list(PRODUCTION_REQUIRED_VARS) + list(extra)
@@ -97,33 +123,22 @@ def validate_production_requirements(extra: Sequence[str] = ()) -> None:
     if not missing:
         return
 
-    lines = [
-        "",
-        "═══════════════════════════════════════════════════════════════",
-        " DORA_ENV=production but required environment variables are",
-        " missing. Refusing to start.",
-        "═══════════════════════════════════════════════════════════════",
-        "",
-        " Missing:",
-    ]
-    for name in missing:
-        lines.append(f"   - {name}")
-    lines += [
+    body = [" Missing:"]
+    body += [f"   - {name}" for name in missing]
+    body += [
         "",
         " Fix:  add the missing vars to your .env (or the deploy",
         " environment) and restart. See .env.example for what each",
         " var does.",
         "",
         " To run in dev mode instead, set DORA_ENV=development.",
-        "═══════════════════════════════════════════════════════════════",
-        "",
     ]
-    msg = "\n".join(lines)
-    # Print to stderr so container runtimes capture it even when the
-    # logger isn't wired up yet, then exit non-zero so compose marks
-    # the container as failed.
-    import sys
-    print(msg, file=sys.stderr, flush=True)
+    _print_banner(
+        [" DORA_ENV=production but required environment variables are",
+         " missing. Refusing to start."],
+        body,
+    )
+    # Exit non-zero so compose marks the container as failed.
     sys.exit(1)
 
 
@@ -141,27 +156,23 @@ def warn_if_insecure_cookies_in_production() -> None:
     """
     if not is_production():
         return
-    if (os.environ.get("DORA_SKIP_PROD_VALIDATION") or "").lower() in {"1", "true", "yes", "on"}:
+    if env_flag("DORA_SKIP_PROD_VALIDATION"):
         return
     raw = (os.environ.get("DORA_SECURE_COOKIES") or "").strip().lower()
     if raw not in {"0", "false", "no", "off"}:
         return
 
-    lines = [
-        "",
-        "═══════════════════════════════════════════════════════════════",
-        " WARNING: DORA_ENV=production and DORA_SECURE_COOKIES=false.",
-        " The session cookie will NOT carry the `Secure` attribute, so",
-        " a browser will send it over plain HTTP too. If this install",
-        " is fronted by HTTPS (Let's Encrypt, Cloudflare, load-balancer",
-        " TLS termination, etc.) unset DORA_SECURE_COOKIES (or set it",
-        " to `true`) so the safe default takes over.",
-        "",
-        " If you deliberately serve the app over plain HTTP (internal",
-        " LAN behind a VPN, home-lab install with no cert) keep the",
-        " current setting; this warning is your one audible reminder.",
-        "═══════════════════════════════════════════════════════════════",
-        "",
-    ]
-    import sys
-    print("\n".join(lines), file=sys.stderr, flush=True)
+    _print_banner(
+        [" WARNING: DORA_ENV=production and DORA_SECURE_COOKIES=false."],
+        [
+            " The session cookie will NOT carry the `Secure` attribute, so",
+            " a browser will send it over plain HTTP too. If this install",
+            " is fronted by HTTPS (Let's Encrypt, Cloudflare, load-balancer",
+            " TLS termination, etc.) unset DORA_SECURE_COOKIES (or set it",
+            " to `true`) so the safe default takes over.",
+            "",
+            " If you deliberately serve the app over plain HTTP (internal",
+            " LAN behind a VPN, home-lab install with no cert) keep the",
+            " current setting; this warning is your one audible reminder.",
+        ],
+    )

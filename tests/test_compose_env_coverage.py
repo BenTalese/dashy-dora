@@ -87,8 +87,6 @@ INTENTIONALLY_OMITTED: dict[str, str] = {
     "DORA_API_HOST": "bind address inside the container; fixed by the image.",
     "DORA_BIND": "gunicorn bind string; derived by startup.sh.",
     "DORA_SPA_DIR": "path to the built SPA inside the image.",
-    "DORA_WEB_APP_HOST": "container-internal nginx host.",
-    "DORA_WEB_APP_PORT": "container-internal nginx port; the published port is the `ports:` mapping.",
     "DORA_GUNICORN_LOG_LEVEL": "derived from DORA_LOG_LEVEL by gunicorn.conf.py.",
     "DORA_WEB_KEEPALIVE": "gunicorn tuning with a sane default; override via .env if ever needed.",
     "DORA_WEB_GRACEFUL_TIMEOUT": "as above.",

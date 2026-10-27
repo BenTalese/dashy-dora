@@ -163,3 +163,29 @@ def test__admin_delete_user__another_user__removed(api):
 def test__admin_delete_user__unknown__404(api):
     resp = requests.delete(f"{USERS}/{uuid4()}")
     assert resp.status_code == 404, resp.text
+
+
+_PNG_DATA_URL = (
+    "data:image/png;base64,"
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA"
+    "60e6kgAAAABJRU5ErkJggg=="
+)
+
+
+def test__admin_update_user__clear_image__removes_the_picture(api):
+    """Finalisation 13-R15: the server's `clear_image` finally has a caller
+    ("Remove picture" in the Users overflow); setting another user's picture
+    was dropped from the admin request (no caller, people set their own on
+    `/auth/me`)."""
+    me = _me()
+    set_resp = requests.patch(f"{BASE}/auth/me", json={"image": _PNG_DATA_URL})
+    assert set_resp.status_code in (200, 204), set_resp.text
+    assert _row(me["user_id"])["has_image"] is True
+
+    resp = requests.patch(f"{BASE}/users/{me['user_id']}", json={"clear_image": True})
+
+    assert resp.status_code in (200, 204), resp.text
+    assert _row(me["user_id"])["has_image"] is False
+    # the set half is gone: an admin can't push a picture onto someone
+    rejected = requests.patch(f"{BASE}/users/{me['user_id']}", json={"image": _PNG_DATA_URL})
+    assert rejected.status_code == 400, rejected.text

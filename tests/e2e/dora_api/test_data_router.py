@@ -15,7 +15,6 @@ before.
 import json
 import uuid  # register_product_barcode tests used uuid without importing it.
 
-import pytest
 import requests
 
 from tests.e2e.dora_api._error_assertions import domain_err
@@ -415,12 +414,14 @@ def test__restore_backup__upload_id_consumed_on_use(api):
         RESTORE_URL,
         json={"upload_id": upload_id, "selection": {}, "mode": "all_skip_duplicates"},
     )
-    # …so a second call referencing the same id 400s with "not found".
+    # …so a second call referencing the same id is a 404 — the staged upload
+    # is a resource that no longer exists (finalisation 18-R11; it was a 400
+    # keyed on the message prefix).
     second = requests.post(
         RESTORE_URL,
         json={"upload_id": upload_id, "selection": {}, "mode": "all_skip_duplicates"},
     )
-    assert second.status_code == 400
+    assert second.status_code == 404
 
 
 def test__restore_backup__rejects_both_inputs(api):

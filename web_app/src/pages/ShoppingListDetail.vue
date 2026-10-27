@@ -1212,10 +1212,12 @@
     import { computed, onMounted, reactive, ref, watch } from 'vue';
     import { useRoute, useRouter } from 'vue-router';
     import { describeApiError, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+    import { useConfirm } from 'src/composables/useConfirm';
 
     const route = useRoute();
     const router = useRouter();
     const $q = useQuasar();
+    const { confirm, prompt } = useConfirm();
     const api = new ShoppingListApiService();
     const templateApi = new ShoppingListTemplateApiService();
     const store = useShoppingListStore();
@@ -1931,16 +1933,11 @@
     }
 
     async function deleteSummary(s: ShoppingListSummary) {
-        const ok = await new Promise<boolean>((resolve) => {
-            $q.dialog({
-                title: `Delete "${s.display_name}"?`,
-                message: 'This permanently removes the list and all its items.',
-                ok: { label: 'Delete', color: 'negative', noCaps: true },
-                cancel: { noCaps: true },
-            })
-                .onOk(() => resolve(true))
-                .onCancel(() => resolve(false))
-                .onDismiss(() => resolve(false));
+        const ok = await confirm({
+            title: `Delete "${s.display_name}"?`,
+            message: 'This permanently removes the list and all its items.',
+            okLabel: 'Delete',
+            destructive: true,
         });
         if (!ok) return;
         try {
@@ -2688,17 +2685,11 @@
                     // product line is going regardless (the user already
                     // clicked Remove); the prompt is purely about whether the
                     // generic stock-item placeholder rides along.
-                    const removeBoth = await new Promise<boolean>((resolve) => {
-                        $q.dialog({
-                            title: 'Also remove the stock item?',
-                            message: `${parentLine.stock_item_name} is on this list as its own line. Remove it too?`,
-                            ok: { label: 'Yes, remove both', noCaps: true, color: 'primary' },
-                            cancel: { label: 'No, just the product', noCaps: true, flat: true },
-                            persistent: false,
-                        })
-                            .onOk(() => resolve(true))
-                            .onCancel(() => resolve(false))
-                            .onDismiss(() => {});
+                    const removeBoth = await confirm({
+                        title: 'Also remove the stock item?',
+                        message: `${parentLine.stock_item_name} is on this list as its own line. Remove it too?`,
+                        okLabel: 'Yes, remove both',
+                        cancelLabel: 'No, just the product',
                     });
                     if (removeBoth) alsoRemoveStockItemId = linkedStockItemId;
                 }
@@ -2760,18 +2751,12 @@
      */
     async function onBackToDraft() {
         const ticked = detail.value?.lines.filter((l) => l.is_ticked).length ?? 0;
-        const ok = await new Promise<boolean>((resolve) => {
-            $q.dialog({
-                title: 'Back to draft?',
-                message: ticked > 0
-                    ? `This list goes back to being a draft, and the ${ticked} item${ticked === 1 ? '' : 's'} you've ticked off ${ticked === 1 ? 'is' : 'are'} unticked. Nothing else changes.`
-                    : 'This list goes back to being a draft. Nothing else changes.',
-                ok: { label: 'Back to draft', noCaps: true },
-                cancel: { noCaps: true },
-            })
-                .onOk(() => resolve(true))
-                .onCancel(() => resolve(false))
-                .onDismiss(() => resolve(false));
+        const ok = await confirm({
+            title: 'Back to draft?',
+            message: ticked > 0
+                ? `This list goes back to being a draft, and the ${ticked} item${ticked === 1 ? '' : 's'} you've ticked off ${ticked === 1 ? 'is' : 'are'} unticked. Nothing else changes.`
+                : 'This list goes back to being a draft. Nothing else changes.',
+            okLabel: 'Back to draft',
         });
         if (!ok) return;
         togglingProgress.value = true;
@@ -2790,16 +2775,11 @@
     }
 
     async function onClearAll() {
-        const ok = await new Promise<boolean>((resolve) => {
-            $q.dialog({
-                title: 'Clear all items?',
-                message: 'Every line on this list will be removed. The list stays.',
-                ok: { label: 'Clear', color: 'negative', noCaps: true },
-                cancel: { noCaps: true },
-            })
-                .onOk(() => resolve(true))
-                .onCancel(() => resolve(false))
-                .onDismiss(() => resolve(false));
+        const ok = await confirm({
+            title: 'Clear all items?',
+            message: 'Every line on this list will be removed. The list stays.',
+            okLabel: 'Clear',
+            destructive: true,
         });
         if (!ok) return;
         try {
@@ -2822,22 +2802,12 @@
     async function onSaveAsTemplate() {
         if (!detail.value) return;
         // Ask for a name and whether to include ticked items.
-        const name = await new Promise<string | null>((resolve) => {
-            $q.dialog({
-                title: 'Save as template',
-                message:
-                    'Snapshots the items on this list as a reusable template. ' +
-                    'Quantities and selected merchant offers are reset on each use.',
-                prompt: {
-                    model: `Template from ${detail.value!.display_name}`,
-                    type: 'text',
-                    isValid: (val: string) => val.trim().length > 0,
-                },
-                cancel: { noCaps: true },
-            })
-                .onOk((v: string) => resolve(v.trim()))
-                .onCancel(() => resolve(null))
-                .onDismiss(() => resolve(null));
+        const name = await prompt({
+            title: 'Save as template',
+            message: 'Snapshots the items on this list as a reusable template. ' +
+                'Quantities and selected merchant offers are reset on each use.',
+            initial: `Template from ${detail.value.display_name}`,
+            isValid: (val: string) => val.trim().length > 0,
         });
         if (!name) return;
         // Include ticked items only when the list isn't archived and has
@@ -2845,17 +2815,11 @@
         const ticked = detail.value.lines.filter((l) => l.is_ticked).length;
         let includeTicked = false;
         if (ticked > 0) {
-            includeTicked = await new Promise<boolean>((resolve) => {
-                $q.dialog({
-                    title: `Include ${ticked} ticked item${ticked === 1 ? '' : 's'}?`,
-                    message:
-                        'Ticked items are usually one-offs.',
-                    ok: { label: 'Include ticked', noCaps: true },
-                    cancel: { label: 'Skip ticked', noCaps: true },
-                })
-                    .onOk(() => resolve(true))
-                    .onCancel(() => resolve(false))
-                    .onDismiss(() => resolve(false));
+            includeTicked = await confirm({
+                title: `Include ${ticked} ticked item${ticked === 1 ? '' : 's'}?`,
+                message: 'Ticked items are usually one-offs.',
+                okLabel: 'Include ticked',
+                cancelLabel: 'Skip ticked',
             });
         }
         try {

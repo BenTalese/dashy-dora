@@ -207,7 +207,7 @@
     }
     .rich-card__name {
         font-weight: 600;
-        font-size: calc(var(--font-size-md) * 1rem);
+        font-size: var(--font-size-md);
         line-height: 1.25;
         word-break: break-word;
     }
@@ -219,7 +219,7 @@
         align-items: center;
         flex-wrap: wrap;
         gap: 6px 8px;
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         color: var(--text-secondary);
     }
     .rich-card__servings {

@@ -280,7 +280,7 @@
     .dora-attention-table {
         width: 100%;
         border-collapse: collapse;
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
     }
     .dora-attention-table th,
     .dora-attention-table td {

@@ -84,7 +84,7 @@
         margin: 0;
         padding: var(--space-1) var(--space-1) var(--space-2);
         max-width: 70ch;
-        font-size: calc(var(--font-size-lg) * 1rem);
+        font-size: var(--font-size-lg);
         line-height: 1.45;
         color: var(--text-primary);
     }

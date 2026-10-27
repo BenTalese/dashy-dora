@@ -24,7 +24,6 @@ from sqlalchemy import select
 from dora_api.app import db
 from dora_api.domain.entities.user import User
 from dora_api.features.data.restore_shared import SECTIONS, SECTION_BY_BACKUP_KEY
-from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 
 

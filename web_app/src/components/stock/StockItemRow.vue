@@ -861,7 +861,7 @@
     }
     .stock-row__belief-reason {
         font-weight: 400;
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
         color: var(--text-secondary);
         white-space: normal;
     }
@@ -883,7 +883,7 @@
     }
     .stock-row__name {
         font-weight: 600;
-        font-size: calc(var(--font-size-md) * 1rem);
+        font-size: var(--font-size-md);
         line-height: 1.25;
         white-space: nowrap;
         overflow: hidden;
@@ -908,7 +908,7 @@
         cursor: pointer;
         display: inline-flex;
         align-items: center;
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
         color: var(--text-secondary);
         padding: 2px 4px;
         margin-left: -4px;

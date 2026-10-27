@@ -7,8 +7,9 @@ voice without any cloud calls, and the catalog (`voice_catalog.py`) lists more
 that an operator can drop in.
 
 Configuration:
-  DORA_PIPER_BIN        — path to the piper executable (default: `piper`
-                          on PATH, which works after `pip install piper-tts`)
+  Piper executable      — Settings → Admin → System → Voice (`piper_bin`
+                          on the AppSetting; `piper` on PATH after
+                          `pip install piper-tts`)
   DORA_PIPER_VOICE_DIR  — directory holding the `.onnx` voice models (+ the
                           matching `.onnx.json`). Default: the `voices/`
                           directory next to this file (where the bundled
@@ -159,8 +160,9 @@ def synthesize():
         return jsonify({
             "error": "Piper is not configured",
             "hint": "Install Piper (`pip install piper-tts`, or the binary from "
-                    "github.com/rhasspy/piper/releases with DORA_PIPER_BIN set), "
-                    "then download a voice from Settings → Voice.",
+                    "github.com/rhasspy/piper/releases and set its path under "
+                    "Settings → Admin → System → Voice), then download a voice "
+                    "from Settings → Voice.",
         }), 503
 
     # Start from the voice's curated defaults, then let explicit request knobs

@@ -39,10 +39,10 @@ import re
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Literal
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from flask import request
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 from dora_api.domain.entities.idempotency_key import IdempotencyKey
 from dora_api.domain.entities.ingestion_source import IngestionSource
@@ -50,18 +50,20 @@ from dora_api.domain.entities.ingestion_store_mapping import \
     IngestionStoreMapping
 from dora_api.domain.entities.store import Store
 from dora_api.domain.entities.product import Product
-from dora_api.domain.entities.product_historic_offer import \
-    ProductHistoricOffer
 from dora_api.domain.entities.product_offer import ProductOffer
-from dora_api.features.ingestion.offer_mapping import (OfferOutcome,
+from dora_api.features.products.offer_mapping import (OfferOutcome,
                                                        apply_offer_to_product)
-from dora_api.features.ingestion.product_identity import find_ingested_product
+from dora_api.features.ingestion.product_identity import (StoreRef, find_ingested_product,
+                                                          find_store_mapping)
 from dora_api.features.routers import INGEST_ROUTER
+from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.ingestion_auth import (
     authenticate_ingestion_request, stamp_used)
+from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
+from dora_api.infrastructure.data_url import image_field
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -73,7 +75,7 @@ _IDEMPOTENCY_TTL = timedelta(days=7)
 
 # ── Payload schema ─────────────────────────────────────────────────────
 
-class _ProductIn(BaseModel):
+class _ProductIn(StoreRef):
     model_config = ConfigDict(extra="forbid")
 
     ref: str = Field(min_length=1, max_length=255)
@@ -81,8 +83,6 @@ class _ProductIn(BaseModel):
     # Exactly one of these. `store` is the store's external name, resolved
     # through the per-source mapping (was `merchant` pre-Phase-E); `store_id`
     # is a Dora store id, for a producer that maps stores on its own side.
-    store: str | None = Field(default=None, min_length=1, max_length=255)
-    store_id: UUID | None = None
     brand: str | None = Field(default=None, max_length=255)
     size: str | None = Field(default=None, max_length=255)
     size_unit: str | None = Field(default=None, max_length=255)
@@ -104,13 +104,7 @@ class _ProductIn(BaseModel):
     # Absent leaves the stored image alone (owner 2026-10-17: images saved
     # from the companion never reached My products, because this field didn't
     # exist and the companion never sent one).
-    image: str | None = Field(default=None, max_length=6_000_000)
-
-    @model_validator(mode="after")
-    def _one_store(self) -> "_ProductIn":
-        if (self.store is None) == (self.store_id is None):
-            raise ValueError("Give exactly one of `store` or `store_id`.")
-        return self
+    image: str | None = image_field()
 
 
 class _OfferIn(BaseModel):
@@ -306,15 +300,7 @@ class SubmitIngestionBatchHandler:
         if cached is not None:
             mapping = cached
         else:
-            field_src = EntityField(
-                IngestionStoreMapping, IngestionStoreMapping.Fields.SOURCE_ID
-            )
-            field_ext = EntityField(
-                IngestionStoreMapping, IngestionStoreMapping.Fields.EXTERNAL_NAME
-            )
-            mapping = self.repository.get(IngestionStoreMapping).one(
-                field_src.eq(ctx.source.id) & field_ext.eq(external_name)
-            )
+            mapping = find_store_mapping(self.repository, ctx.source.id, external_name)
             if mapping is None:
                 # First sighting — create the quarantined row so the
                 # admin sees a pending mapping to resolve. Stores are
@@ -459,6 +445,7 @@ class SubmitIngestionBatchHandler:
 
 
 @INGEST_ROUTER.route("", methods=["POST"], endpoint="submit_ingestion_batch")
+@has_request_body(IngestBatchRequest)
 def submit_ingestion_batch():
     # FU-866 — one shared check: authenticate, then honour the
     # install-wide ingestion switch. Both live in `ingestion_auth` so a
@@ -467,10 +454,11 @@ def submit_ingestion_batch():
     if auth_error is not None:
         return auth_error
 
-    try:
-        payload = IngestBatchRequest.model_validate(request.get_json(silent=True) or {})
-    except Exception as exc:  # noqa: BLE001 — pydantic validation surface
-        return ({"detail": "Malformed payload.", "errors": str(exc)}, 400)
+    # The body is validated by the request middleware (`has_request_body`),
+    # which answers a malformed payload with the structured per-field 400
+    # every other route uses — not `str(ValidationError)` (finalisation
+    # 16-R9 / 16-R34; the owner saw that text ×5 in the companion).
+    payload: IngestBatchRequest = get_request_body()
 
     idempotency_key = (request.headers.get("Idempotency-Key") or "").strip() or None
 

@@ -26,7 +26,6 @@ from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
 from typing import Iterable
-from urllib.parse import urlparse
 from uuid import UUID
 
 import qrcode

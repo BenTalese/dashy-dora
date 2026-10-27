@@ -77,6 +77,7 @@ if _SecretKeyFromEnv:
 else:
     if not _SecretKeyFile.exists():
         _SecretKeyFile.parent.mkdir(parents=True, exist_ok=True)
+        _SecretKeyFile.touch(mode=0o600)  # owner-only before the key lands
         _SecretKeyFile.write_text(secrets.token_hex(32))
     app.config['SECRET_KEY'] = _SecretKeyFile.read_text().strip()
 

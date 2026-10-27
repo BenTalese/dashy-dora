@@ -171,13 +171,13 @@
         margin-bottom: var(--space-3);
     }
     .wr-summary__figure {
-        font-size: calc(var(--font-size-3xl) * 1rem);
+        font-size: var(--font-size-3xl);
         font-weight: 700;
         font-variant-numeric: tabular-nums;
     }
     .wr-summary__caption {
         color: var(--text-secondary);
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
     }
     .wr-reasons {
         display: grid;
@@ -217,14 +217,14 @@
     }
     .wr-reason__icon { color: var(--text-secondary); }
     .wr-reason__count {
-        font-size: calc(var(--font-size-lg) * 1rem);
+        font-size: var(--font-size-lg);
         font-weight: 700;
         font-variant-numeric: tabular-nums;
     }
     .wr-reason__label {
         /* D-003 floor. The old tile ran this at 11.5px on a ~95px square, so a
            two-word label ("Didn't like") wrapped inside its own tile. */
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
         color: var(--text-secondary);
         line-height: 1.15;
     }
@@ -273,13 +273,13 @@
     }
     .wr-list__count {
         color: var(--text-secondary);
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         font-variant-numeric: tabular-nums;
         white-space: nowrap;
     }
     .wr-more {
         margin-top: var(--space-2);
         color: var(--text-secondary);
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
     }
 </style>

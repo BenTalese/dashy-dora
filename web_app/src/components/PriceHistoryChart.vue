@@ -491,7 +491,7 @@
         display: flex;
         flex-wrap: wrap;
         gap: var(--space-1) var(--space-4);
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
         color: var(--text-secondary);
 
         li {
@@ -530,7 +530,7 @@
         border: 1px solid var(--border-default);
         border-radius: var(--radius-md);
         padding: var(--space-2) var(--space-3);
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
         pointer-events: none;
         box-shadow: 0 2px 8px var(--overlay-active);
         min-width: 200px;

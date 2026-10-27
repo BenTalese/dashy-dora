@@ -146,8 +146,8 @@ def build_assistant_client_from_provider(
     base_url: str | None,
     api_key: str,
 ) -> LlmClient:
-    """Direct constructor without a User. Used by the admin probe
-    endpoint (probe_llm) and by tests so they can build a client
+    """Direct constructor without a User. Used by the per-user probe
+    (`assistant/probe_assistant.py`) and by tests so they can build a client
     without hydrating a full row."""
     if provider == LLM_PROVIDER_OLLAMA:
         if not base_url or not model:

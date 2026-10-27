@@ -311,8 +311,11 @@
     import { computed, onMounted, ref } from 'vue';
     import { useRouter } from 'vue-router';
     import { describeApiError, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+    import { useConfirm } from 'src/composables/useConfirm';
 
     const $q = useQuasar();
+
+    const { confirm, prompt } = useConfirm();
     const router = useRouter();
     const shoppingListStore = useShoppingListStore();
     const api = new ShoppingListTemplateApiService();
@@ -372,16 +375,9 @@
     }
 
     async function onCreate() {
-        const name = await new Promise<string | null>((resolve) => {
-            $q.dialog({
-                title: 'New template',
-                message: 'What is this template called? (e.g. "Weekly essentials")',
-                prompt: { model: '', type: 'text' },
-                cancel: { noCaps: true },
-            })
-                .onOk((v: string) => resolve(v.trim()))
-                .onCancel(() => resolve(null))
-                .onDismiss(() => resolve(null));
+        const name = await prompt({
+            title: 'New template',
+            message: 'What is this template called? (e.g. "Weekly essentials")',
         });
         if (!name) return;
         try {
@@ -424,15 +420,11 @@
     }
 
     async function onDelete(template: TemplateSummary) {
-        const ok = await new Promise<boolean>((resolve) => {
-            $q.dialog({
-                title: `Delete "${template.name}"?`,
-                message: 'This removes the template. Shopping lists previously created from it are unaffected.',
-                cancel: { noCaps: true },
-            })
-                .onOk(() => resolve(true))
-                .onCancel(() => resolve(false))
-                .onDismiss(() => resolve(false));
+        const ok = await confirm({
+            title: `Delete "${template.name}"?`,
+            message: 'This removes the template. Shopping lists previously created from it are unaffected.',
+            okLabel: 'Delete',
+            destructive: true,
         });
         if (!ok) return;
         try {
@@ -696,7 +688,7 @@
         grid-area: name;
         min-width: 0;
         display: flex;
-        font-size: calc(var(--font-size-md) * 1rem);
+        font-size: var(--font-size-md);
     }
     /* The picker is sized for a list row; here it reads at the same size as
        a plain name beside it. */

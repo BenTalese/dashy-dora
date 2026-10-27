@@ -1,5 +1,6 @@
 import importlib
 import inspect
+import logging
 import os
 import pkgutil
 import re
@@ -43,6 +44,16 @@ def _to_package_name(path_to_search: Path | str) -> str:
     return s.replace("/", ".")
 
 
+def _raise_import_failure(name: str) -> None:
+    """`pkgutil.walk_packages` swallows an ImportError from a sub-*package*
+    when no `onerror` is given, so a feature package that fails to import
+    silently drops every route under it and the app boots with a hole in its
+    API (FU-719). Log it with the traceback and re-raise: a feature that
+    can't import fails the boot loudly."""
+    logging.getLogger(__name__).exception("Feature package %s failed to import", name)
+    raise
+
+
 def _iter_submodules(package_name: str):
     """pkgutil-based recursive walk of a package. Works in both
     source-tree and PyInstaller-frozen contexts (the on-disk
@@ -52,7 +63,7 @@ def _iter_submodules(package_name: str):
     pkg = importlib.import_module(package_name)
     if not hasattr(pkg, "__path__"):
         return
-    for info in pkgutil.walk_packages(pkg.__path__, prefix=f"{package_name}."):
+    for info in pkgutil.walk_packages(pkg.__path__, prefix=f"{package_name}.", onerror=_raise_import_failure):
         # Skip the package's own __init__ modules — they're already
         # imported as part of `import_module(package_name)`. Modules
         # with a name ending in `.__init__` don't show up via
@@ -80,8 +91,6 @@ def get_attributes_ending_with(term: str, path_to_search: Path | str):
             if (_AttributeName.lower().endswith(term.lower())
                     and _AttributeValue not in _Attributes):
                 _Attributes.append(_AttributeValue)
-    return _Attributes
-
     return _Attributes
 
 

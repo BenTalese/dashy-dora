@@ -5,7 +5,7 @@
          app layout or collides with the mobile bottom nav; it sits above
          everything and is purely informational. -->
     <div v-if="demoMode" class="demo-banner" role="status">
-        <q-icon name="visibility" size="18px" class="demo-banner__icon" />
+        <q-icon :name="ICONS.visibility" size="18px" class="demo-banner__icon" />
         <span class="demo-banner__text">
             Demo mode. This sample data resets periodically.
         </span>
@@ -14,6 +14,7 @@
 
 <script setup lang="ts">
     import { useDemoMode } from 'src/composables/useDemoMode';
+    import { ICONS } from 'src/style/icons';
 
     const { demoMode } = useDemoMode();
 </script>

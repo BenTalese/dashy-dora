@@ -303,7 +303,6 @@ _EXCLUDED_FROM_BEHAVIOURAL: dict[str, str] = {
     "commit_action": "assistant action needs a staged plan",
     "confirm_action": "assistant action needs a staged plan",
     "probe_assistant": "calls the LLM",
-    "probe_llm": "calls an external LLM endpoint",
     "synthesize": "TTS synthesis (audio bytes / external engine)",
     "download_voice": "downloads a voice model",
     "apply_template": "needs a populated meal-plan template",

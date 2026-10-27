@@ -22,6 +22,8 @@ export type AdminUpdateUserCommand = {
     is_admin?: boolean;
     is_active?: boolean;
     deals_email_enabled?: boolean;
+    /** Remove a problematic profile picture (finalisation 13-R15). */
+    clear_image?: boolean;
 };
 
 // admin-create counterpart to `/auth/register`. No verification email; the

@@ -264,7 +264,7 @@
        a group of rows — so the two headings inside one card read as the same
        rank rather than as two competing voices. */
     .sl-store-card__caption {
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         font-weight: 700;
         letter-spacing: 0.08em;
         text-transform: uppercase;

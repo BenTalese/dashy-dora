@@ -26,7 +26,6 @@
                 class="loop-node"
                 :class="{ 'is-shown': nodesShown, 'is-active': focusedKey === stage.key }"
                 :style="nodeStyle(i)"
-                :disabled="!interactive"
                 :aria-pressed="focusedKey === stage.key"
                 :aria-label="`${stage.label}. ${stage.sell}`"
                 @click="focus(stage.key)"
@@ -41,8 +40,7 @@
                     type="button"
                     class="loop-dora"
                     :class="{ 'is-active': focusedKey === 'centre' }"
-                    :disabled="!interactive"
-                    :aria-pressed="focusedKey === 'centre'"
+                        :aria-pressed="focusedKey === 'centre'"
                     :aria-label="`${LOOP_CENTRE.label}. ${LOOP_CENTRE.sell}`"
                     @click="focus('centre')"
                 >
@@ -80,30 +78,21 @@
     } from 'src/pages/onboarding/onboardingContent';
     import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 
-    const props = withDefaults(
-        defineProps<{
-            /** Play the one-time draw-in reveal. Finish-step recap passes false. */
-            autoplay?: boolean;
-            /** Allow tapping stages. */
-            interactive?: boolean;
-        }>(),
-        { autoplay: true, interactive: true },
-    );
-
+    // The story is the only consumer and always animates + lets you tap
+    // (the `autoplay` / `interactive` props and the Finish-step recap that
+    // passed them went in finalisation 14-R13).
     const prefersReducedMotion = useReducedMotion();
 
-    // Animate only when we're allowed to AND the user hasn't asked for less
-    // motion. Otherwise we jump straight to the final, fully-revealed state.
-    const shouldAnimate = computed(
-        () => props.autoplay && props.interactive && !prefersReducedMotion.value,
-    );
+    // Animate unless the user asked for less motion. Otherwise we jump
+    // straight to the final, fully-revealed state.
+    const shouldAnimate = computed(() => !prefersReducedMotion.value);
 
     const nodesShown = ref(!shouldAnimate.value);
     const focusedKey = ref<LoopStageKey | 'centre' | null>(null);
 
     const stageLabels = computed(() => LOOP_STAGES.map((s) => s.label).join(' → '));
 
-    const doraMood = computed<DoraMood>(() => 'happy');
+    const doraMood: DoraMood = 'happy';
 
     // Place each stage node on the ring: start at top (−90°), step clockwise.
     const RING_RADIUS = 38; // % offset from centre — matches the SVG circle r.
@@ -132,7 +121,6 @@
     });
 
     function focus(key: LoopStageKey | 'centre') {
-        if (!props.interactive) return;
         focusedKey.value = key;
     }
 
@@ -224,8 +212,11 @@
     .loop-node:focus-visible {
         border-color: var(--brand-primary);
         color: var(--text-primary);
-        outline: none;
         transform: translate(-50%, -50%) scale(1.05);
+    }
+    .loop-node:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
     }
     /* Active node: filled brand-primary background with contrasting text,
        a soft accent halo, and a lift. The scale bump is deliberate so the
@@ -253,7 +244,7 @@
         letter-spacing: 0.02em;
     }
 
-    /* ── Centre: Dora + the provisional Insight candidate ──────────── */
+    /* ── Centre: Dora ─────────────────────────────────────────────────── */
     .loop-centre {
         position: absolute;
         left: 50%;

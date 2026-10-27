@@ -1,9 +1,9 @@
 """GET /api/auth/capabilities — pre-auth capability probe.
 
 Small unauthenticated surface the SPA reads to decide whether to render
-optional entry points on the auth screens. Right now it exposes just one
-flag: whether outbound email is actually going somewhere. Add more as
-public-facing capabilities appear.
+optional entry points on the auth screens: whether outbound email is going
+somewhere, and the install's password minimum. Add more as public-facing
+capabilities appear.
 
 Why this exists: the reset-password flow always runs (204 on request,
 dry-run logs the link when SMTP is unset) so anti-enumeration holds even

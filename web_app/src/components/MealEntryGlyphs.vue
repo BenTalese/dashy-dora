@@ -2,7 +2,7 @@
     <!-- Owner 2026-09-12 — ordered by how often each is there: Dora's hunch
          (rarest), the price, then the status glyphs, so the host's
          always-present servings hold one column. `chef_hat` = can you make it,
-         `mealsPrepared` (the fridge) = is it already made; green fine, amber
+         `meals_prepared` (the fridge) = is it already made; green fine, amber
          not, and an axis that doesn't apply renders nothing
          (`mealPlanEntryStatus`). FU-653 — the hunch is a remark, not a state:
          it keeps its own glyph rather than tinting either axis. -->
@@ -31,7 +31,7 @@
         </q-icon>
         <q-icon
             v-if="status.readiness"
-            :name="ICONS.mealsPrepared"
+            :name="ICONS.meals_prepared"
             size="22px"
             class="meal-glyph"
             :class="statusToneClass(status.readiness)"

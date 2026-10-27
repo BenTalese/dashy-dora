@@ -36,6 +36,7 @@ from flask import request
 from pydantic import BaseModel, ConfigDict, Field
 
 from dora_api.features.auth.admin_gate import require_admin
+from dora_api.infrastructure.configuration_manager import DORA_CONFIG
 from dora_api.features.routers import DATA_ROUTER
 from dora_api.infrastructure.api_response import bad_request, no_content, not_found, ok
 from dora_api.infrastructure.decorators import has_request_body
@@ -57,7 +58,6 @@ def upload_dir() -> Path:
     data dir honours DORA_DATA_DIR / container volume mounts; the
     config helper creates the dir lazily so first-upload-on-fresh-
     install still works."""
-    from dora_api.infrastructure.configuration_manager import DORA_CONFIG
     return DORA_CONFIG.get_uploads_dir()
 
 

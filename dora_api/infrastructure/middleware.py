@@ -10,6 +10,8 @@ from dora_api.infrastructure.api_response import (ErrorEntry, bad_request,
                                                   endpoint_not_found,
                                                   forbidden,
                                                   unauthorized)
+from dora_api.infrastructure.profile import env_flag, is_production
+from dora_api.infrastructure.session_user import SESSION_USER_ID_KEY
 from dora_api.infrastructure.audit import auto_audit_after_request
 from dora_api.infrastructure.csrf import (csrf_check_passed, ensure_cookie,
                                           request_is_mutating,
@@ -76,7 +78,7 @@ def handle_incoming_request():
     incoming = request.headers.get("X-Request-Id")
     request_id = incoming.strip() if incoming else uuid4().hex
     set_request_id(request_id)
-    set_user_id(session.get("user_id"))
+    set_user_id(session.get(SESSION_USER_ID_KEY))
     g.request_started_at = time.perf_counter()
     g.request_id = request_id
 
@@ -235,21 +237,18 @@ def require_auth_if_protected(endpoint_name: str):
         return None
     if endpoint_name in PUBLIC_ENDPOINTS:
         return None
-    if "user_id" in session:
+    if SESSION_USER_ID_KEY in session:
         return None
     return unauthorized()
 
 
 # endpoints exempt from the CSRF double-submit check. Mirrors
-# PUBLIC_ENDPOINTS (anything pre-session is exempt since the cookie may
-# not exist yet) plus the bearer-authenticated ingestion endpoint
-# (Bearer tokens can't be replayed CSRF-style — no ambient cookie auth).
-CSRF_EXEMPT_ENDPOINTS = PUBLIC_ENDPOINTS | frozenset({
-    # Bearer-auth ingestion: the long-lived API key is the proof; the
-    # browser never holds it ambient, so there's no CSRF surface.
-    "submit_ingestion_batch",
-    "ingest_link_status",
-})
+# Anything pre-session is exempt, since the cookie may not exist yet. The
+# bearer-authenticated ingestion endpoints are *in* PUBLIC_ENDPOINTS (public
+# by session, bearer-checked in-handler) — a Bearer token can't be replayed
+# CSRF-style because the browser never holds it ambient — so this is the
+# same set, not a superset (finalisation 15-R13).
+CSRF_EXEMPT_ENDPOINTS = PUBLIC_ENDPOINTS
 
 
 def require_csrf_if_protected(endpoint_name: str):
@@ -265,10 +264,8 @@ def require_csrf_if_protected(endpoint_name: str):
     # dev-only escape hatch for ad-hoc curl / shell drivers
     # that can't easily echo the cookie as a header. Refused outside
     # the development profile so it cannot weaken a production deploy.
-    if os.environ.get("DORA_CSRF_DISABLED", "").lower() in ("1", "true", "yes"):
-        from dora_api.infrastructure.profile import is_production
-        if not is_production():
-            return None
+    if env_flag("DORA_CSRF_DISABLED") and not is_production():
+        return None
     if csrf_check_passed():
         return None
     return forbidden(

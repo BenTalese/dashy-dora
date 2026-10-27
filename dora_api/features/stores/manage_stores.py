@@ -37,7 +37,7 @@ from dora_api.domain.entities.stock_item import StockItem
 from dora_api.domain.entities.store import Store
 from dora_api.features.routers import STORE_ROUTER
 from dora_api.features.stores._logo_colour import dominant_colour
-from dora_api.infrastructure.data_url import data_url_response, decode_data_url
+from dora_api.infrastructure.data_url import data_url_response, decode_data_url, image_field
 from dora_api.infrastructure.api_response import (bad_request,
                                                   business_rule_violation,
                                                   created, no_content,
@@ -133,7 +133,7 @@ class CreateStoreRequest(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     # optional logo on create. Data-URL convention identical to
     # stock-item / product / recipe images; can be replaced via PATCH.
-    image: str | None = Field(default=None, max_length=6_000_000)
+    image: str | None = image_field()
 
 
 @dataclass(slots=True)
@@ -186,7 +186,7 @@ class UpdateStoreRequest(BaseModel):
     # Same data-URL convention. Send `null` to clear an existing image
     # (`clear_image=True` is the explicit clear flag — `image=None`
     # without the flag means "leave the image untouched").
-    image: str | None = Field(default=None, max_length=6_000_000)
+    image: str | None = image_field()
     clear_image: bool = False
 
 

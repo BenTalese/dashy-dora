@@ -30,13 +30,14 @@ from sqlalchemy import select
 from dora_api.app import db
 from dora_api.features.auth.admin_gate import require_admin
 from dora_api.features.data.backup import BACKUP_SCHEMA_VERSION
+from dora_api.features.data._errors import DataError, invalid, respond_to, upload_missing
 from dora_api.features.data.restore_shared import (
     DUPLICATE_KEY_BY_BACKUP_KEY,
     TABLE_NAME_BY_BACKUP_KEY,
 )
 from dora_api.features.data.uploads import staged_path
 from dora_api.features.routers import DATA_ROUTER
-from dora_api.infrastructure.api_response import bad_request, not_found, ok
+from dora_api.infrastructure.api_response import bad_request, ok
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -82,7 +83,7 @@ def _stream_upload_to_tempfile(upload) -> tuple[str | None, str | None]:
         raise
 
 
-def _resolve_file_path() -> tuple[Path | None, str | None, bool]:
+def _resolve_file_path() -> tuple[Path | None, DataError | None, bool]:
     """Returns (path_on_disk, error, owns_path).
 
     `owns_path` indicates whether the caller should unlink the file
@@ -99,17 +100,17 @@ def _resolve_file_path() -> tuple[Path | None, str | None, bool]:
         upload_id = body["upload_id"]
         path = staged_path(upload_id)
         if not path.exists():
-            return None, f"No staged upload found for id {upload_id}.", False
+            return None, upload_missing(upload_id), False
         return path, None, False
 
     # Path 2: multipart fallback.
     if request.files:
         upload = next(iter(request.files.values()), None)
         if upload is None:
-            return None, "No file in upload.", False
+            return None, invalid("No file in upload."), False
         tmp, err = _stream_upload_to_tempfile(upload)
         if err is not None:
-            return None, err, False
+            return None, invalid(err), False
         return Path(tmp), None, True
 
     # Path 3: inline JSON.
@@ -282,10 +283,8 @@ def inspect_backup():
         return admin_err
     path, err, owns_path = _resolve_file_path()
     if err is not None:
-        _LOGGER.warning("inspect_backup rejected upload: %s", err)
-        if err.startswith("No staged upload"):
-            return not_found("Upload", err.rsplit(" ", 1)[-1].rstrip("."))
-        return bad_request(err)
+        _LOGGER.warning("inspect_backup rejected upload: %s", err.detail)
+        return respond_to(err)
 
     try:
         if path is not None:

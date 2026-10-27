@@ -95,7 +95,7 @@ def test__audit_retention__deletes_rows_older_than_cutoff(api):
     from sqlalchemy import insert, select
 
     from dora_api.app import app, db
-    from dora_api.infrastructure.audit_retention import prune_audit_events
+    from dora_api.features.audit.prune_audit_events import prune_audit_events
 
     # Force a generous-but-finite retention window so we don't depend
     # on what the env says.

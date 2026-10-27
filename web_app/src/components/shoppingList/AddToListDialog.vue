@@ -326,7 +326,7 @@
     .add-to-list__grouphead {
         margin-top: var(--space-3, 12px);
         padding: var(--space-2, 8px) var(--space-4, 16px) var(--space-1, 4px);
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
         font-weight: 700;
         letter-spacing: 0.06em;
         text-transform: uppercase;
@@ -342,7 +342,7 @@
         background: var(--surface-sunken);
         border: 1px solid var(--border-default);
         border-radius: 8px;
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         color: var(--text-secondary);
         line-height: 1.35;
     }

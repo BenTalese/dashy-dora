@@ -63,8 +63,6 @@ const RUNTIME_DECLARED = [/^--q-/, /^--dora-base-font-size$/, /^--vv-inset-(top|
 const KNOWN_UNDECLARED = [
     '--space-sm',          // RecipeCookMode.vue:19 — scale is --space-1..12
     '--space-xs',          // RecipeCookMode.vue:19 — ditto
-    '--surface',           // AccountSettings.vue:364
-    '--surface-base',      // AccountSettings.vue:364
     '--surface-border',    // PutAwayDialog.vue:294,307
     '--surface-card',      // VoicePicker.vue:384 (TriStateFilter fixed 2026-09-02)
     '--surface-default',
@@ -74,7 +72,6 @@ const KNOWN_UNDECLARED = [
     '--text-warning',
     '--font-mono',         // ApiAccessSettings.vue:542
     '--overlay-pressed',   // ShoppingListDetail.vue:3009
-    '--negative',
     '--stock-row-height',
     // `--c-surface-2`, `--c-surface-3`, `--c-line-strong` and `--c-line` came
     // off this list on 2026-09-02 (dashboard chunk 6). Retiring the dashboard's
@@ -216,15 +213,18 @@ describe('R-060 — design tokens are declared before they are referenced', () =
         expect(offenders).toEqual([]);
     });
 
-    it('uses the unitless type-scale tokens through calc(), never bare', () => {
-        // `--font-size-*` are unitless multipliers (0.75, 1, …), so
-        // `font-size: var(--font-size-xs)` is invalid at computed time and the
-        // declaration is dropped. Nine sites, including the shared tint chip,
-        // had silently never applied their size (finalisation 08-R22).
-        const bare = walk(SRC, ['.vue', '.scss', '.css'])
+    it('uses the type-scale tokens as lengths, never multiplied by 1rem', () => {
+        // `--font-size-*` are rem lengths with a 12px floor on `xs` (D-003,
+        // finalisation 20-R12). They used to be unitless multipliers that every
+        // consumer scaled by `calc(var(…) * 1rem)` itself — a floor can't be
+        // expressed that way, and a bare `var()` of a ratio silently dropped
+        // the declaration (08-R22). The two conventions can't coexist.
+        const multiplied = walk(SRC, ['.vue', '.scss', '.css'])
             .flatMap((path) => readFileSync(path, 'utf8').split('\n').map((line, i) => ({ path, line, n: i + 1 })))
-            .filter(({ line }) => /font-size:\s*var\(--font-size-/.test(line))
+            .filter(({ line }) => /calc\(var\(--font-size-[a-z0-9]+\)\s*\*\s*1r?em\)/.test(line))
             .map(({ path, n }) => `${path.slice(SRC.length + 1)}:${n}`);
-        expect(bare).toEqual([]);
+        expect(multiplied).toEqual([]);
+        const tokens = readFileSync(join(CSS_DIR, 'tokens.scss'), 'utf8');
+        expect(tokens).toMatch(/--font-size-xs:\s*max\(12px,\s*0\.75rem\);/);
     });
 });

@@ -222,7 +222,7 @@
         background: color-mix(in srgb, var(--brand-primary) 8%, transparent);
     }
     .apply-tpl__header {
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
         font-weight: 700;
         letter-spacing: 0.08em;
         text-transform: uppercase;

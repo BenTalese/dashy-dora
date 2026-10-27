@@ -114,7 +114,6 @@
     import BaseButton from 'src/components/BaseButton.vue';
     import ImageEditTile from 'src/components/ImageEditTile.vue';
     import StoreLogo from 'src/components/StoreLogo.vue';
-    import { useQuasar } from 'quasar';
     import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { useStoresStore } from 'src/stores/storesStore';
     import { ICONS } from 'src/style/icons';
@@ -123,8 +122,10 @@
     import { onMounted, ref } from 'vue';
     import type { Store } from 'src/models/store';
     import SettingsPageHeader from 'src/components/settings/SettingsPageHeader.vue';
+    import { useConfirm } from 'src/composables/useConfirm';
 
-    const $q = useQuasar();
+
+    const { confirm, prompt } = useConfirm();
     const { notifySuccess, notifyError } = useSettingsSave();
     const storesStore = useStoresStore();
     const { stores } = storeToRefs(storesStore);
@@ -156,16 +157,9 @@
 
     // ── Create — name only, same prompt shape as the vocabulary pages ──
     async function onCreate(): Promise<void> {
-        const name = await new Promise<string | null>((resolve) => {
-            $q.dialog({
-                title: 'New store',
-                message: 'What is this store called? (e.g. "Woolworths", "Aldi")',
-                prompt: { model: '', type: 'text' },
-                cancel: { noCaps: true },
-            })
-                .onOk((v: string) => resolve(v.trim()))
-                .onCancel(() => resolve(null))
-                .onDismiss(() => resolve(null));
+        const name = await prompt({
+            title: 'New store',
+            message: 'What is this store called? (e.g. "Woolworths", "Aldi")',
         });
         if (!name) return;
         saving.value = true;
@@ -238,39 +232,29 @@
         }
     }
 
-    function onDelete(store: Store): void {
-        $q.dialog({
+    async function onDelete(store: Store): Promise<void> {
+        const ok = await confirm({
             title: `Delete ${store.name}?`,
             message:
                 "Stock items and shopping-list lines using this store will have it cleared. A store with linked products can't be deleted.",
-            cancel: { noCaps: true },
-            ok: { label: 'Delete', color: 'negative', noCaps: true, flat: true },
-        }).onOk(() => {
-            storesStore
-                .deleteAsync(store.store_id)
-                .then((result) => {
-                    const tail =
-                        result.items_affected || result.lines_affected
-                            ? ` (${result.items_affected} stock item(s) and ${result.lines_affected} shopping line(s) had their store reference cleared.)`
-                            : '';
-                    notifySuccess(`Deleted ${store.name}.${tail}`);
-                })
-                .catch((e) => {
-                    notifyError(`Couldn't delete ${store.name}.`, e);
-                });
+            okLabel: 'Delete',
+            destructive: true,
         });
+        if (!ok) return;
+        try {
+            const result = await storesStore.deleteAsync(store.store_id);
+            const tail =
+                result.items_affected || result.lines_affected
+                    ? ` (${result.items_affected} stock item(s) and ${result.lines_affected} shopping line(s) had their store reference cleared.)`
+                    : '';
+            notifySuccess(`Deleted ${store.name}.${tail}`);
+        } catch (e) {
+            notifyError(`Couldn't delete ${store.name}.`, e);
+        }
     }
 </script>
 
 <style scoped lang="scss">
-    .settings-page { display: flex; flex-direction: column; }
-    /* Matches VocabListEditor's list chrome — the two pages sit side by side
-       in the Kitchen setup nav group and used to disagree about row height and
-       list borders. */
-    .settings-list {
-        border-top: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
-        border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
-    }
     .settings-list__item {
         padding: 10px 4px;
     }

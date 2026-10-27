@@ -600,8 +600,8 @@
     // get bounced to /welcome. To re-enter we need that timestamp cleared
     // (POST /onboarding/restart) AND the cached auth state refreshed,
     // otherwise the router guard sees the stale non-null value and
-    // bounces straight back here. Same shape as the AccountSettings
-    // "Restart onboarding" action.
+    // bounces straight back here. Same shape as About → "Run the welcome
+    // tour again".
     const onboardingApi = new OnboardingApiService();
     const continuingOnboarding = ref(false);
     async function onContinueOnboarding() {
@@ -1203,7 +1203,7 @@
        face on arbitrary text, that's the moment for a token. */
     .dora-hero-greeting {
         font-family: 'Cute Dino', 'Nunito Variable', 'Nunito', sans-serif;
-        font-size: calc(var(--font-size-xl) * 1rem);
+        font-size: var(--font-size-xl);
         font-weight: 600;
         line-height: 1.2;
         color: var(--accent-ink);
@@ -1214,7 +1214,7 @@
     .dora-hero-line {
         margin-top: var(--space-1);
         color: var(--text-primary);
-        font-size: calc(var(--font-size-md) * 1rem);
+        font-size: var(--font-size-md);
         line-height: 1.35;
     }
     /* The hint that used to be `.dora-welcome-hint` in the merged band, then a
@@ -1244,7 +1244,7 @@
         border-start-end-radius: var(--radius-md);
         border-end-end-radius: var(--radius-md);
         color: var(--text-secondary);
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         line-height: 1.4;
     }
     /* The icon takes the accent ink, not the fill tone — R-069, same rule the
@@ -1320,7 +1320,7 @@
         flex: 1;
     }
     .dora-welcome-line {
-        font-size: calc(var(--font-size-md) * 1rem);
+        font-size: var(--font-size-md);
         line-height: 1.35;
         color: var(--text-primary);
     }
@@ -1334,7 +1334,7 @@
     }
     .dora-welcome-hint {
         margin-top: var(--space-1);
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         color: var(--text-secondary);
     }
     .dora-welcome-actions {

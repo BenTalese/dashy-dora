@@ -1,9 +1,7 @@
 <template>
     <AuthShell backdrop="blobs" mascot="top-right">
         <template #card-head>
-            <div class="setup-badge" role="status">
-                <q-icon name="dns" size="14px" /> Choose your Dora
-            </div>
+            <AuthBadge :icon="ICONS.dns">Choose your Dora</AuthBadge>
             <div class="setup-title" style="font-family: 'Cute Dino'">
                 Dashy Dora
             </div>
@@ -47,11 +45,13 @@
 
 <script lang="ts" setup>
     import { useQuasar } from 'quasar';
+    import { ICONS } from 'src/style/icons';
     import AuthShell from 'src/components/AuthShell.vue';
     import AuthButton from 'src/components/AuthButton.vue';
+    import AuthBadge from 'src/components/AuthBadge.vue';
     import { reactive, ref } from 'vue';
     import { useRouter } from 'vue-router';
-    import axios from 'axios';
+    import AuthApiService from 'src/services/api/authApiService';
     import { setBackendBaseUrl, getBackendBaseUrl, clearBackendBaseUrl } from 'src/services/api/backendUrl';
 
     const $q = useQuasar();
@@ -73,16 +73,13 @@
             // Provisionally set the URL so the health probe uses the
             // normalised form; roll back if the probe fails.
             const previous = getBackendBaseUrl();
-            const url = await setBackendBaseUrl(raw);
+            await setBackendBaseUrl(raw);
             try {
                 // /api/auth/me is the same anonymous-boot probe the auth
-                // store uses on cold-load. It returns 200 (with or without
-                // a user) or 401 — either shape means "backend answered."
-                await axios.get(url + '/auth/me', {
-                    withCredentials: true,
-                    validateStatus: (s) => s >= 200 && s < 500,
-                    timeout: 6000,
-                });
+                // store uses on cold-load; `getMeAsync` treats 401 as
+                // "backend answered". Through the shared client (request id,
+                // timeout policy) — not a second bare axios (finalisation 15-R16).
+                await new AuthApiService().getMeAsync();
             } catch (probeErr) {
                 // Roll back the persisted URL so a bad answer doesn't lock
                 // the app into a broken state.
@@ -110,19 +107,6 @@
 </script>
 
 <style scoped>
-    .setup-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        padding: 4px 10px;
-        margin-bottom: 10px;
-        border-radius: 999px;
-        background: linear-gradient(135deg, var(--auth-shell-accent-strong), var(--auth-shell-accent));
-        color: #fff;
-        font-size: 0.72rem;
-        font-weight: 600;
-        letter-spacing: 0.02em;
-    }
     .setup-title {
         font-size: 2rem;
         line-height: 1.1;

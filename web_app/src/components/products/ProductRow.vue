@@ -161,7 +161,7 @@
     /* Matches RecipeRow/StockItemRow's name treatment so the three compact
        lists read as one shape (2026-08-20 owner call). */
     .product-row__name {
-        font-size: calc(var(--font-size-md) * 1rem);
+        font-size: var(--font-size-md);
         font-weight: 500;
     }
     .product-row__identity {

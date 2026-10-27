@@ -420,7 +420,7 @@
     }
     .mp-shop__cost-label {
         flex: 1 1 auto;
-        font-size: calc(var(--font-size-md) * 1rem);
+        font-size: var(--font-size-md);
         font-weight: 500;
     }
     .mp-shop__cost-value {
@@ -432,7 +432,7 @@
        they cover different spans. */
     .mp-shop__budget {
         padding-top: var(--space-1);
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         color: var(--text-secondary);
         font-variant-numeric: tabular-nums;
     }
@@ -451,7 +451,7 @@
     /* One line at body weight — the figure it replaced was `text-h5`, which
        made a sidebar count the loudest thing on the page. */
     .mp-shop__headline {
-        font-size: calc(var(--font-size-md) * 1rem);
+        font-size: var(--font-size-md);
         font-weight: 600;
     }
     /* Mid-recalculation the previous answer stays, very slightly dimmed — the

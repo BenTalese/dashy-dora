@@ -67,20 +67,16 @@ async function ship(level: Level, message: string, context?: Record<string, unkn
 
 export const clientLog = {
     debug(message: string, context?: Record<string, unknown>) {
-         
         console.debug('[dora]', message, context ?? '');
     },
     info(message: string, context?: Record<string, unknown>) {
-         
         console.info('[dora]', message, context ?? '');
     },
     warn(message: string, context?: Record<string, unknown>) {
-         
         console.warn('[dora]', message, context ?? '');
         void ship('warn', message, context);
     },
     error(message: string, context?: Record<string, unknown>) {
-         
         console.error('[dora]', message, context ?? '');
         void ship('error', message, context);
     },

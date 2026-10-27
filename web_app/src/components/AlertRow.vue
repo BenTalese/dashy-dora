@@ -198,7 +198,7 @@
     .alert-card__actions :deep(.dora-btn) {
         min-height: 32px;
         padding: 0 var(--space-3);
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
     }
     .alert-card__actions :deep(.dora-btn .q-icon) {
         font-size: 1.25em;

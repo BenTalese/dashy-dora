@@ -144,7 +144,7 @@
        the band, which is strictly better than a column header implying it. */
     .dora-radar__head {
         margin-bottom: var(--space-2);
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
         font-weight: 700;
         letter-spacing: 0.08em;
         text-transform: uppercase;
@@ -191,6 +191,6 @@
     /* D-014 — the chip says "Planned" in words; the warning tint is support,
        not the signal. */
     .dora-radar__chip {
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
     }
 </style>

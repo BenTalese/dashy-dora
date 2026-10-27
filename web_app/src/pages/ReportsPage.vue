@@ -434,7 +434,7 @@
     .reports-caveat { color: var(--text-secondary); }
     .reports-window {
         color: var(--text-secondary);
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         font-variant-numeric: tabular-nums;
         white-space: nowrap;
     }

@@ -716,8 +716,11 @@
     import StockItemDetailPage from 'src/pages/StockItemDetailPage.vue';
     import { computed, onMounted, ref, watch } from 'vue';
     import { useRoute, useRouter } from 'vue-router';
+    import { useConfirm } from 'src/composables/useConfirm';
 
     const $q = useQuasar();
+
+    const { choose } = useConfirm();
     const { scanningEnabled } = useScanningEnabled();
     // 2026-08-20 — install-wide stocktake switch. Gates the toolbar button,
     // the row's needs-check marker and the queue fetch below.
@@ -1262,20 +1265,10 @@
             });
             return null;
         }
-        return await new Promise<string | null>((resolve) => {
-            $q.dialog({
-                title,
-                options: {
-                    type: 'radio',
-                    model: candidates[0]!.shopping_list_id,
-                    items: candidates.map((l) => ({ label: l.name, value: l.shopping_list_id })),
-                },
-                cancel: { noCaps: true },
-                persistent: false,
-            })
-                .onOk((val: string) => resolve(val))
-                .onCancel(() => resolve(null))
-                .onDismiss(() => resolve(null));
+        return await choose({
+            title: title,
+            items: candidates.map((l) => ({ label: l.name, value: l.shopping_list_id })),
+            initial: candidates[0]!.shopping_list_id,
         });
     }
 
@@ -1821,7 +1814,7 @@
        dark in every theme, so these literals don't follow a theme token. */
     .scan-action-caption {
         color: rgba(255, 255, 255, 0.82);
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
     }
 </style>

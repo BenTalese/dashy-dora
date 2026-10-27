@@ -115,7 +115,7 @@
         font-weight: 600;
         letter-spacing: 0.02em;
         text-transform: uppercase;
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
         padding: 0 8px;
         height: 22px;
         border: 1px solid transparent;

@@ -314,7 +314,7 @@
         text-align: left;
     }
     .day-card__name {
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         font-weight: 700;
         letter-spacing: 0.08em;
         text-transform: uppercase;
@@ -383,7 +383,7 @@
        1rem meal name read as a different app. */
     .slot-row__label {
         flex: 0 0 5.5rem;
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         font-weight: 600;
         padding-top: 6px;
         color: var(--text-secondary);
@@ -421,7 +421,10 @@
         color: var(--brand-primary);
         border-color: var(--brand-primary);
         background: var(--surface-sunken);
-        outline: none;
+    }
+    .add-meal-button:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
     }
     /* Empty-day variant — a calm full-width affordance, not a tiny chip. */
     .add-meal-button--empty {

@@ -48,6 +48,7 @@ from dora_api.features.recipes._recipe_errors import (RecipeWriteOutcome,
 from dora_api.features.recipes.recipe_requests import (RecipeIngredientRequest,
                                                      RecipeSectionRequest,
                                                      RecipeStepRequest)
+from dora_api.infrastructure.data_url import image_field
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -83,7 +84,7 @@ class CreateRecipeRequest(BaseModel):
     # optional image as a data-URL string ("data:image/...;
     # base64,..."). Stored as UTF-8 bytes; served back via GET /recipes/<id>/
     # image. Capped to keep the row sane (~4MB raw image).
-    image: str | None = Field(default = None, max_length = 6_000_000)
+    image: str | None = image_field()
     # structured steps. Empty list = unstructured recipe
     # (cook-mode falls back to splitting `instructions` on newline). Each
     # step's `ingredient_client_ids` references its sibling ingredients via

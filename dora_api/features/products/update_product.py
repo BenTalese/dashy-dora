@@ -6,7 +6,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from dora_api.domain.entities.product import Product
-from dora_api.features.ingestion.offer_mapping import (OFFER_SOURCE_MANUAL,
+from dora_api.features.products.offer_mapping import (OFFER_SOURCE_MANUAL,
                                                        apply_offer_to_product)
 from dora_api.features.routers import PRODUCT_ROUTER
 from dora_api.infrastructure.api_response import business_rule_violation, no_content, not_found
@@ -14,6 +14,7 @@ from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
+from dora_api.infrastructure.data_url import image_field
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -37,7 +38,7 @@ class UpdateProductRequest(BaseModel):
     # supplies it and the next ingest may restate it — so a hand-set photo
     # there would be either silently overwritten or silently diverge from the
     # source. The handler refuses rather than guessing which.
-    image: str | None = Field(default = None, max_length = 6_000_000)
+    image: str | None = image_field()
     clear_image: bool = False
     # Settable on any product, ingested or custom: a scraper rarely knows how
     # many eggs are in the carton, and ingest only restates it when its source

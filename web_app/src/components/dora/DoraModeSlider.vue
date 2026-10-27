@@ -115,7 +115,7 @@
         background: var(--surface-sunken);
         border: 1px solid color-mix(in srgb, var(--brand-primary) 20%, transparent);
         overflow: hidden;
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         font-weight: 600;
         letter-spacing: 0.02em;
         transition: border-color var(--motion-normal) var(--motion-ease), box-shadow var(--motion-normal) var(--motion-ease);

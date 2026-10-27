@@ -21,6 +21,9 @@ import sys
 
 
 def _int(name: str, default: int) -> int:
+    # Mirrors `configuration_manager._env_int` on purpose: this file must stay
+    # import-light (gunicorn loads it before the app exists), so it cannot
+    # import dora_api (finalisation 19-R8, R-003 carve-out).
     raw = os.environ.get(name)
     if raw is None or raw.strip() == "":
         return default

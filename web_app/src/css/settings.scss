@@ -1,0 +1,29 @@
+/* The settings pages' shared chrome (finalisation 20-R15 / 13-R9 / 18-R13).
+ *
+ * `.settings-page` was a scoped two-line rule copied into 29 pages;
+ * `.settings-actions` and `.settings-list` into two and three. One global
+ * copy here, loaded with the other shared partials in quasar.config.ts. A
+ * page that needs `position: relative` on the wrapper (a floating control)
+ * adds that one line in its own scope.
+ *
+ * Tokens only (R-002 / D-001).
+ */
+
+.settings-page {
+    display: flex;
+    flex-direction: column;
+}
+
+.settings-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-2);
+    margin-top: var(--space-3);
+}
+
+/* List chrome shared by the taxonomy pages and the ones beside them in the
+   Kitchen setup nav group, so they agree on row height and list borders. */
+.settings-list {
+    border-top: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+}

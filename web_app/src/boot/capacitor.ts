@@ -10,7 +10,8 @@
 // survives a reload.
 
 import { boot } from 'quasar/wrappers';
-import { loadBackendBaseUrl, isNativePlatform } from 'src/services/api/backendUrl';
+import { loadBackendBaseUrl } from 'src/services/api/backendUrl';
+import { isNativePlatform } from 'src/helpers/platform';
 
 export default boot(async () => {
     await loadBackendBaseUrl();

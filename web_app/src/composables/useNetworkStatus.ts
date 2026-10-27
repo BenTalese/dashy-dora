@@ -11,6 +11,7 @@
 // — we only want one health-poll loop running per tab.
 
 import { Notify } from 'quasar';
+import { OFFLINE_COPY } from 'src/helpers/offlineCopy';
 import { computed, readonly, ref } from 'vue';
 import { getBackendBaseUrl } from 'src/services/api/backendUrl';
 
@@ -39,7 +40,6 @@ const PROBE_TIMEOUT_MS = 4_000;
 
 const online = ref(typeof navigator === 'undefined' ? true : navigator.onLine);
 const apiReachable = ref(true);
-const lastSeenOnline = ref<Date | null>(online.value ? new Date() : null);
 const reconnecting = ref(false);
 
 let pollTimer: ReturnType<typeof setTimeout> | null = null;
@@ -135,20 +135,17 @@ async function runProbe(force = false): Promise<boolean> {
 
     if (ok) {
         currentBackoffMs = PROBE_INITIAL_MS;
-        lastSeenOnline.value = new Date();
         // The probe reaching the server is proof of connectivity, whatever
         // `navigator.onLine` claims. Flip it back so the banner clears and
         // the queue drain (which watches `apiReachable`) can run.
         online.value = true;
         if (!wasReachable) {
-            // Offline is READ-ONLY (owner decision 2026-08-23) — the write
-            // queue these three toasts were written for is gone, so none of
-            // them may promise a sync. Same correction as `OfflineBanner`'s
-            // copy, which was made at the time and left the toasts behind.
+            // Copy lives in `helpers/offlineCopy.ts` with the banner's (R-052:
+            // offline is read-only, nothing promises a sync).
             Notify.create({
                 type: 'positive',
                 position: 'top',
-                message: "Back online.",
+                message: OFFLINE_COPY.backOnline,
                 timeout: 3000,
             });
         }
@@ -159,8 +156,7 @@ async function runProbe(force = false): Promise<boolean> {
             Notify.create({
                 type: 'warning',
                 position: 'top',
-                message:
-                    "Couldn't reach Dora. You can look around, but not make changes.",
+                message: OFFLINE_COPY.unreachable,
                 timeout: 4000,
             });
         } else if (force) {
@@ -169,7 +165,7 @@ async function runProbe(force = false): Promise<boolean> {
             Notify.create({
                 type: 'warning',
                 position: 'top',
-                message: "Still can't reach the server.",
+                message: OFFLINE_COPY.stillDown,
                 timeout: 2500,
             });
         }
@@ -182,11 +178,10 @@ async function runProbe(force = false): Promise<boolean> {
 function onBrowserOnline() {
     if (online.value) return;
     online.value = true;
-    lastSeenOnline.value = new Date();
     Notify.create({
         type: 'info',
         position: 'top',
-        message: 'Network detected. Checking the server…',
+        message: OFFLINE_COPY.networkDetected,
         timeout: 2500,
     });
     currentBackoffMs = PROBE_INITIAL_MS;
@@ -218,7 +213,7 @@ function onBrowserOffline() {
     Notify.create({
         type: 'warning',
         position: 'top',
-        message: "You're offline. You can look around, but not make changes.",
+        message: OFFLINE_COPY.offline,
         timeout: 4000,
     });
 }
@@ -244,7 +239,6 @@ export function useNetworkStatus() {
     return {
         online: readonly(online),
         apiReachable: readonly(apiReachable),
-        lastSeenOnline: readonly(lastSeenOnline),
         reconnecting: readonly(reconnecting),
         isFullyOnline: computed(() => online.value && apiReachable.value),
         /** Force an immediate probe (e.g. when the user clicks "Retry").

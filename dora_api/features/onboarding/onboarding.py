@@ -1,39 +1,41 @@
-"""F1 — first-run wizard backend.
+"""F1 — first-run wizard backend (`/welcome`).
 
-Four endpoints power the /welcome wizard:
+  GET  /api/onboarding/state      — {first_user}: is this the install's first account
+  GET  /api/onboarding/catalog    — the bundled groups / location tree / starter packs
+  POST /api/onboarding/seed       — create picked default groups + locations, plus the
+                                    user's own group / zone names, in one unit of work
+  POST /api/onboarding/seed-items — create stock items by name (pack picks + own items)
+  POST /api/onboarding/seed-demo  — one-off demo recipe + this week's meal-plan entry
+  POST /api/onboarding/complete   — stamp `onboarding_completed_at`
+  POST /api/onboarding/restart    — clear it (About → "Run the welcome tour again")
 
-  GET  /api/onboarding/state     — snapshot of what the user has + has done
-  POST /api/onboarding/complete  — stamp onboarding_completed_at = NOW()
-  POST /api/onboarding/seed      — import bundled default groups / locations
-  POST /api/onboarding/seed-demo — one-off demo recipe + meal-plan (FU-194)
-  POST /api/onboarding/restart   — clear the completion timestamp
-
-Seed catalogues live as JSON next to this file so designers can edit
-without touching Python. They're idempotent: a second seed call won't
-duplicate groups/locations that already exist by name (we match on the
-visible label rather than ids — the user is supposed to be able to
-re-import without thinking about the bookkeeping).
+Seed catalogues live as JSON next to this file so designers can edit without
+touching Python; they are read once per process. Every seed call is idempotent:
+a second call won't duplicate groups / locations / items that already exist by
+name (the visible label, never an id — a user can re-import without thinking
+about the bookkeeping).
 """
+import functools
 import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
-from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
 from dora_api.domain.entities.meal_plan import MealPlan
 from dora_api.domain.entities.meal_plan_entry import MealPlanEntry
+from dora_api.domain.entities.meal_slot import MealSlot
 from dora_api.domain.entities.recipe import Recipe
 from dora_api.domain.entities.recipe_ingredient import RecipeIngredient
-from dora_api.domain.entities.store import Store
 from dora_api.domain.entities.stock_group import StockGroup
 from dora_api.domain.entities.stock_item import StockItem
 from dora_api.domain.entities.stock_level import StockLevel
 from dora_api.domain.entities.stock_location import StockLocation
 from dora_api.domain.entities.user import User
+from dora_api.domain.stock_status import StockStatus, level_for_status
 from dora_api.features.app_settings.clock import household_today
 from dora_api.features.routers import ONBOARDING_ROUTER
 from dora_api.infrastructure.api_response import (no_content, not_found, ok,
@@ -50,8 +52,11 @@ _LOGGER = logging.getLogger(__name__)
 _SEED_DIR = Path(__file__).parent
 
 
+@functools.lru_cache(maxsize=None)
 def _load_seed(name: str) -> list[dict[str, Any]]:
-    """Read a bundled seed JSON. Defensive — bad JSON shouldn't 500 the wizard."""
+    """Read a bundled seed JSON once per process (the files are bundled and
+    immutable at runtime — finalisation 14-R20). Callers treat the result as
+    read-only. Defensive — bad JSON shouldn't 500 the wizard."""
     try:
         with open(_SEED_DIR / name, "r", encoding="utf-8") as fh:
             data = json.load(fh)
@@ -68,40 +73,20 @@ def _load_seed(name: str) -> list[dict[str, Any]]:
 
 
 @dataclass(frozen=True, slots=True)
-class StoreStatusDto:
-    """FU-189 — used to surface "you haven't set up any stores yet" hints during
-    onboarding. Post-Phase-D the `enabled` field no longer reflects a scraper
-    toggle (Merchant.is_enabled went away with merchant_api); it now mirrors
-    `total` since every user-curated store is implicitly enabled. Kept for
-    payload compatibility with the SPA's onboarding state shape."""
-    total: int
-    enabled: int
-
-
-@dataclass(frozen=True, slots=True)
 class OnboardingStateDto:
-    completed: bool
-    completed_at: datetime | None
+    # The one fact the wizard reads: the first account gets the household
+    # (features) step. `completed` / `completed_at` ride `/auth/me`, and the
+    # FU-189 `store_status` hint had no reader — both dropped (finalisation
+    # 14-R12, R-057).
     first_user: bool
-    store_status: StoreStatusDto
 
 
 class GetOnboardingStateHandler:
     def __init__(self, repository: Repository) -> None:
         self.repository = repository
 
-    def handle(self, user: User) -> OnboardingStateDto:
-        total_users = self.repository.get(User).count()
-        store_total = self.repository.get(Store).count()
-        return OnboardingStateDto(
-            completed = user.onboarding_completed_at is not None,
-            completed_at = user.onboarding_completed_at,
-            first_user = total_users <= 1,
-            store_status = StoreStatusDto(
-                total = store_total,
-                enabled = store_total,
-            ),
-        )
+    def handle(self) -> OnboardingStateDto:
+        return OnboardingStateDto(first_user=self.repository.get(User).count() <= 1)
 
 
 @ONBOARDING_ROUTER.route("/state", methods=["GET"])
@@ -113,8 +98,7 @@ def get_onboarding_state():
     user = repo.get(User).by_id(user_id)
     if user is None:
         return not_found("User", user_id)
-    state = GetOnboardingStateHandler(SqlAlchemyRepository()).handle(user)
-    return ok(state)
+    return ok(GetOnboardingStateHandler(repo).handle())
 
 
 # ─── Complete + restart ──────────────────────────────────────────────
@@ -153,6 +137,24 @@ def restart_onboarding():
 # ─── Seed catalogues ─────────────────────────────────────────────────
 
 
+def _stocked_level(levels: list[StockLevel]) -> StockLevel:
+    """The Stocked level by status identity (`level_for_status`), the one
+    authority for "which level is this role" — two sites used to take
+    `sorted(levels)[0]` (finalisation 14-R6)."""
+    return level_for_status(levels, StockStatus.STOCKED) or sorted(levels, key=lambda lvl: lvl.sequence)[0]
+
+
+def _demo_slot_name(repository: Repository) -> str:
+    """Meal slots are a user-editable vocabulary (`MEAL_SLOT_NAMES` is the
+    seed, not the law): the demo entry takes the install's "Dinner" slot if
+    it still exists, else the last slot by sequence (finalisation 14-R7)."""
+    slots = sorted(repository.get(MealSlot).all(), key=lambda s: s.sequence)
+    for slot in slots:
+        if slot.name.strip().lower() == "dinner":
+            return slot.name
+    return slots[-1].name if slots else "Dinner"
+
+
 class SeedRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     groups: bool = False
@@ -168,6 +170,13 @@ class SeedRequest(BaseModel):
     # own path is not in the list.
     group_names: list[str] | None = None
     location_paths: list[str] | None = None
+    # The user's *own* entries from the stock step, created in the same unit
+    # of work as the defaults and deduped by name like them. The wizard used
+    # to create these client-side with per-name existence checks after the
+    # seed had committed (finalisation 14-R19). Own locations are top-level
+    # zones.
+    extra_group_names: list[str] | None = None
+    extra_location_names: list[str] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -209,12 +218,22 @@ class SeedHandler:
                 self.repository.add(StockGroup(name=name))
                 existing.add(name.lower())
                 groups_created += 1
-            # FU-512 unit-of-work: no habit-commit between groups + locations.
-            # Locations may reference already-persisted rows via
-            # `_find_existing`, which does a full `.all()` scan — SQLAlchemy
-            # autoflush surfaces pending StockGroups on that read.
 
-        if request.locations:
+        for raw in request.extra_group_names or []:
+            name = (raw or "").strip()
+            if not name:
+                continue
+            if "existing" not in locals():
+                existing = {g.name.strip().lower() for g in self.repository.get(StockGroup).all()}
+            if name.lower() in existing:
+                groups_skipped += 1
+                continue
+            self.repository.add(StockGroup(name=name))
+            existing.add(name.lower())
+            groups_created += 1
+
+        wants_locations = request.locations or bool(request.extra_location_names)
+        if wants_locations:
             seed_locations = _load_seed("default_locations.json")
             path_filter: set[str] | None = (
                 {p.strip().lower() for p in request.location_paths if (p or "").strip()}
@@ -225,11 +244,17 @@ class SeedHandler:
             # (parent_id, name) pair already exists. Top-level zones are
             # keyed by name alone.
             existing_pairs: set[tuple[str | None, str]] = set()
+            # Top-level zones by name, built once from the same read — the
+            # loop used to re-scan `StockLocation.all()` per existing zone
+            # (finalisation 14-R25).
+            existing_zones: dict[str, StockLocation] = {}
             for loc in self.repository.get(StockLocation).all():
                 key_parent = str(loc.parent_id) if loc.parent_id else None
                 existing_pairs.add((key_parent, loc.name.strip().lower()))
+                if loc.parent_id is None:
+                    existing_zones[loc.name.strip().lower()] = loc
 
-            for zone in seed_locations:
+            for zone in (seed_locations if request.locations else []):
                 z_name = (zone.get("name") or "").strip()
                 z_kind = zone.get("kind") or "zone"
                 if not z_name:
@@ -261,7 +286,7 @@ class SeedHandler:
 
                 key = (None, z_name.lower())
                 if key in existing_pairs:
-                    zone_entity = self._find_existing(z_name, None)
+                    zone_entity = existing_zones.get(z_name.lower())
                     # Only count as "skipped" when the zone itself was
                     # explicitly requested — otherwise the zone is a
                     # silent prerequisite for the accepted children.
@@ -284,6 +309,7 @@ class SeedHandler:
                     # `sqlalchemy_repository.py:57-67`).
                     self.repository.flush()
                     existing_pairs.add(key)
+                    existing_zones[z_name.lower()] = zone_entity
                     locations_created += 1
 
                 for idx, child in enumerate(accepted_children):
@@ -304,6 +330,17 @@ class SeedHandler:
                     existing_pairs.add(pair)
                     locations_created += 1
 
+            for raw in request.extra_location_names or []:
+                name = (raw or "").strip()
+                if not name:
+                    continue
+                if (None, name.lower()) in existing_pairs:
+                    locations_skipped += 1
+                    continue
+                self.repository.add(StockLocation(name=name, kind="zone", parent_id=None, sequence=0))
+                existing_pairs.add((None, name.lower()))
+                locations_created += 1
+
         # FU-512 unit-of-work: single final commit across groups + locations.
         self.repository.save_changes()
 
@@ -314,21 +351,6 @@ class SeedHandler:
             locations_skipped=locations_skipped,
         )
 
-    def _find_existing(self, name: str, parent_id: UUID | None) -> StockLocation | None:
-        # Inline lookup so the upsert path can grab the existing zone to
-        # parent children off — saves another all() round-trip.
-        for loc in self.repository.get(StockLocation).all():
-            if loc.name.strip().lower() != name.lower():
-                continue
-            same_parent = (loc.parent_id is None and parent_id is None) or (
-                loc.parent_id is not None
-                and parent_id is not None
-                and loc.parent_id == parent_id
-            )
-            if same_parent:
-                return loc
-        return None
-
 
 @ONBOARDING_ROUTER.route("/seed", methods=["POST"])
 @has_request_body(SeedRequest)
@@ -336,12 +358,12 @@ def seed_onboarding():
     user_id = current_user_id()
     if user_id is None:
         return unauthorized("Sign in to use the onboarding endpoints.")
-    request: SeedRequest = get_request_body()
-    if not request.groups and not request.locations:
+    _Request: SeedRequest = get_request_body()
+    if not (_Request.groups or _Request.locations or _Request.extra_group_names or _Request.extra_location_names):
         # Nothing requested — return zero-counts rather than 400 so the
         # frontend can call this unconditionally as "advance step 3".
         return ok(SeedResultDto(0, 0, 0, 0))
-    result = SeedHandler(SqlAlchemyRepository()).handle(request)
+    result = SeedHandler(SqlAlchemyRepository()).handle(_Request)
     _LOGGER.info(
         "Onboarding seed (user %s): groups +%d/-%d, locations +%d/-%d",
         user_id,
@@ -482,8 +504,7 @@ class SeedItemsHandler:
             # these, so this only happens on a pathological DB; fail soft.
             _LOGGER.warning("Seed-items skipped: no stock levels configured.")
             return SeedItemsResultDto(0, 0)
-        # Most-stocked level (lowest sequence) is the sensible default.
-        stocked = sorted(levels, key=lambda lvl: lvl.sequence)[0]
+        stocked = _stocked_level(levels)
 
         existing = {
             item.name.strip().lower()
@@ -538,8 +559,8 @@ def seed_items_onboarding():
     user_id = current_user_id()
     if user_id is None:
         return unauthorized("Sign in to use the onboarding endpoints.")
-    request: SeedItemsRequest = get_request_body()
-    result = SeedItemsHandler(SqlAlchemyRepository()).handle(request)
+    _Request: SeedItemsRequest = get_request_body()
+    result = SeedItemsHandler(SqlAlchemyRepository()).handle(_Request)
     _LOGGER.info(
         "Onboarding seed-items (user %s): +%d/-%d",
         user_id, result.created, result.skipped,
@@ -616,7 +637,8 @@ class SeedDemoHandler:
         if not levels:
             _LOGGER.warning("Seed-demo skipped: no stock levels configured.")
             return SeedDemoResultDto(False, 0, False, False)
-        stocked = sorted(levels, key=lambda lvl: lvl.sequence)[0]
+        stocked = _stocked_level(levels)
+        slot_name = _demo_slot_name(self.repository)
         now = datetime.now(timezone.utc)
         for spec in _DEMO_INGREDIENTS:
             name = spec["name"]
@@ -668,7 +690,7 @@ class SeedDemoHandler:
             recipe_collection=None,
             servings=2,
             source=None,
-            time_of_day="Dinner",
+            time_of_day=slot_name,
             version_group_id=None,
             kcal=None,
             steps_mode="freeform",
@@ -689,7 +711,7 @@ class SeedDemoHandler:
             recipe=recipe,
             scheduled_for=today,
             servings=2,
-            slot="Dinner",
+            slot=slot_name,
         )
         existing_plan: MealPlan | None = self.repository.get(MealPlan).one(
             EntityField(MealPlan, MealPlan.Fields.START_DATE).eq(monday)

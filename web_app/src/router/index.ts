@@ -1,26 +1,13 @@
 import { defineRouter } from '#q-app/wrappers';
 import { Notify } from 'quasar';
 import { useAuthStore } from 'src/stores/authStore';
-import { hasBackendBaseUrl, isNativePlatform } from 'src/services/api/backendUrl';
+import { hasBackendBaseUrl } from 'src/services/api/backendUrl';
+import { isNativePlatform } from 'src/helpers/platform';
 import { createMemoryHistory, createRouter, createWebHashHistory, createWebHistory } from 'vue-router';
 
 import routes from './routes';
 
-const PUBLIC_ROUTES = new Set<string>([
-    '/login',
-    // fresh-install first-admin setup. Reachable without a
-    // session by definition.
-    '/setup',
-    // native app first-run instance picker. Reachable before any
-    // backend is configured (there is no backend to authenticate against
-    // until this step completes).
-    '/setup/backend',
-    // A1 out-of-band auth surfaces — reachable from email links without
-    // an existing session.
-    '/verify-email',
-    '/forgot-password',
-    '/reset-password',
-]);
+import { PUBLIC_ROUTES } from './publicRoutes';
 // Routes we allow incomplete-onboarding users to visit without the redirect.
 // /welcome is the wizard itself; the error pages are safety hatches so a crash
 // mid-wizard doesn't lock the user out. (The escape from the wizard is now

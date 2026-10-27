@@ -45,11 +45,6 @@ export type UpsertStoreMappingCommand = {
     store_id: string | null;
 };
 
-export type DoraStore = {
-    store_id: string;
-    name: string;
-};
-
 export default class IngestionSourcesApiService {
     private httpClient = new AxiosHttpClient();
 
@@ -100,11 +95,4 @@ export default class IngestionSourcesApiService {
         await this.httpClient.delete<void>(
             `/ingestion-sources/${sourceId}/store-mappings/${mappingId}`
         );
-
-    /** Lists Dora-side Stores for the picker. Server returns the
-     * dora_api paginated envelope; we only need name + id here. */
-    listStoresAsync = async (): Promise<DoraStore[]> => {
-        const resp = await this.httpClient.get<{ items: DoraStore[] }>('/stores');
-        return resp.items;
-    };
 }

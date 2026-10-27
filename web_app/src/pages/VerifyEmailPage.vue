@@ -2,7 +2,7 @@
     <AuthShell backdrop="blobs" mascot="top-right">
         <template #card-head>
             <q-icon
-                :name="status === 'ok' ? 'mark_email_read' : status === 'error' ? 'error' : 'mail_lock'"
+                :name="status === 'ok' ? ICONS.mark_email_read : status === 'error' ? ICONS.error : ICONS.mail_lock"
                 :color="status === 'ok' ? 'positive' : status === 'error' ? 'negative' : undefined"
                 :style="status !== 'ok' && status !== 'error' ? 'color: var(--auth-shell-accent)' : ''"
                 size="64px"
@@ -63,6 +63,7 @@
 
 <script lang="ts" setup>
     import { useQuasar } from 'quasar';
+    import { ICONS } from 'src/style/icons';
     import AuthShell from 'src/components/AuthShell.vue';
     import AuthButton from 'src/components/AuthButton.vue';
     import BaseButton from 'src/components/BaseButton.vue';

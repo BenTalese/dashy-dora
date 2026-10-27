@@ -170,7 +170,7 @@
         border-top: 1px dashed var(--border-strong);
     }
     .sl-receipt-total__label {
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         font-weight: 700;
         letter-spacing: 0.08em;
         text-transform: uppercase;
@@ -183,7 +183,7 @@
         opacity: 0.7;
     }
     .sl-receipt-total__value {
-        font-size: calc(var(--font-size-2xl) * 1rem);
+        font-size: var(--font-size-2xl);
         font-weight: 700;
         font-variant-numeric: tabular-nums;
         line-height: 1.1;
@@ -193,7 +193,7 @@
     .sl-receipt-total__note {
         grid-column: 3;
         justify-self: end;
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
         color: var(--text-muted);
     }
 
@@ -202,7 +202,7 @@
         background: var(--surface-sunken);
     }
     .sl-receipt-skipped__label {
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
         color: var(--text-muted);
         margin-bottom: var(--space-1);
     }

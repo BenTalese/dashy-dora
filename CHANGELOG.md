@@ -56,6 +56,70 @@ semver — major bumps signal schema or breaking-config changes.
     theme; sorting follows the install's locale; the unit spelling and
     counting rules come from one source.
 
+- **Finalisation sweep, Stage 2 — app-wide polish (2026-10-27).**
+  - *Everywhere:* every "Are you sure?" dialog has the same shape (a flat
+    Cancel, a filled OK that turns red for deletes, Escape cancels); the
+    smallest text never drops below 12px at the small text-size setting;
+    the warning chips on price history, backups, API access and the audit
+    log use dark ink that clears the contrast floor; keyboard focus shows a
+    ring on Dora's launcher, the planner's Add buttons, the onboarding loop
+    and the file drop zone.
+- **Finalisation sweep, Stage 2 — self-host operations (2026-10-27).**
+  - *Operators:* the boot log lists every scheduled job and the number of
+    API routes it registered, so a deploy that lost a feature shows up at
+    boot instead of as 404s; a feature package that fails to import now
+    stops the boot with the error rather than silently serving without
+    its routes; `DORA_LOG_LEVEL` and the JSON `LOG_LEVEL` both work (a
+    typo falls back to the profile default with a warning); the
+    `dora_config` compose volume is retired; the Piper "not configured"
+    message points at the Settings page, not a removed env var; the
+    generated secret-key files are created owner-only.
+- **Finalisation sweep, Stage 2 — backup, restore and import (2026-10-27).**
+  - *Backup & restore:* every call from the page goes through the app's
+    HTTP client, so a failure shows the same friendly caption (with a
+    reference id) as the rest of Dora; downloading a backup whose file has
+    changed on disk is refused and the row is marked failed; restoring a
+    staged upload twice says the upload is gone (not found) instead of a
+    generic error.
+  - *Import:* slash dates in a spreadsheet follow the install's locale
+    (month-first on a US install, day-first otherwise); imported items,
+    groups and zones get the same defaults as ones created in the app.
+- **Finalisation sweep, Stage 2 — offline and install (2026-10-27).**
+  - *Offline:* the banner and every connectivity toast say the same thing
+    (you can look around, but not make changes); the "new version" banner
+    and the offline banner share one strip.
+  - *Install:* the web-app manifest is the real one (name, colours, icons)
+    rather than a template overwritten at build time.
+- **Finalisation sweep, Stage 2 — ingestion API (2026-10-27).**
+  - *Companion / API access:* a malformed push now returns the same
+    per-field errors as every other call instead of one run-on sentence;
+    listing stores or fetching a store logo counts as "used" on the API
+    access page; the ingestion guide describes the real payload (`store` or
+    `store_id`, `image`) and the read-side endpoints.
+- **Finalisation sweep, Stage 2 — sign-in shell (2026-10-27).**
+  - *Registering* with an email address now says "Check your inbox for a
+    verification link."
+  - *Session expiry:* when your session ends mid-page you're taken to sign
+    in (and back to where you were afterwards) instead of being left on an
+    emptied page.
+  - *Signing out* also clears the CSRF cookie.
+  - *404 page* uses the sign-in shell, so it matches the login look exactly.
+  - *Password fields* on sign-in, setup and the admin dialogs share one
+    show/hide control and one minimum-length hint.
+  - *Self-host behind a reverse proxy:* no change here — see the 2026-10-23
+    entry for `DORA_TRUSTED_PROXY_HOPS`.
+- **Finalisation sweep, Stage 2 — settings and onboarding (2026-10-27).**
+  - *Users (admin):* a "Remove picture" action in each user's menu clears a
+    problematic profile photo.
+  - *About:* "Run the welcome tour again" walks the first-run tour again;
+    nothing you've set up changes.
+  - *Welcome tour:* the groups and zones you add yourself are created in the
+    same step as the starter picks (and never duplicated); the theme choice
+    is stored the same way the Preferences page stores it; the tour's
+    autosave no longer writes on every keystroke.
+  - *Dev / self-host:* the demo meal is placed in your install's "Dinner"
+    slot even if you renamed the others; the admin-only "probe LLM" endpoint
+    that nothing used is gone.
 - **Finalisation sweep, Stage 2 continued (2026-10-24).**
   - *Dora:* "add X to my list" in AI mode works again (it failed on every
     request).

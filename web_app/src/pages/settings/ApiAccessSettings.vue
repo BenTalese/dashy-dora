@@ -36,9 +36,6 @@
             <q-expansion-item
                 v-for="src in sources"
                 :key="src.id"
-                :icon="ICONS.key"
-                :label="src.label"
-                :caption="captionFor(src)"
                 @show="loadMappings(src.id)"
             >
                 <template #header>
@@ -56,26 +53,24 @@
                             {{ src.label }}
                             <q-badge
                                 v-if="!src.enabled"
-                                color="grey"
-                                text-color="white"
-                                class="q-ml-sm"
+                                class="q-ml-sm dora-bg-sunken dora-text-secondary"
                             >
                                 disabled
                             </q-badge>
                             <q-badge
                                 v-if="pendingCountFor(src.id) > 0"
                                 color="warning"
-                                text-color="white"
+                                text-color="dark"
                                 class="q-ml-sm"
                             >
                                 {{ pendingCountFor(src.id) }} pending
                             </q-badge>
                         </q-item-label>
                         <q-item-label caption>
-                            Created {{ formatDate(src.created_at) }}
+                            Created {{ formatDateTime(src.created_at) }}
                             ·
                             <span v-if="src.last_used_at">
-                                Last used {{ formatDate(src.last_used_at) }}
+                                Last used {{ formatDateTime(src.last_used_at) }}
                             </span>
                             <span v-else>Never used</span>
                             ·
@@ -97,7 +92,7 @@
                             :aria-label="`Actions for ${src.label}`"
                         >
                             <q-menu auto-close anchor="bottom right" self="top right">
-                                <q-list dense style="min-width: 180px">
+                                <q-list dense class="api-access-menu">
                                     <q-item clickable @click="onToggle(src)">
                                         <q-item-section avatar>
                                             <q-icon :name="src.enabled ? ICONS.lock : ICONS.lock_open" size="18px" />
@@ -146,7 +141,7 @@
                                         <q-badge
                                             v-if="!m.store_id"
                                             color="warning"
-                                            text-color="white"
+                                            text-color="dark"
                                             class="q-ml-sm"
                                         >
                                             pending
@@ -160,7 +155,7 @@
                                             Awaiting mapping
                                         </span>
                                         <span v-if="m.last_seen_at">
-                                            · last pushed {{ formatDate(m.last_seen_at) }}
+                                            · last pushed {{ formatDateTime(m.last_seen_at) }}
                                         </span>
                                     </q-item-label>
                                 </q-item-section>
@@ -321,21 +316,25 @@
 <script lang="ts" setup>
     import BaseTooltip from 'src/components/BaseTooltip.vue';
     import AppSpinner from 'src/components/AppSpinner.vue';
-    import { formatDateTime as formatLocaleDateTime } from 'src/composables/useDateFormat';
+    import { formatDateTime } from 'src/composables/useDateFormat';
     import BaseButton from 'src/components/BaseButton.vue';
     import BaseDialog from 'src/components/BaseDialog.vue';
     import { ICONS } from 'src/style/icons';
     import { copyToClipboard, useQuasar } from 'quasar';
     import SettingsPageHeader from 'src/components/settings/SettingsPageHeader.vue';
     import IngestionSourcesApiService, {
-        type DoraStore,
         type IngestionSource,
         type IngestionStoreMapping
     } from 'src/services/api/ingestionSourcesApiService';
+    import StoresApiService from 'src/services/api/storesApiService';
+    import type { Store } from 'src/models/store';
     import { computed, onMounted, ref } from 'vue';
     import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+    import { useConfirm } from 'src/composables/useConfirm';
 
     const $q = useQuasar();
+
+    const { confirm } = useConfirm();
     const api = new IngestionSourcesApiService();
 
     const sources = ref<IngestionSource[]>([]);
@@ -357,7 +356,8 @@
     const renaming = ref(false);
 
     const mappingsBySource = ref<Record<string, IngestionStoreMapping[]>>({});
-    const stores = ref<DoraStore[]>([]);
+    const stores = ref<Store[]>([]);
+    const storesApi = new StoresApiService();
 
     const storeOptions = computed(() =>
         stores.value.map(s => ({ value: s.store_id, label: s.name }))
@@ -365,10 +365,6 @@
 
     function pendingCountFor(sourceId: string): number {
         return (mappingsBySource.value[sourceId] ?? []).filter(m => !m.store_id).length;
-    }
-
-    function captionFor(_src: IngestionSource): string {
-        return '';
     }
 
     async function loadMappings(sourceId: string) {
@@ -401,33 +397,33 @@
         }
     }
 
-    function onDeleteMapping(sourceId: string, mapping: IngestionStoreMapping) {
-        $q.dialog({
+    async function onDeleteMapping(sourceId: string, mapping: IngestionStoreMapping) {
+        const ok = await confirm({
             title: 'Drop mapping',
             message: `Drop the mapping for "${mapping.external_name}"? Future pushes will quarantine until you map it again.`,
-            ok: { color: 'negative', label: 'Drop', noCaps: true },
-            cancel: { flat: true, label: 'Cancel', noCaps: true },
-            persistent: true
-        }).onOk(() => {
-            void (async () => {
-                try {
-                    await api.deleteMappingAsync(sourceId, mapping.id);
-                    mappingsBySource.value = {
-                        ...mappingsBySource.value,
-                        [sourceId]: (mappingsBySource.value[sourceId] ?? []).filter(
-                            m => m.id !== mapping.id
-                        )
-                    };
-                } catch (e) {
-                    $q.notify({ type: 'negative', message: "Couldn't drop the mapping.", caption: toastCaption(e) });
-                }
-            })();
+            okLabel: 'Drop',
+            destructive: true,
+            persistent: true,
         });
+        if (!ok) return;
+        try {
+            await api.deleteMappingAsync(sourceId, mapping.id);
+            mappingsBySource.value = {
+                ...mappingsBySource.value,
+                [sourceId]: (mappingsBySource.value[sourceId] ?? []).filter(
+                    m => m.id !== mapping.id
+                )
+            };
+        } catch (e) {
+            $q.notify({ type: 'negative', message: "Couldn't drop the mapping.", caption: toastCaption(e) });
+        }
     }
 
     async function loadStores() {
         try {
-            stores.value = await api.listStoresAsync();
+            // The stores resource, through its own service (finalisation
+            // 16-R23 — this page carried a second client + row type for it).
+            stores.value = (await storesApi.listAsync()).items;
         } catch (e) {
             $q.notify({ type: 'negative', message: "Couldn't load stores.", caption: toastCaption(e) });
         }
@@ -443,10 +439,6 @@
         } finally {
             loading.value = false;
         }
-    }
-
-    function formatDate(iso: string) {
-        return formatLocaleDateTime(iso);
     }
 
     function openCreate() {
@@ -512,26 +504,24 @@
         }
     }
 
-    function onRevoke(src: IngestionSource) {
-        $q.dialog({
+    async function onRevoke(src: IngestionSource) {
+        const ok = await confirm({
             title: 'Revoke key',
             message: `"${src.label}" will stop being accepted immediately. This cannot be undone.`,
-            ok: { color: 'negative', label: 'Revoke', noCaps: true },
-            cancel: { flat: true, label: 'Cancel', noCaps: true },
-            persistent: true
-        }).onOk(() => {
-            void (async () => {
-                revokingId.value = src.id;
-                try {
-                    await api.deleteAsync(src.id);
-                    sources.value = sources.value.filter(s => s.id !== src.id);
-                } catch (e) {
-                    $q.notify({ type: 'negative', message: "Couldn't revoke the API key.", caption: toastCaption(e) });
-                } finally {
-                    revokingId.value = null;
-                }
-            })();
+            okLabel: 'Revoke',
+            destructive: true,
+            persistent: true,
         });
+        if (!ok) return;
+        revokingId.value = src.id;
+        try {
+            await api.deleteAsync(src.id);
+            sources.value = sources.value.filter(s => s.id !== src.id);
+        } catch (e) {
+            $q.notify({ type: 'negative', message: "Couldn't revoke the API key.", caption: toastCaption(e) });
+        } finally {
+            revokingId.value = null;
+        }
     }
 
     onMounted(() => {
@@ -541,10 +531,8 @@
 </script>
 
 <style scoped lang="scss">
-    .settings-page { display: flex; flex-direction: column; }
-    .settings-list {
-        border-top: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
-        border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+    .api-access-menu {
+        min-width: 180px;
     }
     .mapping-row__select {
         min-width: 200px;

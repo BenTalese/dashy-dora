@@ -452,7 +452,6 @@
         .dora-bubble-launcher:hover {
             opacity: 1;
             transform: scale(1);
-            outline: none;
         }
         .dora-bubble-launcher.is-sleeping:hover {
             opacity: 1;
@@ -465,12 +464,16 @@
     .dora-bubble-launcher.is-hint-visible {
         opacity: 1;
         transform: scale(1);
-        outline: none;
+    }
+    /* Keyboard focus gets a real ring (D-016): the opacity/scale above is the
+       hover state, so on its own it couldn't tell focus from a pointer. */
+    .dora-bubble-launcher:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 3px;
     }
     .dora-bubble-launcher.is-active {
         opacity: 1;
         transform: scale(1.12);
-        outline: none;
     }
     .dora-bubble-launcher.is-sleeping {
         opacity: 0.35;

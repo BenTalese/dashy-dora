@@ -70,14 +70,15 @@
     import AppSpinner from 'src/components/AppSpinner.vue';
     import BaseButton from 'src/components/BaseButton.vue';
     import { ICONS } from 'src/style/icons';
-    import { useQuasar } from 'quasar';
     import DietaryTagFormDialog from 'src/components/settings/DietaryTagFormDialog.vue';
     import type { DietaryTag } from 'src/models/recipeVocab';
     import DietaryTagApiService from 'src/services/api/dietaryTagApiService';
     import { onMounted, ref } from 'vue';
     import SettingsPageHeader from 'src/components/settings/SettingsPageHeader.vue';
+    import { useConfirm } from 'src/composables/useConfirm';
 
-    const $q = useQuasar();
+
+    const { confirm } = useConfirm();
     const dietaryTagApi = new DietaryTagApiService();
 
     const dietaryTags = ref<DietaryTag[]>([]);
@@ -135,18 +136,13 @@
 
     async function onDeleteDietaryTag(tag: DietaryTag) {
         const count = tag.recipe_count ?? 0;
-        const ok = await new Promise<boolean>((resolve) => {
-            $q.dialog({
-                title: `Delete "${tag.name}"?`,
-                message:
-                    count > 0
-                        ? `${count} recipe${count === 1 ? '' : 's'} tagged with this will lose the tag.`
-                        : 'Nothing currently uses this tag.',
-                cancel: { noCaps: true },
-            })
-                .onOk(() => resolve(true))
-                .onCancel(() => resolve(false))
-                .onDismiss(() => resolve(false));
+        const ok = await confirm({
+            title: `Delete "${tag.name}"?`,
+            message: count > 0
+                    ? `${count} recipe${count === 1 ? '' : 's'} tagged with this will lose the tag.`
+                    : 'Nothing currently uses this tag.',
+            okLabel: 'Delete',
+            destructive: true,
         });
         if (ok) await run(() => dietaryTagApi.deleteAsync(tag.dietary_tag_id).then(() => undefined));
     }
@@ -155,11 +151,7 @@
 </script>
 
 <style scoped lang="scss">
-    .settings-page { display: flex; flex-direction: column; position: relative; }
-    .settings-list {
-        border-top: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
-        border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
-    }
+    .settings-page { position: relative; }
     .vocab-row {
         display: flex;
         flex-wrap: wrap;

@@ -39,6 +39,54 @@ long session summary. Distinct from the other logs:
 
 ---
 
+## [OPEN] FU-950 — Stock-item detail leftovers from the finalisation review: BuyVerdictCard's own disclosure, bulk deal quality
+- **Raised:** 2026-10-27 (finalisation 06-R21, 06-R13; Stage 2 close-gate)
+- **Type:** leftover (R-001 / efficiency)
+- **What:** (1) **06-R21:** `BuyVerdictCard` hand-rolls the summary-button + caret disclosure that `CollapsibleCard` owns
+  for the two cards above it. The finding was conditional on `CollapsibleCard` exposing a trailing-actions slot — it has
+  `header` / `collapsed` / default only, so the card needs that slot first, then hosts on it with its action button in the
+  header. (2) **06-R13:** `get_buy_verdict._items_with_fake_markdown` calls `get_deal_quality` per linked product (each
+  loading the product with both offer collections plus the household's paid prices); on the bulk path
+  (`get_list_buy_verdicts`) that is one deep walk per product on the list. Add `gather_deal_quality_for_products(ids)` in
+  `deal_quality.py` (one products+offers include, one lines fetch) and call it here.
+- **Why deferred:** (1) is an M-blast component change on a signed-off card; (2) is an M-blast query reshaping in a module
+  chunk 10 owns.
+- **Recommended resolution:** (1) next time `CollapsibleCard` or the stock-item page is open; (2) when a list with many
+  linked products makes the buy-verdict page slow, or with FU-947's `product_id` mapping change.
+
+## [OPEN] FU-949 — `pywebview==5.4` is pinned but nothing imports it; the ops design calls (19-D1..D4)
+- **Raised:** 2026-10-27 (finalisation 19-R15 / 19-D1–D4; noticed while dropping the `webview.platforms.gtk` hidden import)
+- **Type:** leftover + decision
+- **What:** (1) `requirements.txt:10` pins `pywebview==5.4` and the three packaging scripts describe a pywebview window,
+  but `desktop_app.py:314` opens the default browser instead and no module imports `webview`; the pin pulls a native-UI
+  dependency into every image and venv. Drop it (and the GTK/WebView2 notes in `packaging/build-*.sh|ps1`) or revive the
+  window — owner call. (2) **19-D1:** the shipped compose boots production with `DORA_SECURE_COOKIES=false`, so the
+  "deliberate opt-out" banner fires on every default boot; recommend keep `false` (LAN-first), keep the banner once, and
+  add the TLS/proxy recipe (15-R1) to README. (3) **19-D2:** after 19-R13 `appsettings.json` carries `API_HOST` /
+  `API_PORT` / `LOG_LEVEL` only, all env-overridable — retire the file (env-only, FU-333's direction) with a one-boot
+  "ignored" warning. (4) **19-D3:** `/api/health` can't say "degraded" (a DB outage still answers `ok: true`) — add
+  `"db": "ok" | "unreachable"`. (5) **19-D4 / FU-640:** log 4xx on mutating routes at WARNING and default the container to
+  INFO.
+- **Why deferred:** (1) touches the desktop packaging story; (2)–(5) are owner policy calls the finalisation review
+  recorded as decisions, not findings.
+- **Recommended resolution:** (1) now (one line + three comments) once the owner picks; (2)–(5) owner, with the
+  Stage 2 close-out.
+
+## [OPEN] FU-948 — Backup / import leftovers from the finalisation review: inspect dedupe, the two page splits
+- **Raised:** 2026-10-27 (finalisation 18-R10, 18-R18, 18-R19; noticed while landing 18-R7)
+- **Type:** leftover (R-001 / R-003)
+- **What:** (1) **18-R10:** `inspect_backup._inspect_streamed` and `_inspect_inline` duplicate ~50 lines of envelope
+  validation + sampling + duplicate flagging, and `RestoreBackupHandler.handle` validates the envelope a third time; one
+  `_summarise(meta, rows_for(section))` + `restore_shared.validate_envelope(doc) -> DataError | None`. (2) **18-R18:**
+  `AdminDataBackupRestore.vue` (≈1,100 lines) is four surfaces — `BackupLibraryList`, `BackupCreateDialog`,
+  `BackupRestorePanel`, `RestoreReportDialog`; the page keeps the service calls and the library-settings section.
+  (3) **18-R19:** `AdminDataImport.vue`'s result dialog (virtual list + chips + error CSV) is a self-contained
+  `ImportResultDialog.vue`. `SettingsFileDrop.vue` (251 lines, the chunk's one unread file) gets its read with (2).
+- **Why deferred:** (1) is a refactor with three inspect tests as the only guard; (2)/(3) are M-blast splits that want a
+  manual walk of the page afterwards, and the 18-R7 rewire wanted its own verify first.
+- **Recommended resolution:** (1) opportunistic, next time `inspect_backup.py` is open; (2)/(3) chunk 20's componentisation
+  pass or the next time either page is touched.
+
 ## [OPEN] FU-947 — Reports / budget leftovers from the finalisation review: offer `product_id`, savings `lists[]`, the four-card shape
 - **Raised:** 2026-10-27 (finalisation 12-R16, 12-R19, 12-D1; noticed while landing 12-R10)
 - **Type:** leftover + decision
@@ -239,25 +287,6 @@ long session summary. Distinct from the other logs:
   swap needs the cache story decided (the object URL path bypasses it).
 - **Recommended resolution:** later during the finalisation sweeps (chunks 1/5/6 image items), before a split-host deploy.
 
-## [OPEN] FU-929 — Finalisation Stage 1: 729 review findings across 20 chunks await Stage-2 execution (umbrella)
-- **Raised:** 2026-10-23 (finalisation overnight run; register at `docs/05_investigations/FINALISATION_REVIEW.md`, per-chunk files under `docs/05_investigations/finalisation/`)
-- **Type:** finding (umbrella — same shape as FU-928)
-- **What:** the two-stage finalisation plan's Stage 1 is complete: every one of the 20 chunks has its FST walk
-  (`docs/04_proposals/FULL_SYSTEMS_TEST.md`), help drafts (`docs/05_investigations/HELP_CONTENT.md`, 100 entries), senior
-  review (`FINALISATION_REVIEW.md`: 729 `NN-Rk` findings, 576 marked **execute**, ~60 verified bugs — see its §0
-  "opening order"), lean test plan (`docs/04_proposals/TEST_PLAN_INVENTORY.md`, 35 must-write rows) and hand-rolled-vs-library
-  verdicts (`docs/05_investigations/HANDROLLED_VS_LIBRARIES.md`, 6 replace/wrap). Every finding carries `path:line` + the exact
-  change; `FINALISATION_COVERAGE.md` flips a chunk's **Applied** cell when its execute-list is done. Headline verified bugs:
-  UI *New backup* is refused and *Restore selection* 500s (18-R1/R2/R3); the Docker image is built without `-m pwa` (19-R1);
-  `push-sw.js` evicts the Workbox worker (17-R1); idempotency replay after TTL 500s + `link-status` hands out custom-product ids
-  (16-R2/R8); invalid `nutrition_mode` PATCH 500s, last-admin guard ignores `is_active` (13-R1/R3); DEBUG logging captures
-  login bodies (15-R2); the version check targets the wrong repo slug (19-R3).
-- **Why deferred:** Stage 2 executes per chunk, test-guarded, in the order the register's §0 gives; items not reached stay here.
-  Owner decisions the sweep surfaced are listed in `FINALISATION_REVIEW.md` §0 ("Owner decisions outstanding") — the Help
-  information architecture (20-D4) gates the 100 drafted help entries.
-- **Recommended resolution:** now — Stage 2 runs from this register; close when `FINALISATION_COVERAGE.md` has Applied ✅ on all 20 rows.
-- **Progress (2026-10-23):** Stage 2 units 1–10 landed — the §0 opening order (rows 1–11) is exhausted; every verified bug is fixed and test-guarded or explicitly deferred in the worklog's Stage-2 log (08-R6, 08-R8, 03-R1 owner-veto, the M-blast refactors). Register `Applied` = ➗ on 18 rows. 05-R30 did not reproduce (`EntityField.eq` is case-insensitive; already pinned). Remaining: per-chunk execute lists beyond §C1 and the §0 sweeps. **2026-10-24:** units 12–14 landed chunks 9 and 10 (C1 + most of the execute list), most of chunk 6, FU-654 and the R-008 logger sweep; see the worklog's 2026-10-24 entry.
-
 ## [OPEN] FU-930 — iOS Capacitor shell has no `NSCameraUsageDescription`
 - **Raised:** 2026-08-15 (while scoping FU-639). **Renumbered 640 → 930 on 2026-10-23:** two entries carried FU-640; the 4xx-logging one keeps the number (CHUNK_17 17-R5).
 - **Type:** finding
@@ -326,6 +355,8 @@ long session summary. Distinct from the other logs:
 - **Why deferred:** a different surface, touched concurrently by the ingest work.
 - **Recommended resolution:** opportunistic.
 - **2026-10-23 (finalisation Stage 1):** consolidated raw-table reader list is CHUNK_20 **20-R27** (products, app_settings, ingestion ×5 → 4 after 16-R7, import_spreadsheet ×3 to fix, backup_library:268, audit_retention:40, health_check:67 + the dump/restore engine as the documented carve-out).
+- **2026-10-27 (finalisation 16-R24):** the four ingestion sites that remain — `get_ingestable_products.py` (×2), `get_ingest_stores.py:ingest_list_stores`, `infrastructure/ingestion_auth.find_ingestion_source` (which mirrors `auth_helpers.find_active_token`; move the two together).
+- **2026-10-27 (finalisation 18-R20):** `import_spreadsheet.py`'s three raw inserts now go through `repository.add(...)` and `backup_library.list_backups` reads users through the repository — off the list. The generic dump/inspect/restore table walk (`backup.py`, `inspect_backup.py`, `restore_backup.py`, `restore_shared.py`) is the documented R-005 carve-out, not a site to fix.
 
 ## [OPEN] FU-922 — Product photo can only be set from the cards view
 - **Raised:** 2026-10-17 (owner batch, My products)
@@ -1132,6 +1163,7 @@ long session summary. Distinct from the other logs:
   Doing the structural merge in the same pass would have meant 25 unverified
   call sites inside a five-item batch.
 - **Recommended resolution:** later, as its own unit. Cross-ref: D-015, R-001.
+- **2026-10-27 (finalisation 20-R16):** Stage 2 left this as its own unit — the finding's verdict stands (merge onto the hand-rolled radiogroup).
 
 ## [OPEN] FU-847 — Four hosts now measure their own box to size the SVG chart
 - **Raised:** 2026-09-02 (FU-833 — dropping ECharts)
@@ -2527,63 +2559,7 @@ Resolved entries carry one extra line, and live in `DORA_FOLLOWUPS_RESOLVED.md`:
 - **Recommended resolution:** opportunistic, or now alongside FU-719 — the two
   are one small hardening pass over `startup.py` / `infrastructure/utils.py`.
 - **2026-10-23 (finalisation Stage 1):** cheapest shape (log the registered route count per blueprint at boot) rides along with 19-R19's `register_jobs`/router wiring tidy — FINALISATION_REVIEW 19-D5.
-
-## [OPEN] FU-719 — `_iter_submodules` silently swallows a feature subpackage that fails to import
-- **Raised:** 2026-08-23 (chasing FU-717)
-- **Type:** finding (robustness / diagnosability).
-- **What:** route discovery is
-  `get_attributes_ending_with('router', 'dora_api.features')` →
-  `_iter_submodules` (`infrastructure/utils.py:47`), which calls
-  `pkgutil.walk_packages(pkg.__path__, prefix=...)` **with no `onerror`**.
-  Verified against the CPython source in this venv: when `walk_packages`
-  imports a subpackage to recurse into it, `except ImportError:` with
-  `onerror is None` **swallows the error and moves on**. So if any
-  `dora_api/features/<x>/__init__.py` fails to import, that entire feature's
-  modules are never yielded, its routes are never attached to the blueprint,
-  and **the app boots perfectly happily** — the blueprint still registers
-  (every `*_ROUTER` lives in `features/routers.py`, which is imported
-  independently), just with a hole in it. The user-visible result is exactly
-  FU-717's shape: some `/api/*` paths serve normally, others return the app's
-  own `"Endpoint was not found."` 404 (via the middleware for
-  POST/PATCH/DELETE, or `serve_spa.py:110`'s catch-all for GET), with nothing
-  in the logs. Non-package modules are imported by `_iter_submodules` itself
-  and *do* raise loudly, so this hole is subpackage-granular only.
-- **Not the cause of FU-717** (checked 2026-08-23): that turned out to be an
-  rsync exclude *deleting* `features/data/` off the server, and an absent
-  directory yields no subpackage and no ImportError — there was nothing for this
-  hole to swallow. It stays open on its own merit: the failure mode is real and
-  would be indistinguishable from FU-717 if it ever fires.
-- **Why deferred:** wants the owner's go-ahead — it's infrastructure the whole
-  app boots through, and the fix should be verified against a deliberately
-  broken feature package.
-- **Recommended resolution:** now, alongside **FU-720** (same file, same class of
-  silent discovery failure — one hardening pass covers both). Pass an
-  `onerror` that logs the module name + exception and **re-raises**: a feature
-  that can't import should fail the boot loudly, not serve a silently
-  incomplete API. Whatever the cause of FU-717, this is worth doing on its own
-  merit — it is the reason a whole-blueprint hole is invisible.
-- **2026-10-23 (finalisation Stage 1):** execute as part of CHUNK_19 19-R19 (one `onerror=` argument on `walk_packages`, logged at ERROR) — see FINALISATION_REVIEW 19-D5.
-
-## [OPEN] FU-716 — Backup & Restore page bypasses the API service layer
-- **Raised:** 2026-08-23 (image-quality settings split)
-- **Type:** finding (R-005 / portable data access + one HTTP client).
-- **What:** every call in `AdminDataBackupRestore.vue` is a hand-rolled `fetch`
-  with `credentials: 'include'` and a hand-assembled `csrfHeader()`, rather than
-  going through `AxiosHttpClient` / an api service. Consequences: no
-  `X-Request-Id` correlation id, so a failure like FU-717 has no matching server
-  log line to look up; no normalised error, so the toast caption is a raw
-  `Error: List failed (404)` instead of `toastCaption(err)`; and no shared retry
-  policy. `backup_retention_count` / `backup_storage_path` are also absent from
-  the `AppSettings` type, which is *why* the page reached for raw `fetch` in the
-  first place — `image_quality` / `image_max_dimension` were in the same boat
-  and were added to the type when the image card moved out (2026-08-23).
-- **Why deferred:** the current unit only moved the image card; rewiring five
-  more call sites (create / download / restore / delete / library settings,
-  two of which stream files) is its own change and wants its own verify.
-- **Recommended resolution:** opportunistic — fold in next time this page is
-  touched, or immediately after FU-717 is diagnosed, since the correlation id
-  is exactly what would have made FU-717 a five-minute answer.
-- **2026-10-23 (finalisation Stage 1):** shape agreed in CHUNK_18 **18-R7**: `services/api/dataApiService.ts` + `uploadsApiService.ts` on `AxiosHttpClient` (blob download, FormData chunks); 21 raw-fetch sites counted app-wide (17 on the two data pages, 4 in `useChunkedUpload`, `useClientLogger`'s is deliberate). Executes in Stage 2.
+- **2026-10-27 (finalisation 19-R19 / unit 29):** the cheapest shape landed — `register_routers` logs "Registered N router(s), M route(s)" and `jobs.register_jobs` logs the job table at boot; a lost feature directory now shows as a lower count. The post-deploy *assertion* (a pinned expected count or route-map hash) is still open.
 
 ## [OPEN] FU-715 — reported "Needs attention filter is broken" did not reproduce
 - **Raised:** 2026-08-22 (stock-overview feedback batch)
@@ -3230,6 +3206,7 @@ Resolved entries carry one extra line, and live in `DORA_FOLLOWUPS_RESOLVED.md`:
   recipe page is visible. Worth deciding at the same time whether B2's prescribed
   "`-soft` background + semantic ink" replaces solid semantic chips generally.
 - **2026-10-23 (finalisation Stage 1):** now **24 sites / 16 files** — `AlertKindAvatar, AlertsBell, chips/DiscountChip, dashboard/PriceDropsCard, dora/DoraChat, dora/PriceHistoryBottomSheet, products/ProductCard, recipes/ExpiringChip, DoraHelpPage, PriceHistoryPage, RecipeCookMode, settings/AdminDataBackupRestore, settings/ApiAccessSettings, settings/AuditLogSettings, StockItemDetailPage, StockOverview` (CHUNK_20 §0 table). Pairs with FU-674's `--text-on-*` tokens.
+- **2026-10-27 (finalisation 20-R11 sweep, unit 30):** six more sites flipped to `dark` (price history above-baseline chip, backup duplicate chip, API-access pending + unmapped badges, audit-log severity chips ×2). Left on purpose: primary/accent/secondary + white (`--text-on-primary` is the sanctioned pairing; `RecipeCookMode` carries its own note), `DiscountChip` positive + white, `PriceHistoryPage` series colours, `AlertKindAvatar` (decorative icon). The tint-vs-solid question above is still the owner's.
 
 ## [OPEN] FU-670 — At-risk ingredient chips are read-view only (not cook mode / edit rows)
 - **Raised:** 2026-08-17 (expiring-ingredient chips).

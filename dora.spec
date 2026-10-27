@@ -50,7 +50,7 @@ hiddenimports = [
     # Alembic's env.py is loaded dynamically and imports
     # `logging.config`, which PyInstaller doesn't pull in from
     # static analysis. Same story for `logging.handlers` — used by
-    # logging_setup.py's RotatingFileHandler.
+    # logging_setup.py's TimedRotatingFileHandler.
     "logging.config",
     "logging.handlers",
     "apscheduler.triggers.cron",
@@ -59,10 +59,6 @@ hiddenimports = [
     "apscheduler.schedulers.background",
     "apscheduler.jobstores.memory",
     "apscheduler.executors.pool",
-    # pywebview's GTK backend on Linux. Other OSes auto-import their
-    # native backend; the bundle is built per-OS so it's safe to pin
-    # this for the Linux target.
-    "webview.platforms.gtk",
     # dependency_injector occasionally loses its dynamic providers
     # to static analysis. `wiring` covers the common cases.
     "dependency_injector.wiring",

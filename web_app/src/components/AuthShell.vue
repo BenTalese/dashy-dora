@@ -95,6 +95,12 @@
         --auth-shell-accent:              #006a80;
         --auth-shell-accent-strong:       #17b073;
         --auth-shell-accent-amber-strong: #c88a1e;
+        /* Ink on the gradient surfaces + on the midnight canvas. The hexes
+           used to sit in AuthButton, the two setup badges and SplashScreen
+           (finalisation 15-R10). */
+        --auth-shell-on-accent:           #fff;
+        --auth-shell-on-amber:            #3a2a08;
+        --auth-shell-on-canvas:           #fff;
         --auth-shell-shadow:              0 30px 80px -30px rgba(20, 12, 50, 0.55);
 
         color-scheme: light;

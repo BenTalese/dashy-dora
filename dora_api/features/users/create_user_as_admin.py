@@ -9,8 +9,6 @@ require it later; there is no auto-login here (the caller is an admin,
 not the freshly-created user).
 """
 import logging
-import secrets
-import string
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import UUID
@@ -21,12 +19,10 @@ from dora_api.domain.entities.user import User
 from dora_api.domain.types import EMPTY_UUID
 from dora_api.features.auth.admin_gate import require_admin
 from dora_api.features.routers import USER_ROUTER
-from dora_api.infrastructure.api_response import (business_rule_violation, ok,
-                                                  ProblemDetails,
-                                                  unprocessable_entity)
+from dora_api.infrastructure.api_response import business_rule_violation, ok, validation_failed
 from dora_api.infrastructure.audit import emit as audit_emit
-from dora_api.infrastructure.auth_helpers import (hash_password,
-                                                  is_valid_email,
+from dora_api.infrastructure.auth_helpers import (hash_password, is_valid_email,
+                                                  mint_one_time_password,
                                                   normalise_email,
                                                   validate_password)
 from dora_api.infrastructure.decorators import has_request_body
@@ -37,11 +33,6 @@ from dora_api.infrastructure.ports import Repository
 
 _LOGGER = logging.getLogger(__name__)
 
-
-# Same 12-char alphanumeric one-time pad as reset_user_password — readable
-# enough for the admin to relay over chat, strong enough until the user
-# changes it themselves on first login.
-_ONE_TIME_ALPHABET = string.ascii_letters + string.digits
 
 
 class AdminCreateUserRequest(BaseModel):
@@ -84,9 +75,7 @@ class AdminCreateUserHandler:
                 return AdminCreateUserResponse(email_taken=True)
 
         chosen = (request.password or "").strip()
-        one_time_password = chosen or "".join(
-            secrets.choice(_ONE_TIME_ALPHABET) for _ in range(12)
-        )
+        one_time_password = chosen or mint_one_time_password()
         now = datetime.now(timezone.utc)
         new_user = User(
             email=email_norm,
@@ -123,20 +112,10 @@ def admin_create_user():
     if _Request.password:
         pwd_error = validate_password(_Request.password)
         if pwd_error:
-            return unprocessable_entity(ProblemDetails(
-                detail="See errors property for more details.",
-                errors={"password": [pwd_error]},
-                status=422, title="Validation failed.",
-                type="https://datatracker.ietf.org/doc/html/rfc4918#section-11.2",
-            ))
+            return validation_failed({"password": [pwd_error]})
 
     if _Request.email is not None and not is_valid_email(_Request.email):
-        return unprocessable_entity(ProblemDetails(
-            detail="See errors property for more details.",
-            errors={"email": ["Please enter a valid email address."]},
-            status=422, title="Validation failed.",
-            type="https://datatracker.ietf.org/doc/html/rfc4918#section-11.2",
-        ))
+        return validation_failed({"email": ["Please enter a valid email address."]})
 
     _Response = AdminCreateUserHandler(SqlAlchemyRepository()).handle(_Request)
 

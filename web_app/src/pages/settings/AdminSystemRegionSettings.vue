@@ -178,8 +178,11 @@
     import { unitsForSystem, useMeasurementSystem } from 'src/composables/useMeasurementSystem';
     import type { MeasurementSystem } from 'src/generated/units_table';
     import { useRecipeStore } from 'src/stores/recipeStore';
+    import { useConfirm } from 'src/composables/useConfirm';
 
     const $q = useQuasar();
+
+    const { confirm } = useConfirm();
     // Reads and writes go through the shared settings row (13-R9). The page
     // keeps its own save handlers: picks save silently, with inline errors
     // and double-submit guards the generic draft loop doesn't have.
@@ -475,7 +478,7 @@
             type: 'positive', 
             message: 'Matched to this device. Currency is unchanged.',
         });
-        offerRatingScheme(language, zone);
+        void offerRatingScheme(language, zone);
     }
 
     /** The measurement system implied by a device's BCP-47 region subtag, or
@@ -528,7 +531,7 @@
      *  Offered, never applied: this asks, and a "No thanks" is remembered by
      *  simply leaving the setting at `none`. Nothing here nags again — the
      *  prompt is attached to an explicit button press, not to page load. */
-    function offerRatingScheme(language: string, zone: string) {
+    async function offerRatingScheme(language: string, zone: string) {
         const scheme = localRatingScheme(language, zone);
         if (scheme === null) return;
         // The row is current: every save on this page wrote through the store.
@@ -548,15 +551,16 @@
                     + 'guide',
             };
 
-        $q.dialog({
+        const ok = await confirm({
             title: copy.title,
             message:
                 `This device looks like it's ${copy.where}. Dora `
                 + 'can work one out for your recipes. '
                 + 'It needs nutrition set to complex, and ratings are estimates.',
-            ok: { label: 'Turn it on', color: 'primary', noCaps: true },
-            cancel: { label: 'No thanks', flat: true, noCaps: true },
-        }).onOk(() => { void enableRatingScheme(scheme); });
+            okLabel: 'Turn it on',
+            cancelLabel: 'No thanks',
+        });
+        if (ok) await enableRatingScheme(scheme);
     }
 
     /** The countries currently using Nutri-Score, by BCP-47 region subtag:
@@ -694,7 +698,6 @@
 </script>
 
 <style scoped lang="scss">
-    .settings-page { display: flex; flex-direction: column; }
 
     .region-preview {
         display: flex;

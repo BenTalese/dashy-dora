@@ -227,7 +227,7 @@
         display: flex;
         flex-direction: column;
         align-items: flex-start;
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
     }
     .dora-legend li {
         display: flex;

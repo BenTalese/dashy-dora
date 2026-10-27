@@ -183,10 +183,7 @@
   },
   "onboarding_state": {
     "keys": [
-      "completed",
-      "completed_at",
-      "first_user",
-      "store_status"
+      "first_user"
     ]
   },
   "products": {

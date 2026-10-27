@@ -91,7 +91,7 @@
         cursor: pointer;
         color: var(--seg-ink);
         /* D-003: interactive labels are 14px, not the 13px this had. */
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         font-weight: 500;
         line-height: 1;
         white-space: nowrap;

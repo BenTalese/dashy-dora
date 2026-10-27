@@ -1220,11 +1220,14 @@
     import type { SubstituteOption } from 'src/components/recipes/recipeSubstituteTypes';
     import type { EditableStep } from 'src/components/recipes/recipeStepEditorTypes';
     import type { EditableStepImage } from 'src/components/recipes/recipeStepImageEditorTypes';
+    import { useConfirm } from 'src/composables/useConfirm';
 
     // Domain vocabulary, not a page constant: the same three values rank
     // recipes in the cookbook's sort. R-003 — one home, four readers.
 
     const $q = useQuasar();
+
+    const { confirm } = useConfirm();
     const route = useRoute();
     const router = useRouter();
 
@@ -1502,15 +1505,16 @@
 
     /** Discard: re-hydrate from the last loaded recipe. No refetch — the point
      *  is to undo local edits, and `recipe.value` is what they departed from. */
-    function onDiscard() {
+    async function onDiscard() {
         const src = recipe.value;
         if (!src) return;
-        $q.dialog({
+        const ok = await confirm({
             title: 'Discard changes',
             message: 'Throw away every change you’ve made since the last save?',
-            cancel: true,
-            ok: { label: 'Discard', color: 'negative' },
-        }).onOk(() => {
+            okLabel: 'Discard',
+            destructive: true,
+        });
+        if (ok) {
             hydrateRecipeForm(form, src);
             imageDirty.value = false;
             stepImagesDirty.value = false;
@@ -1520,7 +1524,7 @@
             ingredientsEditing.value = false;
             methodEditing.value = false;
             saveState.value = 'idle';
-        });
+        }
     }
 
     async function loadRecipe() {
@@ -2114,14 +2118,15 @@
         }
     }
 
-    function onDelete() {
+    async function onDelete() {
         if (!recipe.value) return;
-        $q.dialog({
+        const ok = await confirm({
             title: 'Delete recipe',
             message: `Delete "${recipe.value.name}"? This can't be undone.`,
-            cancel: true,
-            ok: { label: 'Delete', color: 'negative' },
-        }).onOk(() => { void doDelete(); });
+            okLabel: 'Delete',
+            destructive: true,
+        });
+        if (ok) await doDelete();
     }
     async function doDelete() {
         if (!recipe.value) return;
@@ -2215,19 +2220,15 @@
     }
 
     // In-app navigation — the Back arrow, a sibling version, cook mode.
-    onBeforeRouteLeave((_to, _from, next) => {
-        if (!dirty.value) {
-            next();
-            return;
-        }
-        $q.dialog({
+    onBeforeRouteLeave(async () => {
+        if (!dirty.value) return true;
+        return await confirm({
             title: 'Unsaved changes',
             message: 'You have changes that haven’t been saved yet.',
-            cancel: { label: 'Stay', flat: true, noCaps: true },
-            ok: { label: 'Leave without saving', color: 'negative', noCaps: true },
-        })
-            .onOk(() => { next(); })
-            .onCancel(() => { next(false); });
+            okLabel: 'Leave without saving',
+            cancelLabel: 'Stay',
+            destructive: true,
+        });
     });
 
     // Switching recipes in place (a sibling version) is a fresh load; the

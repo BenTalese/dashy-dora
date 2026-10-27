@@ -227,12 +227,12 @@
         display: flex;
         flex-direction: column;
         gap: 8px;
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         line-height: 1.45;
     }
     .dora-buy-verdict-card__headline {
         font-weight: 600;
-        font-size: calc(var(--font-size-md) * 1rem);
+        font-size: var(--font-size-md);
         display: flex;
         flex-direction: column;
         align-items: flex-start;
@@ -243,7 +243,7 @@
         align-items: center;
         gap: var(--space-1);
         font-weight: 400;
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         color: var(--text-secondary);
     }
     /* The whole summary line is the disclosure control, so it has to be a

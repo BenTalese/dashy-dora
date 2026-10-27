@@ -120,11 +120,11 @@
         min-width: 0;
     }
     .mp-ing__name {
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         line-height: 1.3;
     }
     .mp-ing__qty {
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
         color: var(--text-secondary);
         font-variant-numeric: tabular-nums;
     }

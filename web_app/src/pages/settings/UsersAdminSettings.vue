@@ -115,6 +115,12 @@
                                     </q-item-section>
                                     <q-item-section>Change password</q-item-section>
                                 </q-item>
+                                <q-item v-if="user.has_image" clickable @click="onRemovePicture(user)">
+                                    <q-item-section avatar>
+                                        <q-icon :name="ICONS.image_off" size="20px" />
+                                    </q-item-section>
+                                    <q-item-section>Remove picture</q-item-section>
+                                </q-item>
                                 <q-separator />
                                 <q-item
                                     clickable
@@ -296,7 +302,7 @@
     import PasswordSetter from 'src/components/settings/PasswordSetter.vue';
     import { ICONS } from 'src/style/icons';
     import { storeToRefs } from 'pinia';
-    import { copyToClipboard, useQuasar } from 'quasar';
+    import { copyToClipboard } from 'quasar';
     import UserAdminApiService, {
         type AdminCreateUserCommand,
         type AdminUser
@@ -307,8 +313,10 @@
     import { passwordLongEnough } from 'src/models/password';
     import { computed, onMounted, reactive, ref } from 'vue';
     import { describeApiError } from 'src/services/errorHandling/apiErrorHandler';
+    import { useConfirm } from 'src/composables/useConfirm';
 
-    const $q = useQuasar();
+
+    const { confirm } = useConfirm();
     const { notifySuccess, notifyError } = useSettingsSave();
     const api = new UserAdminApiService();
     const authStore = useAuthStore();
@@ -415,13 +423,15 @@
 
     async function onToggleActive(user: AdminUser, value: boolean) {
         if (!value) {
-            const confirmed = await confirmDialog({
+            const confirmed = await confirm({
                 title: `Deactivate "${user.username}"?`,
                 message:
                     `They'll be signed out and won't be able to sign in again `
                     + `until you switch this back on. Nothing they created is `
                     + `removed.`,
                 okLabel: 'Deactivate',
+                destructive: true,
+                persistent: true,
             });
             if (!confirmed) return;
         }
@@ -431,6 +441,12 @@
                     ? `"${user.username}" can sign in again.`
                     : `"${user.username}" is deactivated.`);
         }
+    }
+
+    // Finalisation 13-R15 — the server's `clear_image` had no caller.
+    async function onRemovePicture(user: AdminUser) {
+        const ok = await patch(user, { clear_image: true });
+        if (ok) notifySuccess(`Removed "${user.username}"'s picture.`);
     }
 
     function onEdit(user: AdminUser) {
@@ -548,7 +564,7 @@
     }
 
     async function onDelete(user: AdminUser) {
-        const confirmed = await confirmDialog({
+        const confirmed = await confirm({
             title: `Delete "${user.username}"?`,
             message:
                 `Their sessions, alert preferences and push subscriptions `
@@ -556,6 +572,8 @@
                 + `(recipes, shopping lists) stay in the household. `
                 + `Deactivate instead if you only want to lock them out.`,
             okLabel: 'Delete',
+            destructive: true,
+            persistent: true,
         });
         if (!confirmed) return;
 
@@ -595,27 +613,12 @@
         return problem?.detail ?? null;
     }
 
-    // R-039: dialogs are sentence-case with `noCaps` on the cancel action.
-    function confirmDialog(opts: { title: string; message: string; okLabel: string }) {
-        return new Promise<boolean>((resolve) => {
-            $q.dialog({
-                title: opts.title,
-                message: opts.message,
-                cancel: { noCaps: true },
-                persistent: true,
-                ok: { color: 'negative', label: opts.okLabel, noCaps: true },
-            })
-                .onOk(() => resolve(true))
-                .onCancel(() => resolve(false))
-                .onDismiss(() => resolve(false));
-        });
-    }
 
     onMounted(loadUsers);
 </script>
 
 <style scoped lang="scss">
-    .settings-page { display: flex; flex-direction: column; position: relative; }
+    .settings-page { position: relative; }
 
     .user-list {
         list-style: none;

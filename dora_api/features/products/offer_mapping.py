@@ -28,7 +28,7 @@ from dora_api.domain.entities.product import Product
 from dora_api.domain.entities.product_historic_offer import \
     ProductHistoricOffer
 from dora_api.persistence.field import EntityField
-from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
+from dora_api.infrastructure.ports import Repository
 
 
 class OfferOutcome(str, Enum):
@@ -48,7 +48,7 @@ OFFER_SOURCE_MANUAL = "manual"
 
 
 def apply_offer_to_product(
-    repository: SqlAlchemyRepository,
+    repository: Repository,
     product: Product,
     *,
     price_now: float,

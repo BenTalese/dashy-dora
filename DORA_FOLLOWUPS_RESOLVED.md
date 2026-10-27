@@ -10,6 +10,85 @@ resolutions go at the **top**.
 
 ---
 
+## [RESOLVED] FU-929 — Finalisation Stage 1: 729 review findings across 20 chunks await Stage-2 execution (umbrella)
+- **Raised:** 2026-10-23 (finalisation overnight run; register at `docs/05_investigations/FINALISATION_REVIEW.md`, per-chunk files under `docs/05_investigations/finalisation/`)
+- **Type:** finding (umbrella — same shape as FU-928)
+- **What:** the two-stage finalisation plan's Stage 1 is complete: every one of the 20 chunks has its FST walk
+  (`docs/04_proposals/FULL_SYSTEMS_TEST.md`), help drafts (`docs/05_investigations/HELP_CONTENT.md`, 100 entries), senior
+  review (`FINALISATION_REVIEW.md`: 729 `NN-Rk` findings, 576 marked **execute**, ~60 verified bugs — see its §0
+  "opening order"), lean test plan (`docs/04_proposals/TEST_PLAN_INVENTORY.md`, 35 must-write rows) and hand-rolled-vs-library
+  verdicts (`docs/05_investigations/HANDROLLED_VS_LIBRARIES.md`, 6 replace/wrap). Every finding carries `path:line` + the exact
+  change; `FINALISATION_COVERAGE.md` flips a chunk's **Applied** cell when its execute-list is done. Headline verified bugs:
+  UI *New backup* is refused and *Restore selection* 500s (18-R1/R2/R3); the Docker image is built without `-m pwa` (19-R1);
+  `push-sw.js` evicts the Workbox worker (17-R1); idempotency replay after TTL 500s + `link-status` hands out custom-product ids
+  (16-R2/R8); invalid `nutrition_mode` PATCH 500s, last-admin guard ignores `is_active` (13-R1/R3); DEBUG logging captures
+  login bodies (15-R2); the version check targets the wrong repo slug (19-R3).
+- **Why deferred:** Stage 2 executes per chunk, test-guarded, in the order the register's §0 gives; items not reached stay here.
+  Owner decisions the sweep surfaced are listed in `FINALISATION_REVIEW.md` §0 ("Owner decisions outstanding") — the Help
+  information architecture (20-D4) gates the 100 drafted help entries.
+- **Recommended resolution:** now — Stage 2 runs from this register; close when `FINALISATION_COVERAGE.md` has Applied ✅ on all 20 rows.
+- **Progress (2026-10-23):** Stage 2 units 1–10 landed — the §0 opening order (rows 1–11) is exhausted; every verified bug is fixed and test-guarded or explicitly deferred in the worklog's Stage-2 log (08-R6, 08-R8, 03-R1 owner-veto, the M-blast refactors). Register `Applied` = ➗ on 18 rows. 05-R30 did not reproduce (`EntityField.eq` is case-insensitive; already pinned). Remaining: per-chunk execute lists beyond §C1 and the §0 sweeps. **2026-10-24:** units 12–14 landed chunks 9 and 10 (C1 + most of the execute list), most of chunk 6, FU-654 and the R-008 logger sweep; see the worklog's 2026-10-24 entry.
+- **RESOLVED 2026-10-27 (finalisation Stage 2 close-gate, unit 30):** `FINALISATION_COVERAGE.md` carries Applied ✅ on all 20 rows — Stage 2 units 1–30 executed the per-chunk lists test-guarded (2547+ backend tests, 790+ vitest, vue-tsc + eslint clean at every close-gate). What was not executed is in named follow-ups (FU-931…FU-950, FU-671, FU-716 → resolved, FU-719 → resolved, FU-848, FU-923) and the owner-decision list in `FINALISATION_REVIEW.md` §0; the browser/operator verification of every unit is in `DORA_VERIFY.md`.
+
+## [RESOLVED] FU-719 — `_iter_submodules` silently swallows a feature subpackage that fails to import
+- **Raised:** 2026-08-23 (chasing FU-717)
+- **Type:** finding (robustness / diagnosability).
+- **What:** route discovery is
+  `get_attributes_ending_with('router', 'dora_api.features')` →
+  `_iter_submodules` (`infrastructure/utils.py:47`), which calls
+  `pkgutil.walk_packages(pkg.__path__, prefix=...)` **with no `onerror`**.
+  Verified against the CPython source in this venv: when `walk_packages`
+  imports a subpackage to recurse into it, `except ImportError:` with
+  `onerror is None` **swallows the error and moves on**. So if any
+  `dora_api/features/<x>/__init__.py` fails to import, that entire feature's
+  modules are never yielded, its routes are never attached to the blueprint,
+  and **the app boots perfectly happily** — the blueprint still registers
+  (every `*_ROUTER` lives in `features/routers.py`, which is imported
+  independently), just with a hole in it. The user-visible result is exactly
+  FU-717's shape: some `/api/*` paths serve normally, others return the app's
+  own `"Endpoint was not found."` 404 (via the middleware for
+  POST/PATCH/DELETE, or `serve_spa.py:110`'s catch-all for GET), with nothing
+  in the logs. Non-package modules are imported by `_iter_submodules` itself
+  and *do* raise loudly, so this hole is subpackage-granular only.
+- **Not the cause of FU-717** (checked 2026-08-23): that turned out to be an
+  rsync exclude *deleting* `features/data/` off the server, and an absent
+  directory yields no subpackage and no ImportError — there was nothing for this
+  hole to swallow. It stays open on its own merit: the failure mode is real and
+  would be indistinguishable from FU-717 if it ever fires.
+- **Why deferred:** wants the owner's go-ahead — it's infrastructure the whole
+  app boots through, and the fix should be verified against a deliberately
+  broken feature package.
+- **Recommended resolution:** now, alongside **FU-720** (same file, same class of
+  silent discovery failure — one hardening pass covers both). Pass an
+  `onerror` that logs the module name + exception and **re-raises**: a feature
+  that can't import should fail the boot loudly, not serve a silently
+  incomplete API. Whatever the cause of FU-717, this is worth doing on its own
+  merit — it is the reason a whole-blueprint hole is invisible.
+- **2026-10-23 (finalisation Stage 1):** execute as part of CHUNK_19 19-R19 (one `onerror=` argument on `walk_packages`, logged at ERROR) — see FINALISATION_REVIEW 19-D5.
+- **RESOLVED 2026-10-27 (finalisation Stage 2, unit 29):** `_iter_submodules` passes `onerror=_raise_import_failure` to `walk_packages` — it logs the package name with the traceback and re-raises, so a feature package that fails to import fails the boot. Verify item: rename a feature `__init__.py` aside and boot (DORA_VERIFY unit 29).
+
+## [RESOLVED] FU-716 — Backup & Restore page bypasses the API service layer
+- **Raised:** 2026-08-23 (image-quality settings split)
+- **Type:** finding (R-005 / portable data access + one HTTP client).
+- **What:** every call in `AdminDataBackupRestore.vue` is a hand-rolled `fetch`
+  with `credentials: 'include'` and a hand-assembled `csrfHeader()`, rather than
+  going through `AxiosHttpClient` / an api service. Consequences: no
+  `X-Request-Id` correlation id, so a failure like FU-717 has no matching server
+  log line to look up; no normalised error, so the toast caption is a raw
+  `Error: List failed (404)` instead of `toastCaption(err)`; and no shared retry
+  policy. `backup_retention_count` / `backup_storage_path` are also absent from
+  the `AppSettings` type, which is *why* the page reached for raw `fetch` in the
+  first place — `image_quality` / `image_max_dimension` were in the same boat
+  and were added to the type when the image card moved out (2026-08-23).
+- **Why deferred:** the current unit only moved the image card; rewiring five
+  more call sites (create / download / restore / delete / library settings,
+  two of which stream files) is its own change and wants its own verify.
+- **Recommended resolution:** opportunistic — fold in next time this page is
+  touched, or immediately after FU-717 is diagnosed, since the correlation id
+  is exactly what would have made FU-717 a five-minute answer.
+- **2026-10-23 (finalisation Stage 1):** shape agreed in CHUNK_18 **18-R7**: `services/api/dataApiService.ts` + `uploadsApiService.ts` on `AxiosHttpClient` (blob download, FormData chunks); 21 raw-fetch sites counted app-wide (17 on the two data pages, 4 in `useChunkedUpload`, `useClientLogger`'s is deliberate). Executes in Stage 2.
+- **RESOLVED 2026-10-27 (finalisation Stage 2, unit 28 / 18-R7):** `services/api/dataApiService.ts` + `uploadsApiService.ts` on `AxiosHttpClient`; both data pages and `useChunkedUpload` have no raw `fetch` left (0 of 21), captions via `toastCaption`, `describeError` ×3 deleted. The library settings already read through `AppSettingsApiService` (13-R16).
+
 ## [RESOLVED] FU-841 — `MarkAsWastedDialog`'s tiles remove the focus outline and replace it with their hover state
 - **Raised:** 2026-09-02 (dashboard chunk 6 — found while fixing the same file's
   undeclared `--c-*` references, which the R-060 guard surfaced)
@@ -4379,6 +4458,7 @@ resolutions go at the **top**.
   browser since the FU-197 CSRF rollout; only axios calls got the interceptor).
 - **Unblocks:** SettingsFileDrop verify tail (L79/L80), Import/Backup batch-12
   checks.
+- **2026-10-27 (18-R7):** `useChunkedUpload` now calls `UploadsApiService` (CSRF header, request id and timeout policy come from the client) — the raw-client list is clear.
 
 ## [RESOLVED] FU-568 — Password-policy fineprint regression: "a passphrase works well" hint gone from auth pages
 - **Resolved:** 2026-07-17 — restored the hint copy ("At least 8 characters — a

@@ -123,8 +123,9 @@ walkthrough scripts the user can follow with the app open.
 - Android PWA (Chrome, installed from banner) + native Capacitor build (P8-10).
 - Desktop installer (Linux `.deb`, Windows `.msi`, macOS `.dmg`, per `packaging/`).
 - iOS PWA (Safari, Add to Home Screen) — voice-unlock gotcha (FU-287).
-- Bad network — throttled to slow-3G / offline (offline queue, service worker
-  fallback, sync-when-back).
+- Bad network — throttled to slow-3G / offline (read-only offline per R-052:
+  cached reads via the service worker, writes refused with the banner; no
+  queue, no sync-when-back).
 - Small viewport (360×640) vs desktop wide (1920+).
 - All five themes × light/dark toggle (feeds FU-010 ride-along).
 - Reduced-motion + high-contrast OS preference on.

@@ -72,9 +72,9 @@
        chip was "a little small/hard to read" (MP-10, PH-5) — `md` is the
        default for that reason. */
     .discount-chip--sm {
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
     }
     .discount-chip--md {
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
     }
 </style>

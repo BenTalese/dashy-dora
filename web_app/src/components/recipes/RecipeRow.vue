@@ -253,7 +253,7 @@
         /* D-003: `--font-size-sm` (14), not the 12 caption floor — cook time
            and ingredient count are values you act on ("can I make this
            tonight?"), and the rule reserves 12 for non-actionable captions. */
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         color: var(--text-secondary);
     }
     .recipe-row__fact {

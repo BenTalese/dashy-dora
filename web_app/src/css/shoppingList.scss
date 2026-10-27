@@ -62,7 +62,7 @@
    The name is what you read, so it gets the size the money figure used to
    take. D-003 floor comfortably cleared. */
 .sl-row__name {
-    font-size: calc(var(--font-size-lg) * 1rem);
+    font-size: var(--font-size-lg);
     font-weight: 500;
     letter-spacing: -0.005em;
     color: var(--text-primary);
@@ -96,7 +96,7 @@ a.sl-row__name:hover {
     display: inline-flex;
     align-items: center;
     gap: 3px;
-    font-size: calc(var(--font-size-xs) * 1rem);
+    font-size: var(--font-size-xs);
     color: var(--text-muted);
 }
 
@@ -108,13 +108,13 @@ a.sl-row__name:hover {
     min-width: 6rem;
 }
 .sl-row__amount {
-    font-size: calc(var(--font-size-lg) * 1rem);
+    font-size: var(--font-size-lg);
     font-weight: 600;
     font-variant-numeric: tabular-nums;
     line-height: 1.2;
 }
 .sl-row__amountnote {
-    font-size: calc(var(--font-size-xs) * 1rem);
+    font-size: var(--font-size-xs);
     color: var(--text-muted);
 }
 
@@ -181,7 +181,7 @@ a.sl-row__name:hover {
     color: var(--text-secondary);
 }
 .sl-section__title {
-    font-size: calc(var(--font-size-sm) * 1rem);
+    font-size: var(--font-size-sm);
     font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -190,7 +190,7 @@ a.sl-row__name:hover {
    count rather than as trailing prose, and stops the header ending in a weaker
    voice than it started. */
 .sl-section__count {
-    font-size: calc(var(--font-size-xs) * 1rem);
+    font-size: var(--font-size-xs);
     font-weight: 600;
     font-variant-numeric: tabular-nums;
     background: var(--surface-component);
@@ -218,6 +218,6 @@ a.sl-row__name:hover {
     }
     .sl-row__name,
     .sl-row__amount {
-        font-size: calc(var(--font-size-md) * 1rem);
+        font-size: var(--font-size-md);
     }
 }

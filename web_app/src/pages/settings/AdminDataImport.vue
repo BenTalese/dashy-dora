@@ -219,7 +219,7 @@
         <BaseDialog v-model="resultOpen" card-style="min-width: 420px; max-width: 720px">
                 <q-card-section class="row items-center q-gutter-md">
                     <q-icon
-                        :name="result?.ok ? 'check_circle' : 'error'"
+                        :name="result?.ok ? ICONS.check_circle : ICONS.error"
                         :color="result?.ok ? 'positive' : 'negative'"
                         size="32px"
                     />
@@ -291,34 +291,27 @@
     import SettingsFileDrop from 'src/components/settings/SettingsFileDrop.vue';
     import { ICONS } from 'src/style/icons';
     import { useQuasar } from 'quasar';
+    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { computed, onMounted, reactive, ref, watch } from 'vue';
-    import { csrfHeader, resolveBaseURL } from 'src/services/api/axiosHttpClient';
+    import DataApiService, { type ImportTemplate, type SpreadsheetRowReport } from 'src/services/api/dataApiService';
+    import { downloadCsv, triggerSave } from 'src/services/files/downloadHelpers';
     import { useChunkedUpload } from 'src/composables/useChunkedUpload';
+    import { useConfirm } from 'src/composables/useConfirm';
 
     const $q = useQuasar();
+
+    const { confirm } = useConfirm();
     const { progress, upload, abort, reset: resetUpload } = useChunkedUpload();
+    const dataApi = new DataApiService();
 
     // per-section CSV templates. Loaded once on mount; the
     // download button in the header offers a single click when there's
     // one section (today's shape) or a menu when more land later.
-    interface ImportTemplate {
-        section: string;
-        label: string;
-        caption: string;
-        headers: string[];
-    }
     const templates = ref<ImportTemplate[]>([]);
     const templatesLoading = ref(false);
     async function loadTemplates(): Promise<void> {
         try {
-            const baseUrl = resolveBaseURL();
-            const response = await fetch(`${baseUrl}/data/import/templates`, {
-                method: 'GET',
-                credentials: 'include',
-            });
-            if (!response.ok) throw new Error(`Templates load failed (${response.status})`);
-            const body = await response.json();
-            templates.value = (body.sections ?? []) as ImportTemplate[];
+            templates.value = await dataApi.importTemplatesAsync();
         } catch (err) {
             // Non-fatal — the file picker still works without a template.
             // Log-only; no toast because the user didn't ask for this yet.
@@ -328,27 +321,13 @@
     async function onDownloadTemplate(template: ImportTemplate): Promise<void> {
         templatesLoading.value = true;
         try {
-            const baseUrl = resolveBaseURL();
-            const response = await fetch(
-                `${baseUrl}/data/import/templates/${encodeURIComponent(template.section)}.csv`,
-                { method: 'GET', credentials: 'include' },
-            );
-            if (!response.ok) throw new Error(`Download failed (${response.status})`);
-            const blob = await response.blob();
-            const filename = `dora-import-${template.section}.csv`;
-            const url = URL.createObjectURL(blob);
-            const anchor = document.createElement('a');
-            anchor.href = url;
-            anchor.download = filename;
-            document.body.appendChild(anchor);
-            anchor.click();
-            document.body.removeChild(anchor);
-            URL.revokeObjectURL(url);
+            const { blob, filename } = await dataApi.downloadImportTemplateAsync(template.section);
+            triggerSave(blob, filename ?? `dora-import-${template.section}.csv`);
         } catch (err) {
             $q.notify({
                 type: 'negative',
                 message: "Couldn't download the template.",
-                caption: err instanceof Error ? err.message : String(err),
+                caption: toastCaption(err),
             });
         } finally {
             templatesLoading.value = false;
@@ -380,18 +359,11 @@
         warnings: string[];
     }
 
-    interface RowReport {
-        row_number: number;
-        status: 'created' | 'skipped_duplicate' | 'error';
-        name: string;
-        reason: string | null;
-    }
-
     interface ImportResult {
         ok: boolean;
         headline: string;
         subline: string;
-        rows: RowReport[];
+        rows: SpreadsheetRowReport[];
     }
 
     // ── State ────────────────────────────────────────────────────────
@@ -481,7 +453,7 @@
             $q.notify({
                 type: 'negative',
                 message: 'Upload failed.',
-                caption: err instanceof Error ? err.message : String(err),
+                caption: toastCaption(err),
             });
             await onClearPick();
             return;
@@ -491,37 +463,22 @@
 
         inspecting.value = true;
         try {
-            const baseUrl = resolveBaseURL();
-            const response = await fetch(`${baseUrl}/data/import/spreadsheet/inspect`, {
-                method: 'POST',
-                credentials: 'include',
-                headers: { 'Content-Type': 'application/json', ...csrfHeader() },
-                body: JSON.stringify({
-                    upload_id: uploadId.value,
-                    filename: file.name,
-                }),
+            inspect.value = await dataApi.inspectSpreadsheetAsync<InspectResponse>({
+                upload_id: uploadId.value,
+                filename: file.name,
             });
-            if (!response.ok) {
-                throw new Error(await describeError(response));
-            }
-            inspect.value = await response.json();
             // Default to the first sheet so the mapping UI is immediately useful.
             selectedSheet.value = inspect.value?.sheets[0] ?? null;
         } catch (err) {
             $q.notify({
                 type: 'negative',
                 message: "Couldn't read that spreadsheet.",
-                caption: err instanceof Error ? err.message : String(err),
+                caption: toastCaption(err),
             });
             await onClearPick();
         } finally {
             inspecting.value = false;
         }
-    }
-
-    async function describeError(response: Response): Promise<string> {
-        const body = await response.json().catch(() => null);
-        return body?.detail ?? body?.title ?? `HTTP ${response.status}`;
     }
 
     async function onClearPick() {
@@ -549,39 +506,22 @@
             return;
         }
 
-        const confirmed = await new Promise<boolean>((resolve) => {
-            $q.dialog({
-                title: 'Confirm import',
-                // Plain text: the sheet name comes from the uploaded file.
-                message: `Import rows from "${selectedSheet.value}"? This can't be undone.`,
-                ok: { label: 'Import', color: 'primary' },
-                cancel: { label: 'Cancel', flat: true },
-            }).onOk(() => resolve(true)).onCancel(() => resolve(false));
+        const confirmed = await confirm({
+            title: 'Confirm import',
+            message: `Import rows from "${selectedSheet.value}"? This can't be undone.`,
+            okLabel: 'Import',
         });
         if (!confirmed) return;
 
         committing.value = true;
         try {
-            const baseUrl = resolveBaseURL();
-            const response = await fetch(`${baseUrl}/data/import/spreadsheet/commit`, {
-                method: 'POST',
-                credentials: 'include',
-                headers: { 'Content-Type': 'application/json', ...csrfHeader() },
-                body: JSON.stringify({
-                    upload_id: uploadId.value,
-                    filename: pickedFile.value.name,
-                    sheet: selectedSheet.value,
-                    column_map: { ...columnMap },
-                    options: { ...options },
-                }),
+            const body = await dataApi.commitSpreadsheetAsync({
+                upload_id: uploadId.value,
+                filename: pickedFile.value.name,
+                sheet: selectedSheet.value,
+                column_map: { ...columnMap },
+                options: { ...options },
             });
-            if (!response.ok) {
-                throw new Error(await describeError(response));
-            }
-            const body = await response.json() as {
-                summary: { created: number; skipped: number; errors: number; halted: number };
-                rows: RowReport[];
-            };
             const headline =
                 body.summary.halted
                     ? 'Import halted'
@@ -603,7 +543,7 @@
             result.value = {
                 ok: false,
                 headline: 'Import failed',
-                subline: err instanceof Error ? err.message : String(err),
+                subline: toastCaption(err),
                 rows: [],
             };
             resultOpen.value = true;
@@ -624,12 +564,12 @@
 
     // R-002: neutral "skipped" routes through `dora-bg-sunken` /
     // `dora-text-secondary` (see template), not a `grey-N` literal.
-    function rowChipColour(status: RowReport['status']): string | null {
+    function rowChipColour(status: SpreadsheetRowReport['status']): string | null {
         if (status === 'created') return 'positive';
         if (status === 'skipped_duplicate') return null;
         return 'negative';
     }
-    function rowChipLabel(status: RowReport['status']): string {
+    function rowChipLabel(status: SpreadsheetRowReport['status']): string {
         if (status === 'created') return 'ok';
         if (status === 'skipped_duplicate') return 'dup';
         return 'err';
@@ -641,45 +581,15 @@
     function downloadErrorRows() {
         const rows = errorRows.value;
         if (!rows.length) return;
-        const header = ['row_number', 'name', 'reason'];
-        const escape = (v: unknown) => {
-            let s: string;
-            if (v === null || v === undefined) s = '';
-            else if (typeof v === 'string') s = v;
-            else if (typeof v === 'number' || typeof v === 'boolean' || typeof v === 'bigint')
-                s = String(v);
-            else s = JSON.stringify(v) ?? '';
-            // RFC4180-ish: wrap in quotes, double internal quotes.
-            if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-            return s;
-        };
-        const lines = [header.join(',')];
-        for (const r of rows) {
-            lines.push([r.row_number, r.name, r.reason ?? ''].map(escape).join(','));
-        }
-        const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const anchor = document.createElement('a');
-        anchor.href = url;
-        anchor.download = 'dora-import-errors.csv';
-        document.body.appendChild(anchor);
-        anchor.click();
-        document.body.removeChild(anchor);
-        URL.revokeObjectURL(url);
+        downloadCsv(
+            ['row_number', 'name', 'reason'],
+            rows.map((r) => [r.row_number, r.name, r.reason ?? '']),
+            'dora-import-errors.csv',
+        );
     }
 </script>
 
 <style scoped lang="scss">
-    .settings-page {
-        display: flex;
-        flex-direction: column;
-    }
-    .settings-actions {
-        display: flex;
-        justify-content: flex-end;
-        gap: var(--space-2);
-        margin-top: var(--space-3);
-    }
     .import-warnings {
         margin-bottom: var(--space-4);
     }

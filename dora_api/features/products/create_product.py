@@ -9,7 +9,7 @@ from dora_api.domain.entities.store import Store
 from dora_api.domain.entities.product import Product
 from dora_api.domain.entities.product_offer import ProductOffer
 from dora_api.domain.types import EMPTY_UUID
-from dora_api.features.ingestion.offer_mapping import (OFFER_SOURCE_MANUAL,
+from dora_api.features.products.offer_mapping import (OFFER_SOURCE_MANUAL,
                                                        OfferOutcome,
                                                        apply_offer_to_product)
 from dora_api.features.products.get_products import get_products
@@ -21,6 +21,7 @@ from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 from dora_api.features.stores.find_store import find_store_by_name
+from dora_api.infrastructure.data_url import image_field
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -34,7 +35,7 @@ class CreateProductRequest(BaseModel):
     # Matches the stock-item/recipe convention. The old `Base64Bytes` decoded
     # arbitrary base64 strings to raw bytes that the read path then tried to
     # `decode('utf-8','ignore')` — corrupting every saved image.
-    image: str | None = Field(default = None, max_length = 6_000_000)
+    image: str | None = image_field()
     is_active: bool
     is_available: bool
     store_name: str = Field(min_length = 1)

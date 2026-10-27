@@ -84,7 +84,6 @@
 </script>
 
 <style scoped lang="scss">
-    .settings-page { display: flex; flex-direction: column; }
     .voice-intro {
         margin: 0;
         padding-left: 20px;

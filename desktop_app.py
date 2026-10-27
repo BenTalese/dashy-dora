@@ -37,7 +37,6 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Optional
 
 from platformdirs import (user_cache_dir, user_data_dir, user_log_dir)
 
@@ -111,6 +110,7 @@ def _bootstrap_keys() -> None:
         secret_file = data / ".secret_key"
         if not secret_file.exists():
             secret_file.parent.mkdir(parents=True, exist_ok=True)
+            secret_file.touch(mode=0o600)  # owner-only before the key lands
             secret_file.write_text(secrets.token_hex(32))
         os.environ["DORA_SECRET_KEY"] = secret_file.read_text().strip()
 
@@ -120,6 +120,7 @@ def _bootstrap_keys() -> None:
             # Fernet.generate_key() returns 32-byte url-safe base64 — exactly
             # what `secret_encryption._fernet()` expects to read from env.
             from cryptography.fernet import Fernet
+            wrap_file.touch(mode=0o600)
             wrap_file.write_bytes(Fernet.generate_key())
         os.environ["DORA_SECRET_ENCRYPTION_KEY"] = wrap_file.read_bytes().decode("ascii").strip()
 

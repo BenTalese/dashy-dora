@@ -23,10 +23,12 @@ from dora_api.features.auth.register_user import (
     SESSION_PWD_V_KEY, SESSION_USER_ID_KEY,
 )
 from dora_api.features.routers import AUTH_ROUTER
-from dora_api.infrastructure.api_response import (business_rule_violation,
-                                                  no_content, ProblemDetails,
-                                                  unauthorized,
-                                                  unprocessable_entity)
+from dora_api.infrastructure.api_response import (
+    business_rule_violation,
+    no_content,
+    unauthorized,
+    validation_failed,
+)
 from dora_api.infrastructure.audit import emit as audit_emit
 from dora_api.infrastructure.auth_helpers import hash_password, validate_password
 from dora_api.infrastructure.decorators import has_request_body
@@ -85,14 +87,10 @@ def change_password():
     _Request: ChangePasswordRequest = get_request_body()
     pwd_error = validate_password(_Request.new_password)
     if pwd_error:
-        return unprocessable_entity(ProblemDetails(
-            detail="See errors property for more details.",
-            errors={"new_password": [pwd_error]},
-            status=422, title="Validation failed.",
-            type="https://datatracker.ietf.org/doc/html/rfc4918#section-11.2",
-        ))
+        return validation_failed({"new_password": [pwd_error]})
 
-    _Response = ChangePasswordHandler(SqlAlchemyRepository()).handle(_Request, _UserId)
+    repo = SqlAlchemyRepository()
+    _Response = ChangePasswordHandler(repo).handle(_Request, _UserId)
 
     if _Response.user_not_found:
         session.clear()
@@ -105,8 +103,7 @@ def change_password():
     if _Response.new_password_changed_at is not None:
         session[SESSION_PWD_V_KEY] = _Response.new_password_changed_at.isoformat()
 
-    # Notification email (best-effort).
-    repo = SqlAlchemyRepository()
+    # Notification email (best-effort) — same repository as the write.
     user = repo.get(User).by_id(_UserId)
     if user is not None and user.email:
         try:
@@ -132,5 +129,5 @@ def change_password():
         actor_user_id=_UserId,
         entity_type="User", entity_id=_UserId,
     )
-    _LOGGER.info(f"Password changed for user {_UserId}")
+    _LOGGER.info("Password changed for user %s", _UserId)
     return no_content()

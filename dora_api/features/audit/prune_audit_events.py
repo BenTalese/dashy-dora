@@ -1,6 +1,8 @@
-"""Nightly job that prunes AuditEvent rows older than RETENTION_DAYS.
+"""Nightly job that prunes AuditEvent rows older than the retention window.
 
-Wired in startup.py via APScheduler. Job is no-op when the table is
+Registered in `dora_api/jobs.py` like the other scheduled jobs (it lived under
+`infrastructure/` until finalisation 19-R18; it is a feature job that reads an
+AppSetting, so it sits beside the audit feature). No-op when the table is
 empty and never raises (a failure here must not take the API down).
 The retention window is `AppSetting.audit_retention_days` (default 365),
 edited in Settings → Admin → System → Hosting (FU-333 Bucket B).
@@ -13,6 +15,8 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import delete
 
 from dora_api.app import app, db
+from dora_api.features.app_settings.operational_config import \
+    resolved_operational_config
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -24,8 +28,6 @@ def retention_days() -> int:
     """Resolve the retention window through the operational-config
     resolver so a Settings edit takes effect on the next nightly run."""
     try:
-        from dora_api.features.app_settings.operational_config import \
-            resolved_operational_config
         return max(1, resolved_operational_config().audit_retention_days)
     except Exception:
         return DEFAULT_RETENTION_DAYS

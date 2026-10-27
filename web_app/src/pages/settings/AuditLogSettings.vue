@@ -160,7 +160,7 @@
                         dense
                         size="sm"
                         :color="severityColour(props.row.severity)"
-                        text-color="white"
+                        text-color="dark"
                     >
                         {{ props.row.severity }}
                     </q-chip>
@@ -215,7 +215,7 @@
                             size="sm"
                             class="q-ml-sm"
                             :color="severityColour(detail.severity)"
-                            text-color="white"
+                            text-color="dark"
                         >
                             {{ detail.severity }}
                         </q-chip>
@@ -436,14 +436,13 @@
 </script>
 
 <style scoped lang="scss">
-    .settings-page { display: flex; flex-direction: column; }
     .audit-filters { padding: 4px 0 12px; }
     .audit-payload {
         background: var(--surface-sunken);
         border-radius: 4px;
         padding: 12px;
         /* A6 — scale token (was fixed 12px). */
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
         white-space: pre-wrap;
         max-height: 360px;
         overflow: auto;
@@ -452,6 +451,6 @@
        component's scope attribute, so the rule has to reach through. */
     :deep(.text-mono) {
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
     }
 </style>

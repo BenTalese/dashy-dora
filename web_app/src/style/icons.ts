@@ -198,6 +198,9 @@ export const ICONS = {
     add_box: 'mdi-plus-box',
     brightness_auto: 'mdi-brightness-auto',
     sync: 'mdi-sync',
+    // Connectivity banner (finalisation 17-R21).
+    wifi_off: 'mdi-wifi-off',
+    sync_problem: 'mdi-sync-alert',
 
     // Status / level / domain icons used in stock + alerts.
     event_busy: 'mdi-calendar-remove',
@@ -232,6 +235,7 @@ export const ICONS = {
     chevron_right: 'mdi-chevron-right',
     cloud_download: 'mdi-cloud-download',
     cloud_off: 'mdi-cloud-off-outline',
+    image_off: 'mdi-image-off-outline',
     // PageErrorState variants (finalisation 20-R21 / R-034).
     not_found_explore: 'mdi-map-search-outline',
     blocked: 'mdi-cancel',
@@ -269,6 +273,9 @@ export const ICONS = {
     lock: 'mdi-lock',
     key: 'mdi-key-variant',
     mark_email_read: 'mdi-email-check',
+    // Auth shell pages (finalisation 15-R20).
+    dns: 'mdi-server-network',
+    mail_lock: 'mdi-email-lock',
     mood: 'mdi-emoticon-happy',
     palette: 'mdi-palette',
     pan_tool: 'mdi-hand-back-right',
@@ -356,9 +363,9 @@ export const ICONS = {
     // called the "meal pool"). A fridge reads as "cooked, stored, ready" —
     // `meal` is the recipe/dish itself and `chef_hat` is the act of cooking,
     // so neither carries the "already done, waiting for you" sense.
-    mealsPrepared: 'mdi-fridge',
+    meals_prepared: 'mdi-fridge',
     // Owner 2026-09-04 — a planned meal cooked on its own day, outside the
-    // cooked pool. Deliberately the opposite image to `mealsPrepared`: the
+    // cooked pool. Deliberately the opposite image to `meals_prepared`: the
     // fridge is "already done, waiting for you", the stove is "it happens on
     // the night". `chef_hat` is taken — it means "the pool is short one of
     // these, somebody has to batch it" — and these are different states.

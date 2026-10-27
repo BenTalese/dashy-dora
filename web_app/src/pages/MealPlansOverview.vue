@@ -677,6 +677,7 @@
     import type { Recipe } from 'src/models/recipe';
     import { useMicroFeedback } from 'src/composables/useMicroFeedback';
     import { computed, nextTick, ref, watch } from 'vue';
+    import { useConfirm } from 'src/composables/useConfirm';
 
     const planner = useMealPlanner();
 
@@ -710,6 +711,7 @@
     const { total: reconcileTotal } = useReconcileQueue();
     const mealPlanStore = useMealPlanStore();
     const $q = useQuasar();
+    const { chooseMany } = useConfirm();
 
     // FU-451 — a budget-defense swap mutates a meal-plan entry's recipe via a
     // dedicated endpoint, so reload the plans (week grid) + ingredient demand
@@ -923,7 +925,7 @@
     // PROPOSAL_MEAL_PLANS_PART_2 — link/unlink a cook batch (one cook, several
     // days). The day picker ticks the days this cook covers; >=2 links them.
     const dayOf = (iso: string) => iso.slice(0, 10);
-    function onEntryLink(entry: MealPlanEntry) {
+    async function onEntryLink(entry: MealPlanEntry) {
         const covered = new Set([dayOf(entry.scheduled_for), ...planner.cookBatchDays(entry)]);
         const items = planner.weekDays.value
             .filter((d) => !planner.isPastDay(d.iso))
@@ -935,19 +937,13 @@
             });
             return;
         }
-        $q.dialog({
+        const picked = await chooseMany({
             title: entry.cook_batch_id ? 'Change cook days' : 'Cook once for more days',
             message: `Cook ${entry.recipe_name} once (${entry.slot}) and eat it on the days you tick.`,
-            options: {
-                type: 'checkbox',
-                model: items.filter((i) => covered.has(dayOf(i.value))).map((i) => i.value),
-                items,
-            },
-            cancel: { noCaps: true },
-            persistent: false,
-        }).onOk((picked: string[]) => {
-            void planner.setCookDays(entry, picked);
+            items,
+            initial: items.filter((i) => covered.has(dayOf(i.value))).map((i) => i.value),
         });
+        if (picked) void planner.setCookDays(entry, picked);
     }
     // "Separate this cook" keeps every day's meal and only breaks the link
     // between them — the one case the owner wanted a copy left behind for
@@ -1205,7 +1201,7 @@
     .rail-strip__label {
         writing-mode: vertical-rl;
         white-space: nowrap;
-        font-size: calc(var(--font-size-md) * 1rem);
+        font-size: var(--font-size-md);
         font-weight: 500;
     }
     /* L100 — "filter button changes based on filter state". */
@@ -1250,7 +1246,7 @@
         color: var(--text-secondary);
     }
     .rail-head__label {
-        font-size: calc(var(--font-size-md) * 1rem);
+        font-size: var(--font-size-md);
         font-weight: 500;
         line-height: 1.3;
     }
@@ -1275,7 +1271,7 @@
         gap: var(--space-3);
     }
     .planner-toolbar__range {
-        font-size: calc(var(--font-size-md) * 1rem);
+        font-size: var(--font-size-md);
         font-weight: 700;
         letter-spacing: 0.06em;
         text-transform: uppercase;
@@ -1301,7 +1297,7 @@
         padding: 0.35rem 0.75rem;
         color: var(--brand-primary);
         text-decoration: none;
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         font-weight: 500;
         border-radius: var(--radius-sm);
         transition: background var(--motion-fast) var(--motion-ease);

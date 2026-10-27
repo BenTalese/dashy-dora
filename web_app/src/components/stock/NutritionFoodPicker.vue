@@ -210,12 +210,12 @@
 <style scoped lang="scss">
     .food-picker__head { padding-bottom: var(--space-2); }
     .food-picker__sub {
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         line-height: 1.4;
         margin-top: 2px;
     }
     .food-picker__hint {
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
         margin-top: var(--space-1);
     }
     .food-picker__results {
@@ -229,12 +229,12 @@
         display: flex;
         align-items: center;
         gap: var(--space-2);
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         color: var(--text-warning);
         padding: var(--space-2) 0;
     }
     .food-picker__empty {
-        font-size: calc(var(--font-size-sm) * 1rem);
+        font-size: var(--font-size-sm);
         line-height: 1.5;
         padding: var(--space-3) 0;
     }
@@ -265,14 +265,14 @@
     .food-row__main { flex: 1 1 auto; min-width: 0; }
     .food-row__name {
         color: var(--text-primary);
-        font-size: calc(var(--font-size-md) * 1rem);
+        font-size: var(--font-size-md);
         line-height: 1.3;
     }
-    .food-row__brand { font-size: calc(var(--font-size-sm) * 1rem); margin-left: var(--space-1); }
+    .food-row__brand { font-size: var(--font-size-sm); margin-left: var(--space-1); }
     .food-row__meta {
         display: flex;
         gap: var(--space-2);
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
         margin-top: 2px;
     }
     // --text-accent was never defined — the declaration was invalid and the
@@ -280,7 +280,7 @@
     .food-row__exact { color: var(--accent-ink); }
     .food-row__source {
         flex: 0 0 auto;
-        font-size: calc(var(--font-size-xs) * 1rem);
+        font-size: var(--font-size-xs);
         padding: 2px 8px;
         border-radius: var(--radius-sm);
         background: var(--surface-sunken);

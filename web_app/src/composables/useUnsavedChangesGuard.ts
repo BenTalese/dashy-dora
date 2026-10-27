@@ -1,7 +1,7 @@
 import { onBeforeUnmount } from 'vue';
 import type { ComputedRef, Ref } from 'vue';
 import { onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router';
-import { useQuasar } from 'quasar';
+import { useConfirm } from 'src/composables/useConfirm';
 
 // Module-level bypass: when true, every mounted guard silently allows
 // navigation and the beforeunload handler is a no-op. Sign-out flips this
@@ -41,19 +41,14 @@ export function suppressUnsavedChangesGuard<T>(fn: () => T | Promise<T>): Promis
 export function useUnsavedChangesGuard(
     isDirty: Ref<boolean> | ComputedRef<boolean>,
 ): void {
-    const $q = useQuasar();
+    const { confirm } = useConfirm();
 
     const confirmDiscard = (): Promise<boolean> =>
-        new Promise<boolean>((resolve) => {
-            $q.dialog({
-                title: 'Discard unsaved changes?',
-                message: 'Your edits will be lost.',
-                ok: { label: 'Discard', color: 'negative', noCaps: true },
-                cancel: { noCaps: true },
-            })
-                .onOk(() => resolve(true))
-                .onCancel(() => resolve(false))
-                .onDismiss(() => resolve(false));
+        confirm({
+            title: 'Discard unsaved changes?',
+            message: 'Your edits will be lost.',
+            okLabel: 'Discard',
+            destructive: true,
         });
 
     onBeforeRouteLeave(async () => bypass || !isDirty.value ? true : await confirmDiscard());

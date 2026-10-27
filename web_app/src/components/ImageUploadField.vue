@@ -106,7 +106,7 @@
        inline above, not on a themed surface, so its ink is the fixed
        near-white that holds against every hue that hash can produce. */
     .image-upload-field__placeholder {
-        font-size: calc(var(--font-size-3xl) * 1rem);
+        font-size: var(--font-size-3xl);
         font-weight: 700;
         color: rgba(255, 255, 255, 0.92);
     }

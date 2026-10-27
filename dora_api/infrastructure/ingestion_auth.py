@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from flask import request
 from sqlalchemy import select
 
+from dora_api.infrastructure.api_response import unauthorized
 from dora_api.app import db
 from dora_api.domain.entities.ingestion_source import IngestionSource
 
@@ -81,8 +82,6 @@ def authenticate_ingestion_request():
     Kept as a shared helper even without the flag, because it still collapses
     the identical four-line auth preamble across four routes (R-087).
     """
-    from dora_api.infrastructure.api_response import unauthorized
-
     raw_token = extract_bearer_token()
     source = find_ingestion_source(raw_token) if raw_token else None
     if source is None:

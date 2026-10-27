@@ -6,8 +6,8 @@ Covers the admin "API access" page contract:
 - patching toggles enabled / relabels
 - delete revokes the credential
 
-The bearer-auth side of the credential is exercised once the ingest
-endpoint lands (C-10.2); this file pins the admin surface only.
+The bearer-auth side of the credential is pinned by `test_ingest_batch.py`
+and friends; this file pins the admin surface only.
 """
 import uuid
 
