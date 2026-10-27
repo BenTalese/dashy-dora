@@ -5,7 +5,7 @@ import CuisineApiService from 'src/services/api/cuisineApiService';
 import DietaryTagApiService from 'src/services/api/dietaryTagApiService';
 import ToolApiService from 'src/services/api/toolApiService';
 import type { Ref } from 'vue';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 
 // shared cache of the three recipe vocabularies, consumed by
 // the cookbook overview filters and the recipe edit surfaces. The settings
@@ -35,6 +35,13 @@ export const useRecipeVocabStore = defineStore('recipeVocab', () => {
         tools.value = await toolApi.getAllAsync();
     };
 
+    // Picker options, one mapping for every surface (finalisation 01-R14).
+    const cuisineOptions = computed(() => cuisines.value.map((c) => ({ label: c.name, value: c.cuisine_id })));
+    const categoryOptions = computed(() => categories.value.map((c) => ({ label: c.name, value: c.category_id })));
+    const dietaryTagOptions = computed(() =>
+        dietaryTags.value.map((t) => ({ label: t.name, value: t.dietary_tag_id, category: t.category })));
+    const toolOptions = computed(() => tools.value.map((t) => ({ label: t.name, value: t.tool_id })));
+
     let hydrated = false;
     let inflight: Promise<void> | null = null;
 
@@ -62,6 +69,10 @@ export const useRecipeVocabStore = defineStore('recipeVocab', () => {
         categories,
         dietaryTags,
         tools,
+        cuisineOptions,
+        categoryOptions,
+        dietaryTagOptions,
+        toolOptions,
         getCuisinesAsync,
         getCategoriesAsync,
         getDietaryTagsAsync,

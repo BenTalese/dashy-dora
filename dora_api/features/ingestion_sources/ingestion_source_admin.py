@@ -41,6 +41,8 @@ from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 
+_LOGGER = logging.getLogger(__name__)
+
 
 # ── DTOs ───────────────────────────────────────────────────────────────
 
@@ -188,7 +190,7 @@ def create_ingestion_source():
     if req.trust not in ALLOWED_TRUSTS:
         return bad_request(f"trust must be one of {ALLOWED_TRUSTS}.")
     result = CreateIngestionSourceHandler(SqlAlchemyRepository()).handle(req)
-    logging.getLogger(__name__).info(
+    _LOGGER.info(
         "Minted IngestionSource %s (label=%s, trust=%s)",
         result.source.id, result.source.label, result.source.trust,
     )
@@ -216,5 +218,5 @@ def delete_ingestion_source(source_id: UUID):
     ok = DeleteIngestionSourceHandler(SqlAlchemyRepository()).handle(source_id)
     if not ok:
         return not_found("IngestionSource", source_id)
-    logging.getLogger(__name__).info("Revoked IngestionSource %s", source_id)
+    _LOGGER.info("Revoked IngestionSource %s", source_id)
     return no_content()

@@ -56,12 +56,12 @@
                     <span v-if="product.size">{{ product.size }}</span>
                 </div>
                 <div class="row items-baseline q-gutter-xs q-mt-xs">
-                    <span class="text-h6">{{ formatMoney(product.price_now ?? 0) }}</span>
+                    <span class="text-h6">{{ formatMoney(product.price_now) }}</span>
                     <span
                         v-if="hasDiscount"
                         class="text-caption dora-text-muted product-card__was"
                     >
-                        {{ formatMoney(product.price_was ?? 0) }}
+                        {{ formatMoney(product.price_was) }}
                     </span>
                 </div>
                 <div v-if="watchThreshold != null" class="product-card__watch">
@@ -226,6 +226,8 @@
     import { formatMoney } from 'src/composables/useMoney';
     import { ICONS } from 'src/style/icons';
     import type { Product } from 'src/models/product';
+    import { isOnSpecial } from 'src/helpers/offerLogic';
+    import { useProductStoreLink } from 'src/composables/useProductStoreLink';
 
     const props = defineProps<{
         product: Product;
@@ -248,30 +250,11 @@
         (e: 'delete'): void;
     }>();
 
-    const hasDiscount = computed(() => {
-        const now = props.product.price_now;
-        const was = props.product.price_was;
-        return now != null && was != null && was > now;
-    });
+    const hasDiscount = computed(() => isOnSpecial(props.product));
 
-    // Only a real anchor when there's somewhere to go and we're not selecting.
-    // A dead <a href="#"> would look clickable and do nothing.
-    const isTopHalfLink = computed(
-        () => !props.bulkMode && !!props.product.web_url,
-    );
-    const topHalfTag = computed(() => (isTopHalfLink.value ? 'a' : 'div'));
-    const topHalfAttrs = computed(() =>
-        isTopHalfLink.value
-            ? {
-                href: props.product.web_url,
-                target: '_blank',
-                rel: 'noopener',
-                // The link text is the product name inside; naming the
-                // destination keeps the purpose obvious out of context (D-005).
-                'aria-label': `Open ${props.product.name} at ${props.product.store_name ?? 'the store'}`,
-            }
-            : {},
-    );
+    const {
+        isLink: isTopHalfLink, tag: topHalfTag, attrs: topHalfAttrs,
+    } = useProductStoreLink(() => props.product, () => props.bulkMode);
 
     function onTopHalfClick(event: MouseEvent): void {
         // In bulk mode the tap belongs to selection, not navigation.
@@ -289,7 +272,7 @@
 
 <style scoped>
     .product-card {
-        transition: outline-color 120ms ease, box-shadow 120ms ease;
+        transition: outline-color var(--motion-fast) var(--motion-ease), box-shadow var(--motion-fast) var(--motion-ease);
         outline: 2px solid transparent;
         outline-offset: -2px;
     }

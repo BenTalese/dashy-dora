@@ -30,7 +30,7 @@
                     </InfoTip>
                 </template>
                 <q-input
-                    v-model.number="retentionDraft"
+                    v-model.number="retention.audit_retention_days"
                     type="number"
                     outlined
                     dense
@@ -43,7 +43,7 @@
             </SettingsRow>
         </SettingsSection>
 
-        <hr class="settings-divider" />
+        <hr class="settings-divider settings-divider--spaced" />
 
         <!-- ── Filters ───────────────────────────────────────────────── -->
         <section class="audit-filters">
@@ -136,7 +136,7 @@
             </div>
         </section>
 
-        <hr class="settings-divider" />
+        <hr class="settings-divider settings-divider--spaced" />
 
         <!-- ── Table ─────────────────────────────────────────────────── -->
         <div v-if="loadError" class="text-negative q-py-sm">
@@ -183,7 +183,7 @@
             <BaseButton
                 variant="ghost"
                 dense
-                icon-right="chevron_right"
+                :icon-right="ICONS.chevron_right"
                 label="Next"
                 :disable="page >= pageCount || loading"
                 @click="reload(page + 1)"
@@ -264,8 +264,7 @@
     import SettingsSection from 'src/components/settings/SettingsSection.vue';
     import SettingsRow from 'src/components/settings/SettingsRow.vue';
     import InfoTip from 'src/components/help/InfoTip.vue';
-    import AppSettingsApiService from 'src/services/api/appSettingsApiService';
-    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+    import { useAppSettingDrafts } from 'src/composables/useAppSettingDrafts';
 
     const $q = useQuasar();
     const auditApi = new AuditApiService();
@@ -309,7 +308,6 @@
         if (sev === 'audit') return 'primary';
         // R-002: info / debug routed through the theme-bound `info`
         // semantic (chip background) rather than `grey-N` literals.
-        if (sev === 'info') return 'info';
         return 'info';
     }
 
@@ -421,51 +419,25 @@
     }
 
     // ── Retention ────────────────────────────────────────────────────
-    const appSettingsApi = new AppSettingsApiService();
-    const retentionDraft = ref(365);
-    let savedRetention = 365;
+    const {
+        draft: retention, save: saveRetention,
+    } = useAppSettingDrafts({ audit_retention_days: 365 });
 
-    async function onSaveRetention() {
-        const next = Number(retentionDraft.value);
-        if (next === savedRetention) return;
-        try {
-            const result = await appSettingsApi.updateAsync({ audit_retention_days: next });
-            savedRetention = result.audit_retention_days;
-            retentionDraft.value = savedRetention;
-            $q.notify({
-                type: 'positive', 
-                message: 'Audit retention saved.',
-            });
-        } catch (err) {
-            retentionDraft.value = savedRetention;
-            $q.notify({
-                type: 'negative', 
-                message: 'Could not save audit retention.',
-                caption: toastCaption(err),
-            });
-        }
+    function onSaveRetention() {
+        void saveRetention(
+            { audit_retention_days: Number(retention.audit_retention_days) },
+            'Audit retention saved.',
+        );
     }
 
     onMounted(() => {
         void reload(1);
-        void appSettingsApi.getAsync()
-            .then((s) => {
-                savedRetention = s.audit_retention_days;
-                retentionDraft.value = savedRetention;
-            })
-            .catch(() => { /* the field just shows the default until a retry */ });
     });
 </script>
 
 <style scoped lang="scss">
     .settings-page { display: flex; flex-direction: column; }
     .audit-filters { padding: 4px 0 12px; }
-    .settings-divider {
-        border: 0;
-        height: 1px;
-        background: color-mix(in srgb, var(--text-primary) 8%, transparent);
-        margin: 8px 0;
-    }
     .audit-payload {
         background: var(--surface-sunken);
         border-radius: 4px;
@@ -476,7 +448,9 @@
         max-height: 360px;
         overflow: auto;
     }
-    .text-mono {
+    /* `classes: 'text-mono'` lands on cells q-table renders itself, outside this
+       component's scope attribute, so the rule has to reach through. */
+    :deep(.text-mono) {
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
         font-size: calc(var(--font-size-xs) * 1rem);
     }

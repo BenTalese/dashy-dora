@@ -207,6 +207,35 @@ def not_found(entity_name: str, id: UUID) -> Response:
     return response
 
 
+def too_many_requests(retry_after: int) -> Response:
+    """429 (RFC 6585 §4) with a `Retry-After` header: the one shape every
+    rate-limited endpoint answers with."""
+    response = jsonify(ProblemDetails(
+        detail = f"Too many requests. Try again in {retry_after}s.",
+        errors = {},
+        status = 429,
+        title = "Rate limit exceeded.",
+        type = "https://datatracker.ietf.org/doc/html/rfc6585#section-4"))
+    response.content_type = 'application/problem+json'
+    response.status_code = 429
+    response.headers["Retry-After"] = str(max(retry_after, 1))
+    return response
+
+
+def not_found_detail(detail: str) -> Response:
+    """404 for something that is not an entity row, such as an install-level
+    feature that isn't configured. Same problem+json shape as `not_found`."""
+    response = jsonify(ProblemDetails(
+        detail = detail,
+        errors = {},
+        status = NOT_FOUND,
+        title = "Not found.",
+        type = "https://datatracker.ietf.org/doc/html/rfc7231#section-6.5.4"))
+    response.content_type = 'application/problem+json'
+    response.status_code = NOT_FOUND
+    return response
+
+
 def ok(result: Any) -> Response:
     response = jsonify(result)
     response.status_code = OK

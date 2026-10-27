@@ -326,7 +326,7 @@
     .add-to-list__grouphead {
         margin-top: var(--space-3, 12px);
         padding: var(--space-2, 8px) var(--space-4, 16px) var(--space-1, 4px);
-        font-size: var(--font-size-xs, 0.6875rem);
+        font-size: calc(var(--font-size-xs) * 1rem);
         font-weight: 700;
         letter-spacing: 0.06em;
         text-transform: uppercase;

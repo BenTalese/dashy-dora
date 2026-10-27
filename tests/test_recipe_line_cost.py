@@ -21,9 +21,10 @@ import pytest
 from dora_api.features.recipes.recipe_cost import (
     UNPRICED_NO_QUANTITY, UNPRICED_UNIT_MISMATCH, UNPRICED_UNIT_NO_PACK_COUNT,
     UNPRICED_UNIT_NO_PACK_SIZE, UNPRICED_UNIT_UNKNOWN_DENSITY,
-    UNPRICED_UNIT_WRONG_FOOD, UnitPrice, _cost_one, _line_cost, _key,
+    UNPRICED_UNIT_WRONG_FOOD, UnitPrice, _cost_one, _line_cost,
     _price_line,
 )
+from dora_api.persistence.uuid_key import uuid_key
 
 
 @dataclass(frozen=True)
@@ -142,7 +143,7 @@ def test__cost_one__IngredientWithNoAmount__IsUnpricedNotBilledAsOne():
     """"Salt to taste" against a $2.50 jar used to add $2.50 to the recipe and
     count itself as one of the priced ingredients."""
     salt = _ing("Sea Salt", None, None)
-    prices = {_key("item-1"): UnitPrice(2.50, "ea", pack_amount=2.50)}
+    prices = {uuid_key("item-1"): UnitPrice(2.50, "ea", pack_amount=2.50)}
 
     estimate = _cost_one([salt], prices, {})
 
@@ -157,8 +158,8 @@ def test__cost_one__IngredientWithNoAmount__IsUnpricedNotBilledAsOne():
 def test__cost_one__QuantifiedNeighbours__AreUnaffected():
     lines = [_ing("Sea Salt", None, None), _ing("Eggs", 2, None, "item-2")]
     prices = {
-        _key("item-1"): UnitPrice(2.50, "ea", pack_amount=2.50),
-        _key("item-2"): UnitPrice(0.60, "ea", pack_amount=0.60),
+        uuid_key("item-1"): UnitPrice(2.50, "ea", pack_amount=2.50),
+        uuid_key("item-2"): UnitPrice(0.60, "ea", pack_amount=0.60),
     }
 
     estimate = _cost_one(lines, prices, {})

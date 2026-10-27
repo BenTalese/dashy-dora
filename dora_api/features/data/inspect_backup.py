@@ -38,6 +38,8 @@ from dora_api.features.data.uploads import staged_path
 from dora_api.features.routers import DATA_ROUTER
 from dora_api.infrastructure.api_response import bad_request, not_found, ok
 
+_LOGGER = logging.getLogger(__name__)
+
 
 # Per-section row-label preview cap. Keeps the inspect response small
 # enough for the SPA to load without a second download even when the
@@ -272,7 +274,6 @@ def _inspect_inline(payload: dict) -> tuple[dict | None, str | None]:
 
 @DATA_ROUTER.route("/backup/inspect", methods=["POST"])
 def inspect_backup():
-    _Logger = logging.getLogger(__name__)
     # inspect reads uploaded backup contents,
     # including any user rows the file would carry into a restore.
     # Same admin gate as the restore endpoint itself.
@@ -281,7 +282,7 @@ def inspect_backup():
         return admin_err
     path, err, owns_path = _resolve_file_path()
     if err is not None:
-        _Logger.warning("inspect_backup rejected upload: %s", err)
+        _LOGGER.warning("inspect_backup rejected upload: %s", err)
         if err.startswith("No staged upload"):
             return not_found("Upload", err.rsplit(" ", 1)[-1].rstrip("."))
         return bad_request(err)

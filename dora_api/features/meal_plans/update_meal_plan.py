@@ -9,42 +9,31 @@ from pydantic import BaseModel, ConfigDict, Field
 from dora_api.domain.entities.cook_batch import CookBatch
 from dora_api.domain.entities.meal_plan import MealPlan
 from dora_api.domain.entities.meal_plan_entry import MealPlanEntry
-from dora_api.domain.entities.recipe import Recipe
 from dora_api.features.app_settings.clock import household_today
-from dora_api.features.meal_plans.cook_batch_grouping import (
-    group_by_cook_key, validate_cook_groups)
-from dora_api.features.meal_slots.slot_validation import (
-    allowed_slot_names, find_invalid_slot, get_valid_slot_names,
-    invalid_slot_message)
+from dora_api.features.meal_plans._entry_writes import (
+    MealPlanEntryRequest, MealPlanWriteOutcome, apply_to_entry, batch_for,
+    check_entries, meal_plan_write_error_response, mint_batches, new_entry,
+    resolve_recipes)
+from dora_api.features.meal_slots.slot_validation import (allowed_slot_names,
+                                                          get_valid_slot_names)
 from dora_api.features.routers import MEAL_PLAN_ROUTER
-from dora_api.infrastructure.api_response import (bad_request,
-                                                  entity_existence_failures,
-                                                  no_content, not_found)
+from dora_api.infrastructure.api_response import (bad_request, no_content,
+                                                  not_found)
 from dora_api.infrastructure.decorators import has_request_body
-from dora_api.infrastructure.utils import (field_of, get_request_body)
+from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 
+_LOGGER = logging.getLogger(__name__)
 
-class UpdateMealPlanEntryRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
 
+class UpdateMealPlanEntryRequest(MealPlanEntryRequest):
     # FU-878 — the saved entry this row edits. A forward entry of this plan
     # with this id is updated in place and keeps its id; anything else (no id,
     # an id from another plan, a past entry's id, or one already claimed by an
     # earlier row) is created as a new entry.
     meal_plan_entry_id: UUID | None = None
-    recipe_id: UUID
-    scheduled_for: date
-    servings: int = Field(default = 1, ge = 1)
-    slot: str = Field(min_length = 1, max_length = 50)
-    # PROPOSAL_MEAL_PLANS_PART_2 — transient grouping token; entries sharing a
-    # `cook_key` become one CookBatch. Not a DB id (see create_meal_plan).
-    cook_key: str | None = Field(default = None, max_length = 64)
-    # Owner 2026-09-04 — cooked on the day, outside the cooked-portion pool.
-    # Mutually exclusive with `cook_key` (validated in `validate_cook_groups`).
-    cook_fresh: bool = False
 
 
 class UpdateMealPlanRequest(BaseModel):
@@ -61,13 +50,9 @@ class UpdateMealPlanRequest(BaseModel):
 
 
 @dataclass(slots=True)
-class UpdateMealPlanResponse:
+class UpdateMealPlanResponse(MealPlanWriteOutcome):
     meal_plan_not_found: bool = False
-    missing_recipe_ids: tuple[UUID, ...] = ()
-    has_past_entry: bool = False
     needs_clear_confirmation: bool = False
-    invalid_slot_message: str | None = None
-    invalid_cook_batch_message: str | None = None
 
 
 class UpdateMealPlanHandler:
@@ -107,23 +92,20 @@ class UpdateMealPlanHandler:
             _AllowedSlots = allowed_slot_names(
                 _ValidSlots, (_Entry.slot for _Entry in (_Plan.entries or []))
             )
-            _BadSlot = find_invalid_slot(
-                (_EntryRequest.slot for _EntryRequest in request.entries), _AllowedSlots
-            )
-            if _BadSlot is not None:
-                # The message names the current vocabulary, not the allowance:
-                # "Allowed: …, Snack" would read as an invitation to keep using
-                # a slot the household has deleted.
+            _Today = household_today(self.repository)
+            # The message names the current vocabulary, not the allowance:
+            # "Allowed: …, Snack" would read as an invitation to keep using a
+            # slot the household has deleted. A forward entry scheduled before
+            # today is a genuine "can't schedule in the past" error: the client
+            # never sends past entries (FU-595, preserved server-side below).
+            _Failure = check_entries(request.entries, _Today, _AllowedSlots, _ValidSlots)
+            if _Failure is not None:
                 return UpdateMealPlanResponse(
-                    invalid_slot_message = invalid_slot_message(_BadSlot, _ValidSlots)
+                    invalid_slot_message = _Failure.invalid_slot_message,
+                    invalid_cook_batch_message = _Failure.invalid_cook_batch_message,
+                    has_past_entry = _Failure.has_past_entry,
                 )
 
-            # PROPOSAL_MEAL_PLANS_PART_2 — validate cook-batch groups before any write.
-            _CookBatchError = validate_cook_groups(request.entries)
-            if _CookBatchError is not None:
-                return UpdateMealPlanResponse(invalid_cook_batch_message = _CookBatchError)
-
-            _Today = household_today(self.repository)
             # Preserve the immutable past. Past days are read-only, so the
             # client resends only forward-looking entries; anything already
             # in the plan that is consumed OR scheduled before today is
@@ -132,33 +114,14 @@ class UpdateMealPlanHandler:
             # consumed ones. A past day the user didn't cook (auto-drain off,
             # or "Didn't cook") is unconsumed; if it weren't preserved here the
             # replace would silently drop it, and the old client's workaround
-            # of resending it tripped the past-date guard below — freezing the
-            # whole week. Preserve it server-side; the client no longer sends it.
+            # of resending it tripped the past-date guard above — freezing the
+            # whole week.
             _PreservedExisting = [
                 _Entry for _Entry in (_Plan.entries or [])
                 if _Entry.consumed_at is not None or _Entry.scheduled_for < _Today
             ]
 
-            # A forward entry scheduled before today is a genuine
-            # "can't schedule in the past" error — the client never sends past
-            # entries any more, so this guards against real bad input, not the
-            # FU-595 resend case (which no longer reaches here).
-            for _EntryRequest in request.entries:
-                if _EntryRequest.scheduled_for < _Today:
-                    return UpdateMealPlanResponse(has_past_entry = True)
-
-            # Resolve recipes once (a cook group repeats a recipe id) before any
-            # write, so a missing recipe never leaves an orphan batch behind.
-            _RecipeById: dict[UUID, Recipe] = {}
-            _MissingIds: List[UUID] = []
-            for _EntryRequest in request.entries:
-                if _EntryRequest.recipe_id in _RecipeById:
-                    continue
-                _Recipe = self.repository.get(Recipe).by_id(_EntryRequest.recipe_id)
-                if not _Recipe:
-                    _MissingIds.append(_EntryRequest.recipe_id)
-                else:
-                    _RecipeById[_EntryRequest.recipe_id] = _Recipe
+            _RecipeById, _MissingIds = resolve_recipes(self.repository, request.entries)
             if _MissingIds:
                 return UpdateMealPlanResponse(missing_recipe_ids = tuple(_MissingIds))
 
@@ -197,19 +160,9 @@ class UpdateMealPlanHandler:
                 str(_Batch.id): _Batch for _Batch in _ExistingBatches
                 if _Batch.id in _PreservedBatchIds
             }
-            _BatchByKey: dict[str, CookBatch] = {}
-            _NewBatches = False
-            for _Key, _Members in group_by_cook_key(request.entries).items():
-                _Existing = _PreservedBatchById.get(str(_Key))
-                if _Existing is not None:
-                    _BatchByKey[_Key] = _Existing
-                    continue
-                _Batch = CookBatch(meal_plan_id = meal_plan_id, recipe_id = _Members[0].recipe_id)
-                self.repository.add(_Batch)
-                _BatchByKey[_Key] = _Batch
-                _NewBatches = True
-            if _NewBatches:
-                self.repository.flush()
+            _BatchByKey = mint_batches(
+                self.repository, meal_plan_id, request.entries, _PreservedBatchById
+            )
 
             # Match-and-update (FU-878). The forward portion used to be deleted
             # and re-inserted, so every entry's id changed on any save. Now a
@@ -222,25 +175,14 @@ class UpdateMealPlanHandler:
             }
             _ForwardEntries: List[MealPlanEntry] = []
             for _EntryRequest in request.entries:
-                _Batch = _BatchByKey.get(_EntryRequest.cook_key) if _EntryRequest.cook_key else None
+                _Recipe = _RecipeById[_EntryRequest.recipe_id]
+                _Batch = batch_for(_EntryRequest, _BatchByKey)
                 _Entry = _ForwardById.pop(_EntryRequest.meal_plan_entry_id, None)
                 if _Entry is None:
-                    _Entry = MealPlanEntry(
-                        recipe = _RecipeById[_EntryRequest.recipe_id],
-                        scheduled_for = _EntryRequest.scheduled_for,
-                        servings = _EntryRequest.servings,
-                        slot = _EntryRequest.slot,
-                        cook_batch_id = _Batch.id if _Batch else None,
-                        cook_fresh = _EntryRequest.cook_fresh,
-                    )
+                    _Entry = new_entry(_EntryRequest, _Recipe, _Batch)
                     self.repository.add(_Entry)
                 else:
-                    _Entry.recipe = _RecipeById[_EntryRequest.recipe_id]
-                    _Entry.scheduled_for = _EntryRequest.scheduled_for
-                    _Entry.servings = _EntryRequest.servings
-                    _Entry.slot = _EntryRequest.slot
-                    _Entry.cook_batch_id = _Batch.id if _Batch else None
-                    _Entry.cook_fresh = _EntryRequest.cook_fresh
+                    apply_to_entry(_Entry, _EntryRequest, _Recipe, _Batch)
                 _ForwardEntries.append(_Entry)
             _Plan.entries = _PreservedExisting + _ForwardEntries
 
@@ -251,7 +193,6 @@ class UpdateMealPlanHandler:
 @MEAL_PLAN_ROUTER.route("<uuid:meal_plan_id>", methods=["PATCH"])
 @has_request_body(UpdateMealPlanRequest)
 def update_meal_plan(meal_plan_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _Handler = UpdateMealPlanHandler(SqlAlchemyRepository())
     _Request: UpdateMealPlanRequest = get_request_body()
     _Response = _Handler.handle(_Request, meal_plan_id)
@@ -259,27 +200,14 @@ def update_meal_plan(meal_plan_id: UUID):
     if _Response.meal_plan_not_found:
         return not_found(MealPlan.__name__, meal_plan_id)
 
-    if _Response.invalid_slot_message:
-        return bad_request(_Response.invalid_slot_message)
-
-    if _Response.invalid_cook_batch_message:
-        return bad_request(_Response.invalid_cook_batch_message)
-
-    if _Response.has_past_entry:
-        return bad_request("Meal plan entries cannot be scheduled in the past.")
-
     if _Response.needs_clear_confirmation:
         return bad_request(
             "Refusing to clear every future entry without confirmation. "
             "Resend with `confirm_clear_entries: true` if that's really the intent."
         )
 
-    if _Response.missing_recipe_ids:
-        _Logger.warning(f"Recipes not found: {_Response.missing_recipe_ids}")
-        return entity_existence_failures(
-            Recipe.__name__,
-            field_of(UpdateMealPlanRequest, 'entries'),
-            *_Response.missing_recipe_ids,
-        )
+    _Error = meal_plan_write_error_response(_Response, UpdateMealPlanRequest)
+    if _Error is not None:
+        return _Error
 
     return no_content()

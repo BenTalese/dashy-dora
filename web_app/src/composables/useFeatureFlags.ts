@@ -9,7 +9,7 @@
 // successful PATCH so the cached answer doesn't drift from the row.
 
 import { computed, ref } from 'vue';
-import HealthApiService from 'src/services/api/healthApiService';
+import HealthApiService, { invalidateHealthInfo } from 'src/services/api/healthApiService';
 
 // Mostly booleans, but `nutrition_mode` publishes a three-state string
 // (2026-08-14) — the install's nutrition depth is a mode, not a flag, and
@@ -59,6 +59,7 @@ export function useFeatureFlags() {
     function refresh(): Promise<void> {
         loaded.value = false;
         inflight = null;
+        invalidateHealthInfo();
         return load();
     }
     return {
@@ -80,7 +81,7 @@ export function useFeatureFlags() {
         // opt-in only), so there's nothing for the server to publish.
         money: computed(() => readFlag('money')),
         nutrition: computed(() => readFlag('nutrition')),
-        // true when DORA_SMTP_USERNAME is set on the backend.
+        // True when the admin has set an SMTP username (Settings → Email).
         // Consumed by NotificationsSettings (the settings screen that owns
         // the per-user email opt-in — R-029 carve-out; the disabled toggle
         // legitimately renders there and only there). Any other surface
@@ -92,8 +93,7 @@ export function useFeatureFlags() {
         // pages) to warn — and offer to generate a key — when secrets can't
         // be stored encrypted. Read by every user, not just admins.
         secretEncryptionConfigured: computed(() => readFlag('secret_encryption_configured')),
-        // true when both DORA_VAPID_PUBLIC_KEY and DORA_VAPID_PRIVATE_KEY
-        // are set. Consumed by NotificationsSettings (same R-029 carve-out
+        // True when both VAPID keys are set (Settings → Push). Consumed by NotificationsSettings (same R-029 carve-out
         // as emailSmtpConfigured) and short-circuits `usePushSubscription`
         // before it tries to fetch the public key.
         pushVapidConfigured: computed(() => readFlag('push_vapid_configured')),

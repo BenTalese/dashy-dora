@@ -45,6 +45,7 @@ from datetime import date, datetime, timedelta, timezone, tzinfo
 from typing import Optional
 from uuid import UUID
 
+from dora_api.persistence.aware import as_utc
 from dora_api.domain.cadence_math import mean_gap_days
 from dora_api.domain.entities.shopping_list import (
     SHOPPING_LIST_STATUS_DONE, ShoppingList, ShoppingListLine,
@@ -90,21 +91,13 @@ MONEY_DISABLED_DETAIL = (
 )
 
 
-def _as_utc(dt: datetime | None) -> datetime | None:
-    if dt is None:
-        return None
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
-    return dt
-
-
 def _local_date(dt: datetime, tz: tzinfo) -> date:
     """Calendar day of a (UTC) observation timestamp *in the household zone*.
     FU-525: bucketing UTC timestamps with a bare `.date()` while `today` is
     household-local (R-021) drifts the day by one for non-UTC households and can
     flip the wait-hint's `next_low <= today` staleness check. Take the date in
     the same zone as `today` so the two clocks agree."""
-    return _as_utc(dt).astimezone(tz).date()
+    return as_utc(dt).astimezone(tz).date()
 
 
 # ── Tunables (single source, easy to iterate) ─────────────────────────
@@ -212,6 +205,9 @@ class WaitHintDto:
     """
     until: str          # ISO date (yyyy-mm-dd) of the next expected low
     reason: str         # human "why" — always paired with `until`
+    # Days from the household's today to `until` (R-021): the card's "in ~N
+    # days" counts from here, not from the reader's browser date.
+    days_until: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -236,7 +232,7 @@ class BuyVerdictDto:
 
 
 @dataclass(slots=True)
-class _AxisInputs:
+class VerdictInputs:
     # Prices are (unit_price, completed_at) tuples over the 12-month
     # window. Sorted newest-first.
     price_samples: list[tuple[float, datetime]] = field(default_factory=list)
@@ -288,7 +284,7 @@ def _trimmed_mean(values: list[float]) -> float:
     return sum(values) / len(values)
 
 
-def _price_axis(inputs: _AxisInputs) -> tuple[Optional[VerdictReasonDto], str]:
+def _price_axis(inputs: VerdictInputs) -> tuple[Optional[VerdictReasonDto], str]:
     """Return (reason, signal). `signal` is always set so the composer
     can key off it; `reason` is None when the axis contributes nothing
     (thin data)."""
@@ -355,7 +351,7 @@ _NEED_SIGNALS: dict[str, str] = {
 }
 
 
-def _need_band(inputs: _AxisInputs) -> tuple[str, bool]:
+def _need_band(inputs: VerdictInputs) -> tuple[str, bool]:
     """Resolve the band the `need` axis reasons from, and whether belief
     supplied it (D-11).
 
@@ -370,7 +366,7 @@ def _need_band(inputs: _AxisInputs) -> tuple[str, bool]:
     return belief.believed_band, True
 
 
-def _need_is_soft_inference(inputs: _AxisInputs) -> bool:
+def _need_is_soft_inference(inputs: VerdictInputs) -> bool:
     """True when the need band is an inference that *disagrees* with the
     recorded level — the case where the composer should hedge (both in the
     label and in the verdict's confidence). Belief merely echoing what the
@@ -383,7 +379,7 @@ def _need_is_soft_inference(inputs: _AxisInputs) -> bool:
     return belief.is_inferred and band != inputs.stock_level_band
 
 
-def _need_axis(inputs: _AxisInputs) -> tuple[Optional[VerdictReasonDto], str]:
+def _need_axis(inputs: VerdictInputs) -> tuple[Optional[VerdictReasonDto], str]:
     band, from_belief = _need_band(inputs)
     if band not in _NEED_SIGNALS:
         # Unknown stock band means we don't have a status at all, and belief
@@ -408,7 +404,7 @@ def _need_axis(inputs: _AxisInputs) -> tuple[Optional[VerdictReasonDto], str]:
     ), signal
 
 
-def _cadence_detail(inputs: _AxisInputs) -> Optional[str]:
+def _cadence_detail(inputs: VerdictInputs) -> Optional[str]:
     """Fallback cadence prose for items with no belief (see `_need_band`).
     The averaging itself is shared (`domain/cadence_math.py`, R-003) so this
     can no longer drift from what belief says."""
@@ -425,7 +421,7 @@ def _cadence_detail(inputs: _AxisInputs) -> Optional[str]:
     return f"Bought every ~{avg_days:.0f} days · ~{remaining} days to run-out"
 
 
-def _waste_axis(inputs: _AxisInputs) -> tuple[Optional[VerdictReasonDto], str]:
+def _waste_axis(inputs: VerdictInputs) -> tuple[Optional[VerdictReasonDto], str]:
     if inputs.purchases_12mo < _MIN_PURCHASES_FOR_WASTE_RATE:
         # Not enough purchase history to compute a rate. Distinguish
         # "we've never seen you waste this" from "we don't know" via
@@ -461,7 +457,7 @@ def _waste_axis(inputs: _AxisInputs) -> tuple[Optional[VerdictReasonDto], str]:
 # ── P8-06 — wait-hint (time-boxed hint on the `wait` verdict) ─────────
 
 
-def _wait_hint(inputs: _AxisInputs) -> Optional[WaitHintDto]:
+def _wait_hint(inputs: VerdictInputs) -> Optional[WaitHintDto]:
     """Predict *when* the user's usual low tends to land, so a `wait`
     verdict has time-boxed advice ("expect the next dip around Nov 15")
     instead of just "above your usual price".
@@ -516,6 +512,7 @@ def _wait_hint(inputs: _AxisInputs) -> Optional[WaitHintDto]:
 
     return WaitHintDto(
         until=next_low.isoformat(),
+        days_until=(next_low - inputs.today).days,
         reason=(
             f"Your usual low lands ~every {int(round(median_gap))} days. "
             f"Expect the next around {next_low.strftime('%b %d')}."
@@ -526,7 +523,7 @@ def _wait_hint(inputs: _AxisInputs) -> Optional[WaitHintDto]:
 # ── The composer itself ────────────────────────────────────────────────
 
 
-def _need_strength(inputs: _AxisInputs, need_signal: str) -> int:
+def _need_strength(inputs: VerdictInputs, need_signal: str) -> int:
     """Base strength from the need axis:
 
                     out   low   stocked
@@ -542,7 +539,7 @@ def _need_strength(inputs: _AxisInputs, need_signal: str) -> int:
     return base
 
 
-def _plan_axis(inputs: _AxisInputs) -> Optional[VerdictReasonDto]:
+def _plan_axis(inputs: VerdictInputs) -> Optional[VerdictReasonDto]:
     """The planned-meals reason, or None when nothing upcoming needs it.
 
     It is a fact about the user's own plan, not evidence about the shelf, so it
@@ -576,7 +573,7 @@ def _plan_axis(inputs: _AxisInputs) -> Optional[VerdictReasonDto]:
     )
 
 
-def _plan_is_handled(inputs: _AxisInputs) -> bool:
+def _plan_is_handled(inputs: VerdictInputs) -> bool:
     """A shortfall the plan exposes is already on an open list, so pushing the
     buy harder would be double-counting it (FU-776)."""
     demand = inputs.planned_demand
@@ -587,7 +584,7 @@ def _plan_is_handled(inputs: _AxisInputs) -> bool:
     )
 
 
-def compose_verdict(inputs: _AxisInputs) -> BuyVerdictDto:
+def compose_verdict(inputs: VerdictInputs) -> BuyVerdictDto:
     price_reason, price_signal = _price_axis(inputs)
     need_reason,  need_signal  = _need_axis(inputs)
     waste_reason, waste_signal = _waste_axis(inputs)
@@ -694,7 +691,7 @@ def _step_down(confidence: str) -> str:
     return {"high": "medium", "medium": "low", "low": "low"}[confidence]
 
 
-def _pick_action(verdict: str, inputs: _AxisInputs) -> OneTapActionDto:
+def _pick_action(verdict: str, inputs: VerdictInputs) -> OneTapActionDto:
     if verdict == "buy":
         return OneTapActionDto(kind="add_to_list", label="Add to list")
     if verdict == "skip":
@@ -708,7 +705,7 @@ def _pick_action(verdict: str, inputs: _AxisInputs) -> OneTapActionDto:
     return OneTapActionDto(kind="none", label="")
 
 
-def _data_used_dto(inputs: _AxisInputs) -> VerdictDataUsedDto:
+def _data_used_dto(inputs: VerdictInputs) -> VerdictDataUsedDto:
     price_average: Optional[float] = None
     price_last: Optional[float] = None
     price_last_at: Optional[str] = None
@@ -756,7 +753,7 @@ def _stock_level_band(level: StockLevel | None) -> str:
 
 def gather_verdict_inputs_for_items(
     repository: SqlAlchemyRepository, items: list[StockItem],
-) -> dict[UUID, _AxisInputs]:
+) -> dict[UUID, VerdictInputs]:
     """Gather composer inputs for many items with a fixed number of queries.
 
     B6 — every surface that shows more than one verdict used to fetch them a
@@ -795,7 +792,7 @@ def gather_verdict_inputs_for_items(
         )
         for l in lists:
             if l.status == SHOPPING_LIST_STATUS_DONE:
-                completed_lookup[l.id] = _as_utc(l.completed_at)
+                completed_lookup[l.id] = as_utc(l.completed_at)
             else:
                 open_list_ids.add(l.id)
 
@@ -805,7 +802,7 @@ def gather_verdict_inputs_for_items(
     )
     waste_in_window_by_item: dict[UUID, int] = {}
     for e in waste_events:
-        if e.occurred_at and _as_utc(e.occurred_at) >= horizon_start:
+        if e.occurred_at and as_utc(e.occurred_at) >= horizon_start:
             waste_in_window_by_item[e.stock_item_id] = (
                 waste_in_window_by_item.get(e.stock_item_id, 0) + 1
             )
@@ -823,7 +820,7 @@ def gather_verdict_inputs_for_items(
         },
     )
 
-    out: dict[UUID, _AxisInputs] = {}
+    out: dict[UUID, VerdictInputs] = {}
     for item in items:
         item_lines = lines_by_item.get(item.id, [])
         samples: list[tuple[float, datetime]] = []
@@ -840,7 +837,7 @@ def gather_verdict_inputs_for_items(
         samples.sort(key=lambda s: s[1], reverse=True)
         unique_dates = sorted({_local_date(s[1], tz) for s in samples})
 
-        out[item.id] = _AxisInputs(
+        out[item.id] = VerdictInputs(
             price_samples=samples,
             unique_purchase_dates=unique_dates,
             waste_events_12mo=waste_in_window_by_item.get(item.id, 0),
@@ -861,7 +858,7 @@ def gather_verdict_inputs_for_items(
 
 def _gather_inputs(
     repository: SqlAlchemyRepository, item: StockItem,
-) -> _AxisInputs:
+) -> VerdictInputs:
     """Single-item path (the detail endpoint). Delegates to the bulk gather so
     there is one definition of what the composer reasons from (R-003)."""
     return gather_verdict_inputs_for_items(repository, [item])[item.id]

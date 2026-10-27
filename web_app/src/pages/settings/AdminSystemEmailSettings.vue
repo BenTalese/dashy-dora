@@ -6,11 +6,7 @@
             :icon="ICONS.mark_email_read"
         />
 
-        <q-banner v-if="!isAdmin" class="dora-bg-negative-soft text-negative" dense rounded>
-            You don't have admin permissions to view this page.
-        </q-banner>
-
-        <template v-else-if="!loading">
+        <template v-if="ready">
             <!-- The SMTP password is stored encrypted-at-rest; warn (and offer
                  a key) when DORA_SECRET_ENCRYPTION_KEY is unset so the admin
                  knows the password save will be refused until it's configured. -->
@@ -215,12 +211,10 @@
 <script lang="ts" setup>
     import { ICONS } from 'src/style/icons';
     import BaseButton from 'src/components/BaseButton.vue';
-    import { storeToRefs } from 'pinia';
-    import { useQuasar } from 'quasar';
-    import AppSettingsApiService, { type AppSettings } from 'src/services/api/appSettingsApiService';
-    import { useAuthStore } from 'src/stores/authStore';
-    import { computed, onMounted, reactive, ref } from 'vue';
-    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+    import { computed, ref } from 'vue';
+    import { useAppSettingDrafts } from 'src/composables/useAppSettingDrafts';
+    import { useSettingsSave } from 'src/composables/useSettingsSave';
+    import { useAppSettingsStore } from 'src/stores/appSettingsStore';
     import SettingsSection from 'src/components/settings/SettingsSection.vue';
     import SettingsRow from 'src/components/settings/SettingsRow.vue';
     import SettingsPageHeader from 'src/components/settings/SettingsPageHeader.vue';
@@ -231,13 +225,7 @@
         | 'smtp_username' | 'smtp_from' | 'smtp_use_tls'
         | 'public_url';
 
-    const $q = useQuasar();
-    const { isAdmin } = storeToRefs(useAuthStore());
-    const api = new AppSettingsApiService();
-
-    const loading = ref(true);
-    const saving = ref(false);
-    const saved = reactive({
+    const { draft, ready, save } = useAppSettingDrafts({
         email_enabled: false,
         smtp_host: '',
         smtp_port: 587,
@@ -246,7 +234,10 @@
         smtp_use_tls: true,
         public_url: '',
     });
-    const draft = reactive({ ...saved });
+
+    function onSaveField(field: EmailField) {
+        void save({ [field]: draft[field] }, 'Email settings saved.');
+    }
 
     const publicUrlHasError = computed(() => {
         const value = (draft.public_url ?? '').trim();
@@ -254,94 +245,27 @@
         return !value.startsWith('http://') && !value.startsWith('https://');
     });
 
-    async function onSavePublicUrl() {
-        // Server validates too, but bail early on the obvious case so the user
-        // sees the inline error rather than a toast.
+    function onSavePublicUrl() {
+        // The server validates too; bailing here shows the inline error
+        // rather than a toast.
         if (publicUrlHasError.value) return;
-        draft.public_url = (draft.public_url ?? '').trim();
-        await onSaveField('public_url');
+        void save({ public_url: (draft.public_url ?? '').trim() }, 'Email settings saved.');
     }
-    // Bucket-C secret is write-only — the server never returns the plaintext,
-    // just a `_configured` bool. We hold the draft locally, submit explicitly.
-    const passwordConfigured = ref(false);
+
+    // The SMTP password is write-only: the server never returns it, only
+    // whether one is set. Held locally and submitted explicitly.
+    const store = useAppSettingsStore();
+    const { update, saving } = useSettingsSave();
+    const passwordConfigured = computed(() => store.settings?.smtp_password_configured ?? false);
     const passwordDraft = ref('');
 
-    function resetDrafts() {
-        Object.assign(draft, saved);
-    }
-
-    async function onSaveField(field: EmailField) {
-        const value = draft[field];
-        if (value === saved[field]) return;
-        saving.value = true;
-        try {
-            const result = await api.updateAsync({ [field]: value });
-            (saved as Record<EmailField, unknown>)[field] = result[field];
-            resetDrafts();
-            $q.notify({
-                type: 'positive', 
-                message: 'Email settings saved.',
-            });
-        } catch (err) {
-            resetDrafts();
-            $q.notify({
-                type: 'negative', 
-                message: 'Could not save email settings.',
-                caption: toastCaption(err),
-            });
-        } finally {
-            saving.value = false;
-        }
-    }
-
     async function onSavePassword(nextValue: string) {
-        saving.value = true;
-        try {
-            const result = await api.updateAsync({ smtp_password: nextValue });
-            passwordConfigured.value = result.smtp_password_configured;
-            passwordDraft.value = '';
-            $q.notify({
-                type: 'positive', 
-                message: nextValue.length === 0
-                    ? 'SMTP password cleared.'
-                    : 'SMTP password saved.',
-            });
-        } catch (err) {
-            $q.notify({
-                type: 'negative', 
-                message: 'Could not save SMTP password.',
-                caption: toastCaption(err),
-            });
-        } finally {
-            saving.value = false;
-        }
+        const saved = await update(
+            nextValue.length === 0 ? 'SMTP password cleared.' : 'SMTP password saved.',
+            () => store.saveAsync({ smtp_password: nextValue }),
+        );
+        if (saved) passwordDraft.value = '';
     }
-
-    function hydrate(s: AppSettings) {
-        saved.email_enabled = s.email_enabled;
-        saved.smtp_host = s.smtp_host;
-        saved.smtp_port = s.smtp_port;
-        saved.smtp_username = s.smtp_username;
-        saved.smtp_from = s.smtp_from;
-        saved.smtp_use_tls = s.smtp_use_tls;
-        saved.public_url = s.public_url;
-        passwordConfigured.value = s.smtp_password_configured;
-        resetDrafts();
-    }
-
-    onMounted(async () => {
-        if (!isAdmin.value) {
-            loading.value = false;
-            return;
-        }
-        try {
-            hydrate(await api.getAsync());
-        } catch {
-            // Leave defaults; admin can retry once the DB is reachable.
-        } finally {
-            loading.value = false;
-        }
-    });
 </script>
 
 <style scoped lang="scss">

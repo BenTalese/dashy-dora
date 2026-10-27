@@ -39,6 +39,8 @@ from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 
+_LOGGER = logging.getLogger(__name__)
+
 
 # ───── DTOs ──────────────────────────────────────────────────────────────
 
@@ -227,14 +229,13 @@ class CreateMealPlanTemplateHandler:
 @MEAL_PLAN_TEMPLATE_ROUTER.route("", methods=["POST"])
 @has_request_body(CreateMealPlanTemplateRequest)
 def create_meal_plan_template():
-    _Logger = logging.getLogger(__name__)
     _Request: CreateMealPlanTemplateRequest = get_request_body()
     _Response = CreateMealPlanTemplateHandler(SqlAlchemyRepository()).handle(_Request)
     if _Response.source_not_found:
         return not_found("MealPlan", _Request.source_meal_plan_id)
     if _Response.no_entries:
         return business_rule_violation("That week has no meals to save as a template.")
-    _Logger.info(f"Created meal-plan template {_Response.template_id} '{_Request.name}'")
+    _LOGGER.info(f"Created meal-plan template {_Response.template_id} '{_Request.name}'")
     return created(
         _Response.template_id,
         f"{MEAL_PLAN_TEMPLATE_ROUTER.name}.{get_meal_plan_templates.__name__}",
@@ -308,11 +309,10 @@ class DeleteMealPlanTemplateHandler:
 
 @MEAL_PLAN_TEMPLATE_ROUTER.route("/<uuid:template_id>", methods=["DELETE"])
 def delete_meal_plan_template(template_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _Response = DeleteMealPlanTemplateHandler(SqlAlchemyRepository()).handle(template_id)
     if _Response.not_found:
         return not_found("MealPlanTemplate", template_id)
-    _Logger.info(f"Deleted meal-plan template {template_id}")
+    _LOGGER.info(f"Deleted meal-plan template {template_id}")
     return no_content()
 
 
@@ -357,11 +357,10 @@ class CloneMealPlanTemplateHandler:
 
 @MEAL_PLAN_TEMPLATE_ROUTER.route("/<uuid:template_id>/clone", methods=["POST"])
 def clone_meal_plan_template(template_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _Response = CloneMealPlanTemplateHandler(SqlAlchemyRepository()).handle(template_id)
     if _Response.not_found:
         return not_found("MealPlanTemplate", template_id)
-    _Logger.info(f"Cloned meal-plan template {template_id} -> {_Response.template_id}")
+    _LOGGER.info(f"Cloned meal-plan template {template_id} -> {_Response.template_id}")
     return created(
         _Response.template_id,
         f"{MEAL_PLAN_TEMPLATE_ROUTER.name}.{get_meal_plan_templates.__name__}",
@@ -468,12 +467,11 @@ class ApplyTemplateHandler:
 @MEAL_PLAN_ROUTER.route("from-template", methods=["POST"])
 @has_request_body(ApplyTemplateRequest)
 def apply_template():
-    _Logger = logging.getLogger(__name__)
     _Request: ApplyTemplateRequest = get_request_body()
     _Response = ApplyTemplateHandler(SqlAlchemyRepository()).handle(_Request)
     if _Response.template_not_found:
         return not_found("MealPlanTemplate", _Request.template_id)
-    _Logger.info(
+    _LOGGER.info(
         f"Applied template {_Request.template_id} -> plan {_Response.meal_plan_id} "
         f"({_Response.added_count} added, {_Response.skipped_past_count} skipped)"
     )
@@ -577,14 +575,13 @@ class ApplyRecurringHandler:
 @MEAL_PLAN_ROUTER.route("from-template/recurring", methods=["POST"])
 @has_request_body(ApplyRecurringRequest)
 def apply_template_recurring():
-    _Logger = logging.getLogger(__name__)
     _Request: ApplyRecurringRequest = get_request_body()
     _Response = ApplyRecurringHandler(SqlAlchemyRepository()).handle(_Request)
     if _Response.not_found_kind is not None:
         return not_found(_Response.not_found_kind, _Request.template_set_id or _Request.template_id)
     if _Response.invalid is not None:
         return business_rule_violation(_Response.invalid)
-    _Logger.info(
+    _LOGGER.info(
         f"Recurring apply over {_Response.weeks_applied} week(s): "
         f"{_Response.total_added} added, {_Response.total_skipped_past} skipped"
     )

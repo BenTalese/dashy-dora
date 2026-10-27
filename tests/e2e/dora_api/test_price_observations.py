@@ -28,11 +28,17 @@ def _detail(item_id: str) -> dict:
     return requests.get(f"{STOCK_ITEMS}/{item_id}/detail").json()
 
 
+def _current(detail: dict) -> float | None:
+    """The detail's current per-unit figure (`your_prices.current`), in the
+    install's display denominator: per 100 ml for volume (AU), each for count."""
+    return (detail.get("your_prices") or {}).get("current")
+
+
 def test__price_observation__add_derives_unit_cost(api):
     item = _new_stock_item()
     d = _detail(item)
     assert d["price_observations"] == []
-    assert d["unit_cost"] is None
+    assert _current(d) is None
 
     resp = requests.post(
         f"{STOCK_ITEMS}/{item}/price-observations",
@@ -44,12 +50,10 @@ def test__price_observation__add_derives_unit_cost(api):
     obs = d["price_observations"][0]
     assert obs["total_price"] == 6.0 and obs["total_measure"] == 2.0 and obs["unit"] == "L"
     # Manual entries have no provenance line and no store unless supplied.
-    assert obs["shopping_list_line_id"] is None
     assert obs["shopping_list_name"] is None
-    assert obs["store_id"] is None
     assert obs["store_name"] is None
-    # Server derives per-unit cost (6 / 2 = 3) — client never divides.
-    assert d["unit_cost"] == 3.0
+    # Server derives per-unit cost (6 / 2 L = 0.30 per 100 ml) — client never divides.
+    assert _current(d) == 0.3
 
 
 def test__price_observation__latest_wins_for_unit_cost(api):
@@ -64,8 +68,9 @@ def test__price_observation__latest_wins_for_unit_cost(api):
     })
     d = _detail(item)
     assert len(d["price_observations"]) == 2
-    # unit_cost comes from the most recent observation (3.0), not the older 10.0.
-    assert d["unit_cost"] == 3.0
+    # The current figure comes from the most recent observation (0.30 per 100 ml),
+    # not the older 1.00.
+    assert _current(d) == 0.3
 
 
 def test__price_observation__delete_clears_unit_cost(api):
@@ -79,7 +84,7 @@ def test__price_observation__delete_clears_unit_cost(api):
     assert resp.status_code == 204, resp.text
     d = _detail(item)
     assert d["price_observations"] == []
-    assert d["unit_cost"] is None
+    assert _current(d) is None
 
 
 def test__price_observation__non_positive_rejected(api):
@@ -101,7 +106,7 @@ def test__price_observation__count_dimension_accepted(api):
     assert resp.status_code == 204, resp.text
     d = _detail(item)
     assert d["price_observations"][0]["unit"] == "ea"
-    assert d["unit_cost"] == 3.0
+    assert _current(d) == 3.0
 
 
 def test__price_observation__unsupported_unit_rejected(api):
@@ -146,8 +151,9 @@ def test__price_observation__store_id_attached_and_resolved(api):
     )
     assert resp.status_code == 204, resp.text
     obs = _detail(item)["price_observations"][0]
-    assert obs["store_id"] == store_id
-    assert obs["store_name"]  # non-empty string
+    assert obs["store_name"] == next(
+        s["name"] for s in stores if (s.get("store_id") or s.get("id")) == store_id
+    )
 
 
 def test__price_observation__unknown_store_rejected(api):

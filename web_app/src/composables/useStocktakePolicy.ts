@@ -1,5 +1,5 @@
 import { computed, ref } from 'vue';
-import HealthApiService from 'src/services/api/healthApiService';
+import HealthApiService, { invalidateHealthInfo } from 'src/services/api/healthApiService';
 
 // Install-wide stocktake defaults, read from /api/health (2026-08-28).
 // `newItemsOptIn` is the position the create-stock-item dialog's Stocktake
@@ -41,6 +41,7 @@ function load(): Promise<void> {
 export function refreshStocktakePolicy(): Promise<void> {
     loaded.value = false;
     inflight = null;
+    invalidateHealthInfo();
     return load();
 }
 

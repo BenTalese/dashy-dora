@@ -16,9 +16,7 @@
 // from every list" popover uses).
 
 import { Notify } from 'quasar';
-import { STOCKED_SEQUENCE } from 'src/helpers/stockStatus';
 import { invalidateBuyVerdict } from 'src/composables/useBuyVerdict';
-import { usePantryBeliefs } from 'src/composables/usePantryBeliefs';
 import { useShoppingListActions } from 'src/composables/useShoppingListActions';
 import { useShoppingListStore } from 'src/stores/shoppingListStore';
 import { useStockItemStore } from 'src/stores/stockItemStore';
@@ -29,22 +27,18 @@ export function useBuyVerdictActions() {
     const stockItemStore = useStockItemStore();
     const stockLevelStore = useStockLevelStore();
     const shoppingListStore = useShoppingListStore();
-    const { stockLevels } = storeToRefs(stockLevelStore);
     const { summaries } = storeToRefs(shoppingListStore);
     const slActions = useShoppingListActions();
-    const pantryBeliefs = usePantryBeliefs();
 
     /**
-     * Move a stock item to the "Well-Stocked" level (sequence 0) and
-     * invalidate any dependent belief/verdict caches. Returns `true` on
+     * Move a stock item to the most-stocked level (sequence 0); the store's
+     * level write refreshes the verdict / belief / demand overlays. Returns `true` on
      * success. The consumer decides whether to also reload page-local
      * detail state; this helper stays store-agnostic beyond the mutation.
      */
     async function markStocked(stockItemId: string): Promise<boolean> {
         await stockLevelStore.ensureLoadedAsync();
-        const stockedLevel = stockLevels.value.find(
-            (sl) => sl.sequence === STOCKED_SEQUENCE,
-        );
+        const stockedLevel = stockLevelStore.stockedLevel;
         if (!stockedLevel) {
             // A brand-new install could theoretically hit this before the
             // seed runs; the seed always produces the three canonical bands
@@ -61,9 +55,6 @@ export function useBuyVerdictActions() {
                 stock_item_id: stockItemId,
                 stock_level_id: stockedLevel.stock_level_id,
             });
-            invalidateBuyVerdict(stockItemId);
-            pantryBeliefs.invalidate();
-            void pantryBeliefs.loadAsync(true);
             Notify.create({
                 type: 'positive',
                 // FU-572: level names are user-configurable (seed default

@@ -4,7 +4,7 @@
          hardcoded `calc(100dvh - 64px)` (which rotted when chrome changed, e.g.
          the OfflineBanner). On mobile the shell falls back to window-scroll — the
          media query overrides the inline height (see styles). -->
-    <q-page class="settings-shell" :style-fn="pageStyleFn">
+    <q-page class="settings-shell" :style-fn="appShellStyleFn">
         <header class="settings-shell__header">
             <!-- FU-346: for admins, the h1 becomes a two-mode segmented
                  toggle. "Settings" holds the personal groups (Account,
@@ -82,6 +82,7 @@
 </template>
 
 <script lang="ts" setup>
+    import { appShellStyleFn } from 'src/helpers/appShell';
     import BaseTooltip from 'src/components/BaseTooltip.vue';
     import { ICONS } from 'src/style/icons';
     import { storeToRefs } from 'pinia';
@@ -248,7 +249,7 @@
         { path: '/settings/admin/system/meal-reconcile', label: 'Meal reconciliation', icon: ICONS.event_note },
         { path: '/settings/admin/system/nutrition', label: 'Nutrition', icon: ICONS.monitor_heart },
         { path: '/settings/admin/system/money', label: 'Money', icon: ICONS.savings },
-        { path: '/settings/admin/system/alerts', label: 'Alert thresholds', icon: ICONS.notifications },
+        { path: '/settings/admin/system/alerts', label: 'Expiring-soon window', icon: ICONS.notifications },
     ];
 
     // Backup & restore + Import were relocated here from the retired `/data`
@@ -347,15 +348,6 @@
         ];
     });
 
-    // FU-609 / R-036 — app-shell height from the live layout offset (header, plus
-    // the OfflineBanner when it shows), replacing the old hardcoded
-    // `calc(100dvh - 64px)`. Applied inline by <q-page>; the mobile media query
-    // overrides it back to `height: auto` so the shell window-scrolls on <md.
-    function pageStyleFn(offset: number, height: number) {
-        return {
-            height: height === 0 ? `calc(100vh - ${offset}px)` : `${height - offset}px`,
-        };
-    }
 </script>
 
 <style scoped lang="scss">
@@ -409,7 +401,7 @@
         padding: 4px;
         border-radius: 999px;
         background: var(--surface-sunken);
-        border: 1px solid var(--border-default, transparent);
+        border: 1px solid var(--border-default);
     }
     .settings-shell__mode-btn {
         display: inline-flex;
@@ -428,7 +420,7 @@
         transition: background 0.15s ease, color 0.15s ease;
     }
     .settings-shell__mode-btn:hover:not(.is-active) {
-        background: var(--overlay-hover, rgba(0, 0, 0, 0.05));
+        background: var(--overlay-hover);
     }
     .settings-shell__mode-btn:focus-visible {
         outline: 2px solid var(--focus-ring);

@@ -1,4 +1,6 @@
-"""Product → linked stock item lookup (the `StockItemProduct` join).
+"""Bulk product reads shared by the product list, reports and alerts: the
+linked stock item (the `StockItemProduct` join) and whether a product has an
+image.
 
 `StockItemProduct.UNIQUE(product_id)` means a product links to at most one
 stock item, so the answer is a plain mapping. One bulk pass over the join,
@@ -44,3 +46,16 @@ def linked_stock_items(repository, product_ids: list[UUID]) -> dict[UUID, Linked
         pid: LinkedStockItem(stock_item_id = sid, name = names.get(sid))
         for pid, sid in product_to_stock.items()
     }
+
+
+def has_image_by_product(repository, product_ids: list[UUID]) -> dict[UUID, bool]:
+    """`{product_id: has_image}` from one `image IS NOT NULL` pass that never
+    loads the deferred image blob (FU-014)."""
+    if not product_ids:
+        return {}
+    product_table = db.metadata.tables["Product"]
+    rows = repository.session.execute(
+        select(product_table.c.id, product_table.c.image.isnot(None))
+        .where(product_table.c.id.in_(product_ids))
+    ).all()
+    return {row[0]: bool(row[1]) for row in rows}

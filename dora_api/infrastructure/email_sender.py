@@ -25,6 +25,8 @@ from typing import Any
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
+_LOGGER = logging.getLogger(__name__)
+
 
 _TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "email_templates"
 _env = Environment(
@@ -50,7 +52,7 @@ def _brand_banner_bytes() -> bytes | None:
     try:
         return _BRAND_BANNER_PATH.read_bytes()
     except OSError:
-        logging.getLogger(__name__).warning(
+        _LOGGER.warning(
             "brand banner missing at %s — emails will send without it",
             _BRAND_BANNER_PATH,
         )
@@ -129,10 +131,9 @@ def send_email(
     the layout as `cid:brand-banner`) as an inline image. Defaults on since
     every transactional template extends _layout.html.
     """
-    log = logging.getLogger(__name__)
     cfg = _config()
     if cfg.dry_run:
-        log.info(
+        _LOGGER.info(
             "DRY-RUN email | to=%s | subject=%s\n%s",
             to, subject, text_body or html_body,
         )
@@ -173,4 +174,4 @@ def send_email(
         if cfg.username and cfg.password:
             server.login(cfg.username, cfg.password)
         server.sendmail(cfg.sender, [to], message.as_string())
-    log.info("Sent transactional email to %s (%s)", to, subject)
+    _LOGGER.info("Sent transactional email to %s (%s)", to, subject)

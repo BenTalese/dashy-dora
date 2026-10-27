@@ -82,6 +82,8 @@ from dora_api.infrastructure.api_response import ok
 from dora_api.infrastructure.ports import Repository
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 
+_LOGGER = logging.getLogger(__name__)
+
 # One list now, so one cap. Five was per-column; six rows of one list is about
 # the same card height and reads as a ranking rather than two short tables.
 MAX_ROWS = 6
@@ -201,9 +203,8 @@ class GetRestockRadarHandler:
 
 @DASHBOARD_ROUTER.route("/restock-radar", methods=["GET"])
 def get_restock_radar():
-    _Logger = logging.getLogger(__name__)
     _Result = GetRestockRadarHandler(SqlAlchemyRepository()).handle()
-    _Logger.debug(
+    _LOGGER.debug(
         "Restock radar: %d rows within %d days (%d planned)",
         len(_Result.rows), _Result.window_days,
         sum(1 for r in _Result.rows if r.is_planned),

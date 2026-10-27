@@ -395,9 +395,11 @@
     import DataApiService, { type BackupSection } from 'src/services/api/dataApiService';
     import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { useAuthStore } from 'src/stores/authStore';
+    import { useAppSettingsStore } from 'src/stores/appSettingsStore';
 
     const $q = useQuasar();
     const authStore = useAuthStore();
+    const appSettingsStore = useAppSettingsStore();
 
     // library-facing state. Old download-only path retired;
     // "Create backup" now POSTs the library create endpoint, and the
@@ -868,22 +870,16 @@
 
     async function loadLibrarySettings(): Promise<void> {
         try {
-            const baseUrl = resolveBaseURL();
-            const response = await fetch(`${baseUrl}/app-settings`, {
-                method: 'GET',
-                credentials: 'include',
-            });
-            if (!response.ok) throw new Error(`Settings load failed (${response.status})`);
-            const settings = await response.json();
-            retentionCount.value = Number(settings.backup_retention_count ?? 5);
-            storagePath.value = String(settings.backup_storage_path ?? '');
+            const settings = await appSettingsStore.loadAsync();
+            retentionCount.value = settings.backup_retention_count;
+            storagePath.value = settings.backup_storage_path;
             retentionInput.value = retentionCount.value;
             storagePathInput.value = storagePath.value;
         } catch (err) {
             $q.notify({
                 type: 'negative',
                 message: "Couldn't load library settings.",
-                caption: err instanceof Error ? err.message : String(err),
+                caption: toastCaption(err),
             });
         }
     }
@@ -895,22 +891,13 @@
     async function onSaveLibrarySettings() {
         savingSettings.value = true;
         try {
-            const baseUrl = resolveBaseURL();
-            const response = await fetch(`${baseUrl}/app-settings`, {
-                method: 'PATCH',
-                credentials: 'include',
-                headers: { 'Content-Type': 'application/json', ...csrfHeader() },
-                body: JSON.stringify({
-                    backup_retention_count: Number(retentionInput.value),
-                    backup_storage_path: (storagePathInput.value ?? '').trim(),
-                }),
+            const saved = await appSettingsStore.saveAsync({
+                backup_retention_count: Number(retentionInput.value),
+                backup_storage_path: (storagePathInput.value ?? '').trim(),
             });
-            const body = await response.json().catch(() => ({}));
-            if (!response.ok) {
-                throw new Error(body.detail ?? `Save failed (${response.status})`);
-            }
-            retentionCount.value = Number(retentionInput.value);
-            storagePath.value = (storagePathInput.value ?? '').trim();
+            retentionCount.value = saved.backup_retention_count;
+            storagePath.value = saved.backup_storage_path;
+            resetLibrarySettings();
             $q.notify({
                 type: 'positive',
                 message: 'Library settings saved.',
@@ -920,7 +907,7 @@
             $q.notify({
                 type: 'negative',
                 message: "Couldn't save library settings.",
-                caption: err instanceof Error ? err.message : String(err),
+                caption: toastCaption(err),
             });
         } finally {
             savingSettings.value = false;
@@ -1048,8 +1035,7 @@
                 : `Everything in the backup will be imported, except rows that already exist locally.`;
             $q.dialog({
                 title: 'Confirm restore',
-                message: `${summary}<br><br>This can't be undone.`,
-                html: true,
+                message: `${summary} This can't be undone.`,
                 ok: { label: 'Restore', color: 'primary' },
                 cancel: { label: 'Cancel', flat: true },
             }).onOk(() => {
@@ -1173,12 +1159,6 @@
     .settings-page {
         display: flex;
         flex-direction: column;
-    }
-    .settings-divider {
-        border: 0;
-        height: 1px;
-        background: color-mix(in srgb, var(--text-primary) 8%, transparent);
-        margin: 0;
     }
     .settings-actions {
         display: flex;

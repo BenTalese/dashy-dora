@@ -84,7 +84,7 @@
     import { useFormErrors } from 'src/composables/useFormErrors';
     import { useRecipeStore } from 'src/stores/recipeStore';
     import { useRecipeVocabStore } from 'src/stores/recipeVocabStore';
-    import { computed, onMounted, reactive, ref, watch } from 'vue';
+    import { onMounted, reactive, ref, watch } from 'vue';
 
     const props = defineProps<{ modelValue: boolean; recipe: Recipe | null }>();
     const emit = defineEmits<{
@@ -95,8 +95,8 @@
 
     const recipeStore = useRecipeStore();
     const recipeVocabStore = useRecipeVocabStore();
-    const { recipeCollections } = storeToRefs(recipeStore);
-    const { cuisines, categories } = storeToRefs(recipeVocabStore);
+    const { collectionOptions } = storeToRefs(recipeStore);
+    const { cuisineOptions, categoryOptions } = storeToRefs(recipeVocabStore);
 
     type RecipeForm = {
         name: string;
@@ -124,15 +124,6 @@
         }
     }
 
-    const collectionOptions = computed(() =>
-        recipeCollections.value.map((c) => ({ label: c.name, value: c.recipe_collection_id }))
-    );
-    const cuisineOptions = computed(() =>
-        cuisines.value.map((c) => ({ label: c.name, value: c.cuisine_id })),
-    );
-    const categoryOptions = computed(() =>
-        categories.value.map((c) => ({ label: c.name, value: c.category_id })),
-    );
 
     onMounted(() => {
         recipeVocabStore.ensureLoadedAsync().catch(() => undefined);

@@ -1,6 +1,6 @@
 """P8-05 — buy-verdict composer unit tests.
 
-Every test drives `compose_verdict` with a fixture `_AxisInputs` — no
+Every test drives `compose_verdict` with a fixture `VerdictInputs` — no
 DB, no HTTP, so the composition rules can be pinned in isolation. The
 data-gathering layer (`_gather_inputs`) is a thin repo walk; browser-
 verify covers it end-to-end.
@@ -8,7 +8,7 @@ verify covers it end-to-end.
 from datetime import date, datetime, time, timedelta, timezone
 
 from dora_api.features.stock_items.get_buy_verdict import (
-    _AxisInputs, compose_verdict,
+    VerdictInputs, compose_verdict,
 )
 from dora_api.features.stock_items.pantry_belief import PantryBelief
 
@@ -30,12 +30,12 @@ def _dt(days_ago: int) -> datetime:
     )
 
 
-def _rich_history_inputs(**overrides) -> _AxisInputs:
+def _rich_history_inputs(**overrides) -> VerdictInputs:
     """A middle-of-the-road history: 8 price samples over 6 months at
     around $3.80 with the most-recent shop at $3.85 (usual price band),
     buying every ~14 days, no waste events, stocked. Individual
     tests override the axes they care about."""
-    base = _AxisInputs(
+    base = VerdictInputs(
         price_samples=[
             (3.85, _dt(6)),
             (3.90, _dt(20)),
@@ -174,7 +174,7 @@ def test__essential_flag__does_not_lift_a_stocked_item():
 def test__strength_and_confidence_are_independent():
     """The two dials answer different questions, which is why they were split:
     a strong need on thin evidence has to be sayable."""
-    verdict = compose_verdict(_AxisInputs(
+    verdict = compose_verdict(VerdictInputs(
         price_samples=[(3.80, _dt(6))],        # 1 sample → thin price axis
         unique_purchase_dates=[_today() - timedelta(days=6)],
         waste_events_12mo=0,
@@ -281,7 +281,7 @@ def test__all_axes_thin__collapses_to_single_not_enough_history():
     `_MIN_PURCHASES_FOR_WASTE_RATE` — i.e. "waste has happened but we
     can't yet compute a rate".
     """
-    inputs = _AxisInputs(
+    inputs = VerdictInputs(
         price_samples=[(3.80, _dt(4))],   # 1 sample → thin
         unique_purchase_dates=[_today() - timedelta(days=4)],
         waste_events_12mo=1,              # some waste seen…
@@ -301,7 +301,7 @@ def test__all_axes_thin__collapses_to_single_not_enough_history():
 def test__thin_price_only__drops_confidence_a_step_but_keeps_verdict():
     """Low-stock with thin price data: verdict stays `buy` (need still argues
     for it), and the one thin axis costs a step of confidence."""
-    inputs = _AxisInputs(
+    inputs = VerdictInputs(
         price_samples=[(3.80, _dt(6))],        # 1 sample → thin
         unique_purchase_dates=[_today() - timedelta(days=6)],
         waste_events_12mo=0,
@@ -319,7 +319,7 @@ def test__waste_thin_but_no_events__signals_no_waste_history_not_thin():
     """Purchase history is too shallow to compute a waste rate, but
     zero events + a fresh account is not the same as 'unknown'. The
     axis contributes no reason but confidence doesn't drop from it."""
-    inputs = _AxisInputs(
+    inputs = VerdictInputs(
         price_samples=[
             (3.80, _dt(6)),
             (3.85, _dt(20)),
@@ -371,7 +371,7 @@ def test__observation_dates_bucket_in_household_zone__not_utc():
     from zoneinfo import ZoneInfo
 
     ts = datetime(2026, 6, 1, 23, 0, tzinfo=timezone.utc)  # == 2026-06-02 09:00 AEST
-    syd = _AxisInputs(
+    syd = VerdictInputs(
         price_samples=[(3.50, ts)],
         unique_purchase_dates=[date(2026, 6, 2)],
         stock_level_band="stocked",
@@ -381,7 +381,7 @@ def test__observation_dates_bucket_in_household_zone__not_utc():
     assert compose_verdict(syd).data_used.price_last_at == "2026-06-02"
 
     # Same instant read in UTC (the pre-FU-525 behaviour) buckets a day earlier.
-    utc = _AxisInputs(
+    utc = VerdictInputs(
         price_samples=[(3.50, ts)],
         unique_purchase_dates=[date(2026, 6, 1)],
         stock_level_band="stocked",
@@ -399,7 +399,7 @@ def _wait_case(price_samples):
     most recent sample is above the usual band, so the composer lands on
     `wait` and `_wait_hint` gets to run."""
     dates = sorted({ts.date() for _, ts in price_samples})
-    return _AxisInputs(
+    return VerdictInputs(
         price_samples=sorted(price_samples, key=lambda s: s[1], reverse=True),
         unique_purchase_dates=dates,
         waste_events_12mo=0,
@@ -739,7 +739,7 @@ def test__planned_meals_against_an_out_item__name_the_blocker():
 
 
 def test__planned_meals_survive_thin_history():
-    thin = _AxisInputs(today=_today(), planned_demand=_demand("none"))
+    thin = VerdictInputs(today=_today(), planned_demand=_demand("none"))
     verdict = compose_verdict(thin)
     assert verdict.verdict == "unsure"
     assert verdict.reasons[0].axis == "plan"

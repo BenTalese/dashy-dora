@@ -27,6 +27,8 @@ from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 
+_LOGGER = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True, slots=True)
 class DietaryTagDto:
@@ -112,12 +114,11 @@ class CreateDietaryTagHandler:
 @DIETARY_TAG_ROUTER.route("", methods=["POST"])
 @has_request_body(CreateDietaryTagRequest)
 def create_dietary_tag():
-    _Logger = logging.getLogger(__name__)
     _Request: CreateDietaryTagRequest = get_request_body()
     _Response = CreateDietaryTagHandler(SqlAlchemyRepository()).handle(_Request)
     if _Response.duplicate:
         return business_rule_violation(f"A dietary tag named '{_Request.name}' already exists.")
-    _Logger.info(f"Created dietary tag {_Response.dietary_tag_id} '{_Request.name}'")
+    _LOGGER.info(f"Created dietary tag {_Response.dietary_tag_id} '{_Request.name}'")
     return created(
         _Response.dietary_tag_id,
         f"{DIETARY_TAG_ROUTER.name}.{get_dietary_tags.__name__}",
@@ -201,9 +202,8 @@ class DeleteDietaryTagHandler:
 
 @DIETARY_TAG_ROUTER.route("/<uuid:dietary_tag_id>", methods=["DELETE"])
 def delete_dietary_tag(dietary_tag_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _Response = DeleteDietaryTagHandler(SqlAlchemyRepository()).handle(dietary_tag_id)
     if _Response.not_found:
         return not_found("DietaryTag", dietary_tag_id)
-    _Logger.info(f"Deleted dietary tag {dietary_tag_id}; {_Response.recipes_affected} link(s) removed")
+    _LOGGER.info(f"Deleted dietary tag {dietary_tag_id}; {_Response.recipes_affected} link(s) removed")
     return ok({"recipes_affected": _Response.recipes_affected})

@@ -89,26 +89,26 @@
 
 <style scoped lang="scss">
     .mark-wasted__subject {
-        padding-bottom: var(--space-2, 8px);
+        padding-bottom: var(--space-2);
     }
     .mark-wasted__tiles {
         display: flex;
         flex-direction: column;
-        gap: var(--space-2, 8px);
+        gap: var(--space-2);
     }
     .mark-wasted__grid {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: var(--space-2, 8px);
+        gap: var(--space-2);
     }
     .mark-wasted__tile {
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: var(--space-1, 4px);
+        gap: var(--space-1);
         min-height: 84px;
-        padding: var(--space-2, 8px) var(--space-3, 12px);
+        padding: var(--space-2) var(--space-3);
         /* R-060: was `--c-line` / `--c-surface-2`, custom properties that have
            never been declared anywhere this component can see — so these have
            always painted their hard-coded rgba fallbacks and never followed the
@@ -116,25 +116,28 @@
            was retired (FU-747) and the R-060 guard lost that declaration. */
         border: 1px solid var(--border-default);
         background: transparent;
-        border-radius: var(--radius-md, 8px);
+        border-radius: var(--radius-md);
         color: inherit;
         font: inherit;
         cursor: pointer;
-        transition: background-color 120ms ease, border-color 120ms ease;
+        transition: background-color var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease);
     }
     .mark-wasted__tile:hover,
     .mark-wasted__tile:focus-visible {
         background: var(--surface-sunken);
         border-color: var(--border-strong);
-        outline: none;
+    }
+    .mark-wasted__tile:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
     }
     .mark-wasted__tile--wide {
         flex-direction: row;
         min-height: 56px;
-        gap: var(--space-2, 8px);
+        gap: var(--space-2);
     }
     .mark-wasted__tile-label {
-        font-size: var(--text-sm, 0.875rem);
+        font-size: calc(var(--font-size-sm) * 1rem);
         text-align: center;
         line-height: 1.2;
     }

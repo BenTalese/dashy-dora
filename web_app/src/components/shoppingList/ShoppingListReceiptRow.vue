@@ -79,7 +79,7 @@
     /**
      * One bought line on the receipt face.
      *
-     * Built on the shared row skeleton in `src/css/shoppingRow.scss` — same
+     * Built on the shared row skeleton in `src/css/shoppingList.scss` — same
      * grid shell, same name and money type scale, same inset divider as the
      * plan row. That is the v4 §4.3 constraint: the receipt gets direction A's
      * document treatment, but as a variant of the row primitive rather than a

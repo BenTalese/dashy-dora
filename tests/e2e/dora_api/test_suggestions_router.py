@@ -244,3 +244,47 @@ def test__dismiss__unknown_field__rejected_400(api):
         "kind": "use_soon", "dedup_key": "x", "definitely_not_a_field": 1,
     })
     assert resp.status_code == 400, resp.text
+
+
+# ── over_budget (finalisation 09-R1 / 09-R3) ─────────────────────────────
+
+_CURRENCY_SYMBOLS = ("$", "€", "£", "¥", "₹")
+
+
+def test__suggestions__no_string_carries_a_currency_symbol(api):
+    """Amounts ride `payload`; the prose never bakes in a symbol, so a EUR or
+    GBP household never reads dollars (the buy-verdict precedent, D-006)."""
+    from sqlalchemy import text
+
+    from dora_api.app import db
+    from tests.e2e.dora_api._spend_seeding import seed_purchase
+    from tests.support import uuid_bind
+
+    seeded = seed_purchase(actual_unit_price=9.0)
+    period_start = date.fromisoformat(requests.get(f"{BASE}/budget/status").json()["period_start"])
+    # Mid-window completion so the shop is in the current period whatever the clock says.
+    with app.app_context(), db.engine.begin() as conn:
+        conn.execute(
+            text('UPDATE "ShoppingList" SET completed_at = :ts WHERE id = :id'),
+            {
+                "ts": datetime.combine(period_start + timedelta(days=1), datetime.min.time())
+                .replace(hour=12).isoformat(" "),
+                "id": uuid_bind(seeded["shopping_list_id"]),
+            },
+        )
+    try:
+        assert requests.patch(
+            f"{BASE}/budget/settings", json={"amount": 1.0},
+        ).status_code == 200
+        _make_expiring_item(0)
+        suggestions = _get_suggestions()
+        over = next(s for s in suggestions if s["kind"] == "over_budget")
+        assert over["primary_action"]["path"] == "/settings/budget"
+        assert over["payload"]["amount"] == 1.0
+        for sugg in suggestions:
+            for field in ("title", "body", "reason"):
+                assert not any(sym in sugg[field] for sym in _CURRENCY_SYMBOLS), (
+                    f"{sugg['kind']}.{field} carries a currency symbol: {sugg[field]!r}"
+                )
+    finally:
+        requests.patch(f"{BASE}/budget/settings", json={"amount": None})

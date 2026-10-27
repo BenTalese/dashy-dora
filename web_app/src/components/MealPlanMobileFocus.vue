@@ -443,7 +443,7 @@
     .mobile-focus {
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: var(--space-2);
     }
     .mobile-focus__weeknav {
         display: flex;
@@ -483,7 +483,7 @@
     .mobile-focus__day-strip {
         display: grid;
         grid-template-columns: repeat(7, minmax(0, 1fr));
-        gap: 4px;
+        gap: var(--space-1);
     }
     .mobile-focus__day-chip {
         position: relative;
@@ -498,7 +498,7 @@
         color: var(--text-secondary);
         font-size: 0.7rem;
         cursor: pointer;
-        transition: background 0.12s ease, border-color 0.12s ease;
+        transition: background var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease);
         min-height: 44px;
     }
     .mobile-focus__day-chip:hover,
@@ -510,21 +510,21 @@
         opacity: 0.55;
     }
     .mobile-focus__day-chip--today {
-        border-color: var(--q-primary);
+        border-color: var(--brand-primary);
     }
     .mobile-focus__day-chip--focused {
-        background: var(--q-primary);
-        color: white;
-        border-color: var(--q-primary);
+        background: var(--brand-primary);
+        color: var(--text-on-primary);
+        border-color: var(--brand-primary);
     }
     /* On the focused chip the primary fill is the ground, so the status
        colours have to sit on it rather than under it. Only `planned` collides
        (it is the same green family); warning and muted stay legible. */
     .mobile-focus__day-chip--focused :deep(.mp-pips__pip--planned) {
-        background: white;
+        background: var(--text-on-primary);
     }
     .mobile-focus__day-chip--focused :deep(.mp-pips__more) {
-        color: white;
+        color: var(--text-on-primary);
     }
     .mobile-focus__day-chip-label {
         font-weight: 700;
@@ -539,7 +539,7 @@
     .mobile-focus__day-header {
         display: flex;
         align-items: center;
-        padding: 4px 0;
+        padding: var(--space-1) 0;
     }
     .mobile-focus__today {
         letter-spacing: 0.06em;
@@ -587,15 +587,15 @@
         color: var(--text-secondary);
         background: transparent;
         border: 1px dashed var(--border-default);
-        border-radius: 999px;
+        border-radius: var(--radius-pill);
         cursor: pointer;
-        transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+        transition: background var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease);
         min-height: 44px;
     }
     .mobile-focus__add:hover,
     .mobile-focus__add:focus-visible {
-        color: var(--q-primary);
-        border-color: var(--q-primary);
+        color: var(--brand-primary);
+        border-color: var(--brand-primary);
         background: var(--surface-sunken);
         outline: none;
     }

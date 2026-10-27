@@ -14,7 +14,6 @@ PATCH /auth/me. See DORA_FOLLOWUPS_RESOLVED.md FU-620.
 import logging
 from datetime import datetime, timezone
 
-from flask import jsonify
 from pydantic import BaseModel, ConfigDict, Field
 
 from dora_api.domain.entities.audit_event import SEVERITY_AUDIT
@@ -39,22 +38,10 @@ from dora_api.infrastructure.email_sender import render_template, send_email
 from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
+from dora_api.infrastructure.api_response import too_many_requests
 
 
-_Logger = logging.getLogger(__name__)
-
-
-def _too_many_requests(retry_after: int):
-    from http.client import TOO_MANY_REQUESTS
-    response = jsonify(ProblemDetails(
-        detail=f"Too many requests. Try again in {retry_after}s.",
-        errors={}, status=TOO_MANY_REQUESTS, title="Rate limit exceeded.",
-        type="https://datatracker.ietf.org/doc/html/rfc6585#section-4",
-    ))
-    response.content_type = "application/problem+json"
-    response.status_code = TOO_MANY_REQUESTS
-    response.headers["Retry-After"] = str(max(retry_after, 1))
-    return response
+_LOGGER = logging.getLogger(__name__)
 
 
 def _validation_failure(errors: dict):
@@ -77,7 +64,7 @@ class VerifyEmailRequest(BaseModel):
 def verify_email():
     body: VerifyEmailRequest = get_request_body()
     if not rate_limit("auth.verify_email", max_per_minute=10):
-        return _too_many_requests(rate_limit_remaining_seconds("auth.verify_email", 10))
+        return too_many_requests(rate_limit_remaining_seconds("auth.verify_email", 10))
 
     token_row = find_active_token(body.token, PURPOSE_VERIFY_EMAIL)
     if token_row is None:
@@ -97,7 +84,7 @@ def verify_email():
         actor_user_id=user.id,
         entity_type="User", entity_id=user.id,
     )
-    _Logger.info("Email verified for user %s", user.id)
+    _LOGGER.info("Email verified for user %s", user.id)
     return ok({"email_verified": True})
 
 
@@ -199,7 +186,7 @@ class ResetPasswordRequest(BaseModel):
 def reset_password():
     body: ResetPasswordRequest = get_request_body()
     if not rate_limit("auth.reset_password", max_per_minute=5):
-        return _too_many_requests(rate_limit_remaining_seconds("auth.reset_password", 5))
+        return too_many_requests(rate_limit_remaining_seconds("auth.reset_password", 5))
 
     pwd_error = validate_password(body.new_password)
     if pwd_error:
@@ -240,5 +227,5 @@ def reset_password():
             text_body=f"Hi {user.username}, your Dashy Dora password was just reset.",
         )
 
-    _Logger.info("Password reset for user %s", user.id)
+    _LOGGER.info("Password reset for user %s", user.id)
     return ok({"password_reset": True})

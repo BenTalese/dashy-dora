@@ -300,3 +300,23 @@ def test__frequently_added__returns_ranked_ids_only(api):
     assert all(set(row.keys()) == {"stock_item_id"} for row in rows)
     assert item_id in {row["stock_item_id"] for row in rows}
     requests.delete(f"{LISTS}/{draft}")
+
+
+def test__copy__product_only_line_keeps_its_product_anchor(api):
+    """03-R1 — the copy used to drop `product_id`, leaving a line with no anchor (500)."""
+    list_id = _make_draft()
+    product_id = _make_product()
+    assert _add_line(list_id, product_id=product_id).status_code in (200, 201)
+    copy_id = None
+    try:
+        resp = requests.post(f"{LISTS}/{list_id}/copy", json={"include": "all"})
+        assert resp.status_code == 200, resp.text
+        copy_id = resp.json()["shopping_list_id"]
+        lines = _lines(copy_id)
+        assert len(lines) == 1
+        assert lines[0]["product_id"] == product_id
+        assert lines[0]["stock_item_id"] is None
+    finally:
+        if copy_id:
+            requests.delete(f"{LISTS}/{copy_id}")
+        requests.delete(f"{LISTS}/{list_id}")

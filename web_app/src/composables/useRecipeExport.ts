@@ -1,39 +1,13 @@
 /**
- * Recipe export actions — CSV (ingredients) + print-view (recipe card).
- * Sibling to useShoppingListExport; same shape so callers can swap.
+ * Recipe export: the print view (recipe card). The CSV download went with
+ * the owner's "export to csv feels weird, remove feature here" (RECIPE
+ * DETAIL feedback); its server route is an owner call (FU-933).
  */
 import { Notify } from 'quasar';
-import { resolveBaseURL } from 'src/services/api/axiosHttpClient';
-import { parseFilename, triggerSave } from 'src/services/files/downloadHelpers';
 import { openHtmlDocumentAsync, PopupBlockedError } from 'src/services/files/printView';
 import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
 
 export function useRecipeExport() {
-    const baseUrl = resolveBaseURL();
-
-    async function downloadCsv(recipeId: string): Promise<void> {
-        try {
-            const response = await fetch(
-                `${baseUrl}/recipes/${encodeURIComponent(recipeId)}/export?format=csv`,
-                { method: 'GET', credentials: 'include' },
-            );
-            if (!response.ok) {
-                throw new Error(`Export failed (${response.status})`);
-            }
-            const filename =
-                parseFilename(response.headers.get('content-disposition'))
-                ?? `recipe-${recipeId}.csv`;
-            const blob = await response.blob();
-            triggerSave(blob, filename);
-        } catch (err) {
-            Notify.create({
-                type: 'negative',
-                message: "Couldn't export the recipe.",
-                caption: err instanceof Error ? err.message : String(err),
-            });
-        }
-    }
-
     /** Reported 2026-08-19 as "Print button 404s".
      *
      *  It was `window.open(`${baseUrl}/recipes/.../print-view`)` — the exact
@@ -70,6 +44,6 @@ export function useRecipeExport() {
         });
     }
 
-    return { downloadCsv, openPrintView };
+    return { openPrintView };
 }
 

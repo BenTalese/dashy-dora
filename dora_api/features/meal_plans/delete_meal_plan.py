@@ -9,6 +9,8 @@ from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 
+_LOGGER = logging.getLogger(__name__)
+
 
 @dataclass(slots=True)
 class DeleteMealPlanResponse:
@@ -35,10 +37,9 @@ class DeleteMealPlanHandler:
 
 @MEAL_PLAN_ROUTER.route("<uuid:meal_plan_id>", methods=["DELETE"])
 def delete_meal_plan(meal_plan_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _Handler = DeleteMealPlanHandler(SqlAlchemyRepository())
     _Response = _Handler.handle(meal_plan_id)
     if _Response.meal_plan_not_found:
         return not_found(MealPlan.__name__, meal_plan_id)
-    _Logger.info(f"Deleted meal plan {meal_plan_id}")
+    _LOGGER.info(f"Deleted meal plan {meal_plan_id}")
     return no_content()

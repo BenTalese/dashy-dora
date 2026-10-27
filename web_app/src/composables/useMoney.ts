@@ -1,5 +1,5 @@
 import { computed, ref } from 'vue';
-import HealthApiService from 'src/services/api/healthApiService';
+import HealthApiService, { invalidateHealthInfo } from 'src/services/api/healthApiService';
 
 // install-wide currency + locale
 // for every money render in the app. R-003: one source of truth, one
@@ -144,6 +144,7 @@ export function ensureLocalePolicy(): Promise<void> {
 export function refreshMoneyPolicy(): Promise<void> {
     loaded.value = false;
     inflight = null;
+    invalidateHealthInfo();
     cachedFormatter = null;
     cachedFor = '';
     return load();

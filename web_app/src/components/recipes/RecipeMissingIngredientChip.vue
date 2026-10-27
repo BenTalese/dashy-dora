@@ -184,7 +184,7 @@
     }
 
     .rmic__headk {
-        font-size: var(--font-size-xs);
+        font-size: calc(var(--font-size-xs) * 1rem);
         font-weight: 700;
         letter-spacing: 0.04em;
         text-transform: uppercase;

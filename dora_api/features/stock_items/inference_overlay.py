@@ -44,14 +44,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from uuid import UUID
 
-from flask import session
 
 from dora_api.domain.entities.stock_item import StockItem
 from dora_api.domain.entities.user import User
-from dora_api.domain.stock_status import is_missing
+from dora_api.domain.stock_status import is_missing, is_missing_sequence
 from dora_api.features.stock_items.pantry_belief import (
-    PantryBelief, gather_beliefs_for_items,
-)
+    PantryBelief, compute_belief, gather_belief_inputs_for_items)
+from dora_api.infrastructure.session_user import current_user
 
 
 # Surface ids ↔ the `User` column that gates each. The stock entry is the
@@ -109,21 +108,6 @@ def surface_enabled(user: User | None, surface: str) -> bool:
     return bool(getattr(user, column, False))
 
 
-def current_user(repository) -> User | None:
-    """The signed-in user, or None. Local because the `session['user_id']` →
-    UUID → `repo.get(User)` dance is hand-rolled in a dozen features already
-    (FU-654 tracks folding them into one helper); this at least doesn't add a
-    thirteenth copy inline in three surfaces."""
-    raw = session.get("user_id")
-    if not raw:
-        return None
-    try:
-        user_id = UUID(raw)
-    except (ValueError, TypeError):
-        return None
-    return repository.get(User).by_id(user_id)
-
-
 def resolve_divergence(repository, surface: str, items: list[StockItem]) -> DivergentItems:
     """One call for a surface: gate on the signed-in user's toggle, then
     compute. Returns the empty overlay when the surface is off, so callers
@@ -143,9 +127,13 @@ def divergent_items(repository, items: list[StockItem]) -> DivergentItems:
     """
     if not items:
         return EMPTY_DIVERGENCE
-    beliefs = gather_beliefs_for_items(repository, items)
+    # The recorded level comes from the gathered inputs (resolved by foreign
+    # key), never `item.stock_level`: the relationship is `noload` and an
+    # include doesn't reliably populate it (R-032 / FU-684; finalisation 07-R2).
+    inputs = gather_belief_inputs_for_items(repository, items)
+    beliefs = {item_id: compute_belief(i) for item_id, i in inputs.items()}
     recorded_missing = {
-        item.id: is_missing(item.stock_level) for item in items
+        item_id: is_missing_sequence(i.recorded_sequence) for item_id, i in inputs.items()
     }
     out: set[UUID] = set()
     available: set[UUID] = set()
@@ -195,6 +183,28 @@ class IngredientRow:
     name: str
     is_optional: bool
     is_missing: bool
+
+    @classmethod
+    def from_dto(cls, ingredient) -> 'IngredientRow':
+        """From a ``RecipeIngredientDto`` (the cookbook path)."""
+        return cls(
+            stock_item_id=ingredient.stock_item_id,
+            name=ingredient.stock_item_name or (ingredient.raw_text or ""),
+            is_optional=ingredient.is_optional,
+            is_missing=ingredient.is_missing,
+        )
+
+    @classmethod
+    def from_entity(cls, ingredient) -> 'IngredientRow':
+        """From a ``RecipeIngredient`` loaded with its stock item and level
+        (the meal-plan path; finalisation 07-R7)."""
+        item = ingredient.stock_item
+        return cls(
+            stock_item_id=item.id if item else None,
+            name=item.name if item else (ingredient.raw_text or ""),
+            is_optional=ingredient.is_optional,
+            is_missing=is_missing(item.stock_level) if item else False,
+        )
 
 
 def recipe_hint(

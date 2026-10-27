@@ -30,7 +30,7 @@ from dora_api.features.routers import SPA_ROUTER
 from dora_api.infrastructure.api_response import endpoint_not_found
 
 
-_Logger = logging.getLogger(__name__)
+_LOGGER = logging.getLogger(__name__)
 
 
 # FU-540/FU-551 — `send_from_directory` derives Content-Type from the stdlib
@@ -58,7 +58,7 @@ def _spa_dir() -> Path | None:
         path = Path(explicit).expanduser().resolve()
         if (path / "index.html").is_file():
             return path
-        _Logger.warning("DORA_SPA_DIR=%s but no index.html there", path)
+        _LOGGER.warning("DORA_SPA_DIR=%s but no index.html there", path)
         return None
     fallback = Path.cwd() / "web_app" / "dist" / "spa"
     if (fallback / "index.html").is_file():

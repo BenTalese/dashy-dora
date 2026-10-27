@@ -20,9 +20,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta, timezone
-from uuid import UUID
 
-from flask import session
 
 from dora_api.domain.dora_score import (
     DORA_SCORE_TREND_LAG_DAYS,
@@ -37,6 +35,7 @@ from dora_api.domain.dora_score import (
 from dora_api.domain.entities.meal_plan_entry import MealPlanEntry
 from dora_api.domain.entities.stock_item import StockItem
 from dora_api.domain.entities.stock_item_waste_event import StockItemWasteEvent
+from dora_api.features.meal_plans.commitment_access import recipe_ids_scheduled_between
 from dora_api.features.app_settings.access import money_features_enabled
 from dora_api.features.app_settings.clock import household_today
 from dora_api.features.budget.budget import GetBudgetStatusHandler
@@ -46,6 +45,7 @@ from dora_api.infrastructure.api_response import ok, unauthorized
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
+from dora_api.infrastructure.session_user import current_user_id
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -103,11 +103,15 @@ class GetDoraScoreHandler:
         upcoming_planned_meals = 0
         upcoming_cookable_meals = 0
         if not lagged:
-            cookability = load_recipe_cookability(self.repository)
             today = household_today(self.repository)
             week_ahead = today + timedelta(days=7)
             mpe_scheduled = EntityField(
                 MealPlanEntry, MealPlanEntry.Fields.SCHEDULED_FOR,
+            )
+            # Cookability first, for just the week's recipes (08-R16; see
+            # `recipe_ids_scheduled_between` for why the order matters).
+            cookability = load_recipe_cookability(
+                self.repository, recipe_ids_scheduled_between(today, week_ahead),
             )
             upcoming: list[MealPlanEntry] = (
                 self.repository.get(MealPlanEntry)
@@ -158,7 +162,7 @@ class GetDoraScoreHandler:
         budget_over_pct: float | None = None
         if money_enabled and not lagged:
             budget = GetBudgetStatusHandler(self.repository).handle()
-            if budget is not None and budget.amount is not None and budget.enabled:
+            if budget.amount is not None and budget.enabled:
                 has_budget = True
                 if budget.amount > 0:
                     budget_over_pct = (budget.spent / budget.amount) - 1.0
@@ -203,19 +207,10 @@ class GetDoraScoreHandler:
             money_enabled=money_enabled,
         )
 
-def _current_user_id() -> UUID | None:
-    raw = session.get("user_id")
-    if not raw:
-        return None
-    try:
-        return UUID(raw)
-    except (ValueError, TypeError):
-        return None
-
 
 @DASHBOARD_ROUTER.route("/dora-score", methods=["GET"])
 def get_dora_score():
-    user_id = _current_user_id()
+    user_id = current_user_id()
     if user_id is None:
         return unauthorized()
     dto = GetDoraScoreHandler(SqlAlchemyRepository()).handle()

@@ -57,7 +57,7 @@ def test__stock_item_price_history__no_data__empty_points(api):
     item = _new_stock_item()
     body = _history(item).json()
     assert body["points"] == []
-    assert body["canonical_unit"] is None
+    assert body["display_unit"] is None
     assert body["baseline"] is None
     assert body["sample_count"] == 0
 
@@ -76,7 +76,7 @@ def test__stock_item_price_history__observations_only__sorted_and_tagged(api):
          observed_at="2026-02-01T00:00:00+00:00")
     body = _history(item).json()
 
-    assert body["canonical_unit"] == "100ml"
+    assert body["display_unit"] == "100ml"
     assert body["sample_count"] == 3
     assert body["baseline"] == 0.3          # median of [2, 3, 5] per-L, per 100ml
 
@@ -98,7 +98,7 @@ def test__stock_item_price_history__ml_observation_displays_per_100ml(api):
     _log(item, total_price=3.0, total_measure=500.0, unit="ml",
          observed_at="2026-05-01T00:00:00+00:00")
     body = _history(item).json()
-    assert body["canonical_unit"] == "100ml"
+    assert body["display_unit"] == "100ml"
     assert len(body["points"]) == 1
     # $3 / 0.5 L = $6/L = $0.60/100ml
     assert abs(body["points"][0]["unit_price"] - 0.6) < 1e-6
@@ -115,7 +115,7 @@ def test__stock_item_price_history__seeded_milk_unions_offers(api):
         return  # seed shape changed — nothing to assert against
     body = _history(milk).json()
 
-    assert body["canonical_unit"] == "100ml"
+    assert body["display_unit"] == "100ml"
     assert body["baseline"] is not None
     assert body["sample_count"] >= 3
 

@@ -54,6 +54,8 @@ from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 
+_LOGGER = logging.getLogger(__name__)
+
 
 # Target fields with their synonyms for auto-mapping. Lowercased,
 # trimmed, punctuation stripped before matching.
@@ -250,7 +252,7 @@ class InspectSpreadsheetHandler:
         except ValueError as exc:
             return str(exc)
         except Exception as exc:  # noqa: BLE001
-            logging.getLogger(__name__).exception("Failed to read spreadsheet.")
+            _LOGGER.exception("Failed to read spreadsheet.")
             return f"Could not read spreadsheet: {exc}"
 
         sheet_names = list(sheets.keys())
@@ -379,7 +381,7 @@ class CommitSpreadsheetHandler:
         except ValueError as exc:
             return str(exc)
         except Exception as exc:  # noqa: BLE001
-            logging.getLogger(__name__).exception("Failed to read spreadsheet on commit.")
+            _LOGGER.exception("Failed to read spreadsheet on commit.")
             return f"Could not read spreadsheet: {exc}"
 
         if request.sheet not in sheets:
@@ -541,7 +543,7 @@ class CommitSpreadsheetHandler:
             )
         except Exception as exc:  # noqa: BLE001
             db.session.rollback()
-            logging.getLogger(__name__).exception("Spreadsheet import failed; rolled back.")
+            _LOGGER.exception("Spreadsheet import failed; rolled back.")
             return f"Import failed and was rolled back: {exc}"
 
         # Successful commit — consume the staged file so the upload area

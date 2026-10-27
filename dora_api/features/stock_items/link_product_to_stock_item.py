@@ -18,6 +18,8 @@ from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 
+_LOGGER = logging.getLogger(__name__)
+
 
 class LinkProductRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -68,25 +70,35 @@ class LinkProductToStockItemHandler:
         #     setting `stock_item_id` (still keeping `product_id`).
         # Either way the SPA gets a single nested row instead of two
         # disconnected rows next time it refreshes.
-        orphan_lines = (
-            self.repository.get(ShoppingListLine).all(
+        orphan_lines = [
+            line for line in self.repository.get(ShoppingListLine).all(
                 EntityField(ShoppingListLine, "product_id").eq(_Product.id)
             )
-        )
+            if line.stock_item_id is None  # a nested line is already fine
+        ]
+        # The parent lists and this item's plain lines on them, once each
+        # rather than per orphan.
+        list_ids = list({line.shopping_list_id for line in orphan_lines})
+        open_list_ids = {
+            lst.id for lst in (
+                self.repository.get(ShoppingList).all(EntityField(ShoppingList, "id").in_(list_ids))
+                if list_ids else []
+            )
+            if lst.status != SHOPPING_LIST_STATUS_DONE  # finished lists are history
+        }
+        stock_line_by_list = {
+            line.shopping_list_id: line for line in (
+                self.repository.get(ShoppingListLine).all(
+                    EntityField(ShoppingListLine, "shopping_list_id").in_(list(open_list_ids))
+                    & EntityField(ShoppingListLine, "stock_item_id").eq(_StockItem.id)
+                    & EntityField(ShoppingListLine, "product_id").is_null()
+                ) if open_list_ids else []
+            )
+        }
         for orphan in orphan_lines:
-            # Ignore orphans on finished lists — historic data.
-            parent_list = self.repository.get(ShoppingList).by_id(
-                orphan.shopping_list_id,
-            )
-            if parent_list is None or parent_list.status == SHOPPING_LIST_STATUS_DONE:
+            if orphan.shopping_list_id not in open_list_ids:
                 continue
-            if orphan.stock_item_id is not None:
-                continue  # already nested
-            existing_stock_line = self.repository.get(ShoppingListLine).one(
-                EntityField(ShoppingListLine, "shopping_list_id").eq(orphan.shopping_list_id)
-                & EntityField(ShoppingListLine, "stock_item_id").eq(_StockItem.id)
-                & EntityField(ShoppingListLine, "product_id").is_null()
-            )
+            existing_stock_line = stock_line_by_list.get(orphan.shopping_list_id)
             if existing_stock_line is not None:
                 # Fold: keep the stock line, set its product anchor,
                 # drop the orphan.
@@ -104,7 +116,6 @@ class LinkProductToStockItemHandler:
 @STOCK_ITEM_ROUTER.route("<uuid:stock_item_id>/products", methods=["POST"])
 @has_request_body(LinkProductRequest)
 def link_product_to_stock_item(stock_item_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _Handler = LinkProductToStockItemHandler(SqlAlchemyRepository())
     _Request: LinkProductRequest = get_request_body()
     _Response = _Handler.handle(stock_item_id, _Request)
@@ -118,7 +129,7 @@ def link_product_to_stock_item(stock_item_id: UUID):
             _Request.product_id,
         )
 
-    _Logger.info(
+    _LOGGER.info(
         "Linked product %s to stock item %s%s",
         _Request.product_id,
         stock_item_id,

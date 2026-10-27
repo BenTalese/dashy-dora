@@ -25,6 +25,8 @@ from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 
+_LOGGER = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True, slots=True)
 class StockItemMembershipDto:
@@ -115,9 +117,8 @@ class GetMembershipHandler:
 
 @SHOPPING_LIST_ROUTER.route("/membership", methods=["GET"])
 def get_membership():
-    _Logger = logging.getLogger(__name__)
     _Result = GetMembershipHandler(SqlAlchemyRepository()).handle()
-    _Logger.debug(
+    _LOGGER.debug(
         "Membership: quick_add_target=%s, %d items on at least one active list",
         _Result.quick_add_target_list_id, len(_Result.items),
     )

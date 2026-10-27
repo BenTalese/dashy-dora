@@ -6,11 +6,7 @@
             :icon="ICONS.record_voice_over"
         />
 
-        <q-banner v-if="!isAdmin" class="dora-bg-negative-soft text-negative" dense rounded>
-            You don't have admin permissions to view this page.
-        </q-banner>
-
-        <template v-else-if="!loading">
+        <template v-if="ready">
             <SettingsSection>
                 <template #title>How Dora's voice works</template>
                 <template #description>
@@ -73,73 +69,18 @@
 
 <script lang="ts" setup>
     import { ICONS } from 'src/style/icons';
-    import { storeToRefs } from 'pinia';
-    import { useQuasar } from 'quasar';
-    import AppSettingsApiService, { type AppSettings } from 'src/services/api/appSettingsApiService';
-    import { useAuthStore } from 'src/stores/authStore';
-    import { onMounted, reactive, ref } from 'vue';
-    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+    import { useAppSettingDrafts } from 'src/composables/useAppSettingDrafts';
     import SettingsSection from 'src/components/settings/SettingsSection.vue';
     import SettingsRow from 'src/components/settings/SettingsRow.vue';
     import SettingsPageHeader from 'src/components/settings/SettingsPageHeader.vue';
 
     type VoiceField = 'piper_bin' | 'piper_bundled_voice_dir';
 
-    const $q = useQuasar();
-    const { isAdmin } = storeToRefs(useAuthStore());
-    const api = new AppSettingsApiService();
+    const { draft, ready, save } = useAppSettingDrafts({ piper_bin: '', piper_bundled_voice_dir: '' });
 
-    const loading = ref(true);
-    const saved = reactive({
-        piper_bin: '',
-        piper_bundled_voice_dir: '',
-    });
-    const draft = reactive({ ...saved });
-
-    function resetDrafts() {
-        Object.assign(draft, saved);
+    function onSaveField(field: VoiceField) {
+        void save({ [field]: (draft[field] ?? '').trim() }, 'Voice settings saved.');
     }
-
-    async function onSaveField(field: VoiceField) {
-        const value = (draft[field] ?? '').trim();
-        if (value === saved[field]) return;
-        try {
-            const result = await api.updateAsync({ [field]: value });
-            saved[field] = result[field];
-            resetDrafts();
-            $q.notify({
-                type: 'positive', 
-                message: 'Voice settings saved.',
-            });
-        } catch (err) {
-            resetDrafts();
-            $q.notify({
-                type: 'negative', 
-                message: 'Could not save voice settings.',
-                caption: toastCaption(err),
-            });
-        }
-    }
-
-    function hydrate(s: AppSettings) {
-        saved.piper_bin = s.piper_bin;
-        saved.piper_bundled_voice_dir = s.piper_bundled_voice_dir;
-        resetDrafts();
-    }
-
-    onMounted(async () => {
-        if (!isAdmin.value) {
-            loading.value = false;
-            return;
-        }
-        try {
-            hydrate(await api.getAsync());
-        } catch {
-            // Leave defaults; env fallback still active.
-        } finally {
-            loading.value = false;
-        }
-    });
 </script>
 
 <style scoped lang="scss">

@@ -657,7 +657,7 @@
 <style scoped>
     .template-card {
         cursor: pointer;
-        transition: transform 120ms ease, box-shadow 120ms ease;
+        transition: transform var(--motion-fast) var(--motion-ease), box-shadow var(--motion-fast) var(--motion-ease);
     }
     .template-card:focus-visible {
         outline: 2px solid var(--focus-ring);

@@ -97,6 +97,9 @@ export type AppSettings = {
     // install-wide image-encode policy, applied at upload time by the shared
     // `processImageFile` helper. Owned by Settings → Install → Image quality;
     // also mirrored on /api/health so non-admin clients read the same numbers.
+    // Backup library (Settings → Backup & restore).
+    backup_retention_count: number;
+    backup_storage_path: string;
     image_quality: number;
     image_max_dimension: number;
 };
@@ -111,12 +114,6 @@ export type UpdateAppSettingsCommand = Partial<Omit<AppSettings,
     vapid_private_key?: string;
 };
 
-export type ProbeResult = {
-    reachable: boolean;
-    models: string[];
-    error: string | null;
-};
-
 export default class AppSettingsApiService {
     private httpClient = new AxiosHttpClient();
 
@@ -125,9 +122,4 @@ export default class AppSettingsApiService {
 
     updateAsync = async (command: UpdateAppSettingsCommand): Promise<AppSettings> =>
         await this.httpClient.patch<AppSettings, UpdateAppSettingsCommand>('/app-settings', command);
-
-    probeAsync = async (baseUrl: string): Promise<ProbeResult> =>
-        await this.httpClient.post<ProbeResult, { base_url: string }>('/app-settings/probe', {
-            base_url: baseUrl,
-        });
 }

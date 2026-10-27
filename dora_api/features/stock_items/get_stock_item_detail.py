@@ -4,8 +4,8 @@ The list endpoint at `GET /api/stock-items` returns a compact DTO suitable
 for the overview grid. This one is used by the detail page and includes:
   * everything on the list DTO
   * notes, stocktake_alerts_are_enabled (Mute)
-  * the location name and stock-level name (so the page doesn't need to
-    cross-reference lookups)
+  * the stock-level name (the page edits location, group and usual store
+    through id pickers, so only their ids ride along)
   * linked products with their store + current offer info
   * linked recipes (just id + name) — derived via the RecipeIngredient join
 """
@@ -18,14 +18,15 @@ from uuid import UUID
 from sqlalchemy import select
 
 from dora_api.app import db
-from dora_api.domain.location_breadcrumb import build_breadcrumb
 from dora_api.domain.entities.recipe import Recipe
 from dora_api.domain.entities.recipe_ingredient import RecipeIngredient
 from dora_api.domain.entities.shopping_list import (
     SHOPPING_LIST_STATUS_DONE, ShoppingList, ShoppingListLine,
 )
 from dora_api.domain.entities.preferred_buy import PreferredBuy
+from dora_api.domain.entities.barcode import Barcode
 from dora_api.domain.entities.cook_event import CookEvent
+from dora_api.domain.entities.nutrition_food import NUTRITION_SOURCE_LABELS, NutritionFood
 from dora_api.domain.entities.store import Store
 from dora_api.domain.entities.stock_item import StockItem
 from dora_api.domain.entities.stock_item_expiry_event import StockItemExpiryEvent
@@ -33,8 +34,6 @@ from dora_api.domain.entities.stock_item_price_observation import StockItemPrice
 from dora_api.domain.entities.stock_item_waste_event import StockItemWasteEvent
 from dora_api.domain.entities.stock_level import StockLevel
 from dora_api.domain.entities.stock_level_change import StockLevelChange
-from dora_api.domain.entities.stock_location import StockLocation
-from dora_api.domain.stock_status import get_stock_item_unit_cost_at
 from dora_api.features.nutrition.nutrients import display_rows
 from dora_api.features.routers import STOCK_ITEM_ROUTER
 from dora_api.features.stock_items.your_prices import build_your_prices_for_item
@@ -43,16 +42,15 @@ from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 
+_LOGGER = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True, slots=True)
 class LinkedProductDto:
     product_id: UUID
     name: str
-    brand: str | None
     store_id: UUID
     store_name: str
-    # producer's SKU code, retained verbatim.
-    merchant_stockcode: str | None
     size: str | None
     web_url: str | None
     price_now: float | None
@@ -93,6 +91,9 @@ class SubstituteDto:
     name: str
     stock_level_id: UUID | None
     stock_level_name: str | None
+    # The level's ladder position (0 stocked, 1 low, 2 out), so the row can
+    # colour its dot without looking the substitute up in another store.
+    stock_level_sequence: int | None
     # free-text hint. NULL when the user didn't set one.
     notes: str | None
     # optional structured ratio "qty_in of THIS item → qty_out of
@@ -109,8 +110,11 @@ class SubstituteDto:
 @dataclass(frozen=True, slots=True)
 class LevelChangeDto:
     changed_at: datetime
-    stock_level_id: UUID | None
     stock_level_name: str | None
+    # The level's ladder position when it still exists (None once a level is
+    # deleted). The timeline reads "restocked" / "dropped" off this, never off
+    # the level's name, which a household can rename (R-068).
+    stock_level_sequence: int | None
 
 
 # lifecycle timeline inputs. The frontend merges these
@@ -143,7 +147,6 @@ class PurchaseEventDto:
     occurred_at: datetime
     quantity: int
     actual_unit_price: float | None
-    store_id: UUID | None
     store_name: str | None
     shopping_list_id: UUID
     shopping_list_name: str
@@ -196,13 +199,11 @@ class PriceObservationDto:
     total_measure: float
     unit: str
     observed_at: datetime
-    # A2 — optional store; resolved name for the chip on the detail page.
-    store_id: UUID | None
+    # A2 — the store's resolved name for the chip on the detail page.
     store_name: str | None
-    # A4 revised — provenance FK (LC-4: provenance only, not a sync link).
-    # `shopping_list_name` is a small human label resolved server-side
-    # ("Wed's shopping list") so the client renders a string, not the FK.
-    shopping_list_line_id: UUID | None
+    # A4 revised — provenance (LC-4: provenance only, not a sync link): a
+    # small human label resolved server-side ("Wed's shopping list") so the
+    # client renders a string, not the FK.
     shopping_list_name: str | None
     # Multipack metadata (FU-227 follow-up). When set, the obs list shows
     # "4 × 125g" instead of "500g flat"; math is unaffected.
@@ -314,10 +315,7 @@ class StockItemDetailDto:
     stock_level_id: UUID | None
     stock_level_name: str | None
     stock_location_id: UUID | None
-    stock_location_name: str | None
-    stock_location_breadcrumb: List[str]
     stock_group_id: UUID | None
-    stock_group_name: str | None
     stock_level_last_updated: datetime
     expiry_date: date | None
     is_open: bool
@@ -327,7 +325,6 @@ class StockItemDetailDto:
     # stock-item detail; drives the shopping-list grouping
     # (PROPOSAL_PRODUCTS_AS_OVERLAY §3.3) when set.
     usual_store_id: UUID | None
-    usual_store_name: str | None
     products: List[LinkedProductDto]
     recipes: List[LinkedRecipeDto]
     substitutes: List[SubstituteDto]
@@ -353,10 +350,9 @@ class StockItemDetailDto:
     history_older_count: int = 0
     # free-text "what I buy" reminders (always present; not gated).
     preferred_buys: List[PreferredBuyDto] = field(default_factory=list)
-    # price observations + the server-derived per-unit cost (the
-    # client never divides — R-003). Money-gated at the UI, not here.
+    # price observations. The current per-unit figure is `your_prices.current`
+    # (the client never divides — R-003). Money-gated at the UI, not here.
     price_observations: List[PriceObservationDto] = field(default_factory=list)
-    unit_cost: float | None = None
     # what the shared PriceEntry widget should seed itself
     # with when opened (F2). Null when no prior observation exists. Resolved
     # server-side so the source label ("from your last log") stays consistent.
@@ -395,6 +391,483 @@ class StockItemDetailDto:
 HISTORY_PER_KIND_CAP = 50
 
 
+# ── Builders (one per feed) ───────────────────────────────────────────────
+#
+# Each feed of the detail DTO is built by its own function, so the handler
+# reads as a list of feeds and the slices other surfaces need (substitutes,
+# the price-entry prefill, the buy choices) are served by small endpoints in
+# `get_stock_item_parts.py` instead of a full detail read (finalisation
+# 06-R10 / 06-R11).
+
+
+def _level_lookup(repository: Repository) -> dict[UUID, StockLevel]:
+    return {lvl.id: lvl for lvl in repository.get(StockLevel).all()}
+
+
+def load_stock_item_with_products(repository: Repository, stock_item_id: UUID) -> StockItem | None:
+    """The item with its level, location, group and linked products (each
+    product with its store and current offer)."""
+    return (
+        repository
+        .get(StockItem)
+        .include(StockItem.Fields.STOCK_LEVEL)
+        .include(StockItem.Fields.STOCK_LOCATION)
+        .include(StockItem.Fields.STOCK_GROUP)
+        # store and current_offer are siblings on Product, so each needs
+        # its own include("products") branch — chaining then_include would
+        # try to resolve current_offer on Store.
+        .include(StockItem.Fields.PRODUCTS)
+            .then_include("store")
+        .include(StockItem.Fields.PRODUCTS)
+            .then_include("current_offer")
+        .one(EntityField(StockItem, "id").eq(stock_item_id))
+    )
+
+
+def build_linked_products(stock_item: StockItem) -> List[LinkedProductDto]:
+    return sorted(
+        (
+            LinkedProductDto(
+                product_id = p.id,
+                name = p.name,
+                store_id = p.store.id,
+                store_name = p.store.name,
+                size = p.size,
+                web_url = p.web_url,
+                price_now = p.current_offer.price_now if p.current_offer else None,
+                price_was = p.current_offer.price_was if p.current_offer else None,
+            )
+            for p in (stock_item.products or [])
+        ),
+        key=lambda d: (d.store_name.lower(), d.name.lower()),
+    )
+
+
+def build_preferred_buys(repository: Repository, stock_item_id: UUID) -> List[PreferredBuyDto]:
+    """Free-text preferred buys, A–Z case-insensitive. FU-225 dropped the
+    `position` column and the manual reorder UI; the server owns the order."""
+    return sorted(
+        (
+            PreferredBuyDto(preferred_buy_id = pb.id, label = pb.label)
+            for pb in repository.get(PreferredBuy).all(
+                EntityField(PreferredBuy, PreferredBuy.Fields.STOCK_ITEM_ID).eq(stock_item_id)
+            )
+        ),
+        key=lambda d: d.label.lower(),
+    )
+
+
+def build_substitutes(
+    repository: Repository, stock_item_id: UUID,
+    levels: dict[UUID, StockLevel] | None = None,
+) -> List[SubstituteDto]:
+    """The item's substitutes, read straight from the association table (the
+    generic repository can't self-join StockItem, R-005 carve-out). Pairs are
+    undirected: the "other side" is whichever column is *not* this item, and
+    the ratio is **inverted** when viewing from the B side so the consumer
+    always sees `qty_in/unit_in` as "this item" and `qty_out/unit_out` as
+    "the substitute" (FU-034)."""
+    session = repository.session
+    levels = levels if levels is not None else _level_lookup(repository)
+    assoc = db.metadata.tables["StockItemSubstitute"]
+    as_a = session.execute(
+        select(
+            assoc.c.stock_item_b_id,
+            assoc.c.notes,
+            assoc.c.ratio_quantity_in,
+            assoc.c.ratio_unit_in,
+            assoc.c.ratio_quantity_out,
+            assoc.c.ratio_unit_out,
+        ).where(assoc.c.stock_item_a_id == stock_item_id)
+    ).all()
+    as_b = session.execute(
+        select(
+            assoc.c.stock_item_a_id,
+            assoc.c.notes,
+            # Swap the in/out pair so we display from B's side.
+            assoc.c.ratio_quantity_out.label("ratio_quantity_in"),
+            assoc.c.ratio_unit_out.label("ratio_unit_in"),
+            assoc.c.ratio_quantity_in.label("ratio_quantity_out"),
+            assoc.c.ratio_unit_in.label("ratio_unit_out"),
+        ).where(assoc.c.stock_item_b_id == stock_item_id)
+    ).all()
+    # other_id → metadata. If both directions returned the same row
+    # (shouldn't happen with canonical storage), the later wins; both are
+    # equivalent semantically.
+    meta_by_other: dict = {}
+    for row in list(as_a) + list(as_b):
+        meta_by_other[row[0]] = {
+            "notes": row[1],
+            "ratio_quantity_in": row[2],
+            "ratio_unit_in": row[3],
+            "ratio_quantity_out": row[4],
+            "ratio_unit_out": row[5],
+        }
+    if not meta_by_other:
+        return []
+    sub_items = list(session.execute(
+        select(StockItem).where(StockItem.id.in_(list(meta_by_other)))
+    ).scalars())
+    out: List[SubstituteDto] = []
+    for s in sub_items:
+        level = levels.get(s._stock_level_id)
+        meta = meta_by_other[s.id]
+        out.append(SubstituteDto(
+            stock_item_id = s.id,
+            name = s.name,
+            stock_level_id = s._stock_level_id,
+            stock_level_name = level.name if level else None,
+            stock_level_sequence = level.sequence if level else None,
+            notes = meta["notes"],
+            ratio_quantity_in = meta["ratio_quantity_in"],
+            ratio_unit_in = meta["ratio_unit_in"],
+            ratio_quantity_out = meta["ratio_quantity_out"],
+            ratio_unit_out = meta["ratio_unit_out"],
+        ))
+    return sorted(out, key=lambda d: d.name.lower())
+
+
+@dataclass(slots=True)
+class _HistoryTally:
+    """Running count of events dropped past the per-kind cap across every
+    history feed, reported as `history_older_count`."""
+    older: int = 0
+
+    def capped(self, rows: list) -> list:
+        self.older += max(0, len(rows) - HISTORY_PER_KIND_CAP)
+        return rows[:HISTORY_PER_KIND_CAP]
+
+
+def _linked_recipe_ids(repository: Repository, stock_item_id: UUID) -> List[UUID]:
+    """Recipes that use this item, from the ingredient join. `_recipe_id` and
+    `_stock_item_id` are the underscore-prefixed mapper properties on
+    RecipeIngredient (see table_mappings.py) — that naming keeps the FK columns
+    out of verify_mappings."""
+    return list(repository.session.execute(
+        select(RecipeIngredient._recipe_id)
+        .where(RecipeIngredient._stock_item_id == stock_item_id)
+        .distinct()
+    ).scalars())
+
+
+def _linked_recipes(repository: Repository, recipe_ids: List[UUID]) -> List[LinkedRecipeDto]:
+    if not recipe_ids:
+        return []
+    recipes = list(repository.session.execute(
+        select(Recipe).where(Recipe.id.in_(recipe_ids))
+    ).scalars())
+    recipes.sort(key=lambda r: r.name.lower())
+    return [LinkedRecipeDto(recipe_id=r.id, name=r.name) for r in recipes]
+
+
+def _level_history(
+    repository: Repository, stock_item_id: UUID,
+    levels: dict[UUID, StockLevel], tally: _HistoryTally,
+) -> List[LevelChangeDto]:
+    changes = repository.get(StockLevelChange).all(
+        EntityField(StockLevelChange, StockLevelChange.Fields.STOCK_ITEM_ID).eq(stock_item_id)
+    )
+    changes.sort(key=lambda c: c.changed_at, reverse=True)
+    out: List[LevelChangeDto] = []
+    for c in tally.capped(changes):
+        level = levels.get(c.stock_level_id)
+        out.append(LevelChangeDto(
+            changed_at = c.changed_at,
+            stock_level_name = c.stock_level_name,
+            stock_level_sequence = level.sequence if level else None,
+        ))
+    return out
+
+
+def _waste_events(repository: Repository, stock_item_id: UUID, tally: _HistoryTally) -> List[WasteEventDto]:
+    """Append-only waste log (P2-06), newest first."""
+    wastes = repository.get(StockItemWasteEvent).all(
+        EntityField(StockItemWasteEvent, StockItemWasteEvent.Fields.STOCK_ITEM_ID).eq(stock_item_id)
+    )
+    wastes.sort(key=lambda w: w.occurred_at, reverse=True)
+    return [WasteEventDto(occurred_at=w.occurred_at, reason=w.reason) for w in tally.capped(wastes)]
+
+
+def _list_adds(
+    repository: Repository, item_lines: List[ShoppingListLine], tally: _HistoryTally,
+) -> List[ListAddEventDto]:
+    """Every line for this item with an `added_at` stamp. Lines on finished
+    lists are included on purpose: the timeline is the *item's* history, not
+    the current cart."""
+    lines = sorted((l for l in item_lines if l.added_at is not None), key=lambda l: l.added_at, reverse=True)
+    lines = tally.capped(lines)
+    if not lines:
+        return []
+    lists = list(repository.session.execute(
+        select(ShoppingList).where(ShoppingList.id.in_({l.shopping_list_id for l in lines}))
+    ).scalars())
+    name_by_id = {lst.id: lst.display_name for lst in lists}
+    return [
+        ListAddEventDto(
+            added_at = l.added_at,
+            shopping_list_id = l.shopping_list_id,
+            shopping_list_name = name_by_id.get(l.shopping_list_id, '(deleted list)'),
+        )
+        for l in lines
+    ]
+
+
+def _purchase_events(
+    repository: Repository, item_lines: List[ShoppingListLine], tally: _HistoryTally,
+) -> List[PurchaseEventDto]:
+    """"You actually bought this on <date> at <store>": every line ticked on a
+    list that is genuinely finished (`done` + `completed_at`; a ticked line
+    on an in-flight list is mid-shop). The list's `completed_at` is the when
+    (a line has no per-tick timestamp)."""
+    bought = [l for l in item_lines if l.is_ticked]
+    if not bought:
+        return []
+    session = repository.session
+    list_by_id = {
+        lst.id: lst for lst in session.execute(
+            select(ShoppingList).where(ShoppingList.id.in_({l.shopping_list_id for l in bought}))
+        ).scalars()
+    }
+    store_ids = {l.purchased_store_id for l in bought if l.purchased_store_id is not None}
+    store_name_by_id: dict[UUID, str] = {}
+    if store_ids:
+        store_name_by_id = {
+            s.id: s.name for s in session.execute(select(Store).where(Store.id.in_(store_ids))).scalars()
+        }
+    purchases = []
+    for line in bought:
+        lst = list_by_id.get(line.shopping_list_id)
+        if lst is None or lst.status != SHOPPING_LIST_STATUS_DONE or lst.completed_at is None:
+            continue
+        purchases.append((lst, line))
+    purchases.sort(key=lambda pair: pair[0].completed_at, reverse=True)
+    return [
+        PurchaseEventDto(
+            occurred_at = lst.completed_at,
+            quantity = line.quantity,
+            actual_unit_price = line.actual_unit_price,
+            store_name = (
+                store_name_by_id.get(line.purchased_store_id)
+                if line.purchased_store_id is not None else None
+            ),
+            shopping_list_id = lst.id,
+            shopping_list_name = lst.display_name,
+        )
+        for lst, line in tally.capped(purchases)
+    ]
+
+
+def _cook_events(
+    repository: Repository, recipe_ids: List[UUID], tally: _HistoryTally,
+) -> List[CookEventDto]:
+    """"You cooked a recipe that uses this ingredient", over exactly the
+    linked-recipe set; `recipe_id IN (…)` rides the `cook_event_recipe_id`
+    index."""
+    if not recipe_ids:
+        return []
+    rows = list(repository.session.execute(
+        select(CookEvent).where(CookEvent.recipe_id.in_(recipe_ids))
+    ).scalars())
+    rows.sort(key=lambda e: e.occurred_at, reverse=True)
+    return [
+        CookEventDto(
+            occurred_at = e.occurred_at,
+            recipe_id = e.recipe_id,
+            recipe_name = e.recipe_name,
+            meals_cooked = e.meals_cooked,
+        )
+        for e in tally.capped(rows)
+    ]
+
+
+def _expiry_events(repository: Repository, stock_item_id: UUID, tally: _HistoryTally) -> List[ExpiryEventDto]:
+    """Every set / pushed / cleared expiry transition, newest first."""
+    rows = repository.get(StockItemExpiryEvent).all(
+        EntityField(StockItemExpiryEvent, StockItemExpiryEvent.Fields.STOCK_ITEM_ID).eq(stock_item_id)
+    )
+    rows.sort(key=lambda e: e.occurred_at, reverse=True)
+    return [
+        ExpiryEventDto(
+            occurred_at = e.occurred_at,
+            kind = e.kind,
+            previous_expiry_date = e.previous_expiry_date,
+            new_expiry_date = e.new_expiry_date,
+            delta_days = e.delta_days,
+        )
+        for e in tally.capped(rows)
+    ]
+
+
+def _observations_newest_first(repository: Repository, stock_item_id: UUID) -> List[StockItemPriceObservation]:
+    rows = repository.get(StockItemPriceObservation).all(
+        EntityField(StockItemPriceObservation, StockItemPriceObservation.Fields.STOCK_ITEM_ID).eq(stock_item_id)
+    )
+    rows.sort(key=lambda o: o.observed_at, reverse=True)
+    return rows
+
+
+def _store_names(repository: Repository, store_ids: set) -> dict[UUID, str]:
+    if not store_ids:
+        return {}
+    return {s.id: s.name for s in repository.get(Store).all(EntityField(Store, "id").in_(list(store_ids)))}
+
+
+def _prefill_from(latest: StockItemPriceObservation, store_names: dict[UUID, str]) -> PriceEntryPrefillDto:
+    """Seed the PriceEntry widget from the newest observation. A harvested
+    one (it has a shopping line) says "your last receipt"; a manual one says
+    "your last log"."""
+    return PriceEntryPrefillDto(
+        total_price = latest.total_price,
+        total_measure = latest.total_measure,
+        unit = latest.unit,
+        store_id = latest.store_id,
+        store_name = store_names.get(latest.store_id) if latest.store_id is not None else None,
+        source_label = (
+            "from your last receipt" if latest.shopping_list_line_id is not None else "from your last log"
+        ),
+        observed_at = latest.observed_at,
+    )
+
+
+def build_price_entry_prefill(repository: Repository, stock_item_id: UUID) -> PriceEntryPrefillDto | None:
+    observations = _observations_newest_first(repository, stock_item_id)
+    if not observations:
+        return None
+    latest = observations[0]
+    return _prefill_from(latest, _store_names(repository, {latest.store_id} - {None}))
+
+
+def _price_observations(
+    repository: Repository, observations: List[StockItemPriceObservation], store_names: dict[UUID, str],
+) -> List[PriceObservationDto]:
+    """Folded-shape observations, newest first, with the store and the
+    provenance list resolved to names so the SPA renders strings, not FKs."""
+    line_ids = {o.shopping_list_line_id for o in observations if o.shopping_list_line_id is not None}
+    list_name_by_line: dict[UUID, str] = {}
+    if line_ids:
+        lines = repository.get(ShoppingListLine).all(EntityField(ShoppingListLine, "id").in_(list(line_ids)))
+        list_ids = {ln.shopping_list_id for ln in lines}
+        lists_by_id = {
+            sl.id: sl for sl in (
+                repository.get(ShoppingList).all(EntityField(ShoppingList, "id").in_(list(list_ids)))
+                if list_ids else []
+            )
+        }
+        for ln in lines:
+            sl = lists_by_id.get(ln.shopping_list_id)
+            if sl is not None:
+                list_name_by_line[ln.id] = sl.name or "shopping list"
+    return [
+        PriceObservationDto(
+            observation_id = o.id,
+            total_price = o.total_price,
+            total_measure = o.total_measure,
+            unit = o.unit,
+            observed_at = o.observed_at,
+            store_name = store_names.get(o.store_id) if o.store_id is not None else None,
+            shopping_list_name = (
+                list_name_by_line.get(o.shopping_list_line_id)
+                if o.shopping_list_line_id is not None else None
+            ),
+            pack_count = o.pack_count,
+        )
+        for o in observations
+    ]
+
+
+def _your_prices(repository: Repository, stock_item_id: UUID) -> YourPricesDto:
+    """The server-derived baseline + signal (R-003: the client renders it)."""
+    raw = build_your_prices_for_item(repository, stock_item_id)
+    return YourPricesDto(
+        baseline = raw.baseline,
+        baseline_unit = raw.baseline_unit,
+        current = raw.current,
+        above_baseline = raw.above_baseline,
+        sample_count = raw.sample_count,
+        last_observed_at = raw.last_observed_at,
+        last_seen_store_name = raw.last_seen_store_name,
+        offers_sidecar = [
+            OfferSidecarDto(store_name=o.store_name, price_per_unit=o.price_per_unit, unit=o.unit)
+            for o in raw.offers_sidecar
+        ],
+    )
+
+
+def _barcodes(repository: Repository, stock_item: StockItem) -> List[StockItemBarcodeDto]:
+    """Every barcode that resolves to this item: direct registrations and,
+    read-only here, those on a linked product. Two targeted fetches, not a
+    full-table scan (06-R8)."""
+    linked_ids = {p.id for p in stock_item.products or []}
+    product_names = {p.id: p.name for p in stock_item.products or []}
+    rows = list(repository.get(Barcode).all(
+        EntityField(Barcode, Barcode.Fields.STOCK_ITEM_ID).eq(stock_item.id)
+    ))
+    if linked_ids:
+        seen = {b.id for b in rows}
+        rows += [
+            b for b in repository.get(Barcode).all(
+                EntityField(Barcode, Barcode.Fields.PRODUCT_ID).in_(list(linked_ids))
+            )
+            if b.id not in seen
+        ]
+    out: List[StockItemBarcodeDto] = []
+    for b in rows:
+        if b.stock_item_id == stock_item.id:
+            source = "direct"
+        elif b.product_id is not None and b.product_id in linked_ids:
+            source = "via_product"
+        else:
+            continue
+        out.append(StockItemBarcodeDto(
+            barcode_id = b.id,
+            barcode = b.barcode,
+            source = source,
+            product_id = b.product_id,
+            product_name = product_names.get(b.product_id),
+        ))
+    out.sort(key=lambda b: (b.source != "direct", b.barcode))
+    return out
+
+
+def _nutrition_food(repository: Repository, stock_item: StockItem) -> LinkedNutritionFoodDto | None:
+    """The linked food, one targeted fetch. The FK is a plain UUID with no
+    relationship object (R-032), so nothing is loaded implicitly."""
+    if stock_item.nutrition_food_id is None:
+        return None
+    food = repository.get(NutritionFood).by_id(stock_item.nutrition_food_id)
+    if food is None:
+        return None
+    return LinkedNutritionFoodDto(
+        nutrition_food_id = food.id,
+        name = food.name,
+        brand = food.brand,
+        source = food.source,
+        source_label = NUTRITION_SOURCE_LABELS.get(food.source, food.source),
+        kcal_per_100g = food.kcal_per_100g,
+        nutrient_rows = [
+            NutrientRowDto(label=row.label, value=row.value, group=row.group, indent=row.indent)
+            for row in display_rows(food)
+        ],
+    )
+
+
+def _nutrition_suggestion(repository: Repository, stock_item: StockItem) -> SuggestedNutritionFoodDto | None:
+    from dora_api.features.nutrition.suggestions import suggest_for_name
+    suggested = suggest_for_name(repository, stock_item.name)
+    if suggested is None:
+        return None
+    return SuggestedNutritionFoodDto(
+        nutrition_food_id = suggested.nutrition_food_id,
+        name = suggested.name,
+        brand = suggested.brand,
+        source = suggested.source,
+        source_label = suggested.source_label,
+        kcal_per_100g = suggested.kcal_per_100g,
+        confidence = suggested.confidence,
+        is_strong = suggested.is_strong,
+    )
+
+
 class GetStockItemDetailHandler:
     def __init__(self, repository: Repository) -> None:
         self.repository = repository
@@ -413,597 +886,79 @@ class GetStockItemDetailHandler:
         from dora_api.domain.entities.app_setting import NUTRITION_MODE_COMPLEX
         from dora_api.features.app_settings.access import get_or_create_app_setting
         setting = get_or_create_app_setting(self.repository)
-        return getattr(setting, "nutrition_mode", None) == NUTRITION_MODE_COMPLEX
+        return setting.nutrition_mode == NUTRITION_MODE_COMPLEX
 
     def handle(self, stock_item_id: UUID) -> StockItemDetailDto | None:
+        repo = self.repository
         # Read before the entity load — see the docstring above.
-        _NutritionIsComplex = self._nutrition_is_complex()
-
-        _StockItem: StockItem | None = (
-            self.repository
-            .get(StockItem)
-            .include(StockItem.Fields.STOCK_LEVEL)
-            .include(StockItem.Fields.STOCK_LOCATION)
-            .include(StockItem.Fields.STOCK_GROUP)
-            # store and current_offer are siblings on Product, so each needs
-            # its own include("products") branch — chaining then_include would
-            # try to resolve current_offer on Store.
-            .include(StockItem.Fields.PRODUCTS)
-                .then_include("store")
-            .include(StockItem.Fields.PRODUCTS)
-                .then_include("current_offer")
-            .one(EntityField(StockItem, "id").eq(stock_item_id))
-        )
-        if not _StockItem:
+        nutrition_is_complex = self._nutrition_is_complex()
+        stock_item = load_stock_item_with_products(repo, stock_item_id)
+        if not stock_item:
             return None
 
-        # Recipes that use this stock item — pulled from the ingredient join.
-        # We could do this in one big query joining Recipe → RecipeIngredient
-        # → StockItem; doing it in two cheap queries keeps the recipe column
-        # selection simple and is plenty fast at any realistic scale.
-        # `_recipe_id` and `_stock_item_id` are the underscore-prefixed mapper
-        # properties on RecipeIngredient (see table_mappings.py) — that naming
-        # keeps the FK columns out of verify_mappings.
-        _Session = self.repository.session
-        _IngredientRecipeIds = list(_Session.execute(
-            select(RecipeIngredient._recipe_id)
-            .where(RecipeIngredient._stock_item_id == stock_item_id)
-            .distinct()
-        ).scalars())
-        _LinkedRecipes: List[LinkedRecipeDto] = []
-        if _IngredientRecipeIds:
-            _Recipes = list(_Session.execute(
-                select(Recipe).where(Recipe.id.in_(_IngredientRecipeIds))
-            ).scalars())
-            _Recipes.sort(key=lambda r: r.name.lower())
-            _LinkedRecipes = [
-                LinkedRecipeDto(recipe_id=r.id, name=r.name) for r in _Recipes
-            ]
-
-        _LinkedProducts = sorted(
-            (
-                LinkedProductDto(
-                    product_id = p.id,
-                    name = p.name,
-                    brand = p.brand,
-                    store_id = p.store.id,
-                    store_name = p.store.name,
-                    merchant_stockcode = p.merchant_stockcode,
-                    size = p.size,
-                    web_url = p.web_url,
-                    price_now = p.current_offer.price_now if p.current_offer else None,
-                    price_was = p.current_offer.price_was if p.current_offer else None,
-                )
-                for p in (_StockItem.products or [])
-            ),
-            key=lambda d: (d.store_name.lower(), d.name.lower()),
-        )
-
-        # Walk the location's parent chain so the detail page can show
-        # "Pantry > Middle shelf > Left side" without a second request.
-        # R-003 — one breadcrumb implementation (`domain.location_breadcrumb`).
-        # This was a hand-rolled parent walk, as were three others.
-        _Breadcrumb: List[str] = []
-        if _StockItem.stock_location is not None:
-            _Breadcrumb = build_breadcrumb(
-                _StockItem.stock_location,
-                {loc.id: loc for loc in self.repository.get(StockLocation).all()},
-            )
-
-        # Substitutes — read straight from the association table (the generic
-        # repository can't self-join StockItem). Level names come from a small
-        # lookup so we avoid a join.
-        _LevelLookup = {lvl.id: lvl.name for lvl in self.repository.get(StockLevel).all()}
-        # Undirected pairs: the "other side" is whichever column is *not*
-        # the current item. FU-034: we now also need the per-pair `notes`
-        # and ratio columns, and the ratio must be **inverted** when we're
-        # viewing the pair from the B side so the consumer always sees
-        # `qty_in/unit_in` as "this item" and `qty_out/unit_out` as "the
-        # substitute".
-        _Assoc = db.metadata.tables["StockItemSubstitute"]
-        _AsA = _Session.execute(
-            select(
-                _Assoc.c.stock_item_b_id,
-                _Assoc.c.notes,
-                _Assoc.c.ratio_quantity_in,
-                _Assoc.c.ratio_unit_in,
-                _Assoc.c.ratio_quantity_out,
-                _Assoc.c.ratio_unit_out,
-            ).where(_Assoc.c.stock_item_a_id == stock_item_id)
-        ).all()
-        _AsB = _Session.execute(
-            select(
-                _Assoc.c.stock_item_a_id,
-                _Assoc.c.notes,
-                # Swap the in/out pair so we display from B's side.
-                _Assoc.c.ratio_quantity_out.label("ratio_quantity_in"),
-                _Assoc.c.ratio_unit_out.label("ratio_unit_in"),
-                _Assoc.c.ratio_quantity_in.label("ratio_quantity_out"),
-                _Assoc.c.ratio_unit_in.label("ratio_unit_out"),
-            ).where(_Assoc.c.stock_item_b_id == stock_item_id)
-        ).all()
-        # other_id → metadata. If both directions returned the same row
-        # (shouldn't happen with canonical storage), the later wins; both
-        # are equivalent semantically.
-        _MetaByOther: dict = {}
-        for row in list(_AsA) + list(_AsB):
-            _MetaByOther[row[0]] = {
-                "notes": row[1],
-                "ratio_quantity_in": row[2],
-                "ratio_unit_in": row[3],
-                "ratio_quantity_out": row[4],
-                "ratio_unit_out": row[5],
-            }
-        _SubIds = list(_MetaByOther.keys())
-        _Substitutes: List[SubstituteDto] = []
-        if _SubIds:
-            _SubItems = list(_Session.execute(
-                select(StockItem).where(StockItem.id.in_(_SubIds))
-            ).scalars())
-            _Substitutes = sorted(
-                (
-                    SubstituteDto(
-                        stock_item_id = s.id,
-                        name = s.name,
-                        stock_level_id = s._stock_level_id,
-                        stock_level_name = _LevelLookup.get(s._stock_level_id),
-                        notes = _MetaByOther[s.id]["notes"],
-                        ratio_quantity_in = _MetaByOther[s.id]["ratio_quantity_in"],
-                        ratio_unit_in = _MetaByOther[s.id]["ratio_unit_in"],
-                        ratio_quantity_out = _MetaByOther[s.id]["ratio_quantity_out"],
-                        ratio_unit_out = _MetaByOther[s.id]["ratio_unit_out"],
-                    )
-                    for s in _SubItems
-                ),
-                key=lambda d: d.name.lower(),
-            )
-
-        # Running tally of every event dropped past the per-kind cap
-        # across every history feed. Reported as `history_older_count`
-        # on the DTO so the SPA can show a single truncation footer.
-        _HistoryOlderCount = 0
-
-        # Level-change history — newest first, capped so the page stays light.
-        _Changes = self.repository.get(StockLevelChange).all(
-            EntityField(StockLevelChange, StockLevelChange.Fields.STOCK_ITEM_ID).eq(stock_item_id)
-        )
-        _Changes.sort(key=lambda c: c.changed_at, reverse=True)
-        _HistoryOlderCount += max(0, len(_Changes) - HISTORY_PER_KIND_CAP)
-        _LevelHistory = [
-            LevelChangeDto(
-                changed_at = c.changed_at,
-                stock_level_id = c.stock_level_id,
-                stock_level_name = c.stock_level_name,
-            )
-            for c in _Changes[:HISTORY_PER_KIND_CAP]
-        ]
-
-        # lifecycle inputs (read-only, capped).
-        # Waste events: append-only log (P2-06); newest first.
-        _Wastes = self.repository.get(StockItemWasteEvent).all(
-            EntityField(StockItemWasteEvent, StockItemWasteEvent.Fields.STOCK_ITEM_ID).eq(stock_item_id)
-        )
-        _Wastes.sort(key=lambda w: w.occurred_at, reverse=True)
-        _HistoryOlderCount += max(0, len(_Wastes) - HISTORY_PER_KIND_CAP)
-        _WasteEvents = [
-            WasteEventDto(
-                occurred_at = w.occurred_at,
-                reason = w.reason,
-            )
-            for w in _Wastes[:HISTORY_PER_KIND_CAP]
-        ]
-
-        # Past list-adds: every line for this stock item that has an
-        # added_at stamp. Lines on done/archived lists are intentionally
-        # included — the timeline is about the *item's* history, not the
-        # current cart. Look up list names from a tiny cache to avoid
-        # N+1 SELECTs. Filter at the field; sort + cap on the result.
-        # One fetch for both history feeds (list-adds here, purchases below) —
-        # it used to run the same query twice (finalisation 06-R7).
-        _ItemLines: List[ShoppingListLine] = self.repository.get(ShoppingListLine).all(
+        levels = _level_lookup(repo)
+        recipe_ids = _linked_recipe_ids(repo, stock_item_id)
+        tally = _HistoryTally()
+        # One fetch of this item's lines serves both the list-adds and the
+        # purchases feed (06-R7).
+        item_lines: List[ShoppingListLine] = repo.get(ShoppingListLine).all(
             EntityField(ShoppingListLine, ShoppingListLine.Fields.STOCK_ITEM_ID).eq(stock_item_id)
         )
-        _Lines = [l for l in _ItemLines if l.added_at is not None]
-        _Lines.sort(key=lambda l: l.added_at, reverse=True)
-        _HistoryOlderCount += max(0, len(_Lines) - HISTORY_PER_KIND_CAP)
-        _Lines = _Lines[:HISTORY_PER_KIND_CAP]
-        _ListAdds: List[ListAddEventDto] = []
-        if _Lines:
-            _ListIds = {l.shopping_list_id for l in _Lines}
-            _Lists = list(_Session.execute(
-                select(ShoppingList).where(ShoppingList.id.in_(_ListIds))
-            ).scalars())
-            _ListNameLookup = {lst.id: lst.display_name for lst in _Lists}
-            _ListAdds = [
-                ListAddEventDto(
-                    added_at = l.added_at,
-                    shopping_list_id = l.shopping_list_id,
-                    shopping_list_name = _ListNameLookup.get(l.shopping_list_id, '(deleted list)'),
-                )
-                for l in _Lines
-            ]
-
-        # ── Purchase events (2026-06-30) ─────────────────────────────
-        # "You actually bought this on <date> at <store>." Pulled from
-        # every ShoppingListLine for this item where the parent list
-        # is `done` AND the line was ticked at Finish. The parent
-        # list's `completed_at` gives the "when" (a line has no
-        # per-tick timestamp; the list-level stamp is the closest
-        # proxy). Reuses the ShoppingList name cache built above so
-        # we don't re-hit the DB.
-        _PurchaseEvents: List[PurchaseEventDto] = []
-        _BoughtLines = [l for l in _ItemLines if l.is_ticked]
-        if _BoughtLines:
-            # Load parent lists for status + completed_at. Separate hit
-            # from the recent-list-adds branch's name-only cache because
-            # here we need the full row (status/completed_at/name).
-            _BoughtListIds = {l.shopping_list_id for l in _BoughtLines}
-            _AllLists = list(_Session.execute(
-                select(ShoppingList).where(ShoppingList.id.in_(_BoughtListIds))
-            ).scalars())
-            _ListForId = {lst.id: lst for lst in _AllLists}
-            # Resolve store names in one hit for the union of purchased_store_ids.
-            _StoreIds = {
-                l.purchased_store_id for l in _BoughtLines
-                if l.purchased_store_id is not None
-            }
-            _StoreNameLookup: dict[UUID, str] = {}
-            if _StoreIds:
-                _Stores = list(_Session.execute(
-                    select(Store).where(Store.id.in_(_StoreIds))
-                ).scalars())
-                _StoreNameLookup = {s.id: s.name for s in _Stores}
-
-            _Purchases_raw = []
-            for l in _BoughtLines:
-                lst = _ListForId.get(l.shopping_list_id)
-                # Only surface lines on genuinely-finished lists — a
-                # ticked line on an in-flight list means the user is
-                # mid-shop, not that they've bought yet.
-                if lst is None or lst.status != SHOPPING_LIST_STATUS_DONE:
-                    continue
-                if lst.completed_at is None:
-                    continue
-                _Purchases_raw.append((lst, l))
-            _Purchases_raw.sort(key=lambda pair: pair[0].completed_at, reverse=True)
-            _HistoryOlderCount += max(0, len(_Purchases_raw) - HISTORY_PER_KIND_CAP)
-            _Purchases_raw = _Purchases_raw[:HISTORY_PER_KIND_CAP]
-            _PurchaseEvents = [
-                PurchaseEventDto(
-                    occurred_at = lst.completed_at,
-                    quantity = l.quantity,
-                    actual_unit_price = l.actual_unit_price,
-                    store_id = l.purchased_store_id,
-                    store_name = (
-                        _StoreNameLookup.get(l.purchased_store_id)
-                        if l.purchased_store_id is not None else None
-                    ),
-                    shopping_list_id = lst.id,
-                    shopping_list_name = lst.display_name,
-                )
-                for lst, l in _Purchases_raw
-            ]
-
-        # ── Cook events (2026-06-30) ─────────────────────────────────
-        # "You cooked a recipe that uses this ingredient." Universe of
-        # recipes is exactly the linked-recipes set already computed
-        # above (any recipe with an ingredient referencing this stock
-        # item). Iterating CookEvent by `recipe_id IN (…)` uses the
-        # `cook_event_recipe_id` index so this stays cheap even on
-        # heavy cooks. Cap at 20.
-        _CookEvents: List[CookEventDto] = []
-        if _IngredientRecipeIds:
-            _CookRows = list(_Session.execute(
-                select(CookEvent).where(
-                    CookEvent.recipe_id.in_(_IngredientRecipeIds)
-                )
-            ).scalars())
-            _CookRows.sort(key=lambda e: e.occurred_at, reverse=True)
-            _HistoryOlderCount += max(0, len(_CookRows) - HISTORY_PER_KIND_CAP)
-            _CookEvents = [
-                CookEventDto(
-                    occurred_at = e.occurred_at,
-                    recipe_id = e.recipe_id,
-                    recipe_name = e.recipe_name,
-                    meals_cooked = e.meals_cooked,
-                )
-                for e in _CookRows[:HISTORY_PER_KIND_CAP]
-            ]
-
-        # ── Expiry events (2026-06-30) ───────────────────────────────
-        # Every set / pushed / cleared transition for this item.
-        # Newest first, capped at 20.
-        _ExpiryRows = self.repository.get(StockItemExpiryEvent).all(
-            EntityField(
-                StockItemExpiryEvent,
-                StockItemExpiryEvent.Fields.STOCK_ITEM_ID,
-            ).eq(stock_item_id)
+        observations = _observations_newest_first(repo, stock_item_id)
+        store_names = _store_names(repo, {o.store_id for o in observations if o.store_id is not None})
+        nutrition_food = _nutrition_food(repo, stock_item)
+        # A suggestion only when there's nothing linked yet, the user hasn't
+        # waved the item off, and complex mode has a catalogue to match.
+        nutrition_ignored = bool(stock_item.nutrition_ignored)
+        nutrition_suggestion = (
+            _nutrition_suggestion(repo, stock_item)
+            if nutrition_food is None and not nutrition_ignored and nutrition_is_complex
+            else None
         )
-        _ExpiryRows.sort(key=lambda e: e.occurred_at, reverse=True)
-        _HistoryOlderCount += max(0, len(_ExpiryRows) - HISTORY_PER_KIND_CAP)
-        _ExpiryEvents = [
-            ExpiryEventDto(
-                occurred_at = e.occurred_at,
-                kind = e.kind,
-                previous_expiry_date = e.previous_expiry_date,
-                new_expiry_date = e.new_expiry_date,
-                delta_days = e.delta_days,
-            )
-            for e in _ExpiryRows[:HISTORY_PER_KIND_CAP]
-        ]
-
-        # free-text preferred buys for this item. FU-225 dropped
-        # the `position` column and the manual reorder UI; sort alphabetically
-        # (case-insensitive) for a stable, predictable order matching the SPA.
-        _PreferredBuys = sorted(
-            (
-                PreferredBuyDto(
-                    preferred_buy_id = pb.id,
-                    label = pb.label,
-                )
-                for pb in self.repository.get(PreferredBuy).all(
-                    EntityField(PreferredBuy, PreferredBuy.Fields.STOCK_ITEM_ID).eq(stock_item_id)
-                )
-            ),
-            key=lambda d: d.label.lower(),
-        )
-
-        # folded-shape observations (newest first) + the
-        # single server-owned per-unit cost (R-003 — client never divides).
-        # Provenance / store names resolved server-side so the SPA renders
-        # strings, not raw FKs.
-        _Observations = self.repository.get(StockItemPriceObservation).all(
-            EntityField(
-                StockItemPriceObservation,
-                StockItemPriceObservation.Fields.STOCK_ITEM_ID,
-            ).eq(stock_item_id)
-        )
-        _Observations.sort(key=lambda o: o.observed_at, reverse=True)
-
-        # Resolve the small lookup pools once per request rather than N+1.
-        _StoreNamesById: dict[UUID, str] = {}
-        _ListNamesByLineId: dict[UUID, str] = {}
-        _StoreIds = {o.store_id for o in _Observations if o.store_id is not None}
-        if _StoreIds:
-            from dora_api.domain.entities.store import Store as _StoreEntity
-            for _s in self.repository.get(_StoreEntity).all(
-                EntityField(_StoreEntity, "id").in_(list(_StoreIds))
-            ):
-                _StoreNamesById[_s.id] = _s.name
-        _LineIds = {o.shopping_list_line_id for o in _Observations if o.shopping_list_line_id is not None}
-        if _LineIds:
-            from dora_api.domain.entities.shopping_list import ShoppingListLine as _Line, ShoppingList as _List
-            _Lines = self.repository.get(_Line).all(
-                EntityField(_Line, "id").in_(list(_LineIds))
-            )
-            _ListIds = {ln.shopping_list_id for ln in _Lines}
-            _ListsById: dict[UUID, _List] = {}
-            if _ListIds:
-                for _sl in self.repository.get(_List).all(
-                    EntityField(_List, "id").in_(list(_ListIds))
-                ):
-                    _ListsById[_sl.id] = _sl
-            for ln in _Lines:
-                sl = _ListsById.get(ln.shopping_list_id)
-                if sl is not None:
-                    _ListNamesByLineId[ln.id] = sl.name or "shopping list"
-
-        _PriceObservations = [
-            PriceObservationDto(
-                observation_id = o.id,
-                total_price = o.total_price,
-                total_measure = o.total_measure,
-                unit = o.unit,
-                observed_at = o.observed_at,
-                store_id = o.store_id,
-                store_name = _StoreNamesById.get(o.store_id) if o.store_id is not None else None,
-                shopping_list_line_id = o.shopping_list_line_id,
-                shopping_list_name = _ListNamesByLineId.get(o.shopping_list_line_id) if o.shopping_list_line_id is not None else None,
-                pack_count = o.pack_count,
-            )
-            for o in _Observations
-        ]
-        _UnitCost = get_stock_item_unit_cost_at(_Observations)
-
-        # seed the PriceEntry widget from the most-recent
-        # observation. The "source_label" line picks the right human framing
-        # based on the FK (provenance) — manual entries say "your last log",
-        # harvested entries say "your last receipt".
-        _Prefill: PriceEntryPrefillDto | None = None
-        if _Observations:
-            _Latest = _Observations[0]  # already sorted newest-first above
-            _SourceLabel = (
-                "from your last receipt"
-                if _Latest.shopping_list_line_id is not None
-                else "from your last log"
-            )
-            _Prefill = PriceEntryPrefillDto(
-                total_price=_Latest.total_price,
-                total_measure=_Latest.total_measure,
-                unit=_Latest.unit,
-                store_id=_Latest.store_id,
-                store_name=_StoreNamesById.get(_Latest.store_id) if _Latest.store_id is not None else None,
-                source_label=_SourceLabel,
-                observed_at=_Latest.observed_at,
-            )
-
-        # server-derived baseline + signal (R-003: client
-        # renders the booleans/numbers, never re-derives). Pure-function call
-        # over already-loaded data via the repo.
-        _YpRaw = build_your_prices_for_item(self.repository, stock_item_id)
-        _YourPrices = YourPricesDto(
-            baseline=_YpRaw.baseline,
-            baseline_unit=_YpRaw.baseline_unit,
-            current=_YpRaw.current,
-            above_baseline=_YpRaw.above_baseline,
-            sample_count=_YpRaw.sample_count,
-            last_observed_at=_YpRaw.last_observed_at,
-            last_seen_store_name=_YpRaw.last_seen_store_name,
-            offers_sidecar=[
-                OfferSidecarDto(
-                    store_name=o.store_name,
-                    price_per_unit=o.price_per_unit,
-                    unit=o.unit,
-                )
-                for o in _YpRaw.offers_sidecar
-            ],
-        )
-
-        # resolve the usual-store name for the detail DTO. Falls
-        # back to None when the user hasn't picked one or the referenced
-        # store has been deleted (the FK is SET NULL).
-        _UsualStoreName: str | None = None
-        if _StockItem.usual_store_id is not None:
-            _UsualStore = self.repository.get(Store).by_id(_StockItem.usual_store_id)
-            if _UsualStore is not None:
-                _UsualStoreName = _UsualStore.name
-
-        # gather every barcode that resolves to this stock item.
-        # Two sources, merged + sorted by created_at descending:
-        #   1. Direct registrations (Barcode.stock_item_id == this id)
-        #   2. Indirect via a linked Product (StockItemProduct → Product
-        #      → Barcode.product_id). Read-only on this surface; editing
-        #      lives on the Product when the Products UI ships it.
-        from dora_api.domain.entities.barcode import Barcode
-        _Barcodes: List[StockItemBarcodeDto] = []
-        # _StockItem.products is a list of `Product` entities (m2m
-        # selectin-loaded), so key off the entity id, not a "product_id"
-        # field — that attribute lives on the StockItemProduct join row.
-        _LinkedProductIds = {p.id for p in _StockItem.products or []}
-        # Two targeted fetches, not a full-table scan filtered in Python
-        # (finalisation 06-R8).
-        _AllBarcodes = list(self.repository.get(Barcode).all(
-            EntityField(Barcode, Barcode.Fields.STOCK_ITEM_ID).eq(stock_item_id)
-        ))
-        if _LinkedProductIds:
-            _Seen = {b.id for b in _AllBarcodes}
-            _AllBarcodes += [
-                b for b in self.repository.get(Barcode).all(
-                    EntityField(Barcode, Barcode.Fields.PRODUCT_ID).in_(list(_LinkedProductIds))
-                )
-                if b.id not in _Seen
-            ]
-        _ProductNamesById: dict = {
-            p.id: getattr(p, "name", None) for p in (_StockItem.products or [])
-        }
-        for _Bc in _AllBarcodes:
-            if _Bc.stock_item_id == stock_item_id:
-                _Barcodes.append(StockItemBarcodeDto(
-                    barcode_id=_Bc.id,
-                    barcode=_Bc.barcode,
-                    source="direct",
-                    product_id=_Bc.product_id,
-                    product_name=_ProductNamesById.get(_Bc.product_id),
-                ))
-            elif _Bc.product_id is not None and _Bc.product_id in _LinkedProductIds:
-                _Barcodes.append(StockItemBarcodeDto(
-                    barcode_id=_Bc.id,
-                    barcode=_Bc.barcode,
-                    source="via_product",
-                    product_id=_Bc.product_id,
-                    product_name=_ProductNamesById.get(_Bc.product_id),
-                ))
-        _Barcodes.sort(key=lambda b: (b.source != "direct", b.barcode))
-
-        # Nutrition link. One targeted fetch, only when the item actually has
-        # one — the FK is a plain UUID with no relationship object (R-032), so
-        # nothing is loaded implicitly.
-        _NutritionFood = None
-        if getattr(_StockItem, "nutrition_food_id", None) is not None:
-            from dora_api.domain.entities.nutrition_food import (
-                NUTRITION_SOURCE_LABELS, NutritionFood,
-            )
-            _Food = self.repository.get(NutritionFood).by_id(_StockItem.nutrition_food_id)
-            if _Food is not None:
-                _NutritionFood = LinkedNutritionFoodDto(
-                    nutrition_food_id = _Food.id,
-                    name = _Food.name,
-                    brand = _Food.brand,
-                    source = _Food.source,
-                    source_label = NUTRITION_SOURCE_LABELS.get(_Food.source, _Food.source),
-                    kcal_per_100g = _Food.kcal_per_100g,
-                    nutrient_rows = [
-                        NutrientRowDto(
-                            label = row.label, value = row.value,
-                            group = row.group, indent = row.indent,
-                        )
-                        for row in display_rows(_Food)
-                    ],
-                )
-
-        # Auto-match suggestion — only worth computing when there's nothing to
-        # link to yet and the user hasn't waved this item off. A linked item
-        # needs no guess, and an ignored one has already answered the question.
-        _NutritionIgnored = bool(getattr(_StockItem, "nutrition_ignored", False))
-        # Gated on complex mode: in off/simple there is no catalogue to match
-        # against, so computing one would be a wasted query on every read of
-        # every stock item for installs that never turned nutrition on.
-        _NutritionSuggestion = None
-        if _NutritionFood is None and not _NutritionIgnored and _NutritionIsComplex:
-            from dora_api.features.nutrition.suggestions import suggest_for_name
-            _Suggested = suggest_for_name(self.repository, _StockItem.name)
-            if _Suggested is not None:
-                _NutritionSuggestion = SuggestedNutritionFoodDto(
-                    nutrition_food_id = _Suggested.nutrition_food_id,
-                    name = _Suggested.name,
-                    brand = _Suggested.brand,
-                    source = _Suggested.source,
-                    source_label = _Suggested.source_label,
-                    kcal_per_100g = _Suggested.kcal_per_100g,
-                    confidence = _Suggested.confidence,
-                    is_strong = _Suggested.is_strong,
-                )
 
         return StockItemDetailDto(
-            stock_item_id = _StockItem.id,
-            name = _StockItem.name,
-            notes = _StockItem.notes,
-            stocktake_alerts_are_enabled = _StockItem.stocktake_alerts_are_enabled,
-            stock_level_id = _StockItem.stock_level.id if _StockItem.stock_level else None,
-            stock_level_name = _StockItem.stock_level.name if _StockItem.stock_level else None,
-            stock_location_id = _StockItem.stock_location.id if _StockItem.stock_location else None,
-            stock_location_name = _StockItem.stock_location.name if _StockItem.stock_location else None,
-            stock_location_breadcrumb = _Breadcrumb,
-            stock_group_id = _StockItem.stock_group.id if _StockItem.stock_group else None,
-            stock_group_name = _StockItem.stock_group.name if _StockItem.stock_group else None,
-            stock_level_last_updated = _StockItem.stock_level_last_updated,
-            expiry_date = _StockItem.expiry_date,
-            is_open = bool(_StockItem.is_open),
-            opened_on = _StockItem.opened_on,
-            is_essential = bool(_StockItem.is_essential),
-            usual_store_id = _StockItem.usual_store_id,
-            usual_store_name = _UsualStoreName,
-            products = _LinkedProducts,
-            recipes = _LinkedRecipes,
-            substitutes = _Substitutes,
-            waste_events = _WasteEvents,
-            recent_list_adds = _ListAdds,
-            purchase_events = _PurchaseEvents,
-            cook_events = _CookEvents,
-            expiry_events = _ExpiryEvents,
-            history_older_count = _HistoryOlderCount,
-            preferred_buys = _PreferredBuys,
-            price_observations = _PriceObservations,
-            unit_cost = _UnitCost,
-            price_entry_prefill = _Prefill,
-            your_prices = _YourPrices,
-            barcodes = _Barcodes,
-
-            last_checked_at = _StockItem.last_checked_at,
-            nutrition_food = _NutritionFood,
-            nutrition_suggestion = _NutritionSuggestion,
-            nutrition_ignored = _NutritionIgnored,
-            level_history = _LevelHistory,
+            stock_item_id = stock_item.id,
+            name = stock_item.name,
+            notes = stock_item.notes,
+            stocktake_alerts_are_enabled = stock_item.stocktake_alerts_are_enabled,
+            stock_level_id = stock_item.stock_level.id if stock_item.stock_level else None,
+            stock_level_name = stock_item.stock_level.name if stock_item.stock_level else None,
+            stock_location_id = stock_item.stock_location.id if stock_item.stock_location else None,
+            stock_group_id = stock_item.stock_group.id if stock_item.stock_group else None,
+            stock_level_last_updated = stock_item.stock_level_last_updated,
+            expiry_date = stock_item.expiry_date,
+            is_open = bool(stock_item.is_open),
+            opened_on = stock_item.opened_on,
+            is_essential = bool(stock_item.is_essential),
+            usual_store_id = stock_item.usual_store_id,
+            products = build_linked_products(stock_item),
+            recipes = _linked_recipes(repo, recipe_ids),
+            substitutes = build_substitutes(repo, stock_item_id, levels),
+            level_history = _level_history(repo, stock_item_id, levels, tally),
+            waste_events = _waste_events(repo, stock_item_id, tally),
+            recent_list_adds = _list_adds(repo, item_lines, tally),
+            purchase_events = _purchase_events(repo, item_lines, tally),
+            cook_events = _cook_events(repo, recipe_ids, tally),
+            expiry_events = _expiry_events(repo, stock_item_id, tally),
+            history_older_count = tally.older,
+            preferred_buys = build_preferred_buys(repo, stock_item_id),
+            price_observations = _price_observations(repo, observations, store_names),
+            price_entry_prefill = _prefill_from(observations[0], store_names) if observations else None,
+            your_prices = _your_prices(repo, stock_item_id),
+            barcodes = _barcodes(repo, stock_item),
+            last_checked_at = stock_item.last_checked_at,
+            nutrition_food = nutrition_food,
+            nutrition_suggestion = nutrition_suggestion,
+            nutrition_ignored = nutrition_ignored,
         )
 
 
 @STOCK_ITEM_ROUTER.route("<uuid:stock_item_id>/detail")
 def get_stock_item_detail(stock_item_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _Detail = GetStockItemDetailHandler(SqlAlchemyRepository()).handle(stock_item_id)
     if _Detail is None:
         return not_found(StockItem.__name__, stock_item_id)
-    _Logger.debug(
+    _LOGGER.debug(
         "Stock item %s detail: %d products, %d recipes",
         stock_item_id, len(_Detail.products), len(_Detail.recipes),
     )

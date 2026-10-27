@@ -34,6 +34,7 @@
      *  one formatting authority).
      */
     import { computed } from 'vue';
+    import { discountPercent } from 'src/helpers/offerLogic';
 
     const props = withDefaults(
         defineProps<{
@@ -58,11 +59,7 @@
 
     const discountPct = computed<number | null>(() => {
         if (props.pct != null) return props.pct > 0 ? Math.round(props.pct) : null;
-        const now = props.priceNow;
-        const was = props.priceWas;
-        if (now == null || was == null) return null;
-        if (was <= 0 || now >= was) return null;
-        return Math.round(((was - now) / was) * 100);
+        return discountPercent({ price_now: props.priceNow, price_was: props.priceWas });
     });
 </script>
 

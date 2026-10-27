@@ -1,9 +1,6 @@
 <template>
-    <div v-if="!currentUser">
-        <q-banner class="dora-bg-sunken" dense>Not signed in.</q-banner>
-    </div>
-
-    <div v-else class="settings-page">
+    <!-- The router guard owns "signed in"; this only waits for the user row. -->
+    <div v-if="currentUser" class="settings-page">
         <SettingsPageHeader title="Assistant" :icon="ICONS.smart_toy">
             <template #description>
                 Settings to control D.O.R.A., your personal assistant in the
@@ -193,7 +190,7 @@
                                 v-model="state[provider].model"
                                 outlined
                                 dense
-                                :placeholder="modelPlaceholder(provider)"
+                                :placeholder="state[provider].example_model"
                                 @blur="onPaidModelBlur(provider)"
                                 @keydown.enter.prevent="onPaidModelBlur(provider)"
                             />
@@ -203,7 +200,7 @@
                                 v-model="state[provider].base_url"
                                 outlined
                                 dense
-                                :placeholder="defaultBaseUrl(provider)"
+                                :placeholder="state[provider].default_base_url"
                                 @blur="onPaidBaseUrlBlur(provider)"
                                 @keydown.enter.prevent="onPaidBaseUrlBlur(provider)"
                             />
@@ -400,6 +397,9 @@
         status: ProviderStatus;
         reason: string | null;
         models: string[];      // Ollama models discovered by the last probe
+        /** Placeholders from the server (`/assistant/providers`, 11-R16). */
+        default_base_url: string;
+        example_model: string;
     }
 
     function emptyState(): ProviderUiState {
@@ -412,6 +412,8 @@
             status: 'empty',
             reason: null,
             models: [],
+            default_base_url: '',
+            example_model: '',
         };
     }
 
@@ -431,28 +433,6 @@
         }
     }
 
-    // Placeholder for the optional Base URL field — the endpoint each client
-    // falls back to when the field is left empty, so the placeholder is the
-    // literal default rather than a hint. Must stay in step with each client's
-    // own `_DEFAULT_BASE_URL`.
-    function defaultBaseUrl(p: LlmProviderName): string {
-        switch (p) {
-            case 'openai': return 'https://api.openai.com/v1';
-            case 'anthropic': return 'https://api.anthropic.com';
-            case 'gemini': return 'https://generativelanguage.googleapis.com';
-            default: return '';
-        }
-    }
-
-    function modelPlaceholder(p: LlmProviderName): string {
-        switch (p) {
-            case 'openai': return 'gpt-4o-mini';
-            case 'anthropic': return 'claude-3-5-sonnet-20241022';
-            case 'gemini': return 'gemini-2.0-flash';
-            default: return 'qwen2.5:7b';
-        }
-    }
-
     function seedFrom(configs: ProviderConfig[]) {
         for (const cfg of configs) {
             const s = state[cfg.provider];
@@ -461,6 +441,8 @@
             s.model = cfg.model ?? '';
             s.has_api_key = cfg.has_api_key;
             s.verified = cfg.verified;
+            s.default_base_url = cfg.default_base_url;
+            s.example_model = cfg.example_model;
             const configured = !!(cfg.base_url || cfg.model || cfg.has_api_key);
             s.status = cfg.verified ? 'connected' : configured ? 'unverified' : 'empty';
         }
@@ -732,12 +714,6 @@
         max-width: 100%;
     }
     .settings-page__link { color: var(--brand-primary); font-weight: 600; }
-    .settings-divider {
-        border: 0;
-        height: 1px;
-        background: color-mix(in srgb, var(--text-primary) 8%, transparent);
-        margin: 0;
-    }
     .provider-card {
         border: 1px solid color-mix(in srgb, var(--text-primary) 10%, transparent);
         border-radius: 12px;

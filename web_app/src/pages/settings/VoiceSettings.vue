@@ -1,9 +1,6 @@
 <template>
-    <div v-if="!currentUser">
-        <q-banner class="dora-bg-sunken" dense>Not signed in.</q-banner>
-    </div>
-
-    <div v-else class="settings-page">
+    <!-- The router guard owns "signed in"; this only waits for the user row. -->
+    <div v-if="currentUser" class="settings-page">
         <SettingsPageHeader
             title="Voice"
             :icon="ICONS.record_voice_over"
@@ -308,10 +305,4 @@
         line-height: 1.4;
     }
     .settings-page__voices { margin-top: 12px; }
-    .settings-divider {
-        border: 0;
-        height: 1px;
-        background: color-mix(in srgb, var(--text-primary) 8%, transparent);
-        margin: 0;
-    }
 </style>

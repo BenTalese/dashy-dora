@@ -18,13 +18,18 @@ from dora_api.domain.stock_status import StockStatus, level_for_status
 from dora_api.features.app_settings.clock import household_today
 # The household's own slot order, from the feature that owns it (R-003). See
 # the sort below for why alphabetical was actively wrong here.
+from dora_api.features.app_settings.access import get_or_create_app_setting
+from dora_api.features.meal_plans.commitment_access import recipe_ids_scheduled_between
 from dora_api.features.meal_plans.daily_brief import slot_order_map
+from dora_api.features.meal_plans.planned_meals import upcoming_planned_meals
 from dora_api.features.recipes.get_recipes import load_recipe_cookability
 from dora_api.features.routers import DASHBOARD_ROUTER
 from dora_api.infrastructure.api_response import ok
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -150,8 +155,6 @@ class GetDashboardSummaryHandler:
         batch's true earliest day comes from `_cook_batches`, which fetches
         the whole batch rather than reading what's on screen.
         """
-        from dora_api.features.app_settings.access import get_or_create_app_setting
-        from dora_api.features.meal_plans.planned_meals import upcoming_planned_meals
 
         if not entries:
             return {}
@@ -197,26 +200,26 @@ class GetDashboardSummaryHandler:
             if low_stock_id else 0
         )
 
-        # ── Recipes ───────────────────────────────────────────────────────
-        # Cookability map via the shared query (same rule the recipe DTO and the
-        # `?cookable` filter use — R-003). Still needed: each upcoming meal-plan
-        # entry below carries a per-recipe `missing_count` derived from it, which
-        # is what drives the "Next to cook" card's ready / missing-N badge.
-        # FU-826 removed only the two whole-collection sums built on top of it
-        # (`cookable_count`, `needs_linking_count`), which nothing rendered.
-        cookability = load_recipe_cookability(self.repository)
-
         # ── Meal plan: upcoming entries within the next week ──────────────
         # R-021 — "today" is the household-tz boundary, not server-local.
-        _Today = household_today(self.repository)
-        _Window = _Today + timedelta(days=7)
+        today = household_today(self.repository)
+        window_end = today + timedelta(days=7)
+        # Cookability via the shared query (same rule the recipe DTO and the
+        # `?cookable` filter use — R-003), for just the week's recipes: each
+        # upcoming entry carries a per-recipe `missing_count` for the "Next to
+        # cook" card's ready / missing-N badge (finalisation 08-R16; this
+        # graded the whole cookbook to label ≤ 7 entries). Loaded before the
+        # entries, see `recipe_ids_scheduled_between`.
+        cookability = load_recipe_cookability(
+            self.repository, recipe_ids_scheduled_between(today, window_end),
+        )
         upcoming_entries_entities = (
             self.repository
             .get(MealPlanEntry)
             .include(MealPlanEntry.Fields.RECIPE)
             .all(
                 EntityField(MealPlanEntry, MealPlanEntry.Fields.SCHEDULED_FOR)
-                .between(_Today, _Window)
+                .between(today, window_end)
             )
         )
         # Owner 2026-09-08 — *"How is next to cook ordered? It should be based on
@@ -231,10 +234,10 @@ class GetDashboardSummaryHandler:
         # whose slot has since been renamed falls to the end of its day and stays
         # stable among its peers — the same tolerance `format_meal_line` applies,
         # because `MealPlanEntry.slot` is free text validated at write time.
-        _SlotOrder = slot_order_map(self.repository.get(MealSlot).all())
+        slot_order = slot_order_map(self.repository.get(MealSlot).all())
         upcoming_entries_entities.sort(key=lambda e: (
             e.scheduled_for,
-            _SlotOrder.get(e.slot.lower(), len(_SlotOrder)),
+            slot_order.get(e.slot.lower(), len(slot_order)),
             e.slot.lower(),
         ))
         # reuse the cookability map already computed for the recipe
@@ -282,10 +285,9 @@ class GetDashboardSummaryHandler:
 
 @DASHBOARD_ROUTER.route("/summary")
 def get_dashboard_summary():
-    _Logger = logging.getLogger(__name__)
     _Handler = GetDashboardSummaryHandler(SqlAlchemyRepository())
     _Summary = _Handler.handle()
-    _Logger.debug(
+    _LOGGER.debug(
         "Dashboard summary: %d stock items (%d low, %d out)",
         _Summary.stock_items.total,
         _Summary.stock_items.low_stock,

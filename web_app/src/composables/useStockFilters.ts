@@ -1,8 +1,6 @@
-import {
-    isLowStockSequence,
-    isOutOfStockSequence,
-} from 'src/helpers/stockStatus';
+import { isOutOfStockSequence } from 'src/helpers/stockStatus';
 import { colourForSequence } from 'src/helpers/stockLevelLogic';
+import { useLocationOptions } from 'src/composables/useLocationOptions';
 import { nameCollator } from 'src/composables/useMoney';
 import type { PageCount } from 'src/components/PageCountsFooter.vue';
 import { cartStateFor, type CartState, type Membership } from 'src/models/shoppingList';
@@ -11,7 +9,7 @@ import type { StockGroup } from 'src/models/stockGroup';
 import type { StockItem } from 'src/models/stockItem';
 import type { LocationNode } from 'src/models/location';
 import type { StockLevel } from 'src/models/stockLevel';
-import { computed, ref, watch, type DeepReadonly } from 'vue';
+import { computed, ref, type DeepReadonly } from 'vue';
 import { useListState } from 'src/composables/useListState';
 import type { SortAxisFor } from 'src/components/filters/SortControl.vue';
 
@@ -230,29 +228,7 @@ export function useStockFilters(sources: {
     // (consumers that need the unfiltered set — e.g. the bulk-move dialog —
     // read this); `locationOptions` is the narrowing ref bound to the
     // searchable q-select via `filterLocations` (same UX as the detail page).
-    type LocationOption = { label: string; value: string };
-    const allLocationOptions = computed<LocationOption[]>(() => {
-        const out: LocationOption[] = [];
-        const walk = (nodes: ReadList<LocationNode>, prefix: string) => {
-            for (const n of nodes) {
-                const path = prefix ? `${prefix} › ${n.name}` : n.name;
-                out.push({ label: path, value: n.location_id });
-                walk(n.children, path);
-            }
-        };
-        walk(sources.locationTree(), '');
-        return out.sort((a, b) => a.label.localeCompare(b.label));
-    });
-    const locationOptions = ref<LocationOption[]>([]);
-    watch(allLocationOptions, (v) => { locationOptions.value = v; }, { immediate: true });
-    function filterLocations(val: string, update: (cb: () => void) => void) {
-        update(() => {
-            const needle = val.toLowerCase();
-            locationOptions.value = needle
-                ? allLocationOptions.value.filter((o) => o.label.toLowerCase().includes(needle))
-                : allLocationOptions.value;
-        });
-    }
+    const { allLocationOptions, locationOptions, filterLocations } = useLocationOptions(sources.locationTree);
     const groupOptions = computed(() =>
         sources.stockGroups().map((g) => ({
             label: g.name,
@@ -274,32 +250,6 @@ export function useStockFilters(sources: {
             if (ing.stock_item_id) ids.add(ing.stock_item_id);
         }
         return { name: recipe.name, ids };
-    });
-
-    // ── Summary counts (header banner) ──────────────────────────────────
-    const summaryCounts = computed(() => {
-        let low = 0;
-        let out = 0;
-        let essentials = 0;
-        let open = 0;
-        for (const item of sources.stockItems()) {
-            const seq =
-                item.stock_level_sequence ?? levelSequence(item.stock_level_id);
-            if (item.is_low_stock ?? isLowStockSequence(seq)) low++;
-            if (item.is_out_of_stock ?? isOutOfStockSequence(seq)) out++;
-            if (item.is_essential) essentials++;
-            if (item.is_open) open++;
-        }
-        return { low, out, essentials, open };
-    });
-
-    const countByLevel = computed(() => {
-        const map = new Map<string, number>();
-        for (const item of sources.stockItems()) {
-            if (!item.stock_level_id) continue;
-            map.set(item.stock_level_id, (map.get(item.stock_level_id) ?? 0) + 1);
-        }
-        return map;
     });
 
     // ── Filtered + sorted output ────────────────────────────────────────
@@ -518,9 +468,6 @@ export function useStockFilters(sources: {
     });
 
     // ── Imperative helpers ──────────────────────────────────────────────
-    function toggleLevelFilter(id: string) {
-        levelFilter.value = levelFilter.value === id ? null : id;
-    }
     function clearFilters() {
         searchText.value = '';
         levelFilter.value = null;
@@ -555,13 +502,10 @@ export function useStockFilters(sources: {
         filterLocations,
         groupOptions,
         // derived
-        summaryCounts,
-        countByLevel,
         filteredStockItems,
         activeFilterCount,
         footerCounts,
         // helpers
-        toggleLevelFilter,
         clearFilters,
     };
 }

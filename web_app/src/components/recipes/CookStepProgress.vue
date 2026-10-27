@@ -130,21 +130,21 @@
         white-space: nowrap;
     }
     .cook-progress__word {
-        font-size: 0.6875rem;
+        font-size: calc(var(--font-size-xs) * 1rem);
         font-weight: 600;
         letter-spacing: 0.12em;
         text-transform: uppercase;
         color: var(--text-secondary);
     }
     .cook-progress__current {
-        font-size: 1.5rem;
+        font-size: calc(var(--font-size-2xl) * 1rem);
         font-weight: 700;
         line-height: 1;
         color: var(--brand-primary);
         font-variant-numeric: tabular-nums;
     }
     .cook-progress__total {
-        font-size: 0.875rem;
+        font-size: calc(var(--font-size-sm) * 1rem);
         font-weight: 500;
         color: var(--text-secondary);
         font-variant-numeric: tabular-nums;
@@ -184,9 +184,9 @@
         background: var(--surface-sunken);
         border: 1px solid var(--border-default);
         transition:
-            background-color var(--motion-normal, 200ms) ease,
-            height var(--motion-normal, 200ms) ease,
-            box-shadow var(--motion-normal, 200ms) ease;
+            background-color var(--motion-normal) var(--motion-ease),
+            height var(--motion-normal) var(--motion-ease),
+            box-shadow var(--motion-normal) var(--motion-ease);
     }
     .cook-progress__segment--done .cook-progress__bar {
         background: color-mix(in srgb, var(--brand-primary) 45%, transparent);
@@ -235,7 +235,7 @@
         inset: 0 auto 0 0;
         background: var(--brand-primary);
         border-radius: inherit;
-        transition: width var(--motion-normal, 200ms) ease;
+        transition: width var(--motion-normal) var(--motion-ease);
     }
     @media (max-width: 599px) {
         .cook-progress {
@@ -245,7 +245,7 @@
             padding: var(--space-1) var(--space-3);
         }
         .cook-progress__current {
-            font-size: 1.25rem;
+            font-size: calc(var(--font-size-xl) * 1rem);
         }
     }
 </style>

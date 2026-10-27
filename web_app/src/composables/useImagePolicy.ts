@@ -1,5 +1,5 @@
 import { ref } from 'vue';
-import HealthApiService from 'src/services/api/healthApiService';
+import HealthApiService, { invalidateHealthInfo } from 'src/services/api/healthApiService';
 
 // install-wide image compression policy. Every upload site
 // funnels through `processImageFile`, which reads these values so
@@ -76,6 +76,7 @@ export function currentImagePolicy(): ImagePolicy {
 export function refreshImagePolicy(): Promise<void> {
     loaded.value = false;
     inflight = null;
+    invalidateHealthInfo();
     return load();
 }
 

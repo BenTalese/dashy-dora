@@ -128,3 +128,16 @@
         flex: 1 1 auto;
     }
 }
+
+/* The rule between two sections on a settings page (finalisation 13-R11: one
+   rule instead of fourteen scoped copies). `--spaced` adds a step of air for
+   pages whose sections carry no padding of their own. */
+.settings-divider {
+    border: 0;
+    height: 1px;
+    background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+    margin: 0;
+}
+.settings-divider--spaced {
+    margin: var(--space-2) 0;
+}

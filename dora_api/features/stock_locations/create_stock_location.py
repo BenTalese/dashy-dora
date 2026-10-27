@@ -17,6 +17,8 @@ from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 
+_LOGGER = logging.getLogger(__name__)
+
 
 class CreateStockLocationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -59,17 +61,16 @@ class CreateStockLocationHandler:
 @STOCK_LOCATION_ROUTER.route("", methods=["POST"])
 @has_request_body(CreateStockLocationRequest)
 def create_stock_location():
-    _Logger = logging.getLogger(__name__)
-    _Logger.info("Received request to create stock location.")
+    _LOGGER.info("Received request to create stock location.")
     _Handler = CreateStockLocationHandler(SqlAlchemyRepository())
     _Request: CreateStockLocationRequest = get_request_body()
     _Response = _Handler.handle(_Request)
 
     if _Response.stock_location_already_exists:
-        _Logger.warning(f"Stock location already exists with name: {_Request.name}")
+        _LOGGER.warning(f"Stock location already exists with name: {_Request.name}")
         return business_rule_violation(f"A stock location with the name '{_Request.name}' already exists.")
 
-    _Logger.info(f"Successfully created stock location with ID: {_Response.new_stock_location_id}")
+    _LOGGER.info(f"Successfully created stock location with ID: {_Response.new_stock_location_id}")
     from dora_api.features.stock_locations.get_stock_locations import \
         GetStockLocationsHandler
     _Dto = GetStockLocationsHandler(SqlAlchemyRepository()).handle_by_id(

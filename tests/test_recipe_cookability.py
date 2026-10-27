@@ -37,6 +37,13 @@ def _item(level_sequence, name="item"):
     )
 
 
+# The RecipeIngredient fields the DTO reads that these stubs don't vary.
+_INGREDIENT_DEFAULTS = dict(
+    section_id=None, is_optional=False, raw_text=None,
+    label=None, preferred_buy_id=None, selected_product_id=None,
+)
+
+
 def _ingredient(item_sequence, name="item"):
     """Recipe ingredient stub. item_sequence=None → stock item has no level record."""
     return SimpleNamespace(
@@ -45,6 +52,7 @@ def _ingredient(item_sequence, name="item"):
         quantity=None,
         unit=None,
         notes=None,
+        **_INGREDIENT_DEFAULTS,
     )
 
 
@@ -53,6 +61,7 @@ def _recipe(*ingredient_args):
     return SimpleNamespace(
         id=uuid4(),
         name="Test Recipe",
+        notes=None,
         available_meals=0,
         category=None,
         cook_time_minutes=None,
@@ -129,8 +138,8 @@ def test__missing_count_counts_all_missing_ingredients():
 def test__missing_count_dedupes_by_stock_item():
     # The same out-of-stock stock item listed on two ingredient rows counts once.
     shared = _item(2)
-    ing_a = SimpleNamespace(id=uuid4(), stock_item=shared, quantity=None, unit=None, notes=None)
-    ing_b = SimpleNamespace(id=uuid4(), stock_item=shared, quantity=None, unit=None, notes=None)
+    ing_a = SimpleNamespace(id=uuid4(), stock_item=shared, quantity=None, unit=None, notes=None, **_INGREDIENT_DEFAULTS)
+    ing_b = SimpleNamespace(id=uuid4(), stock_item=shared, quantity=None, unit=None, notes=None, **_INGREDIENT_DEFAULTS)
     dto = RecipeDto.from_entity(_recipe(ing_a, ing_b))
     assert dto.missing_count == 1
     assert dto.cookable is False
@@ -191,11 +200,10 @@ def _unlinked_ingredient(is_optional=False, raw_text="1 pound something"):
     return SimpleNamespace(
         id=uuid4(),
         stock_item=None,
-        raw_text=raw_text,
         quantity=None,
         unit=None,
         notes=None,
-        is_optional=is_optional,
+        **{**_INGREDIENT_DEFAULTS, "is_optional": is_optional, "raw_text": raw_text},
     )
 
 

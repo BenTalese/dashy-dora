@@ -109,7 +109,7 @@
                         <div class="col-12">
                             <q-list separator class="dora-inline-edit">
                                 <q-item>
-                                    <q-item-section class="dora-text-secondary text-weight-bold" style="max-width:160px">Name</q-item-section>
+                                    <q-item-section class="dora-text-secondary text-weight-bold dora-inline-edit__label">Name</q-item-section>
                                     <q-item-section>
                                         <q-input
                                             v-model="form.name"
@@ -130,7 +130,7 @@
                                      to its right. The picker uses the same
                                      stock-level palette as the row buttons. -->
                                 <q-item>
-                                    <q-item-section class="dora-text-secondary text-weight-bold" style="max-width:160px">Level</q-item-section>
+                                    <q-item-section class="dora-text-secondary text-weight-bold dora-inline-edit__label">Level</q-item-section>
                                     <q-item-section>
                                         <!-- Feedback 2026-08-23: the picker used to be
                                              an intrinsically-sized button sharing its
@@ -199,7 +199,7 @@
                                 </q-item>
 
                                 <q-item>
-                                    <q-item-section class="dora-text-secondary text-weight-bold" style="max-width:160px">Location</q-item-section>
+                                    <q-item-section class="dora-text-secondary text-weight-bold dora-inline-edit__label">Location</q-item-section>
                                     <q-item-section>
                                         <q-select
                                             v-model="form.stock_location_id"
@@ -229,7 +229,7 @@
                                      value is set; a string forces that
                                      string into the field. -->
                                 <q-item>
-                                    <q-item-section class="dora-text-secondary text-weight-bold" style="max-width:160px">Stock group</q-item-section>
+                                    <q-item-section class="dora-text-secondary text-weight-bold dora-inline-edit__label">Stock group</q-item-section>
                                     <q-item-section>
                                         <q-select
                                             v-model="form.stock_group_id"
@@ -247,7 +247,7 @@
                                 </q-item>
 
                                 <q-item>
-                                    <q-item-section class="dora-text-secondary text-weight-bold" style="max-width:160px">Usual store</q-item-section>
+                                    <q-item-section class="dora-text-secondary text-weight-bold dora-inline-edit__label">Usual store</q-item-section>
                                     <q-item-section>
                                         <q-select
                                             v-model="form.usual_store_id"
@@ -265,10 +265,7 @@
                                                  swatch otherwise) in the option list. -->
                                             <template #option="{ opt, itemProps }">
                                                 <q-item v-bind="itemProps">
-                                                    <q-item-section
-                                                        avatar
-                                                        style="min-width: 0; padding-right: 8px"
-                                                    >
+                                                    <q-item-section avatar class="stock-detail__store-logo">
                                                         <StoreLogo
                                                             :name="opt.label"
                                                             :store-id="opt.value"
@@ -291,7 +288,7 @@
                                      have nothing to link, so the row is hidden
                                      rather than shown disabled (R-029). -->
                                 <q-item v-if="nutritionIsComplex">
-                                    <q-item-section class="dora-text-secondary text-weight-bold" style="max-width:160px">Nutrition</q-item-section>
+                                    <q-item-section class="dora-text-secondary text-weight-bold dora-inline-edit__label">Nutrition</q-item-section>
                                     <q-item-section>
                                         <!-- Feedback 2026-08-16: the full nutrient table
                                              would push every section below it off the
@@ -301,11 +298,11 @@
                                              from. -->
                                         <div v-if="detail.nutrition_food">
                                             <div class="row items-center q-gutter-xs">
-                                                <div class="column items-start" style="min-width: 0">
+                                                <div class="column items-start stock-detail__shrink">
                                                     <span class="dora-text-primary ellipsis">
                                                         {{ detail.nutrition_food.name }}
                                                     </span>
-                                                    <span class="dora-text-muted" style="font-size: 0.75rem">
+                                                    <span class="dora-text-muted stock-detail__caption">
                                                         <template v-if="detail.nutrition_food.kcal_per_100g !== null">
                                                             {{ Math.round(detail.nutrition_food.kcal_per_100g) }} kcal / 100g ·
                                                         </template>
@@ -452,7 +449,7 @@
                                 </q-item>
 
                                 <q-item>
-                                    <q-item-section class="dora-text-secondary text-weight-bold" style="max-width:160px">Expiry</q-item-section>
+                                    <q-item-section class="dora-text-secondary text-weight-bold dora-inline-edit__label">Expiry</q-item-section>
                                     <q-item-section>
                                         <!-- Feedback 2026-08-16: the set-expiry control leads
                                              the row, ahead of the date, and carries the same
@@ -526,7 +523,7 @@
                                          tooltip that opened on what opening *doesn't*
                                          do read as a puzzle. One word for the row, one
                                          sentence for the note (owner-picked wording). -->
-                                    <q-item-section class="dora-text-secondary text-weight-bold" style="max-width:160px">Opened</q-item-section>
+                                    <q-item-section class="dora-text-secondary text-weight-bold dora-inline-edit__label">Opened</q-item-section>
                                     <q-item-section>
                                         <div class="row items-center q-gutter-sm">
                                             <q-toggle
@@ -550,7 +547,7 @@
                                 </q-item>
 
                                 <q-item>
-                                    <q-item-section class="dora-text-secondary text-weight-bold" style="max-width:160px">Essential</q-item-section>
+                                    <q-item-section class="dora-text-secondary text-weight-bold dora-inline-edit__label">Essential</q-item-section>
                                     <q-item-section>
                                         <div class="row items-center q-gutter-sm">
                                             <q-toggle
@@ -588,7 +585,7 @@
                                      a per-item opt-in to a feature that
                                      doesn't exist is just a confusing switch. -->
                                 <q-item v-if="stocktakeEnabled">
-                                    <q-item-section class="dora-text-secondary text-weight-bold" style="max-width:160px">Stocktake</q-item-section>
+                                    <q-item-section class="dora-text-secondary text-weight-bold dora-inline-edit__label">Stocktake</q-item-section>
                                     <q-item-section>
                                         <div class="row items-center q-gutter-sm">
                                             <q-toggle
@@ -632,7 +629,7 @@
                                      row expand vertically as the user
                                      types. -->
                                 <q-item>
-                                    <q-item-section class="dora-text-secondary text-weight-bold" style="max-width:160px">Notes</q-item-section>
+                                    <q-item-section class="dora-text-secondary text-weight-bold dora-inline-edit__label">Notes</q-item-section>
                                     <q-item-section>
                                         <q-input
                                             v-model="form.notes"
@@ -748,12 +745,9 @@
                             </div>
                             </template>
 
-                            <!-- "Your prices" widget (C5
-                                 revised) replaces the inline price entry
-                                 form. The widget contains its own [Log a
-                                 price] action that opens the shared
-                                 PriceEntry dialog. Chunk 4 lights up the
-                                 real baseline; chunk 6 wires Full history. -->
+                            <!-- "Your prices" widget: baseline, latest
+                                 price, [Log a price] (the shared PriceEntry
+                                 dialog) and Full history. -->
                             <template v-if="moneyEnabled">
                                 <!-- q-mt-lg: owner 2026-10-17, "a bit more
                                      top margin" — it sat tight under the
@@ -833,7 +827,7 @@
                     <div v-if="detail.products.length === 0" class="column items-center q-py-xl q-gutter-md">
                         <q-icon :name="ICONS.local_offer" size="48px" class="dora-text-secondary" />
                         <div class="text-subtitle1">No products linked yet</div>
-                        <div class="dora-text-secondary text-caption text-center" style="max-width: 360px">
+                        <div class="dora-text-secondary text-caption text-center stock-detail__empty-copy">
                             Link a product to surface live deals and price
                             history for this stock item.
                         </div>
@@ -878,8 +872,7 @@
                                     <q-chip
                                         v-if="isCheapest(prod)"
                                         dense
-                                        color="positive"
-                                        text-color="white"
+                                        class="dora-chip--tint-positive"
                                     >
                                         Cheapest
                                     </q-chip>
@@ -895,7 +888,7 @@
                                             {{ formatMoney(prod.price_now) }}
                                         </span>
                                         <span
-                                            v-if="prod.price_was !== null && prod.price_now !== null && prod.price_was > prod.price_now"
+                                            v-if="isOnSpecial(prod)"
                                             class="text-caption dora-text-muted strike q-ml-xs"
                                         >
                                             {{ formatMoney(prod.price_was) }}
@@ -1008,16 +1001,13 @@
                             clickable
                             @click="onOpenSubstitute(sub.stock_item_id)"
                         >
-                            <q-item-section avatar style="min-width: 28px">
-                                <q-icon
-                                    name="circle"
-                                    size="12px"
-                                    :color="colourForSequence(stockItemFor(sub).stock_level_sequence ?? null) ?? undefined"
-                                    :class="{ 'dora-text-muted': !colourForSequence(stockItemFor(sub).stock_level_sequence ?? null) }"
-                                />
+                            <q-item-section avatar class="stock-detail__sub-dot">
+                                <StockLevelDot :sequence="sub.stock_level_sequence" size="12px">
+                                    <BaseTooltip>{{ sub.stock_level_name ?? 'No level set' }}</BaseTooltip>
+                                </StockLevelDot>
                             </q-item-section>
                             <q-item-section>
-                                <q-item-label>{{ stockItemFor(sub).name }}</q-item-label>
+                                <q-item-label>{{ sub.name }}</q-item-label>
                                 <!-- optional ratio shown above
                                      notes; cook-mode picker mirrors this
                                      same layout so the user reads the
@@ -1125,7 +1115,7 @@
                                 v-else-if="qrSrc"
                                 :src="qrSrc"
                                 alt="QR code"
-                                style="width: 256px; height: 256px; max-width: 100%;"
+                                class="stock-detail__qr"
                             />
                         </div>
                         <!-- The error sits BELOW the image rather than in place
@@ -1295,7 +1285,7 @@
                             v-for="ev in lifecycleEvents"
                             :key="ev.id"
                             :title="ev.title"
-                            :subtitle="formatDateTime(ev.at)"
+                            :subtitle="formatLocaleDateTime(ev.at)"
                             :icon="ev.icon"
                             :color="ev.color"
                         >
@@ -1322,6 +1312,8 @@
         </FadeTransition>
 
         <!-- ── Set-expiry dialog ──────────────────────────────────────── -->
+        <BlockedByRecipesDialog :recipe-names="blockedByRecipes" @close="blockedByRecipes = []" />
+
         <BaseDialog v-model="expiryDialogOpen" title="Set expiry" closable card-style="min-width: 320px">
                 <q-card-section>
                     <q-date v-model="expiryDraft" mask="YYYY-MM-DD" />
@@ -1338,7 +1330,7 @@
                 <q-card-section>
                     <SearchInput v-model="subSearch" autofocus :debounce="150" placeholder="Search stock items" />
                 </q-card-section>
-                <q-card-section class="q-pt-none" style="max-height: 60vh; overflow: auto">
+                <q-card-section class="q-pt-none stock-detail__picker-list">
                     <q-list separator>
                         <!-- Feedback 2026-08-21: no leading box glyph — every row
                              in a stock-item picker is a stock item, so the icon
@@ -1386,6 +1378,7 @@
     import BuyVerdictCard from 'src/components/stock/BuyVerdictCard.vue';
     import HelpHint from 'src/components/help/HelpHint.vue';
     import StockLevelDot from 'src/components/stock/StockLevelDot.vue';
+    import BlockedByRecipesDialog from 'src/components/stock/BlockedByRecipesDialog.vue';
     import PantryBeliefCard from 'src/components/stock/PantryBeliefCard.vue';
     import { usePantryBeliefs } from 'src/composables/usePantryBeliefs';
     import PlannedDemandCard from 'src/components/stock/PlannedDemandCard.vue';
@@ -1419,14 +1412,12 @@
     import { useStockItemActions } from 'src/composables/useStockItemActions';
     import { useUnsavedChangesGuard } from 'src/composables/useUnsavedChangesGuard';
     import { expiryIndicatorFor } from 'src/helpers/expiryIndicator';
-    import { colourForSequence } from 'src/helpers/stockLevelLogic';
-    import type { LocationNode } from 'src/models/location';
-    import type { StockGroup } from 'src/models/stockGroup';
-    import StockGroupApiService from 'src/services/api/stockGroupApiService';
+    import { useStockGroupStore } from 'src/stores/stockGroupStore';
     import type { Recipe } from 'src/models/recipe';
     import type { LinkedProduct, PreferredBuy, PriceObservation, StockItemDetail, Substitute } from 'src/models/stockItemDetail';
-    import type { StockItem } from 'src/models/stockItem';
-    import ProductApiService from 'src/services/api/productApiService';
+    import { LOW_STOCK_SEQUENCE } from 'src/helpers/stockStatus';
+    import { formatQuantity } from 'src/helpers/formatQuantity';
+    import PriceHistoryApiService from 'src/services/api/priceHistoryApiService';
     import { NormalisedApiError } from 'src/services/api/axiosHttpClient';
     import StockItemApiService from 'src/services/api/stockItemApiService';
     import BarcodeApiService from 'src/services/api/barcodeApiService';
@@ -1434,11 +1425,13 @@
     import { useShoppingListStore } from 'src/stores/shoppingListStore';
     import { useStockItemStore } from 'src/stores/stockItemStore';
     import { useStockLevelStore } from 'src/stores/stockLevelStore';
+    import { useLocationOptions } from 'src/composables/useLocationOptions';
     import { useLocationStore } from 'src/stores/locationStore';
     import { useStoresStore } from 'src/stores/storesStore';
     import { computed, onMounted, reactive, ref, watch } from 'vue';
     import { useRoute, useRouter } from 'vue-router';
     import { describeApiError, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+    import { isOnSpecial } from 'src/helpers/offerLogic';
 
     const props = defineProps<{ idOverride?: string; embedded?: boolean }>();
 
@@ -1469,8 +1462,7 @@
 
     const stockItemApi = new StockItemApiService();
     const barcodeApi = new BarcodeApiService();
-    const productApi = new ProductApiService();
-    const stockGroupApi = new StockGroupApiService();
+    const stockGroupStore = useStockGroupStore();
 
     const stockItemStore = useStockItemStore();
     const stockLevelStore = useStockLevelStore();
@@ -1603,35 +1595,8 @@
         if (current === 'scanning') void ensureQrLoadedAsync();
     }, { immediate: true });
 
-    // Full-path location options (e.g. "Pantry › Middle shelf › Left side"),
-    // built once from the location tree so the picker reads like the other
-    // location pickers — searchable + path-labelled rather than leaf-only.
-    type LocationOption = { label: string; value: string };
-    const allLocationOptions = computed<LocationOption[]>(() => {
-        const out: LocationOption[] = [];
-        const walk = (nodes: LocationNode[], prefix: string) => {
-            for (const n of nodes) {
-                const path = prefix ? `${prefix} › ${n.name}` : n.name;
-                out.push({ label: path, value: n.location_id });
-                walk(n.children, path);
-            }
-        };
-        walk(locationStore.tree, '');
-        return out.sort((a, b) => a.label.localeCompare(b.label));
-    });
-
-    // Quasar local-filter pattern: the bound list narrows on type, reset to
-    // the full set when the query is cleared.
-    const locationOptions = ref<LocationOption[]>([]);
-    watch(allLocationOptions, (v) => { locationOptions.value = v; }, { immediate: true });
-    function filterLocations(val: string, update: (cb: () => void) => void) {
-        update(() => {
-            const needle = val.toLowerCase();
-            locationOptions.value = needle
-                ? allLocationOptions.value.filter((o) => o.label.toLowerCase().includes(needle))
-                : allLocationOptions.value;
-        });
-    }
+    // Full-path, searchable location options, like every location picker.
+    const { locationOptions, filterLocations } = useLocationOptions(() => locationStore.tree);
 
     // ── Inline-edit state (C-1b.1) ──────────────────────────────────────
     // Text rows (name/notes) live in `form` and save on blur if changed;
@@ -1651,9 +1616,13 @@
     });
     const form = reactive<BasicsForm>(emptyBasics());
 
-    function hydrateForm(d: StockItemDetail) {
-        form.name = d.name;
-        form.notes = d.notes ?? '';
+    /** `keepDrafts` holds an unsaved name / notes edit across a reload of the
+     *  same item (a toggle saved elsewhere on the page reloads the detail). */
+    function hydrateForm(d: StockItemDetail, keepDrafts = false) {
+        if (!keepDrafts) {
+            form.name = d.name;
+            form.notes = d.notes ?? '';
+        }
         form.stock_location_id = d.stock_location_id;
         form.stock_group_id = d.stock_group_id;
         form.usual_store_id = d.usual_store_id;
@@ -1673,9 +1642,8 @@
     // Stock groups — loaded once for the inline picker. (Owned locally
     // rather than via a store; this is the only consumer on this page
     // and the list is small.)
-    const stockGroups = ref<StockGroup[]>([]);
     const groupOptions = computed(() =>
-        stockGroups.value.map((g) => ({ label: g.name, value: g.stock_group_id })),
+        stockGroupStore.stockGroups.map((g) => ({ label: g.name, value: g.stock_group_id })),
     );
 
     // Stores picker. Hydrate lazily via R-016 ensureLoadedAsync; the
@@ -1697,7 +1665,7 @@
     const detailLevelSequence = computed<number | null>(() => {
         const levelId = detail.value?.stock_level_id;
         if (!levelId) return null;
-        const seq = stockLevelStore.stockLevels.find((l) => l.stock_level_id === levelId)?.sequence;
+        const seq = stockLevelStore.levelById.get(levelId)?.sequence;
         return typeof seq === 'number' ? seq : null;
     });
 
@@ -1824,14 +1792,9 @@
     // so picking one from the search dialog is the un-ignore. The bulk
     // Settings → Kitchen setup → Nutrition matching screen keeps an explicit
     // control for the "I mis-tagged a batch" case.
+    // The row's "+N days" rule, server-side (one rule, household today).
     function shiftExpiry(days: number) {
-        // From the current expiry if set, otherwise from today. Date math in
-        // UTC so DST boundaries don't shift the displayed day.
-        const baseISO = detail.value?.expiry_date ?? new Date().toISOString().slice(0, 10);
-        const [y, m, d] = baseISO.split('-').map(Number) as [number, number, number];
-        const t = new Date(Date.UTC(y, m - 1, d));
-        t.setUTCDate(t.getUTCDate() + days);
-        void saveField({ expiry_date: t.toISOString().slice(0, 10) });
+        void withBusyReload(() => actions.pushExpiry(stockItemId.value, days));
     }
     function clearExpiry() {
         void saveField({ expiry_date: null });
@@ -1850,15 +1813,9 @@
 
     // ── Preferred buys (FU-211) — free-text "what I actually buy" reminders.
     // Separate from the Product overlay; always available. Mutations reuse
-    // withBusyReload so the list reflects the server after each change.
-    // Round-3 feedback: sort alphabetically client-side. The server still
-    // stores a `position` for historical compatibility, but the UI never
-    // surfaces it — manual reorder buttons are gone.
-    const preferredBuys = computed(() => {
-        const list = [...(detail.value?.preferred_buys ?? [])];
-        list.sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
-        return list;
-    });
+    // withBusyReload so the list reflects the server after each change. The
+    // server sends them A–Z (R-003: it owns the order).
+    const preferredBuys = computed(() => detail.value?.preferred_buys ?? []);
     const newBuyLabel = ref('');
     const editingBuyId = ref<string | null>(null);
     const editingBuyLabel = ref('');
@@ -1914,20 +1871,13 @@
             pack_count: value.pack_count ?? null,
         }));
     }
-    // Multipack (FU-227 follow-up): render "4 × 125g" instead of "500g
-    // flat" when the obs carries a pack_count. Per-pack = total/count.
-    // Trims trailing zeros so "4 × 125g" reads cleaner than "4 × 125.0g".
+    // Multipack (FU-227 follow-up): "4 × 125g" instead of "500g flat" when
+    // the observation carries a pack count. Per-pack = total / count.
     function formatObsMeasure(obs: PriceObservation): string {
-        const total = obs.total_measure;
-        const unit = obs.unit;
         if (obs.pack_count != null && obs.pack_count > 1) {
-            const perPack = total / obs.pack_count;
-            return `${obs.pack_count} × ${trimZero(perPack)} ${unit}`;
+            return `${obs.pack_count} × ${formatQuantity(obs.total_measure / obs.pack_count, obs.unit)}`;
         }
-        return `${trimZero(total)} ${unit}`;
-    }
-    function trimZero(n: number): string {
-        return Number.isInteger(n) ? n.toString() : n.toFixed(2).replace(/\.?0+$/, '');
+        return formatQuantity(obs.total_measure, obs.unit);
     }
 
     async function deleteObservation(obs: PriceObservation) {
@@ -1971,6 +1921,7 @@
         }
         // `skip` / `none` — nothing to do.
     }
+    // The store's level write refreshes the verdict, belief and demand overlays.
     async function onChangeStockLevel(stockLevelId: string) {
         await withBusyReload(() =>
             stockItemStore.updateStockLevelAsync({
@@ -1978,18 +1929,6 @@
                 stock_level_id: stockLevelId,
             }),
         );
-        // stock band feeds `_need_axis`; drop the cached
-        // verdict so the card re-fetches the new answer.
-        buyVerdictInvalidate();
-        // a manual level change is a fresh hard signal; refresh the
-        // belief so the chip reflects "override wins" immediately.
-        pantryBeliefs.invalidate();
-        void pantryBeliefs.loadAsync(true);
-        // The recorded level is what grades planned demand (Out outranks Low),
-        // so the same change can move this card's tone without moving a single
-        // count. Refetch rather than leave it showing the old grade.
-        plannedDemandCache.invalidate();
-        void plannedDemandCache.loadAsync(true);
     }
 
     // ── Expiry ───────────────────────────────────────────────────────────
@@ -2011,6 +1950,8 @@
 
     // ── Linked products ──────────────────────────────────────────────────
     const priceHistory = ref<Map<string, number[]>>(new Map());
+    const priceSeriesApi = new PriceHistoryApiService();
+    const PRICE_SERIES_BATCH = 5;
 
     // `discountPct` moved into `DiscountChip` (FU-885) — it was one of four
     // copies of the same rule, rendered three different ways.
@@ -2029,24 +1970,25 @@
         return withPrice.reduce((min, p) => (p.price_now! < min.price_now! ? p : min));
     });
 
+    /** Sparkline series for the linked products, from the batched
+     *  `/price-history` read (it takes up to five products a call). */
     async function loadPriceHistories(products: LinkedProduct[]) {
+        const ids = products.map((p) => p.product_id);
+        const batches: string[][] = [];
+        for (let i = 0; i < ids.length; i += PRICE_SERIES_BATCH) batches.push(ids.slice(i, i + PRICE_SERIES_BATCH));
         const map = new Map<string, number[]>();
-        await Promise.all(
-            products.map(async (p) => {
-                try {
-                    const h = await productApi.getPriceHistoryAsync(p.product_id);
-                    map.set(
-                        p.product_id,
-                        h.points.map((pt) => pt.price_now ?? 0).filter((n) => n > 0),
-                    );
-                } catch {
-                    // Sparkline just renders empty if history can't be loaded.
+        await Promise.all(batches.map(async (batch) => {
+            try {
+                const { series } = await priceSeriesApi.seriesAsync(batch, '90d');
+                for (const s of series) {
+                    map.set(s.product_id, s.points.map((pt) => pt.unit_price ?? 0).filter((n) => n > 0));
                 }
-            }),
-        );
+            } catch {
+                // Sparklines just render empty if history can't be loaded.
+            }
+        }));
         priceHistory.value = map;
     }
-
 
     // the cheapest product gets a chip + highlight
     // style rather than a separate "Add cheapest" button — each product
@@ -2069,7 +2011,7 @@
     // ── Recipes ──────────────────────────────────────────────────────────
     const recipesForDetail = computed<Recipe[]>(() => {
         const ids = new Set((detail.value?.recipes ?? []).map((r) => r.recipe_id));
-        return recipes.value.filter((r) => ids.has(r.recipe_id)) as unknown as Recipe[];
+        return recipes.value.filter((r) => ids.has(r.recipe_id));
     });
     function goToRecipe(recipeId: string) {
         void router.push(`/cookbook/${recipeId}`);
@@ -2103,7 +2045,7 @@
     // (toggle on the recipe store; the card re-renders via the store).
     function onToggleFavourite(recipeId: string) {
         const r = recipes.value.find((x) => x.recipe_id === recipeId);
-        if (r) void recipeStore.toggleFavouriteAsync(r as unknown as Recipe);
+        if (r) void recipeStore.toggleFavouriteAsync(r);
     }
     // Cookable card → "Add all" pushes every ingredient onto the primary
     // draft. Matches the existing onAddMissing pattern (no picker dialog
@@ -2129,17 +2071,6 @@
     }
 
     // ── Substitutes ──────────────────────────────────────────────────────
-    function stockItemFor(sub: Substitute): StockItem {
-        const full = stockItems.value.find((si) => si.stock_item_id === sub.stock_item_id);
-        if (full) return full;
-        return {
-            stock_item_id: sub.stock_item_id,
-            name: sub.name,
-            stock_level_id: sub.stock_level_id ?? '',
-            stock_location_id: null,
-            stock_group_id: null,
-        };
-    }
     const subPickerOpen = ref(false);
     const subSearch = ref('');
     const substituteCandidates = computed(() => {
@@ -2291,13 +2222,13 @@
         const ids = entry?.unticked_list_ids ?? [];
         const lookup = new Map((m?.active_lists ?? []).map((l) => [l.shopping_list_id, l]));
         return ids
-            .map((lid) => lookup.get(lid) ?? { shopping_list_id: lid, name: lid, status: 'draft' as const })
-            .filter((l) => l.status !== 'done');
+            .map((lid) => lookup.get(lid))
+            .filter((l): l is NonNullable<typeof l> => !!l && l.status !== 'done');
     });
     // the server-inferred primary draft list (R-003) — the
     // Lists tab decorates that row with a styled "Primary" badge instead
     // of plain text.
-    const primaryListId = computed(() => shoppingListStore.quickAddTargetListId ?? null);
+    const primaryListId = computed(() => shoppingListStore.quickAddTargetListId);
 
     // Tab definitions for DoraTabs — counts re-evaluate as detail loads /
     // mutates. Products tab is gated by the install-wide feature flag.
@@ -2356,7 +2287,7 @@
 
         // Level history — newest level at top of `level_history` already.
         // Walk *forwards in time* (older→newer) so we can infer "restocked"
-        // vs "dropped to X" by comparing to the previous level name.
+        // vs "dropped to X" by comparing to the previous level's sequence.
         const levels = [...d.level_history].sort(
             (a, b) => new Date(a.changed_at).getTime() - new Date(b.changed_at).getTime(),
         );
@@ -2365,12 +2296,11 @@
             const prev = i > 0 ? levels[i - 1] : null;
             const name = cur.stock_level_name ?? 'Level changed';
             let title = `Level → ${name}`;
-            if (prev && prev.stock_level_name && cur.stock_level_name) {
-                // Cheap heuristic: any move from Low/Out → not-Low/Out reads as
-                // "restocked"; the opposite reads as "dropped to X". Otherwise
-                // just show the destination.
-                const wasShort = /^(low|out)/i.test(prev.stock_level_name);
-                const nowShort = /^(low|out)/i.test(cur.stock_level_name);
+            if (prev && prev.stock_level_sequence != null && cur.stock_level_sequence != null) {
+                // A move from low/out to stocked reads as "restocked"; the
+                // opposite as "dropped to X". Otherwise just the destination.
+                const wasShort = prev.stock_level_sequence >= LOW_STOCK_SEQUENCE;
+                const nowShort = cur.stock_level_sequence >= LOW_STOCK_SEQUENCE;
                 if (wasShort && !nowShort) title = `Restocked → ${name}`;
                 else if (!wasShort && nowShort) title = `Dropped to ${name}`;
             }
@@ -2495,7 +2425,7 @@
                 id: `opened-${d.opened_on}`,
                 at: `${d.opened_on}T00:00:00`,
                 title: 'Opened',
-                icon: 'lock_open',
+                icon: ICONS.lock_open,
                 // was 'amber-9'; reuses the --severity-attention
                 // token (same visual weight as the AddToList "on multiple
                 // lists" hint — both grabby-but-not-urgent).
@@ -2535,12 +2465,14 @@
     }
 
     // ── Delete ───────────────────────────────────────────────────────────
+    const blockedByRecipes = ref<string[]>([]);
     function confirmDelete() {
         if (!detail.value) return;
         const item = detail.value;
         $q.dialog({
             title: 'Delete stock item',
             message: `Delete "${item.name}"?`,
+            ok: { label: 'Delete', color: 'negative', noCaps: true },
             cancel: { noCaps: true },
         }).onOk(() => void doDelete(item.stock_item_id));
     }
@@ -2561,18 +2493,7 @@
             if (err instanceof NormalisedApiError) {
                 const blocked = err.details?.blocked_by_recipes;
                 if (Array.isArray(blocked) && blocked.length > 0) {
-                    const lines = (blocked as Array<{ name: string }>)
-                        .map((r) => `<li>${r.name}</li>`)
-                        .join('');
-                    $q.dialog({
-                        title: 'Still used by recipes',
-                        message:
-                            `<p>Can't delete this stock item. It's an ingredient in ${blocked.length} recipe(s):</p>` +
-                            `<ul>${lines}</ul>` +
-                            `<p>Remove it from those recipes first, then try again.</p>`,
-                        html: true,
-                        ok: { label: 'OK', flat: true },
-                    });
+                    blockedByRecipes.value = (blocked as Array<{ name: string }>).map((r) => r.name);
                     return;
                 }
             }
@@ -2583,10 +2504,6 @@
     // ── Helpers ──────────────────────────────────────────────────────────
     function notifyErr(message: string, err: unknown) {
         $q.notify({ type: 'negative', message, caption: toastCaption(err) });
-    }
-    function formatDateTime(iso: string): string {
-        if (!iso) return '';
-        return formatLocaleDateTime(iso);
     }
     // relativeTime extracted to src/helpers/relativeTime.ts (R-003) — see
     // imports at the top of the script block.
@@ -2601,11 +2518,12 @@
         loadError.value = null;
         try {
             const d = await stockItemApi.getDetailAsync(stockItemId.value);
+            const keepDrafts = detail.value?.stock_item_id === d.stock_item_id && isDirty.value;
             detail.value = d;
-            hydrateForm(d);
+            hydrateForm(d, keepDrafts);
             void loadPriceHistories(d.products);
-            // Membership feeds the "on lists" tab and chips.
-            void shoppingListStore.refreshAsync();
+            // List membership (the "on lists" tab) comes from the shopping-list
+            // store, loaded on mount and refreshed by the list actions themselves.
         } catch (err) {
             loadError.value = 'Could not load this stock item.';
             console.warn('stock-item detail load failed', err);
@@ -2635,9 +2553,7 @@
     // Self-triggered edits on the detail page also flow through the
     // store, but the value already matches by the time the watcher
     // fires — the assignment is a no-op, not a loop.
-    const storeItem = computed(() =>
-        stockItems.value.find((si) => si.stock_item_id === stockItemId.value) ?? null,
-    );
+    const storeItem = computed(() => stockItemStore.byId.get(stockItemId.value) ?? null);
     watch(storeItem, (si) => {
         if (!si || !detail.value || detail.value.stock_item_id !== si.stock_item_id) return;
         if (si.expiry_date !== undefined && si.expiry_date !== detail.value.expiry_date) {
@@ -2654,16 +2570,14 @@
         }
         if (si.stock_level_id && si.stock_level_id !== detail.value.stock_level_id) {
             detail.value.stock_level_id = si.stock_level_id;
+            detail.value.stock_level_name = stockLevelStore.levelById.get(si.stock_level_id)?.name ?? null;
         }
-        if (si.stock_level_name !== undefined && si.stock_level_name !== detail.value.stock_level_name) {
-            detail.value.stock_level_name = si.stock_level_name;
-        }
-    }, { deep: true });
+    });
 
     onMounted(async () => {
         // Stock groups are page-local (only consumer); load alongside the
         // other dropdowns so the inline picker has options on first paint.
-        void stockGroupApi.getAllAsync().then((g) => { stockGroups.value = g; });
+        void stockGroupStore.ensureLoadedAsync();
         // populate the usual-store picker. R-016 ensureLoaded.
         void storesStore.ensureLoadedAsync();
         await Promise.all([
@@ -2781,6 +2695,35 @@
     /* Feedback 2026-08-08: recipe cards reflow by column count rather than
        stretching within a Quasar breakpoint grid. auto-fill keeps each card
        within a bounded width band and drops/adds a whole column on resize. */
+    .stock-detail__sub-dot {
+        min-width: 28px;
+    }
+    /* The label column of the inline-edit list. */
+    .dora-inline-edit__label {
+        max-width: 160px;
+    }
+    .stock-detail__store-logo {
+        min-width: 0;
+        padding-right: var(--space-2);
+    }
+    .stock-detail__shrink {
+        min-width: 0;
+    }
+    .stock-detail__caption {
+        font-size: calc(var(--font-size-xs) * 1rem);
+    }
+    .stock-detail__qr {
+        width: 256px;
+        height: 256px;
+        max-width: 100%;
+    }
+    .stock-detail__empty-copy {
+        max-width: 360px;
+    }
+    .stock-detail__picker-list {
+        max-height: 60vh;
+        overflow: auto;
+    }
     .stock-detail__recipe-grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
@@ -2800,12 +2743,12 @@
     .nutrition-suggestion__tag {
         background: var(--surface-raised);
         color: var(--text-secondary);
-        font-size: 0.6875rem;
+        font-size: calc(var(--font-size-xs) * 1rem);
         font-weight: 600;
-        padding: 1px 6px;
+        padding: 1px var(--space-2);
     }
     .nutrition-suggestion__meta {
-        font-size: 0.75rem;
+        font-size: calc(var(--font-size-xs) * 1rem);
         line-height: 1.35;
         margin-top: 2px;
     }

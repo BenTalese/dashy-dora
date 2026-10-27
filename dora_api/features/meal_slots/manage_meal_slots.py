@@ -16,10 +16,11 @@ from typing import List
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import func, select
 
+from dora_api.app import db
 from dora_api.domain.entities.meal_plan_entry import MealPlanEntry
 from dora_api.domain.entities.meal_slot import MealSlot
-from dora_api.domain.entities.recipe import Recipe
 from dora_api.features.routers import MEAL_SLOT_ROUTER
 from dora_api.infrastructure.api_response import (business_rule_violation,
                                                   created, not_found, ok)
@@ -28,6 +29,8 @@ from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,18 +45,28 @@ class MealSlotDto:
 
 # ───── List ──────────────────────────────────────────────────────────────
 
+def _slot_usage_counts() -> dict[str, int]:
+    """Label -> uses across meal-plan entries and recipe `time_of_day`.
+    R-005 carve-out: grouped counts the generic repository has no port for."""
+    entry = db.metadata.tables["MealPlanEntry"]
+    recipe = db.metadata.tables["Recipe"]
+    counts: dict[str, int] = {}
+    for column in (entry.c.slot, recipe.c.time_of_day):
+        rows = db.session.execute(
+            select(column, func.count()).where(column.is_not(None)).group_by(column)
+        ).all()
+        for label, n in rows:
+            counts[label] = counts.get(label, 0) + int(n)
+    return counts
+
+
 class GetMealSlotsHandler:
     def __init__(self, repository: Repository) -> None:
         self.repository = repository
 
     def handle(self) -> List[MealSlotDto]:
         slots: List[MealSlot] = self.repository.get(MealSlot).all()
-        counts: dict[str, int] = {}
-        for e in self.repository.get(MealPlanEntry).all():
-            counts[e.slot] = counts.get(e.slot, 0) + 1
-        for r in self.repository.get(Recipe).all():
-            if r.time_of_day:
-                counts[r.time_of_day] = counts.get(r.time_of_day, 0) + 1
+        counts = _slot_usage_counts()
         out = [
             MealSlotDto(
                 meal_slot_id=s.id,
@@ -105,12 +118,11 @@ class CreateMealSlotHandler:
 @MEAL_SLOT_ROUTER.route("", methods=["POST"])
 @has_request_body(CreateMealSlotRequest)
 def create_meal_slot():
-    _Logger = logging.getLogger(__name__)
     _Request: CreateMealSlotRequest = get_request_body()
     _Response = CreateMealSlotHandler(SqlAlchemyRepository()).handle(_Request)
     if _Response.duplicate:
         return business_rule_violation(f"A meal slot named '{_Request.name}' already exists.")
-    _Logger.info(f"Created meal slot {_Response.meal_slot_id} '{_Request.name}'")
+    _LOGGER.info(f"Created meal slot {_Response.meal_slot_id} '{_Request.name}'")
     return created(
         _Response.meal_slot_id,
         f"{MEAL_SLOT_ROUTER.name}.{get_meal_slots.__name__}",
@@ -157,12 +169,11 @@ class ReorderMealSlotsHandler:
 @MEAL_SLOT_ROUTER.route("/reorder", methods=["PATCH"])
 @has_request_body(ReorderMealSlotsRequest)
 def reorder_meal_slots():
-    _Logger = logging.getLogger(__name__)
     _Request: ReorderMealSlotsRequest = get_request_body()
     _Response = ReorderMealSlotsHandler(SqlAlchemyRepository()).handle(_Request)
     if _Response.unknown_ids:
         return business_rule_violation(f"Unknown meal slot IDs: {_Response.unknown_ids}")
-    _Logger.info(f"Reordered {len(_Request.slots)} meal slot(s)")
+    _LOGGER.info(f"Reordered {len(_Request.slots)} meal slot(s)")
     return ok({})
 
 
@@ -238,9 +249,8 @@ class DeleteMealSlotHandler:
 
 @MEAL_SLOT_ROUTER.route("/<uuid:meal_slot_id>", methods=["DELETE"])
 def delete_meal_slot(meal_slot_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _Response = DeleteMealSlotHandler(SqlAlchemyRepository()).handle(meal_slot_id)
     if _Response.not_found:
         return not_found("MealSlot", meal_slot_id)
-    _Logger.info(f"Deleted meal slot {meal_slot_id}; {_Response.entries_affected} entry(ies) keep the label")
+    _LOGGER.info(f"Deleted meal slot {meal_slot_id}; {_Response.entries_affected} entry(ies) keep the label")
     return ok({"entries_affected": _Response.entries_affected})

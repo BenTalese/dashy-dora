@@ -39,3 +39,29 @@ def test__instantiate_shopping_list_template__all_valid__commits_list_and_lines_
         if list_id:
             requests.delete(f"{LISTS}/{list_id}")
         requests.delete(f"{SL_TEMPLATES}/{template_id}")
+
+
+def test__instantiate__merge_into_list__tops_up_and_skips_items_already_on_it(api):
+    """03-R33 — a template merges into an existing list in one call."""
+    items = [i["stock_item_id"] for i in requests.get(f"{BASE}/stock-items?limit=2").json()["items"]]
+    template_id = requests.post(f"{BASE}/shopping-list-templates", json={
+        "name": f"03-R33 tpl {uuid4()}",
+        "lines": [{"stock_item_id": i, "quantity": 1} for i in items],
+    }).json()["template_id"]
+    list_name = f"03-R33 list {uuid4().hex[:8]}"
+    list_id = requests.post(f"{BASE}/shopping-lists", json={"name": list_name}).json()["shopping_list_id"]
+    try:
+        assert requests.post(f"{BASE}/shopping-lists/{list_id}/lines", json={"stock_item_id": items[0]}).status_code in (200, 201)
+        resp = requests.post(f"{BASE}/shopping-list-templates/{template_id}/instantiate", json={
+            "merge_into_list_id": list_id,
+        })
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["shopping_list_id"] == list_id
+        assert (body["line_count"], body["skipped_count"]) == (1, 1)
+        detail = requests.get(f"{BASE}/shopping-lists/{list_id}").json()
+        assert detail["display_name"] == list_name
+        assert sorted(l["stock_item_id"] for l in detail["lines"]) == sorted(items)
+    finally:
+        requests.delete(f"{BASE}/shopping-lists/{list_id}")
+        requests.delete(f"{BASE}/shopping-list-templates/{template_id}")

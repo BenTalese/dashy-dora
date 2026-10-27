@@ -646,7 +646,7 @@
         position: absolute;
         inset: 0 auto 0 0;
         background: var(--semantic-positive);
-        transition: width 320ms ease-out;
+        transition: width var(--motion-slow) var(--motion-ease-out);
     }
     @media (prefers-reduced-motion: reduce) {
         .sl-overview__progress-fill {

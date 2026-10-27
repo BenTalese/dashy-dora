@@ -300,15 +300,14 @@
             >
                 <q-icon :name="ICONS.shopping_bag" size="60px" class="q-mb-sm" />
                 <div v-if="products.length === 0">
-                    You haven't saved any products yet. Use Product Search to find and
-                    save deals.
+                    You haven't saved any products yet. {{ emptyHint }}
                 </div>
                 <div v-else>No products match the current filters.</div>
                 <BaseButton
-                    v-if="products.length === 0"
+                    v-if="products.length === 0 && productSearchLabel"
                     variant="primary"
                     :icon="ICONS.search"
-                    label="Open Product Search"
+                    :label="productSearchLabel"
                     class="q-mt-md"
                     @click="openProductSearch(router)"
                 />
@@ -424,7 +423,7 @@
                     {{ stockItemsMissingProducts.length }} item{{
                         stockItemsMissingProducts.length === 1 ? '' : 's'
                     }} that no product in My Products is linked to.
-                    Hop into Product Search to find one.
+                    <template v-if="productSearch.configured.value">Hop into Product Search to find one.</template>
                 </div>
             </q-card-section>
             <q-card-section class="col scroll">
@@ -440,7 +439,7 @@
                                 :class="{ 'dora-bg-sunken dora-text-secondary': !levelColourFor(item) }"
                                 size="32px"
                             >
-                                <q-icon name="inventory_2" size="16px" />
+                                <q-icon :name="ICONS.inventory_2" size="16px" />
                             </q-avatar>
                         </q-item-section>
                         <q-item-section>
@@ -449,7 +448,7 @@
                                 {{ levelNameFor(item) ?? 'No level' }}
                             </q-item-label>
                         </q-item-section>
-                        <q-item-section side>
+                        <q-item-section v-if="productSearch.configured.value" side>
                             <BaseButton
                                 variant="icon"
                                 color="primary"
@@ -465,7 +464,7 @@
             </q-card-section>
         </BaseDialog>
 
-        <CustomProductDialog v-model="customOpen" @created="loadAll" />
+        <CustomProductDialog v-model="customOpen" @created="refreshProducts" />
 
         <ProductPhotoDialog
             v-model="photoOpen"
@@ -476,7 +475,7 @@
         <ProductPackCountDialog
             v-model="packCountOpen"
             :product="packCountTarget"
-            @saved="loadAll"
+            @saved="refreshProducts"
         />
 
         <ProductPriceWatchDialog
@@ -546,7 +545,7 @@
     import { useFilterPanelExpanded } from 'src/composables/useFilterPanelExpanded';
     import { useListState } from 'src/composables/useListState';
     import { useListViewMode } from 'src/composables/useListViewMode';
-    import { openProductSearch } from 'src/composables/useProductSearchUrl';
+    import { openProductSearch, useProductSearchUrl } from 'src/composables/useProductSearchUrl';
     import { useShoppingListActions } from 'src/composables/useShoppingListActions';
     import { colourForSequence } from 'src/helpers/stockLevelLogic';
     import type { Product } from 'src/models/product';
@@ -554,6 +553,7 @@
     import ProductApiService from 'src/services/api/productApiService';
     import StockItemApiService from 'src/services/api/stockItemApiService';
     import { describeApiError, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+    import { useAuthStore } from 'src/stores/authStore';
     import { useProductStore } from 'src/stores/productStore';
     import { useShoppingListStore } from 'src/stores/shoppingListStore';
     import { useStockItemStore } from 'src/stores/stockItemStore';
@@ -563,6 +563,7 @@
     import { useQuasar } from 'quasar';
     import { computed, onMounted, ref } from 'vue';
     import { useRouter } from 'vue-router';
+    import { isOnSpecial } from 'src/helpers/offerLogic';
 
     const $q = useQuasar();
     const router = useRouter();
@@ -576,7 +577,6 @@
 
     const { products } = storeToRefs(productStore);
     const { stockItems } = storeToRefs(stockItemStore);
-    const { stockLevels } = storeToRefs(stockLevelStore);
 
     const loading = ref(false);
     const loadError = ref<string | null>(null);
@@ -592,8 +592,8 @@
         () => `Stock items without products (${stockItemsMissingProducts.value.length})`,
     );
 
-    // products comes via the store (R-003) so a save on the
-    // product-search surface is immediately visible here.
+    // Everything the page reads, once on mount. A mutation refreshes only what
+    // it changed: `refreshProducts` / `refreshLinks` below.
     async function loadAll() {
         loading.value = true;
         loadError.value = null;
@@ -612,9 +612,18 @@
         }
     }
 
+    async function refreshProducts(): Promise<void> {
+        await productStore.getProductsAsync();
+    }
+    /** A link lives on the stock item, so both sides refresh. */
+    async function refreshLinks(): Promise<void> {
+        await Promise.all([productStore.getProductsAsync(), stockItemStore.getStockItemsAsync()]);
+    }
+
     // ── Price watches (owner 2026-10-15) ────────────────────────────────
     // The user's own watches, keyed by product so each card can say whether
-    // it has one. Money-gated on the server like every price surface.
+    // it has one. The bell only fires a watch with money features on
+    // (`get_alerts._price_drop_alerts`); setting one is not gated.
     const priceHistoryApi = new PriceHistoryApiService();
     const watches = ref<PriceAlert[]>([]);
     const watchByProduct = computed(
@@ -653,11 +662,7 @@
         update(() => { linkedStockItemPickerText.value = value; });
     }
 
-    function onSpecial(product: Product): boolean {
-        const now = product.price_now;
-        const was = product.price_was;
-        return now != null && was != null && was > now;
-    }
+    const onSpecial = (product: Product): boolean => isOnSpecial(product);
 
     const storeOptions = computed(() => {
         const names = [...new Set(products.value.map((p) => p.store_name).filter(Boolean))];
@@ -899,7 +904,7 @@
                     product.linked_stock_item_id!, product.product_id,
                 );
             }
-            await loadAll();
+            await refreshLinks();
             $q.notify({
                 type: 'positive',
                 message: `Unlinked ${targets.length} product${targets.length === 1 ? '' : 's'}.`,
@@ -933,7 +938,7 @@
                     product_id: product.product_id, is_active: false,
                 });
             }
-            await loadAll();
+            await refreshProducts();
             $q.notify({
                 type: 'positive',
                 message: `Stopped tracking ${targets.length} product${targets.length === 1 ? '' : 's'}.`,
@@ -963,8 +968,8 @@
         );
         if (!ok) return;
         try {
-            await productApi.deleteAsync(product.product_id);
-            await loadAll();
+            await productStore.deleteProductAsync(product.product_id);
+            await loadWatches();
             $q.notify({
                 type: 'positive', message: 'Product deleted.',
             });
@@ -991,7 +996,7 @@
             for (const product of targets) {
                 await productApi.deleteAsync(product.product_id);
             }
-            await loadAll();
+            await Promise.all([refreshProducts(), loadWatches()]);
             $q.notify({
                 type: 'positive',
                 message: `Deleted ${targets.length} product${targets.length === 1 ? '' : 's'}.`,
@@ -1015,7 +1020,7 @@
             await stockItemApi.unlinkProductAsync(
                 product.linked_stock_item_id, product.product_id,
             );
-            await loadAll();
+            await refreshLinks();
             $q.notify({ type: 'positive', message: 'Unlinked.' });
         } catch (err) {
             $q.notify({
@@ -1028,10 +1033,9 @@
 
     async function onToggleActive(product: Product) {
         try {
-            await productApi.updateAsync({
+            await productStore.updateProductAsync({
                 product_id: product.product_id, is_active: !product.is_active,
             });
-            await loadAll();
         } catch (err) {
             $q.notify({
                 type: 'negative',
@@ -1063,7 +1067,7 @@
     async function onPhotoSaved(): Promise<void> {
         const id = photoTarget.value?.product_id;
         if (id) photoVersion.value.set(id, (photoVersion.value.get(id) ?? 0) + 1);
-        await loadAll();
+        await refreshProducts();
     }
 
     function goToStockItem(stockItemId: string) {
@@ -1109,7 +1113,7 @@
                 linkChoiceStockItemId.value, linkTarget.value.product_id,
             );
             linkOpen.value = false;
-            await loadAll();
+            await refreshLinks();
             $q.notify({
                 type: 'positive', message: 'Product linked.',
             });
@@ -1137,18 +1141,34 @@
         return stockItems.value.filter((s) => !linkedIds.has(s.stock_item_id));
     });
 
+    function levelFor(item: StockItem) {
+        return item.stock_level_id ? stockLevelStore.levelById.get(item.stock_level_id) : undefined;
+    }
     function levelNameFor(item: StockItem): string | null {
-        return stockLevels.value.find(
-            (l) => l.stock_level_id === item.stock_level_id,
-        )?.name ?? null;
+        return levelFor(item)?.name ?? null;
     }
     function levelColourFor(item: StockItem): string | null {
         // sequence-keyed, not name-keyed (R-003).
-        const seq = stockLevels.value.find(
-            (l) => l.stock_level_id === item.stock_level_id,
-        )?.sequence;
+        const seq = levelFor(item)?.sequence;
         return typeof seq === 'number' ? colourForSequence(seq) : null;
     }
+
+    // Product Search is the companion app (R-029, hide when off): a configured
+    // URL opens it; an admin without one is offered the setup page; a member
+    // without one gets no button, since they can't set it up.
+    const productSearch = useProductSearchUrl();
+    const authStore = useAuthStore();
+    const productSearchLabel = computed(() => {
+        if (productSearch.configured.value) return 'Open Product Search';
+        return authStore.isAdmin ? 'Set up Product Search' : null;
+    });
+    const emptyHint = computed(() => {
+        if (productSearch.configured.value) {
+            return 'Find and save them with Product Search, or add one with Add custom.';
+        }
+        if (authStore.isAdmin) return 'Set up Product Search to find them, or add one with Add custom.';
+        return 'Add one with Add custom, or ask your admin to set up Product Search.';
+    });
 
     function searchForOrphan() {
         // FU-186/FU-581 — the in-app `/product-search` route is gone; open the

@@ -37,6 +37,7 @@ import { describe, expect, it } from 'vitest';
 import {
     CARD_DEFS,
     DEFAULT_VISIBLE_COUNT,
+    RETIRED_CARD_IDS,
     type CardId,
 } from 'src/helpers/dashboardCards';
 
@@ -90,19 +91,7 @@ describe('retired cards stay retired', () => {
     // filters to known ids, so they drop out — but only as long as they are
     // genuinely absent from the registry. Resurrecting one of these ids for a
     // *different* card would silently inherit some users' hidden flag.
-    const retired = [
-        // FU-818 / FU-819 / FU-830
-        'calendar', 'budget', 'best_deals',
-        // The 2026-09-04 owner cull
-        'attention', 'draft_shop', 'suggestions', 'spend_trend', 'pantry_value',
-        'reconcile_pending',
-        // Renamed in the same batch — the old ids must not linger either, or a
-        // stored layout would carry both the old and the new entry.
-        'cookable', 'primary_list',
-        // The 2026-09-08 owner batch: two cut, one renamed.
-        'before_you_shop', 'shopping_lists', 'savings',
-    ];
-    for (const gone of retired) {
+    for (const gone of RETIRED_CARD_IDS) {
         it(`${gone} is not in the registry`, () => {
             expect(CARD_DEFS.map((c) => String(c.id))).not.toContain(gone);
         });

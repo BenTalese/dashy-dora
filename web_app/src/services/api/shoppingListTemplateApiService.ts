@@ -26,11 +26,14 @@ export type AddTemplateLineCommand = {
 
 export type InstantiateCommand = {
     name?: string;
+    /** Top up this list instead of creating one; items already on it are skipped. */
+    merge_into_list_id?: string;
 };
 
 export type InstantiateResult = {
     shopping_list_id: string | null;
     line_count: number;
+    skipped_count: number;
 };
 
 export type SnapshotCommand = {

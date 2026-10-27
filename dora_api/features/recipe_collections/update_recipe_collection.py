@@ -14,6 +14,8 @@ from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 
+_LOGGER = logging.getLogger(__name__)
+
 
 class UpdateRecipeCollectionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -49,7 +51,6 @@ class UpdateRecipeCollectionHandler:
 @RECIPE_COLLECTION_ROUTER.route("<uuid:recipe_collection_id>", methods=["PATCH"])
 @has_request_body(UpdateRecipeCollectionRequest)
 def update_recipe_collection(recipe_collection_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _Handler = UpdateRecipeCollectionHandler(SqlAlchemyRepository())
     _Request: UpdateRecipeCollectionRequest = get_request_body()
     _Response = _Handler.handle(_Request, recipe_collection_id)
@@ -58,7 +59,7 @@ def update_recipe_collection(recipe_collection_id: UUID):
         return not_found(RecipeCollection.__name__, recipe_collection_id)
 
     if _Response.recipe_collection_already_exists:
-        _Logger.warning(f"Recipe collection already exists: {_Request.name}")
+        _LOGGER.warning(f"Recipe collection already exists: {_Request.name}")
         return business_rule_violation(
             f"A recipe collection with the name '{_Request.name}' already exists."
         )

@@ -61,6 +61,7 @@
 </template>
 
 <script lang="ts" setup>
+    import { relativeTime } from 'src/helpers/relativeTime';
     import BaseTooltip from 'src/components/BaseTooltip.vue';
     /**
      * Restock radar — what recently went low or out, most recent first.
@@ -126,13 +127,7 @@
      * sitting there", which is the question the card is asking.
      */
     function whenLabel(row: RestockRow): string {
-        const then = new Date(row.changed_at).getTime();
-        const days = Math.floor((Date.now() - then) / 86_400_000);
-        if (days <= 0) return 'today';
-        if (days === 1) return 'yesterday';
-        if (days < 7) return `${days} days ago`;
-        if (days < 14) return 'last week';
-        return `${Math.round(days / 7)} weeks ago`;
+        return relativeTime(row.changed_at, { style: 'coarse' });
     }
 </script>
 

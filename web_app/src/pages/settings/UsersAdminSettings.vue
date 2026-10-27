@@ -288,6 +288,7 @@
 </template>
 
 <script lang="ts" setup>
+    import { useSettingsSave } from 'src/composables/useSettingsSave';
     import BaseTooltip from 'src/components/BaseTooltip.vue';
     import AppSpinner from 'src/components/AppSpinner.vue';
     import BaseButton from 'src/components/BaseButton.vue';
@@ -305,9 +306,10 @@
     import { useAuthStore } from 'src/stores/authStore';
     import { passwordLongEnough } from 'src/models/password';
     import { computed, onMounted, reactive, ref } from 'vue';
-    import { describeApiError, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+    import { describeApiError } from 'src/services/errorHandling/apiErrorHandler';
 
     const $q = useQuasar();
+    const { notifySuccess, notifyError } = useSettingsSave();
     const api = new UserAdminApiService();
     const authStore = useAuthStore();
     const { currentUser } = storeToRefs(authStore);
@@ -374,8 +376,7 @@
         loading.value = true;
         loadError.value = null;
         try {
-            const page = await api.getAllAsync();
-            users.value = page.items;
+            users.value = await api.getAllPagesAsync();
         } catch (err) {
             loadError.value = `Could not load users: ${describeApiError(err)}`;
         } finally {
@@ -398,11 +399,7 @@
             }
             return true;
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Update failed.',
-                caption: toastCaption(err)
-            });
+            notifyError('Update failed.', err);
             // Re-read so a rejected write (e.g. the last-admin guard) doesn't
             // leave the toggle showing the value the server refused.
             await loadUsers();
@@ -430,12 +427,9 @@
         }
         const ok = await patch(user, { is_active: value });
         if (ok) {
-            $q.notify({
-                type: 'positive',
-                message: value
+            notifySuccess(value
                     ? `"${user.username}" can sign in again.`
-                    : `"${user.username}" is deactivated.`,
-            });
+                    : `"${user.username}" is deactivated.`);
         }
     }
 
@@ -483,10 +477,7 @@
                 generatedKind.value = 'change';
                 generatedOpen.value = true;
             } else {
-                $q.notify({
-                    type: 'positive',
-                    message: `Password changed for "${user.username}".`,
-                });
+                notifySuccess(`Password changed for "${user.username}".`);
             }
         } catch (err) {
             passwordError.value = fieldError(err, 'password')
@@ -528,10 +519,7 @@
                 generatedKind.value = 'create';
                 generatedOpen.value = true;
             } else {
-                $q.notify({
-                    type: 'positive',
-                    message: `Created "${payload.username}".`,
-                });
+                notifySuccess(`Created "${payload.username}".`);
             }
             await loadUsers();
         } catch (err) {
@@ -552,11 +540,7 @@
             } else if (problem?.detail?.toLowerCase().includes('email')) {
                 createFieldErrors.value = { email: problem.detail };
             } else {
-                $q.notify({
-                    type: 'negative',
-                    message: 'Could not create user.',
-                    caption: toastCaption(err),
-                });
+                notifyError('Could not create user.', err);
             }
         } finally {
             creating.value = false;
@@ -578,17 +562,10 @@
         busyId.value = user.user_id;
         try {
             await api.deleteAsync(user.user_id);
-            $q.notify({
-                type: 'positive',
-                message: `Deleted "${user.username}".`,
-            });
+            notifySuccess(`Deleted "${user.username}".`);
             await loadUsers();
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Delete failed.',
-                caption: toastCaption(err),
-            });
+            notifyError('Delete failed.', err);
         } finally {
             busyId.value = null;
         }
@@ -597,16 +574,9 @@
     async function copyGenerated() {
         try {
             await copyToClipboard(generatedPassword.value);
-            $q.notify({
-                type: 'positive',
-                message: 'Copied to clipboard.'
-            });
+            notifySuccess('Copied to clipboard.');
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not copy.',
-                caption: toastCaption(err)
-            });
+            notifyError('Could not copy.', err);
         }
     }
 

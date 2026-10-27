@@ -216,7 +216,7 @@
         background: var(--surface-sunken);
         color: var(--text-primary);
         cursor: pointer;
-        transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+        transition: border-color var(--motion-fast) var(--motion-ease), background var(--motion-fast) var(--motion-ease), transform var(--motion-fast) var(--motion-ease);
     }
     .dora-cal-cell.has-events:hover {
         border-color: var(--border-strong);

@@ -20,6 +20,12 @@ from dora_api.domain.entities.stock_item import StockItem
 from dora_api.domain.entities.stock_level import StockLevel
 from dora_api.domain.stock_status import StockStatus, level_for_status
 from dora_api.features.routers import SHOPPING_LIST_ROUTER
+from dora_api.features.shopping_lists._line_defaults import apply_line_defaults
+from dora_api.features.shopping_lists._line_retention import \
+    snapshot_line_display_names
+from dora_api.features.shopping_lists.get_shopping_lists import get_shopping_lists
+from dora_api.features.shopping_lists.manage_shopping_list_lines import \
+    snapshot_offer_rrp
 from dora_api.features.shopping_lists._observation_sync import (
     sync_line_observations)
 from dora_api.infrastructure.api_response import (business_rule_violation,
@@ -30,6 +36,8 @@ from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
+
+_LOGGER = logging.getLogger(__name__)
 
 
 # ───── Create ─────────────────────────────────────────────────────────────
@@ -69,12 +77,9 @@ class CreateShoppingListHandler:
 @SHOPPING_LIST_ROUTER.route("", methods=["POST"])
 @has_request_body(CreateShoppingListRequest)
 def create_shopping_list():
-    _Logger = logging.getLogger(__name__)
     _Request: CreateShoppingListRequest = get_request_body()
     _Response = CreateShoppingListHandler(SqlAlchemyRepository()).handle(_Request)
-    _Logger.info(f"Created shopping list {_Response.shopping_list_id}")
-    from dora_api.features.shopping_lists.get_shopping_lists import \
-        get_shopping_lists
+    _LOGGER.info(f"Created shopping list {_Response.shopping_list_id}")
     return created(
         _Response.shopping_list_id,
         f"{SHOPPING_LIST_ROUTER.name}.{get_shopping_lists.__name__}",
@@ -145,7 +150,6 @@ class UpdateShoppingListHandler:
 @SHOPPING_LIST_ROUTER.route("/<uuid:shopping_list_id>", methods=["PATCH"])
 @has_request_body(UpdateShoppingListRequest)
 def update_shopping_list(shopping_list_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _Request: UpdateShoppingListRequest = get_request_body()
     _Response = UpdateShoppingListHandler(SqlAlchemyRepository()).handle(_Request, shopping_list_id)
     if _Response.not_found:
@@ -159,7 +163,7 @@ def update_shopping_list(shopping_list_id: UUID):
             "A list becomes done by finishing it: POST /finish (which "
             "snapshots prices and restocks), not PATCH status=done."
         )
-    _Logger.info(f"Updated shopping list {shopping_list_id}")
+    _LOGGER.info(f"Updated shopping list {shopping_list_id}")
     return no_content()
 
 
@@ -185,11 +189,10 @@ class DeleteShoppingListHandler:
 
 @SHOPPING_LIST_ROUTER.route("/<uuid:shopping_list_id>", methods=["DELETE"])
 def delete_shopping_list(shopping_list_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _Response = DeleteShoppingListHandler(SqlAlchemyRepository()).handle(shopping_list_id)
     if _Response.not_found:
         return not_found("ShoppingList", shopping_list_id)
-    _Logger.info(f"Deleted shopping list {shopping_list_id}")
+    _LOGGER.info(f"Deleted shopping list {shopping_list_id}")
     return no_content()
 
 
@@ -239,8 +242,6 @@ class FinishShoppingListHandler:
         # user entered: that is what "you saved $4 against the shelf price"
         # is measured from, and it is context for their number rather than a
         # replacement for it.
-        from dora_api.features.shopping_lists.manage_shopping_list_lines import \
-            snapshot_offer_rrp
         for line in ticked_lines:
             snapshot_offer_rrp(self.repository, line)
 
@@ -272,8 +273,6 @@ class FinishShoppingListHandler:
         # historic line instead of a nameless row (which is why those FKs
         # used to CASCADE the line away entirely). Every line on the list,
         # not just the ticked ones: unticked lines stay on a done list.
-        from dora_api.features.shopping_lists._line_retention import \
-            snapshot_line_display_names
         all_lines = self.repository.get(ShoppingListLine).all(
             EntityField(ShoppingListLine, "shopping_list_id").eq(shopping_list_id)
         )
@@ -289,12 +288,11 @@ class FinishShoppingListHandler:
 @SHOPPING_LIST_ROUTER.route("/<uuid:shopping_list_id>/finish", methods=["POST"])
 @has_request_body(FinishShoppingListRequest)
 def finish_shopping_list(shopping_list_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _Request: FinishShoppingListRequest = get_request_body() or FinishShoppingListRequest()
     _Response = FinishShoppingListHandler(SqlAlchemyRepository()).handle(_Request, shopping_list_id)
     if _Response.not_found:
         return not_found("ShoppingList", shopping_list_id)
-    _Logger.info(
+    _LOGGER.info(
         f"Finished shopping list {shopping_list_id}: "
         f"{_Response.ticked_lines} items restocked"
     )
@@ -341,15 +339,28 @@ class CopyShoppingListHandler:
         )
         self.repository.add(target)
 
-        for sl in source_lines:
-            self.repository.add(ShoppingListLine(
+        # Both anchors and every "which one" / store choice travel, so a
+        # product-only line copies (it used to lose both anchors and 500 on the
+        # line-anchor check, finalisation 03-R1).
+        copies = [
+            ShoppingListLine(
                 shopping_list_id = target.id,
                 stock_item_id = sl.stock_item_id,
+                product_id = sl.product_id,
+                display_name_snapshot = sl.display_name_snapshot,
                 quantity = sl.quantity,
                 is_ticked = False,  # fresh list starts unticked
                 selected_product_id = sl.selected_product_id,
+                preferred_buy_id = sl.preferred_buy_id,
+                planned_store_id = sl.planned_store_id,
                 sequence = sl.sequence,
-            ))
+                added_at = now,
+            )
+            for sl in source_lines
+        ]
+        apply_line_defaults(self.repository, copies)
+        for line in copies:
+            self.repository.add(line)
         # FU-512 unit-of-work: one commit at the end.
         self.repository.save_changes()
         return CopyShoppingListResponse(new_shopping_list_id=target.id)
@@ -358,14 +369,13 @@ class CopyShoppingListHandler:
 @SHOPPING_LIST_ROUTER.route("/<uuid:shopping_list_id>/copy", methods=["POST"])
 @has_request_body(CopyShoppingListRequest)
 def copy_shopping_list(shopping_list_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _Request: CopyShoppingListRequest = get_request_body()
     if _Request.include not in ("all", "unticked"):
         return business_rule_violation("`include` must be 'all' or 'unticked'.")
     _Response = CopyShoppingListHandler(SqlAlchemyRepository()).handle(_Request, shopping_list_id)
     if _Response.not_found:
         return not_found("ShoppingList", shopping_list_id)
-    _Logger.info(
+    _LOGGER.info(
         f"Copied shopping list {shopping_list_id} -> {_Response.new_shopping_list_id}"
     )
     return ok({"shopping_list_id": _Response.new_shopping_list_id})
@@ -448,7 +458,6 @@ class BackToDraftHandler:
 
 @SHOPPING_LIST_ROUTER.route("/<uuid:shopping_list_id>/back-to-draft", methods=["POST"])
 def back_to_draft(shopping_list_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _Response = BackToDraftHandler(SqlAlchemyRepository()).handle(shopping_list_id)
     if _Response.not_found:
         return not_found("ShoppingList", shopping_list_id)
@@ -456,7 +465,7 @@ def back_to_draft(shopping_list_id: UUID):
         return business_rule_violation(
             "A finished list can't go back to draft."
         )
-    _Logger.info(
+    _LOGGER.info(
         f"List {shopping_list_id} returned to draft "
         f"({_Response.unticked_count} lines unticked)"
     )
@@ -465,7 +474,6 @@ def back_to_draft(shopping_list_id: UUID):
 
 @SHOPPING_LIST_ROUTER.route("/<uuid:shopping_list_id>/start", methods=["POST"])
 def start_shopping(shopping_list_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _Response = StartShoppingHandler(SqlAlchemyRepository()).handle(shopping_list_id)
     if _Response.not_found:
         return not_found("ShoppingList", shopping_list_id)
@@ -473,5 +481,5 @@ def start_shopping(shopping_list_id: UUID):
         return business_rule_violation(
             "Cannot start shopping on a finished list."
         )
-    _Logger.info(f"Started shopping on list {shopping_list_id}")
+    _LOGGER.info(f"Started shopping on list {shopping_list_id}")
     return no_content()

@@ -26,7 +26,7 @@
             </li>
         </ul>
 
-        <hr class="settings-divider" />
+        <hr class="settings-divider settings-divider--spaced" />
 
         <!-- Counts are server-owned aggregates (R-003) — a read of an existing
              fact, not a second tally that could disagree with another surface.
@@ -47,7 +47,7 @@
             </div>
         </SettingsSection>
 
-        <hr v-if="stats.length && !isNative" class="settings-divider" />
+        <hr v-if="stats.length && !isNative" class="settings-divider settings-divider--spaced" />
 
         <!-- Inside the Capacitor shell the user IS in the app; the browser
              install prompt can never fire there and the section fell through
@@ -64,7 +64,7 @@
             </div>
         </SettingsSection>
 
-        <hr class="settings-divider" />
+        <hr class="settings-divider settings-divider--spaced" />
 
         <!-- Open-source project & support links. The "Report" row is gated on
              a configured support channel (useSupportChannel /
@@ -149,7 +149,7 @@
             </q-list>
         </SettingsSection>
 
-        <hr class="settings-divider" />
+        <hr class="settings-divider settings-divider--spaced" />
 
         <!-- Third-party art credits. The pre-made profile pictures are
              Fluent Emoji (MIT); the licence text ships beside the PNGs in
@@ -181,7 +181,7 @@
             </q-list>
         </SettingsSection>
 
-        <hr class="settings-divider" />
+        <hr class="settings-divider settings-divider--spaced" />
 
         <SettingsSection>
             <template #title>Technical details</template>
@@ -507,12 +507,6 @@
         .about-hero__title { font-size: 1.25rem; }
     }
 
-    .settings-divider {
-        border: 0;
-        height: 1px;
-        background: color-mix(in srgb, var(--text-primary) 8%, transparent);
-        margin: 8px 0;
-    }
     .text-mono {
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     }

@@ -68,12 +68,9 @@ const KNOWN_UNDECLARED = [
     '--surface-border',    // PutAwayDialog.vue:294,307
     '--surface-card',      // VoicePicker.vue:384 (TriStateFilter fixed 2026-09-02)
     '--surface-default',
-    '--surface-hover',     // StocktakeRunner.vue:946
     '--surface-muted',     // RecipeNutriScore.vue:99
     '--surface-raised',    // StockItemDetailPage.vue:2788
-    '--text-md',           // StocktakeRunner.vue:931,971
     '--text-sm',           // HelpPage.vue:686
-    '--text-xs',           // StocktakeRunner.vue:935
     '--text-warning',
     '--font-mono',         // ApiAccessSettings.vue:542
     '--overlay-pressed',   // ShoppingListDetail.vue:3009
@@ -217,5 +214,17 @@ describe('R-060 — design tokens are declared before they are referenced', () =
             .filter((r) => swept(r.file) && !declared.has(r.token) && !isRuntime(r.token))
             .map((r) => `${r.token} @ ${r.file}:${r.line}`);
         expect(offenders).toEqual([]);
+    });
+
+    it('uses the unitless type-scale tokens through calc(), never bare', () => {
+        // `--font-size-*` are unitless multipliers (0.75, 1, …), so
+        // `font-size: var(--font-size-xs)` is invalid at computed time and the
+        // declaration is dropped. Nine sites, including the shared tint chip,
+        // had silently never applied their size (finalisation 08-R22).
+        const bare = walk(SRC, ['.vue', '.scss', '.css'])
+            .flatMap((path) => readFileSync(path, 'utf8').split('\n').map((line, i) => ({ path, line, n: i + 1 })))
+            .filter(({ line }) => /font-size:\s*var\(--font-size-/.test(line))
+            .map(({ path, n }) => `${path.slice(SRC.length + 1)}:${n}`);
+        expect(bare).toEqual([]);
     });
 });

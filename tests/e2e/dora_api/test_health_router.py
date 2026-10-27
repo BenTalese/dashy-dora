@@ -33,4 +33,17 @@ def test__health_check__reports_db_schema_version_alongside_code_head(api):
     assert body["schema_version_db"] is None, body
 
 
+def test__health_check__publishes_the_product_search_url_for_every_user(api):
+    """Members can't read `/app-settings`, so the Product Search nav entry
+    never appeared for them; the URL rides `/health` (finalisation 13-R4)."""
+    url = "https://companion.example/search"
+    assert requests.patch(
+        "http://localhost:5170/api/app-settings", json={"product_search_url": url},
+    ).status_code == 200
+    try:
+        assert requests.get(base_route).json()["products_policy"] == {"search_url": url}
+    finally:
+        requests.patch("http://localhost:5170/api/app-settings", json={"product_search_url": ""})
+
+
 #endregion health_check tests

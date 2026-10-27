@@ -2,7 +2,7 @@
 
 The K2 ladder (`shopping_lists._line_price.line_paid_unit_price`) is the
 single source for "what did this line cost" (R-003). Before FU-229,
-`reports.py` `SpendByStoreHandler` projected `picked_offer_price` only and
+`reports/spend.py` `SpendByStoreHandler` projected `picked_offer_price` only and
 ignored the user's `actual_unit_price` override, diverging from
 budget / waste / assistant / suggestions. This test pins the fix: a line
 with both a `picked_offer_price` snapshot and an `actual_unit_price`
@@ -76,9 +76,8 @@ def test__spend_by_store__honours_actual_unit_price_over_picked(api):
         SHOPPING_LISTS, json={"name": f"FU229List-{suffix}"},
     ).json()["shopping_list_id"]
 
-    # Add the line selecting the product → snapshot_offer_price runs at
-    # add-time, so `picked_offer_price = 10.0`. Then override with the
-    # till-receipt price (7.0) and tick. Quantity defaults to 1.
+    # Add the line selecting the product, then enter the till-receipt
+    # price (7.0) and tick. Quantity defaults to 1.
     line_resp = requests.post(
         f"{SHOPPING_LISTS}/{list_id}/lines",
         json={"stock_item_id": stock_item_id, "selected_product_id": product_id},

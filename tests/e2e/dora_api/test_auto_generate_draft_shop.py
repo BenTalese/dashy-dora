@@ -76,3 +76,43 @@ def test__auto_generate__create_new_honours_the_explicit_name(api):
             requests.delete(f"{LISTS}/{generated_list_id}")
         requests.patch(f"{BASE}/stock-items/{stock_item_id}", json={"is_essential": False})
         requests.delete(f"{BASE}/stock-items/{stock_item_id}")
+
+
+def test__auto_generate__recipe_source__lists_unstocked_and_reports_unlinked(api):
+    """03-R12 — the recipe source loads every recipe at once: an unstocked
+    ingredient becomes a line, a stocked one doesn't, an unlinked one is
+    reported for manual adding."""
+    levels = {l["sequence"]: l["stock_level_id"] for l in requests.get(f"{BASE}/stock-levels").json()["items"]}
+    suffix = uuid4().hex[:8]
+    out_id = requests.post(f"{BASE}/stock-items", json={
+        "name": f"03-R12 out {suffix}", "stock_level_id": levels[max(levels)],
+    }).json()["stock_item_id"]
+    stocked_id = requests.post(f"{BASE}/stock-items", json={
+        "name": f"03-R12 stocked {suffix}", "stock_level_id": levels[min(levels)],
+    }).json()["stock_item_id"]
+    recipe = requests.post(f"{BASE}/recipes", json={
+        "name": f"03-R12 soup {suffix}",
+        "ingredients": [
+            {"stock_item_id": out_id, "quantity": 1, "unit": "g"},
+            {"stock_item_id": stocked_id, "quantity": 1, "unit": "g"},
+            {"raw_text": "a pinch of something"},
+        ],
+    })
+    assert recipe.status_code == 201, recipe.text
+    recipe_id = recipe.json()["recipe_id"]
+    list_id = None
+    try:
+        resp = requests.post(AUTO, json={"sources": {"recipes": [recipe_id]}})
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        list_id = body["shopping_list_id"]
+        line_items = {l["stock_item_id"] for l in requests.get(f"{LISTS}/{list_id}").json()["lines"]}
+        assert out_id in line_items
+        assert stocked_id not in line_items
+        assert [u["ingredient_name"] for u in body["unlinked_skipped"]] == ["a pinch of something"]
+    finally:
+        if list_id:
+            requests.delete(f"{LISTS}/{list_id}")
+        requests.delete(f"{BASE}/recipes/{recipe_id}")
+        requests.delete(f"{BASE}/stock-items/{out_id}")
+        requests.delete(f"{BASE}/stock-items/{stocked_id}")

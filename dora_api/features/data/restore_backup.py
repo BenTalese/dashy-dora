@@ -50,6 +50,8 @@ from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 
+_LOGGER = logging.getLogger(__name__)
+
 
 MODE_ALL_SKIP_DUPLICATES = "all_skip_duplicates"
 MODE_PARTIAL = "partial"
@@ -310,7 +312,7 @@ class RestoreBackupHandler:
             db.session.commit()
         except Exception as exc:  # noqa: BLE001
             db.session.rollback()
-            logging.getLogger(__name__).exception("Restore failed; rolled back.")
+            _LOGGER.exception("Restore failed; rolled back.")
             return f"Restore failed and was rolled back: {exc}"
 
         return RestoreSummary(created=created, skipped=skipped, warnings=warnings)
@@ -413,7 +415,6 @@ class RestoreBackupHandler:
 @DATA_ROUTER.route("/backup/restore", methods=["POST"])
 @has_request_body(RestoreBackupRequest)
 def restore_backup():
-    _Logger = logging.getLogger(__name__)
     # restore inserts arbitrary rows across every
     # table (users, app_settings, historic offers). Any authenticated
     # caller could invoke it before; the gate closes that HIGH-severity
@@ -424,13 +425,13 @@ def restore_backup():
     _Request: RestoreBackupRequest = get_request_body()
     _Result = RestoreBackupHandler().handle(_Request)
     if isinstance(_Result, str):
-        _Logger.warning("Restore validation failed: %s", _Result)
+        _LOGGER.warning("Restore validation failed: %s", _Result)
         # User-facing errors land as 400; "rolled back" as 500.
         if _Result.startswith("Restore failed and was rolled back"):
             return internal_server_error(_Result)
         return bad_request(_Result)
     summary = _Result.model_dump()
-    _Logger.info(
+    _LOGGER.info(
         "Restore complete: created=%s skipped=%s warnings=%d",
         summary["created"], summary["skipped"], len(summary["warnings"]),
     )

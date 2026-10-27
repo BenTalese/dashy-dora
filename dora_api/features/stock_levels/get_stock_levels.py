@@ -14,6 +14,8 @@ from dora_api.persistence.page import Page
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 
+_LOGGER = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True, slots=True)
 class StockLevelDto:
@@ -47,11 +49,10 @@ class GetStockLevelsHandler:
 
 @STOCK_LEVEL_ROUTER.route("")
 def get_stock_levels():
-    _Logger = logging.getLogger(__name__)
     try:
         _Options = parse_query_options(request.args)
         _Page = GetStockLevelsHandler(SqlAlchemyRepository()).handle(_Options)
     except InvalidQueryParameter as exc:
         return bad_request(str(exc))
-    _Logger.info(f"Retrieved {len(_Page.items)} of {_Page.total} stock levels.")
+    _LOGGER.info(f"Retrieved {len(_Page.items)} of {_Page.total} stock levels.")
     return paginated(_Page.items, _Page.total, _Page.page, _Page.limit)

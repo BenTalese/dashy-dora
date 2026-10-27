@@ -27,6 +27,8 @@ from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 
+_LOGGER = logging.getLogger(__name__)
+
 
 class AddPreferredBuyRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -105,7 +107,7 @@ def add_preferred_buy(stock_item_id: UUID):
         return not_found(StockItem.__name__, stock_item_id)
     if _Response.empty_label:
         return bad_request("A preferred buy needs a label.")
-    logging.getLogger(__name__).info("Added preferred buy to stock item %s", stock_item_id)
+    _LOGGER.info("Added preferred buy to stock item %s", stock_item_id)
     return no_content()
 
 

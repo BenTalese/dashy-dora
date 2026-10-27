@@ -2,8 +2,8 @@
     <!--
         R-Phase 6 §9-I — skeleton screens. Same shape as the real surface
         so the layout doesn't shift on hydrate (Doherty + reduces CLS).
-        Three variants align with the planner's three layouts:
-        Direction A carousel, Direction B grid, mobile single-day focus.
+        Two variants align with the planner's layouts: the day-card list
+        and the mobile single-day focus.
     -->
     <div
         class="skeleton"
@@ -27,24 +27,6 @@
             </q-card>
         </template>
 
-        <!-- Direction B: 7 column grid -->
-        <template v-else-if="variant === 'grid'">
-            <div class="skeleton__grid">
-                <q-card
-                    v-for="i in 7"
-                    :key="`g-${i}`"
-                    flat bordered
-                    class="skeleton__grid-col"
-                >
-                    <q-skeleton type="rect" height="40px" />
-                    <div class="q-pa-sm column q-gutter-xs">
-                        <q-skeleton type="rect" height="44px" />
-                        <q-skeleton type="rect" height="44px" />
-                    </div>
-                </q-card>
-            </div>
-        </template>
-
         <!-- Mobile single-day focus -->
         <template v-else>
             <div class="skeleton__day-strip">
@@ -62,7 +44,7 @@
 <script lang="ts" setup>
     withDefaults(
         defineProps<{
-            variant?: 'list' | 'grid' | 'mobile';
+            variant?: 'list' | 'mobile';
         }>(),
         { variant: 'list' },
     );
@@ -72,22 +54,9 @@
     .skeleton {
         width: 100%;
     }
-    .skeleton__grid {
-        display: grid;
-        grid-template-columns: repeat(7, minmax(0, 1fr));
-        gap: 8px;
-    }
-    @media (max-width: 1023px) {
-        .skeleton__grid {
-            grid-template-columns: 1fr;
-        }
-    }
-    .skeleton__grid-col {
-        min-height: 180px;
-    }
     .skeleton__day-strip {
         display: grid;
         grid-template-columns: repeat(7, minmax(0, 1fr));
-        gap: 4px;
+        gap: var(--space-1);
     }
 </style>

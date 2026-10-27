@@ -1,3 +1,4 @@
+import { STEPS_MODES, type RecipeStepsMode } from 'src/generated/recipe_vocabulary';
 export type RecipeIngredient = {
     recipe_ingredient_id: string;
     /** IMPL_PLAN_RECIPE_IMPORTER §Chunk 4 — nullable so unlinked
@@ -216,10 +217,6 @@ export type Recipe = {
      *  changes mode. Mode switching is non-destructive — all three
      *  payloads can coexist on one recipe. */
     steps_mode: RecipeStepsMode;
-    /** PROPOSAL_RECIPE_IMAGE_STEPS — cheap existence flag set by the list
-     *  endpoint (mirrors `has_structured_steps`). Detail endpoint also
-     *  hydrates the full `step_images[]` metadata below. */
-    has_step_images: boolean;
     /** PROPOSAL_RECIPE_IMAGE_STEPS — ordered metadata for image-mode
      *  rendering. Bytes are NOT inlined; each image is fetched via
      *  `GET /recipes/<recipe_id>/step-images/<image_id>`. Populated only
@@ -377,13 +374,10 @@ export type RecipeNutritionGapIngredient = {
     reason: RecipeNutritionGap;
 };
 
-/** PROPOSAL_RECIPE_IMAGE_STEPS — closed set of recipe step payload modes.
- *  Kept as a const union (R-010) so a bad write fails at type-check. */
-export type RecipeStepsMode = 'structured' | 'freeform' | 'image';
-
-export const RECIPE_STEPS_MODES: RecipeStepsMode[] = [
-    'structured', 'freeform', 'image',
-];
+/** PROPOSAL_RECIPE_IMAGE_STEPS — closed set of recipe step payload modes,
+ *  generated from the server (R-010 / R-089). */
+export type { RecipeStepsMode };
+export const RECIPE_STEPS_MODES: RecipeStepsMode[] = [...STEPS_MODES];
 
 /** PROPOSAL_RECIPE_IMAGE_STEPS — one ordered photo of a recipe's steps. */
 export type RecipeStepImage = {

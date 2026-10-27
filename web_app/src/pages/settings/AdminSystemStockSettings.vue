@@ -6,11 +6,7 @@
             :icon="ICONS.inventory_2"
         />
 
-        <q-banner v-if="!isAdmin" class="dora-bg-negative-soft text-negative" dense rounded>
-            You don't have admin permissions to view this page.
-        </q-banner>
-
-        <template v-else-if="!loading">
+        <template v-if="ready">
             <SettingsSection>
                 <template #title>Auto-add on low</template>
                 <template #description>
@@ -23,7 +19,7 @@
 
                 <SettingsRow label="Fire for">
                     <DoraSegmented
-                        :model-value="modeDraft"
+                        :model-value="draft.auto_add_mode"
                         :options="MODE_OPTIONS"
                         @update:model-value="onModeChange"
                     />
@@ -49,7 +45,7 @@
                         </InfoTip>
                     </template>
                     <q-toggle
-                        :model-value="scanningDraft"
+                        :model-value="draft.scanning_enabled"
                         @update:model-value="onScanningToggle"
                     />
                 </SettingsRow>
@@ -58,7 +54,7 @@
                      the camera on plain http, but not all. Shown only when the
                      page reading it is on http, and only once scanning is on. -->
                 <q-banner
-                    v-if="scanningDraft && cameraInsecure"
+                    v-if="draft.scanning_enabled && cameraInsecure"
                     dense
                     rounded
                     class="dora-bg-warning-soft q-mt-sm"
@@ -79,13 +75,8 @@
 
 <script lang="ts" setup>
     import { ICONS } from 'src/style/icons';
-    import { storeToRefs } from 'pinia';
-    import { useQuasar } from 'quasar';
-    import AppSettingsApiService from 'src/services/api/appSettingsApiService';
     import type { AutoAddMode } from 'src/services/api/appSettingsApiService';
-    import { useAuthStore } from 'src/stores/authStore';
-    import { onMounted, ref } from 'vue';
-    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+    import { useAppSettingDrafts } from 'src/composables/useAppSettingDrafts';
     import SettingsSection from 'src/components/settings/SettingsSection.vue';
     import SettingsRow from 'src/components/settings/SettingsRow.vue';
     import SettingsPageHeader from 'src/components/settings/SettingsPageHeader.vue';
@@ -96,98 +87,40 @@
     import { useScanningEnabled } from 'src/composables/useScanningEnabled';
 
     /**
-     * FU-511 — install-wide auto-add mode. Replaces the retired per-item
-     * `StockItem.auto_add_when_low` toggle. Single-value dial so we save
-     * eagerly on change; no explicit Save button (matches the neighbouring
-     * Stocktake page's pattern).
+     * FU-511: install-wide auto-add mode, which replaced the per-item
+     * `StockItem.auto_add_when_low` toggle. Saved on change.
      */
-    // 2026-09-03: was a raw `q-btn-toggle`, the last squared-off segmented
-    // control on the settings pages. `DoraSegmented` is the same control with
-    // the app's one anatomy and proper radiogroup semantics.
     const MODE_OPTIONS: DoraSegmentedOption<AutoAddMode>[] = [
         { label: 'Off', value: 'off' },
         { label: 'Essential only', value: 'essential_only' },
         { label: 'All items', value: 'all' },
     ];
 
-    const $q = useQuasar();
-    const { isAdmin } = storeToRefs(useAuthStore());
-    const api = new AppSettingsApiService();
+    const { draft, ready, save } = useAppSettingDrafts({
+        auto_add_mode: 'essential_only' as AutoAddMode,
+        scanning_enabled: false,
+    });
 
-    const loading = ref(true);
-    const modeDraft = ref<AutoAddMode>('essential_only');
-    let savedMode: AutoAddMode = 'essential_only';
-
-    // Scanning & QR labels — a real install-wide flag, saved on toggle.
-    const scanningDraft = ref(false);
-    // FU-580 — scanning has its own dedicated module-level probe composable
-    // (separate from useFeatureFlags), so the toggle handler must refresh
-    // *that* cache too or the gated UI (Stock Overview scan button, QR labels
-    // nav entry) stays stale until a reload.
+    // FU-580: scanning has its own module-level probe composable (separate
+    // from useFeatureFlags), so a toggle refreshes that cache too or the gated
+    // UI (the scan button, the QR labels nav entry) stays stale until a reload.
     const { refreshScanning } = useScanningEnabled();
-    const { refresh: featureFlags$refresh } = useFeatureFlags();
+    const { refresh: refreshFeatureFlags } = useFeatureFlags();
     // Same authority the scan overlay consults, so the warning here and the
-    // explainer there can't drift apart (R-003). Evaluated once — the page's
-    // origin can't change under it.
+    // explainer there can't drift apart (R-003).
     const cameraInsecure = insecureContextWarning() !== null;
 
-    async function onScanningToggle(value: boolean) {
-        try {
-            const result = await api.updateAsync({ scanning_enabled: value });
-            scanningDraft.value = result.scanning_enabled;
-            await Promise.all([refreshScanning(), featureFlags$refresh()]);
-            $q.notify({
-                type: 'positive', 
-                message: value ? 'Scanning & QR labels enabled.' : 'Scanning & QR labels disabled.',
-            });
-        } catch (err) {
-            scanningDraft.value = !value;
-            $q.notify({
-                type: 'negative', 
-                message: 'Could not save scanning setting.',
-                caption: toastCaption(err),
-            });
-        }
+    function onScanningToggle(value: boolean) {
+        void save(
+            { scanning_enabled: value },
+            value ? 'Scanning & QR labels enabled.' : 'Scanning & QR labels disabled.',
+            () => Promise.all([refreshScanning(), refreshFeatureFlags()]),
+        );
     }
 
-    async function onModeChange(next: AutoAddMode) {
-        if (next === savedMode) return;
-        try {
-            const result = await api.updateAsync({ auto_add_mode: next });
-            savedMode = result.auto_add_mode;
-            modeDraft.value = savedMode;
-            $q.notify({
-                type: 'positive', 
-                message: 'Auto-add mode saved.',
-            });
-        } catch (err) {
-            modeDraft.value = savedMode;
-            $q.notify({
-                type: 'negative', 
-                message: 'Could not save auto-add mode.',
-                caption: toastCaption(err),
-            });
-        }
+    function onModeChange(next: AutoAddMode) {
+        void save({ auto_add_mode: next }, 'Auto-add mode saved.');
     }
-
-    onMounted(async () => {
-        if (!isAdmin.value) {
-            loading.value = false;
-            return;
-        }
-        try {
-            const s = await api.getAsync();
-            if (s.auto_add_mode) {
-                savedMode = s.auto_add_mode;
-                modeDraft.value = savedMode;
-            }
-            scanningDraft.value = s.scanning_enabled;
-        } catch {
-            // Leave defaults; nothing else on the page depends on the fetch.
-        } finally {
-            loading.value = false;
-        }
-    });
 </script>
 
 <style scoped lang="scss">

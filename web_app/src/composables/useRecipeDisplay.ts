@@ -18,6 +18,8 @@ import { computed, type ComputedRef } from 'vue';
 import { storeToRefs } from 'pinia';
 import type { Recipe } from 'src/models/recipe';
 import { recipeImageUrl } from 'src/services/api/recipeApiService';
+import { inferenceTooltip as hintTooltip } from 'src/helpers/inferenceHint';
+import { totalMinutes } from 'src/helpers/recipeTime';
 import { useRecipeVocabStore } from 'src/stores/recipeVocabStore';
 
 export interface RecipeDisplay {
@@ -65,11 +67,7 @@ export interface RecipeDisplay {
 export function useRecipeDisplay(recipe: () => Recipe): RecipeDisplay {
     const { dietaryTags } = storeToRefs(useRecipeVocabStore());
 
-    const totalTime = computed<number | null>(() => {
-        const r = recipe();
-        if (r.prep_time_minutes === null && r.cook_time_minutes === null) return null;
-        return (r.prep_time_minutes ?? 0) + (r.cook_time_minutes ?? 0);
-    });
+    const totalTime = computed<number | null>(() => totalMinutes(recipe().prep_time_minutes, recipe().cook_time_minutes));
 
     const ingredientCount = computed(() => recipe().ingredients.length);
 
@@ -199,15 +197,9 @@ export function useRecipeDisplay(recipe: () => Recipe): RecipeDisplay {
         return lowIds.value.length > 0 ? 'Some ingredients are low' : 'All ingredients in stock';
     });
 
-    // FU-653 — names the items, because "may be short" without saying what
-    // is a nudge with nowhere to go.
-    const inferenceTooltip = computed(() => {
-        const r = recipe();
-        const list = (r.inference_stock_item_names ?? []).join(', ');
-        return r.inference_hint === 'at_risk'
-            ? `Everything's recorded as in stock, but Dora thinks you may have run out of ${list}.`
-            : `Recorded as missing ${list}, but Dora thinks you're back in stock.`;
-    });
+    const inferenceTooltip = computed(() =>
+        hintTooltip(recipe().inference_hint, recipe().inference_stock_item_names, 'recipe'),
+    );
 
     const initial = computed(() => (recipe().name.trim()[0] ?? '?').toUpperCase());
     const mediaStyle = computed(() => {

@@ -18,8 +18,18 @@ from __future__ import annotations
 import statistics
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Iterable
+from typing import Callable, Iterable
 from uuid import UUID
+
+from dora_api.domain import units
+from dora_api.domain.entities.product import Product
+from dora_api.domain.entities.product_offer import ProductOffer
+from dora_api.domain.entities.stock_item_price_observation import \
+    StockItemPriceObservation
+from dora_api.domain.entities.store import Store
+from dora_api.features.app_settings.access import get_or_create_app_setting
+from dora_api.features.products.product_links import linked_stock_items
+from dora_api.persistence.field import EntityField
 
 
 def _as_naive_utc(dt: datetime) -> datetime:
@@ -33,16 +43,6 @@ def _as_naive_utc(dt: datetime) -> datetime:
     if dt.tzinfo is None:
         return dt
     return dt.astimezone(timezone.utc).replace(tzinfo=None)
-
-from dora_api.domain import units
-from dora_api.domain.entities.app_setting import AppSetting
-from dora_api.domain.entities.product import Product
-from dora_api.domain.entities.product_offer import ProductOffer
-from dora_api.domain.entities.stock_item_price_observation import \
-    StockItemPriceObservation
-from dora_api.domain.entities.store import Store
-from dora_api.features.app_settings.access import get_or_create_app_setting
-from dora_api.persistence.field import EntityField
 
 
 def measurement_system_from_repo(repo) -> str:
@@ -123,55 +123,45 @@ def per_unit_in_canonical(
     return total_price / measure_in_canonical, canonical
 
 
-def build_your_prices_for_item(
-    repo, stock_item_id: UUID, *,
-    now: datetime | None = None, system: str | None = None,
+def _empty_your_prices(last_observed_at: datetime | None = None) -> YourPrices:
+    return YourPrices(
+        baseline=None, baseline_unit=None, current=None,
+        above_baseline=False, sample_count=0,
+        last_observed_at=last_observed_at, last_seen_store_name=None,
+        offers_sidecar=[],
+    )
+
+
+def _baseline_from_observations(
+    repo, observations: list[StockItemPriceObservation], *,
+    now: datetime, system: str,
+    sidecar: Callable[[str, str, float], list[OfferSidecarEntry]] | None = None,
 ) -> YourPrices:
-    """Build the YourPrices signal for one stock item.
+    """The baseline math shared by the per-item and per-product signals.
 
     Algorithm (B4 / C1-C5 / LC-2):
-      1. Load all observations for the item; if empty → empty state.
-      2. Active dimension = dimension of most-recent observation.
-      3. Filter to obs in that dimension within ``BASELINE_WINDOW`` ago.
-      4. Normalise each to per-canonical-unit price.
-      5. ``current`` = most-recent obs's per-unit price (always set if
-         there's any obs at all — even if too few for a baseline).
+      1. No observations → empty state.
+      2. Active dimension = dimension of the most-recent observation.
+      3. Filter to observations in that dimension within ``BASELINE_WINDOW``.
+      4. Normalise each to a per-canonical-unit price.
+      5. ``current`` = the most-recent observation's per-unit price (set
+         whenever there is any observation, even below a baseline).
       6. ``sample_count`` < MIN_SAMPLES → baseline None, above_baseline
          False. Else median + strict-greater threshold compare.
-      7. ``offers_sidecar`` (LC-2) — populated from linked products'
-         current offers (when present), normalised to the same canonical
-         unit. Never contributes to the median.
+      7. ``sidecar(canonical_unit, display_unit, display_factor)`` builds the
+         LC-2 offers sidecar (already in display units); it never contributes
+         to the median.
     """
-    _now = now or datetime.now(timezone.utc)
-    _system = system or measurement_system_from_repo(repo)
-
-    observations: list[StockItemPriceObservation] = repo.get(StockItemPriceObservation).all(
-        EntityField(
-            StockItemPriceObservation,
-            StockItemPriceObservation.Fields.STOCK_ITEM_ID,
-        ).eq(stock_item_id)
-    )
     if not observations:
-        return YourPrices(
-            baseline=None, baseline_unit=None, current=None,
-            above_baseline=False, sample_count=0,
-            last_observed_at=None, last_seen_store_name=None,
-            offers_sidecar=[],
-        )
+        return _empty_your_prices()
 
-    observations.sort(key=lambda o: o.observed_at, reverse=True)
+    observations = sorted(observations, key=lambda o: o.observed_at, reverse=True)
     latest = observations[0]
     latest_def = units.find_unit(latest.unit)
     if latest_def is None or latest_def.dimension not in units.PRICE_DIMENSIONS:
         # Defensive — the write path validates this so it's a "should never"
         # case; degrade to empty state rather than 500.
-        return YourPrices(
-            baseline=None, baseline_unit=None, current=None,
-            above_baseline=False, sample_count=0,
-            last_observed_at=latest.observed_at,
-            last_seen_store_name=None,
-            offers_sidecar=[],
-        )
+        return _empty_your_prices(latest.observed_at)
     active_dim = latest_def.dimension
     canonical_unit = units.CANONICAL_PRICE_UNIT[active_dim]
 
@@ -193,20 +183,17 @@ def build_your_prices_for_item(
         latest.total_measure, latest.unit, canonical_unit,
     ) or 0.0
     display_unit, display_factor = units.display_denominator_for(
-        active_dim, latest_measure_in_canonical, system=_system,
+        active_dim, latest_measure_in_canonical, system=system,
     )
 
-    # Resolve the most-recent observation's store name (A2 — surfaced in the
-    # widget's "Last seen $X at Coles" line).
+    # The most-recent observation's store (A2 — "Last seen $X at Coles").
     last_seen_store_name: str | None = None
     if latest.store_id is not None:
         store = repo.get(Store).by_id(latest.store_id)
         if store is not None:
             last_seen_store_name = store.name
 
-    # Build the dimension-filtered, window-filtered, normalised series for
-    # the median.
-    cutoff = _as_naive_utc(_now - BASELINE_WINDOW)
+    cutoff = _as_naive_utc(now - BASELINE_WINDOW)
     in_dim_window: list[float] = []
     for obs in observations:
         obs_def = units.find_unit(obs.unit)
@@ -223,7 +210,6 @@ def build_your_prices_for_item(
             in_dim_window.append(pu[0])
 
     sample_count = len(in_dim_window)
-
     baseline: float | None = None
     above: bool = False
     if sample_count >= MIN_SAMPLES:
@@ -234,17 +220,8 @@ def build_your_prices_for_item(
         if current_value is not None:
             above = current_value > baseline * ABOVE_THRESHOLD
 
-    # LC-2 offers sidecar — never folded into the median above. Populated
-    # only when there are linked products with a current offer. Already in
-    # display units (sidecar builder applies the same display factor).
-    offers = _build_offers_sidecar(
-        repo, stock_item_id,
-        canonical_unit=canonical_unit,
-        display_unit=display_unit,
-        display_factor=display_factor,
-    )
+    offers = sidecar(canonical_unit, display_unit, display_factor) if sidecar else []
 
-    # Apply the display factor to the price-bearing fields one final time.
     # Internal compute stays in canonical units; only the DTO is shifted.
     display_baseline = baseline / display_factor if baseline is not None else None
     display_current = current_value / display_factor if current_value is not None else None
@@ -265,133 +242,49 @@ def build_your_prices_for_item(
     )
 
 
-def build_your_prices_for_product(
-    repo, product_id: UUID, *,
-    now: datetime | None = None, system: str | None = None,
-) -> YourPrices:
-    """Per-product variant used by the Price-History page (chunk 6).
-
-    Same baseline math, but the "observations" pool is gathered transitively
-    — every stock-item linked to this product contributes its observations.
-    Used by Price-History chart to render a baseline reference line per
-    product series (F-3) and the above-usual annotation in the header.
-    """
-    # Intentionally minimal: aggregate observations across linked stock
-    # items and reuse the per-item algorithm. No offers sidecar here — the
-    # per-product Price-History page already shows offers as the primary
-    # series, sidecar would be redundant.
-    from dora_api.domain.entities.stock_item import StockItem
-    from sqlalchemy import select
-    from dora_api.app import db
-
-    # Fetch linked stock-item ids via the StockItemProduct join table.
-    # Pure SQL via the metadata table rather than an entity since the join
-    # table isn't mapped to a domain entity.
-    join_table = db.metadata.tables["StockItemProduct"]
-    stock_item_ids: list[UUID] = [
-        row[0]
-        for row in db.session.execute(
-            select(join_table.c.stock_item_id).where(
-                join_table.c.product_id == product_id
-            )
-        ).all()
-    ]
+def _observations_for(repo, stock_item_ids: list[UUID]) -> list[StockItemPriceObservation]:
     if not stock_item_ids:
-        return YourPrices(
-            baseline=None, baseline_unit=None, current=None,
-            above_baseline=False, sample_count=0,
-            last_observed_at=None, last_seen_store_name=None,
-            offers_sidecar=[],
-        )
-
-    _now = now or datetime.now(timezone.utc)
-    _system = system or measurement_system_from_repo(repo)
-    observations: list[StockItemPriceObservation] = repo.get(StockItemPriceObservation).all(
+        return []
+    return repo.get(StockItemPriceObservation).all(
         EntityField(
             StockItemPriceObservation,
             StockItemPriceObservation.Fields.STOCK_ITEM_ID,
         ).in_(stock_item_ids)
     )
-    if not observations:
-        return YourPrices(
-            baseline=None, baseline_unit=None, current=None,
-            above_baseline=False, sample_count=0,
-            last_observed_at=None, last_seen_store_name=None,
-            offers_sidecar=[],
-        )
 
-    observations.sort(key=lambda o: o.observed_at, reverse=True)
-    latest = observations[0]
-    latest_def = units.find_unit(latest.unit)
-    if latest_def is None or latest_def.dimension not in units.PRICE_DIMENSIONS:
-        return YourPrices(
-            baseline=None, baseline_unit=None, current=None,
-            above_baseline=False, sample_count=0,
-            last_observed_at=latest.observed_at,
-            last_seen_store_name=None,
-            offers_sidecar=[],
-        )
-    active_dim = latest_def.dimension
-    canonical_unit = units.CANONICAL_PRICE_UNIT[active_dim]
 
-    cutoff = _as_naive_utc(_now - BASELINE_WINDOW)
-    in_dim_window: list[float] = []
-    for obs in observations:
-        obs_def = units.find_unit(obs.unit)
-        if obs_def is None or obs_def.dimension != active_dim:
-            continue
-        if _as_naive_utc(obs.observed_at) < cutoff:
-            continue
-        pu = per_unit_in_canonical(
-            total_price=obs.total_price,
-            total_measure=obs.total_measure,
-            unit=obs.unit,
-        )
-        if pu is not None:
-            in_dim_window.append(pu[0])
-
-    latest_pu = per_unit_in_canonical(
-        total_price=latest.total_price,
-        total_measure=latest.total_measure,
-        unit=latest.unit,
+def build_your_prices_for_item(
+    repo, stock_item_id: UUID, *,
+    now: datetime | None = None, system: str | None = None,
+) -> YourPrices:
+    """The YourPrices signal for one stock item, with the offers sidecar
+    from its linked products' current offers."""
+    return _baseline_from_observations(
+        repo, _observations_for(repo, [stock_item_id]),
+        now=now or datetime.now(timezone.utc),
+        system=system or measurement_system_from_repo(repo),
+        sidecar=lambda canonical_unit, display_unit, display_factor: _build_offers_sidecar(
+            repo, stock_item_id,
+            canonical_unit=canonical_unit,
+            display_unit=display_unit,
+            display_factor=display_factor,
+        ),
     )
-    current_value = latest_pu[0] if latest_pu else None
 
-    last_seen_store_name: str | None = None
-    if latest.store_id is not None:
-        store = repo.get(Store).by_id(latest.store_id)
-        if store is not None:
-            last_seen_store_name = store.name
 
-    sample_count = len(in_dim_window)
-    baseline: float | None = None
-    above: bool = False
-    if sample_count >= MIN_SAMPLES:
-        baseline = statistics.median(in_dim_window)
-        if current_value is not None:
-            above = current_value > baseline * ABOVE_THRESHOLD
-
-    # AU-shelf display denominator (FU-228 follow-up) — same rule as the
-    # per-item variant. The Price-History page card reads this baseline_unit
-    # for its "Your usual: $X" caption (F-3).
-    latest_measure_in_canonical = units.convert(
-        latest.total_measure, latest.unit, canonical_unit,
-    ) or 0.0
-    display_unit, display_factor = units.display_denominator_for(
-        active_dim, latest_measure_in_canonical, system=_system,
-    )
-    display_baseline = baseline / display_factor if baseline is not None else None
-    display_current = current_value / display_factor if current_value is not None else None
-
-    return YourPrices(
-        baseline=display_baseline,
-        baseline_unit=display_unit if display_current is not None else None,
-        current=display_current,
-        above_baseline=above,
-        sample_count=sample_count,
-        last_observed_at=latest.observed_at,
-        last_seen_store_name=last_seen_store_name,
-        offers_sidecar=[],
+def build_your_prices_for_product(
+    repo, product_id: UUID, *,
+    now: datetime | None = None, system: str | None = None,
+) -> YourPrices:
+    """Per-product variant used by the Price-History page: the observations
+    of the stock item the product is linked to, through the same baseline
+    math. No offers sidecar — that page already shows offers as the primary
+    series."""
+    link = linked_stock_items(repo, [product_id]).get(product_id)
+    return _baseline_from_observations(
+        repo, _observations_for(repo, [link.stock_item_id] if link else []),
+        now=now or datetime.now(timezone.utc),
+        system=system or measurement_system_from_repo(repo),
     )
 
 

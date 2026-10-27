@@ -49,6 +49,9 @@ from dora_api.infrastructure.push_sender import (PushGoneError, is_configured,
                                                  send_push)
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
+from dora_api.features.alerts import _ledger as ledger
+
+_LOGGER = logging.getLogger(__name__)
 
 
 # 19:00 household-local. Late enough that the day's cooking is settled and the
@@ -69,7 +72,6 @@ def send_daily_brief(
     household timezone, so a test can drive the hour gate without freezing the
     system clock.
     """
-    log = logging.getLogger(__name__)
     now = now or datetime.now(timezone.utc)
     sent = 0
     try:
@@ -89,7 +91,7 @@ def send_daily_brief(
             # `now` into that zone is exactly what `household_today` does.
             today = local_now.date()
 
-            subscriptions_by_user = _subscriptions_by_user(repository)
+            subscriptions_by_user = ledger.subscriptions_by_user(repository)
             for user in _opted_in_users(repository):
                 subs = subscriptions_by_user.get(user.id)
                 if not subs:
@@ -102,14 +104,14 @@ def send_daily_brief(
                         repository, user.id, subs, today, now, _send_push,
                     )
                 except Exception as exc:  # noqa: BLE001
-                    log.warning("daily_brief: user %s failed: %s", user.id, exc)
+                    _LOGGER.warning("daily_brief: user %s failed: %s", user.id, exc)
             if sent:
-                log.info(
+                _LOGGER.info(
                     "daily_brief: delivered %d push(es) at %s",
                     sent, local_now.isoformat(),
                 )
     except Exception as exc:  # noqa: BLE001
-        log.warning("daily_brief: job failed: %s", exc)
+        _LOGGER.warning("daily_brief: job failed: %s", exc)
     return sent
 
 
@@ -121,16 +123,6 @@ def _opted_in_users(repository: SqlAlchemyRepository) -> List[User]:
         EntityField(User, User.Fields.DAILY_BRIEF_ENABLED).eq(True)
         & EntityField(User, User.Fields.IS_ACTIVE).eq(True)
     ))
-
-
-def _subscriptions_by_user(
-    repository: SqlAlchemyRepository,
-) -> dict[UUID, list[PushSubscription]]:
-    rows: List[PushSubscription] = repository.get(PushSubscription).all()
-    grouped: dict[UUID, list[PushSubscription]] = {}
-    for row in rows:
-        grouped.setdefault(row.user_id, []).append(row)
-    return grouped
 
 
 def brief_ledger_key(today) -> str:
@@ -149,7 +141,7 @@ def _process_user(
     sender: Callable,
 ) -> int:
     key = brief_ledger_key(today)
-    existing = _ledger_row(repository, user_id, key)
+    existing = ledger.interaction_for(repository, user_id, key)
     if existing is not None and existing.last_pushed_at is not None:
         return 0
 
@@ -172,7 +164,6 @@ def _process_user(
         "url": brief.url,
     }
 
-    log = logging.getLogger(__name__)
     sent_count = 0
     for sub in list(subscriptions):
         try:
@@ -185,7 +176,7 @@ def _process_user(
             sub.last_seen_at = now
             sent_count += 1
         except PushGoneError:
-            log.info(
+            _LOGGER.info(
                 "daily_brief: pruning gone subscription %s (user=%s)",
                 sub.endpoint[:80], user_id,
             )
@@ -194,7 +185,7 @@ def _process_user(
             # Transient — leave the row and retry on the next tick. Only
             # stamp the ledger if at least one device took it, so a total
             # send failure re-attempts rather than silently burning the day.
-            log.warning(
+            _LOGGER.warning(
                 "daily_brief: send failed for user=%s endpoint=%s: %s",
                 user_id, sub.endpoint[:80], exc,
             )
@@ -211,15 +202,3 @@ def _process_user(
             existing.last_pushed_at = now
     repository.save_changes()
     return sent_count
-
-
-def _ledger_row(
-    repository: SqlAlchemyRepository,
-    user_id: UUID,
-    key: str,
-) -> AlertInteraction | None:
-    rows: List[AlertInteraction] = repository.get(AlertInteraction).all(
-        EntityField(AlertInteraction, AlertInteraction.Fields.USER_ID).eq(user_id)
-        & EntityField(AlertInteraction, AlertInteraction.Fields.ALERT_KEY).eq(key)
-    )
-    return rows[0] if rows else None

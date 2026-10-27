@@ -25,7 +25,7 @@ Flow:
 4. ``source_url`` is stamped onto the DTO as metadata. Never fetched.
 
 Saving still goes through ``POST /api/recipes`` and its own
-``CreateRecipeIngredientRequest`` shape — Chunk 4 made that route
+``RecipeIngredientRequest`` shape — Chunk 4 made that route
 accept either ``stock_item_id`` (linked) or ``raw_text`` (unlinked),
 so an ingredient that missed the fuzzy threshold round-trips as
 unlinked all the way through save.

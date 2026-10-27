@@ -10,6 +10,334 @@ resolutions go at the **top**.
 
 ---
 
+## [RESOLVED] FU-841 — `MarkAsWastedDialog`'s tiles remove the focus outline and replace it with their hover state
+- **Raised:** 2026-09-02 (dashboard chunk 6 — found while fixing the same file's
+  undeclared `--c-*` references, which the R-060 guard surfaced)
+- **Type:** finding (A6 / D-016)
+- **What:** `components/stock/MarkAsWastedDialog.vue` styles its reason tiles with
+  a single `:hover, :focus-visible` rule that sets `outline: none` and changes the
+  background + border colour. Two problems, the same pair `PantryDonutCard` had
+  before chunk 6 fixed it there: **A6 forbids `outline: none` without a
+  replacement**, and because hover and focus share one rule the two states are
+  **byte-identical**, which D-016 requires be distinguishable. A keyboard user
+  tabbing through the tiles gets the same feedback as a mouse hovering, and no
+  ring.
+- **Not fixed in chunk 6** — different surface (stock, not the dashboard), and the
+  chunk only touched this file because retiring the dashboard's `--c-*` aliases
+  made the R-060 guard fail on its undeclared token references. Fixing the focus
+  ring too would have been scope creep into a dialog nobody was reviewing.
+- **The fix is known and small**: split the rule, keep the background change on
+  hover, and give `:focus-visible` a real `outline: 2px solid var(--focus-ring)`
+  with an offset — copy `PantryDonutCard.vue`'s, which is the worked example.
+- **Worth checking in the same pass:** how many other `outline: none` rules exist
+  app-wide. The dashboard review counted one on its own surface; nobody has
+  counted the rest.
+- **Recommended resolution:** **opportunistic** — next time anyone is in the stock
+  dialogs, or as part of an app-wide focus-ring pass alongside [[FU-631]].
+- **State (2026-10-27):** resolved in finalisation 12-R21: the tiles' `:focus-visible` gets its own
+  `outline: 2px solid var(--focus-ring)` with an offset (hover keeps the background change only), and the dialog's
+  token fallbacks went. The app-wide `outline: none` count is the §0 focus sweep.
+
+## [RESOLVED] FU-663 — The chat header's Basic/AI slider is a 24px tap target (D-004)
+- **Raised:** 2026-08-17 (assistant chat-window feedback pass).
+- **Type:** finding.
+- **What:** `DoraModeSlider.vue` is `height: 24px; min-width: 96px`. D-004 floors touch
+  targets at 44×44px. This was tolerable while the slider was mouse-territory chrome,
+  but this session made it **deliberately tappable on touch** — when AI isn't configured
+  it now routes to Settings → Assistant rather than sitting inert behind a hover-only
+  tooltip. So it is now a primary touch affordance at roughly half the required height.
+- **Why deferred:** growing it changes the chat header's whole vertical rhythm (the
+  header row also holds three icon buttons and the D.O.R.A. wordmark), which is a design
+  call, not a CSS tweak. Same family as **FU-641** (header icon buttons at 36px) — the
+  two should be resolved together as one header-density pass rather than piecemeal.
+- **Recommended resolution:** later, folded into FU-641. Cheapest compliant shape is
+  probably an invisible `::after` hit-area expanding the slider to 44px vertically
+  without moving the pill itself.
+- **State (2026-10-27):** resolved in finalisation 11-D3: the slider's root is a 44px hit area and the visible pill a 32px track inside it (labels and icons a step larger); focus ring on the track. Browser check in DORA_VERIFY.
+
+## [RESOLVED] FU-899 — `DashboardCard`'s `to` prop and `.dora-card-action` now have no consumers
+- **Raised:** 2026-09-08 (dashboard feedback batch)
+- **Type:** leftover (R-057 contract inventory)
+- **What:** the batch removed every card's header link and the one whole-card
+  link (`MoneyCard` passed `to="/settings/money"`). Three things in the shared
+  shell are consequently consumer-less app-wide, dashboard and Reports both
+  (grepped): the **`to` prop**, the `.dora-card-clickable` cursor/hover/`:deep`
+  rules that only fire when `to` is set, and the `:deep(.dora-card-action)`
+  text style. `.dora-card-link` was deleted in-place (it *is* the pattern the
+  owner cut, so leaving it invites reinstatement); these three were not.
+- **Why deferred:** `to` is a public prop of a component the Reports page also
+  renders, and the `<component :is="to ? 'router-link' : 'article'">` root is
+  the mechanism that makes a card a real keyboard-focusable control — removing
+  it is a small API change to a shared shell rather than a UI tidy, and it is
+  plausible that a future non-dashboard consumer wants a whole-card link. The
+  `#action` slot is **not** part of this: Reports' `SpendCard` still puts a
+  `BaseSegmented` in it.
+- **Recommended resolution:** opportunistic — next time anyone is in
+  `DashboardCard.vue`. Either delete all three or leave a comment saying `to` is
+  deliberately kept for non-dashboard callers.
+- **State (2026-10-27):** resolved in finalisation 08-R11: `DashboardCard` is a plain `<article>`; the `to` prop, the hover lift and the `.dora-card-action` / clickable rules are gone (the `#action` slot stays for Reports' segmented control).
+
+## [RESOLVED] FU-896 — `invalidateDoraScore()` is now definitively dead
+- **Raised:** 2026-09-08 (dashboard feedback batch)
+- **Type:** leftover
+- **What:** `composables/useDoraScore.ts` exports `invalidateDoraScore()`, whose
+  docstring says it is *"bumped after any mutation that could shift the score
+  (log waste, finish a shopping list, mark an item checked, cook + drop
+  level)"*. It has **never had a caller** — grepped app-wide, zero, and that was
+  already true before this batch. None of those mutations invalidates it.
+  That gap is what produced the owner's *"the budget health indicator stayed the
+  same"* report (see the fix note in `DashboardPage.loadAll`), and the fix taken
+  was the blunt one: the dashboard now force-refreshes the score on every load,
+  which is correct for the one surface that renders it and makes the
+  invalidation hook redundant rather than merely unused.
+- **What to do:** delete `invalidateDoraScore` (and say so in the composable's
+  header, since the comment currently describes behaviour that does not exist),
+  **or** wire it to the four mutations it names — which only becomes worth doing
+  if a second surface ever renders the score, since the dashboard no longer
+  needs it. `clearDoraScoreCache` is separate and does have a caller (logout).
+- **Recommended resolution:** opportunistic. Deleting is the honest option; the
+  comment lying about it is the actual defect.
+- **State (2026-10-27):** resolved in finalisation 08-R10: `invalidateDoraScore` and `clearDoraScoreCache` (also caller-less) deleted and the header rewritten to what the cache does (stale-after-mount + the page's `refresh`). The cache itself was not moved onto `createOverlayCache`: it is a single value with an error ref and staleness, a different shape from the per-item overlays.
+
+## [RESOLVED] FU-728 — Cook mode and Stocktake are the other two surfaces R-054 applies to
+- **Raised:** 2026-08-23 (FU-727 / ADR-050)
+- **Type:** finding.
+- **What:** R-054 ("a lifecycle phase that changes what the user *does* gets its
+  own composition") was established from the shopping list, but two other
+  surfaces have the same shape: cook mode (planning vs cooking) and Stocktake's
+  three-phase runner (review / walk / sweep). Neither was inspected in this unit.
+- **Why it matters:** the rule's whole point is that the wrong shape is invisible
+  — nobody notices a missing surface when something is already rendering. If
+  either of those is a disabled-copy-of-one-surface, the same hidden-feature cost
+  applies.
+- **Recommended resolution:** opportunistic — next time either surface is
+  touched, read it against R-054 before adding to it. Not worth a sweep of its
+  own.
+- **Cook-mode half answered (2026-10-24, finalisation 04-D1):** cook mode is already its own composition: the planning phase is the recipe page, and the step / photo faces are modes *within* cooking, not lifecycle phases. No second composition is warranted (04-R20 is size hygiene, FU-942). The Stocktake half stays open for chunk 5.
+- **State (2026-10-24):** resolved: both halves answered by the finalisation review. Cook mode (04-D1): already its own composition; the step / photo faces are modes within cooking. Stocktake (05-D1): the runner already gives each lifecycle phase its own composition (`StocktakeReviewPhase`, the walk card, `StocktakeSweepPhase`), so R-054 is satisfied.
+
+## [RESOLVED] FU-699 — full backend suite not run for the stocktake-switch change
+- **Raised:** 2026-08-20 (stock-overview feedback batch).
+- **Type:** finding.
+- **What:** the session was cut short mid-verification. What did run and pass:
+  240 backend tests matching `stocktake or app_setting or settings or stock_item
+  or health`, the refreshed `dto_snapshots.json` contract test (27 passed), the
+  full frontend suite (504), `vue-tsc` (0 errors) and eslint on every touched
+  file. The **whole** `pytest tests` run did not.
+- **Why deferred:** out of session time.
+- **Recommended resolution:** now — one `pytest tests -q` before this lands.
+- **State (2026-10-24):** resolved: the full backend suite has run green many times since (latest 2527 passed / 1 skip / 1 xfail on 2026-10-24), covering the stocktake-switch change (finalisation 05-D5).
+
+## [RESOLVED] FU-698 — "Deselect all" and "Cancel bulk select" are now the same action
+- **Raised:** 2026-08-20 (stock-overview feedback batch).
+- **Type:** design question.
+- **What:** per owner feedback, Deselect-all now exits bulk mode (matching what
+  unticking the last item already did), which makes it behaviourally identical
+  to the toolbar's Cancel. It was kept because on a phone the bulk bar is what's
+  on screen and the toolbar Cancel may be scrolled away — but two buttons doing
+  one thing is the kind of thing D-rules exist to catch.
+- **Why deferred:** removing a button the owner didn't ask to remove is his call.
+- **Recommended resolution:** opportunistic — next time the bulk bar is touched.
+- **State (2026-10-24):** resolved as kept by design (finalisation 05-R21 / FU-698 note): on a phone the bulk bar is what's on screen and the toolbar Cancel may be scrolled away, so the bar keeps its own way out. The code comment says so.
+
+## [RESOLVED] FU-725 — Line-price ladder has no e2e coverage of the historic rung
+- **Raised:** 2026-08-23 (shopping-list redesign)
+- **Type:** test gap.
+- **What:** `compute_list_totals` + the store breakdown are unit-tested
+  (`tests/test_shopping_list_store_breakdown.py`, 7 cases) and the sectioning is
+  covered in `useLineSections.spec.ts` (19 cases). The **ladders themselves** —
+  actual→historic→offer for money, and purchased→usual→historic→offer for store —
+  run inside `GetShoppingListDetailHandler` and are only verified by having been
+  driven once in a browser against seed data.
+- **Why it matters:** these are exactly the "stable, low-churn domain contract"
+  the verification stance says is worth pinning, and a silent regression would
+  show up as *wrong money*, which is the least forgivable kind.
+- **Recommended resolution:** opportunistic — next time the detail handler is
+  touched. One e2e test per rung, asserting `estimate_source` and
+  `resolved_store_id`, would cover it.
+- **Note (2026-10-24, finalisation 03-R48):** `_prior_purchases` (now its own method on the detail handler) loads every ticked line ever for the list's items to find the latest done purchase; a `MAX(completed_at)` join is the optimisation. Pin the historic rung here first, then optimise.
+- **State (2026-10-24):** resolved: `tests/e2e/dora_api/test_shopping_list_ladders.py` drives the real detail read through every money rung (none → historic → offer, with an unpicked offer shown not to price → actual) and the store rungs (last purchase → planned → bought from). The `_prior_purchases` `MAX(completed_at)` optimisation (03-R48) is not urgent and is left as a code comment target, not an FU.
+
+## [RESOLVED] FU-766 — Server-side `bulk-tick` endpoint and `has_substitutes` are now unread
+- **Raised:** 2026-08-28 (shopping-list feedback batch 1)
+- **Type:** leftover
+- **What:** removing the bulk-select bar and the substitute swap left two server
+  contracts with no client caller: `POST /shopping-lists/<id>/lines/bulk-tick`
+  (`bulk_operations.py:82`) and the per-line `has_substitutes` flag on the detail
+  DTO (`shoppingList.ts:113`), which the server computes on every line of every
+  read for nobody. The client-side `bulkTickAsync` was deleted this session; these
+  weren't.
+- **Why deferred:** deleting a live endpoint plus its tests is a bigger call than a
+  UI batch should make unilaterally, and R-057/ADR-054 is explicit that a replaced
+  endpoint's response is an inventory to check, not a casualty list. `has_substitutes`
+  in particular may be wanted by a future shop-mode swap if INV-8's original
+  recommendation is ever revisited.
+- **Recommended resolution:** opportunistic — owner's call. Delete both, or keep
+  `has_substitutes` and note why.
+- **State (2026-10-24):** resolved in finalisation 03-R22/R23: `has_substitutes` (and its raw-SQL block), `POST …/lines/bulk-tick` and `POST …/lines/move-to/<target>` deleted with their client halves and `test_line_has_substitutes.py`; `MoveLinesHandler` keeps only the finish flow's move-unticked.
+
+## [RESOLVED] FU-862 — `mealPlanStore.getShortfallAsync` has no client consumer left
+- **Raised:** 2026-09-03 (meal-planner owner batch)
+- **Type:** leftover
+- **What:** the planner was the only client reader of `GET /meal-plans/shortfall`,
+  and it used those recipe-level rows to decide which meal chips needed a cook —
+  a recipe-level answer to a per-entry question, which is the defect the owner
+  reported ("3 fried rice planned, 2 in the pool, all three light up"). That
+  verdict is now per-entry on the plan (`MealPlanEntry.needs_cooking`), so the
+  composable stopped fetching it — on mount, after every mutation, after a pool
+  ±, and after a week clear (four fewer round trips). `mealPlanStore.shortfall`,
+  `getShortfallAsync` and `MealPlanApiService.getShortfallAsync` are therefore
+  written and read by nothing on the client. Annotated in place rather than
+  deleted.
+- **Why deferred:** the **endpoint** is live and answers a different question
+  (how many *servings* short each recipe is, not which meals to cook) — the
+  assistant's `meals_shortfall` tool reads it server-side, and it is plausibly
+  what a future "what should I batch-cook this weekend" surface wants. Deleting
+  the client plumbing is a two-minute job whenever it is clear nothing wants it.
+- **Recommended resolution:** opportunistic — delete the store ref + api method
+  if no client surface has claimed it by the next meal-plan unit.
+- **State (2026-10-24):** resolved in finalisation 02-R21: `mealPlanStore.shortfall` / `getShortfallAsync`, `MealPlanApiService.getShortfallAsync` and the `Shortfall` type deleted; the endpoint stays for the assistant.
+
+## [RESOLVED] FU-759 — Two more copies of the install-wide money read, now that `access.money_features_enabled` exists
+- **Raised:** 2026-08-27 (buy-verdict money gate)
+- **Type:** finding
+- **What:** the buy-verdict gate needed an install-wide money read in two files,
+  so one was added as `money_features_enabled()` in
+  `dora_api/features/app_settings/access.py` — beside the memoised singleton
+  accessor, so gating costs no extra query. Two pre-existing private copies now
+  duplicate it: `swap_suggestions._money_features_on` (line ~324) and the money
+  half of `build_week._household_budget_amount` (line ~377). Both do their own
+  `repository.get(AppSetting).all()` rather than going through the memoised
+  accessor, so they also re-query a single-row table FU-560 already cached.
+- **Why deferred:** R-007 — the ask was gating the buy verdict. Both call sites
+  are inside meal-plan reasoning with their own tests; folding them in means
+  re-reading that suite, which is its own piece of work rather than a line in
+  this diff.
+- **Recommended resolution:** opportunistic — next time either meal-plan file is
+  open. Cites **R-003** (one domain fact, one reader) and FU-560.
+- **State (2026-10-24):** resolved in finalisation 02-R13: `budget.household_budget` / `budget_remaining` (through the memoised `get_or_create_app_setting`) and `access.money_features_enabled` replace both private copies in `build_week` and `swap_suggestions`.
+
+## [RESOLVED] FU-879 — the plan endpoint loads the same recipes twice when nutrition *and* money are both on
+- **Raised:** 2026-09-05 (owner meal-planner batch, item 5)
+- **Type:** finding
+- **What:** `GetMealPlansHandler._hydrate_nutrition` and the new
+  `_hydrate_cost` each run their own `Recipe` + `INGREDIENTS` +
+  `then_include(STOCK_ITEM)` load over the same distinct recipe ids. Each is
+  constant-cost in the number of *entries* (which is the property
+  `test_meal_plan_nutrition`'s query-count test pins, and it still holds), but
+  an install with both features on pays the identical load twice per request.
+- **Why not fixed here:** hoisting the load into `handle`/`handle_by_id` and
+  passing it down changes the shape of four hydrators that are currently
+  independent and individually skippable — each returns early when its own
+  feature is off, which is what keeps an install that uses neither paying
+  nothing. Worth doing as a deliberate small refactor rather than folded into a
+  UI batch.
+- **Recommended resolution:** opportunistic — next time either hydrator is
+  touched. Cross-ref: R-003, `get_recipes._hydrate_estimated_cost` (which solved
+  the same problem for the cookbook list in two queries).
+- **State (2026-10-24):** RESOLVED — the planner loads its recipes once per request (`GetMealPlansHandler._recipes_with_ingredients`, shared by the nutrition, cost and inference passes) and its cookability pass reads only the plans' recipes (finalisation 02-R4).
+
+## [RESOLVED] FU-761 — `kcal_to_kj` is imported from the HSR module by a Nutri-Score caller
+- **Raised:** 2026-08-27 (Nutri-Score build)
+- **Type:** finding
+- **What:** `recipe_rollup.py` builds the Nutri-Score profile with
+  `hsr.kcal_to_kj(...)`, because the kcal→kJ factor lives in
+  `domain/health_star_rating.py` and both schemes score energy in kJ.
+  Duplicating the constant into `domain/nutri_score.py` would have been a
+  straight **R-003** violation, so the shared read is the lesser evil — but a
+  generic unit conversion sitting inside one scheme's module, imported by the
+  other's caller, reads oddly and will read worse if a third scheme appears.
+- **Why deferred:** `domain/units.py` is the natural home, but moving it churns
+  a module that shipped hours earlier and whose tests import the symbol by name.
+  Not worth bundling into this diff.
+- **Recommended resolution:** opportunistic — next time `domain/units.py` or
+  either rating module is open. Cites **R-003**.
+- **State (2026-10-24):** RESOLVED — `kcal_to_kj`, `KJ_PER_KCAL` and the shared table lookup `points_for` now live in `domain/rating_tables.py`; both rating schemes and `recipe_rollup` import from there (finalisation 01-R9, Stage 2 unit 15).
+
+## [RESOLVED] FU-654 — `session['user_id']` → `User` is hand-rolled in ~13 features (R-001)
+- **Raised:** 2026-08-17 (FU-653 build).
+- **Type:** finding.
+- **What:** the same 8-line dance — read `session["user_id"]`, `UUID()` it inside a
+  try/except, `repo.get(User).by_id(...)` — is copy-pasted across `features/alerts/*`
+  (5 files), `features/assistant/*` (2), `features/budget/budget.py`,
+  `features/dashboard/get_dora_score.py`, `features/stock_items/get_pantry_beliefs.py`
+  and now `features/stock_items/inference_overlay.current_user` (which at least gives the
+  three new surfaces one copy between them, with a comment pointing here).
+- **Why deferred:** mechanical and wide; folding it into one
+  `infrastructure/auth_helpers.current_user(repo)` touches a dozen files and belongs in a
+  tidy-up pass, not in the middle of a feature.
+- **Recommended resolution:** opportunistic — next time something is being changed across
+  those features anyway (a natural pairing with the FU-512 unit-of-work sweep).
+- **State (2026-10-24):** RESOLVED — new `infrastructure/session_user.py` (`current_user_id`, `current_user`) replaces ~25 hand-rolled parses (finalisation Stage 2 unit 12). The auth shell keeps its own parse on purpose (malformed id clears the session).
+
+## [RESOLVED] FU-765 — Cook mode never re-fetches when the route's recipe id changes
+- **Raised:** 2026-08-28 (cook-mode feedback batch — found while verifying)
+- **Type:** finding
+- **What:** `RecipeCookMode.vue` fetches its recipe in `onMounted` only. Vue reuses
+  the component instance across `/cookbook/A/cook` → `/cookbook/B/cook`, so the
+  page keeps rendering recipe **A** — right down to its steps, ingredients and
+  finish flow — under recipe B's URL. Reproduced live: hopping between two cook
+  routes left the first recipe's step card on screen indefinitely; only a hard
+  reload corrected it. There is no `watch` on `route.params.id`.
+  **Re-confirmed live 2026-09-01** during the cook-mode batch, and it has a
+  second face worth recording: after a *failed* load the page latches
+  "Recipe not found." for every subsequent id too, because `recipe.value = null`
+  is set in `onMounted`'s `catch` and nothing ever retries. Whatever the fix is,
+  it has to clear that state as well.
+- **Why deferred:** out of scope for a visual-feedback batch, and it needs a
+  decision rather than a reflex `watch`: re-fetching mid-cook must not silently
+  discard session state (headcount, session swaps, the timer, the step position),
+  so the honest fix may be `:key="route.params.id"` on the route component — which
+  remounts and resets deliberately — rather than a watcher that mutates a live
+  cook session underneath the user.
+- **Why it may not matter much:** no in-app path currently jumps between two cook
+  routes (you exit to the cookbook first), so this is reachable mainly by a pasted
+  link or a back/forward pair. Worth fixing anyway — the failure is silent and
+  wrong, not merely stale.
+- **Recommended resolution:** opportunistic — next time cook mode is touched.
+- **State (2026-10-24):** RESOLVED — cook mode loads by `loadRecipe(id)` and watches `route.params.id`, resetting the session (finalisation 04-R1, Stage 2 unit 11).
+
+## [RESOLVED] FU-838 — Cutting Best deals orphaned an endpoint, a client method and a helper
+- **Raised:** 2026-09-02 (dashboard chunk 3 — [[FU-819]]'s cut)
+- **Type:** leftover
+- **What:** the Best-deals card was the **only** consumer of three contracts, all
+  now unreferenced by the SPA:
+  - `productApiService.getBestDealsAsync(limit)` (`productApiService.ts:18`) and
+    the `/products/best-deals` endpoint behind it — a server-side ranked+sliced
+    query written for exactly this card (state-ownership §8.2).
+  - `helpers/scrapedProductOfferLogic.discountPercent()` — grepped app-wide,
+    **zero** callers now. Note the review and ADR-068 both say this "survives as
+    a per-offer display helper"; that is a statement about it being *legitimate*
+    (one offer's % off its own ticket is a shelf-price question), not about it
+    having a consumer. It has none.
+- **Why deferred:** R-057/ADR-054 is explicit that a replaced surface's contracts
+  are an inventory to check, not a casualty list — deleting a live endpoint plus
+  its tests is a bigger call than a UI chunk should make unilaterally. There is
+  also a plausible future consumer: the `/reports` restructure keeps a deals
+  angle, and FU-831's own-price baseline work may want a per-offer discount.
+- **Recommended resolution:** opportunistic — owner's call. Delete all three, or
+  keep `discountPercent` with a note saying why and retire the endpoint. Same
+  shape as [[FU-766]] (the shopping list's orphaned `bulk-tick` +
+  `has_substitutes`), and worth deciding together.
+- **State (2026-10-24):** RESOLVED — `/products/best-deals` + `getBestDealsAsync` deleted; `GetBestDealsHandler` stays (deals email pool); the orphan helper became `helpers/offerLogic.ts` with four consumers (finalisation 10-R38a/10-R23, unit 13).
+
+## [RESOLVED] FU-910 — `StockItemPriceHistoryDto.canonical_unit` carries the *display* unit
+- **Raised:** 2026-09-13 (shelf-denominator batch)
+- **Type:** finding
+- **What:** the field is named `canonical_unit` and commented "per canonical
+  unit (L / kg / ea)", but it is populated from
+  `build_stock_item_price_series`, which returns the **display** denominator —
+  so it can be `100g` or `100ml`, and under a US install `oz` or `fl oz`. The
+  points it labels are scaled to match, so the chart is right; only the name and
+  the comment are wrong. Spotted while tracing which surfaces already read
+  `display_denominator_for` (they all do — this one just mislabels the answer).
+- **Why deferred:** cosmetic, and renaming a DTO field is an API-shape change
+  that the SPA service type and the chart composable both follow. Not worth
+  bundling into a fix the owner was waiting on.
+- **Recommended resolution:** opportunistic — next time the price-history
+  endpoint is touched.
+- **State (2026-10-24):** RESOLVED — field renamed `display_unit` through the DTO, TS type and tests (finalisation 06-R30, unit 14).
+
 ## [RESOLVED] FU-853 — Cook mode's timer chime is blocked by the app's own CSP
 - **Raised:** 2026-09-03 (cook-mode owner batch — observed, not reported)
 - **Type:** finding

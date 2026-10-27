@@ -50,8 +50,8 @@ export interface PriceHistorySeries {
 }
 
 // per-stock-item unioned series for the "Full history"
-// bottom-sheet. Points are tagged by `source` and already normalised to
-// `canonical_unit` server-side.
+// bottom-sheet. Points are tagged by `source` and already scaled to
+// `display_unit` server-side.
 export interface StockItemPriceHistoryPoint {
     observed_at: string;
     unit_price: number;
@@ -62,7 +62,7 @@ export interface StockItemPriceHistoryPoint {
 export interface StockItemPriceHistory {
     stock_item_id: string;
     name: string;
-    canonical_unit: string | null;
+    display_unit: string | null;
     baseline: number | null;
     baseline_unit: string | null;
     current: number | null;
@@ -78,7 +78,6 @@ export interface PriceAlert {
     store_name: string;
     threshold_unit_price: number;
     created_at: string | null;
-    last_fired_at: string | null;
 }
 
 export default class PriceHistoryApiService {

@@ -16,6 +16,8 @@ from dataclasses import dataclass
 from dora_api.features.routers import HELP_ROUTER
 from dora_api.infrastructure.api_response import ok
 
+_LOGGER = logging.getLogger(__name__)
+
 
 FOOD_FACTS: tuple[str, ...] = (
     "Honey never spoils. Sealed pots of it from ancient Egyptian tombs are still edible.",
@@ -157,7 +159,6 @@ class FoodFactDto:
 
 @HELP_ROUTER.route("/food-fact", methods=["GET"])
 def get_food_fact():
-    _Logger = logging.getLogger(__name__)
     fact = random.choice(FOOD_FACTS)
-    _Logger.debug("Served food fact: %s", fact[:40])
+    _LOGGER.debug("Served food fact: %s", fact[:40])
     return ok(FoodFactDto(fact=fact))

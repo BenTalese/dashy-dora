@@ -22,13 +22,17 @@ from datetime import date, timedelta
 from typing import Any, Callable
 from uuid import UUID
 
-from flask import session
 
+from dora_api.features.meal_slots.slot_validation import ordered_slot_names
+from dora_api.features.assistant._name_resolution import (
+    resolve_by_name, stock_item_candidate)
+from dora_api.features.app_settings.access import get_or_create_app_setting
+from dora_api.domain.money import format_money
+from dora_api.features.assistant._limits import MAX_CANDIDATES
 from dora_api.domain.entities.meal_plan import MealPlan
 from dora_api.domain.entities.recipe import Recipe
 from dora_api.domain.entities.recipe_ingredient import RecipeIngredient
-from dora_api.domain.entities.shopping_list import (
-    SHOPPING_LIST_STATUS_DONE, ShoppingList, ShoppingListLine)
+from dora_api.domain.entities.shopping_list import ShoppingListLine
 from dora_api.domain.entities.stock_item import StockItem
 from dora_api.domain.entities.stock_level import StockLevel
 from dora_api.domain.entities.stock_location import StockLocation
@@ -53,41 +57,27 @@ from dora_api.features.stock_items.update_stock_item import (
 from dora_api.infrastructure.utils import pluralize
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
+from dora_api.infrastructure.session_user import current_user_id
 
-_Logger = logging.getLogger(__name__)
+_LOGGER = logging.getLogger(__name__)
 
-_MAX_CANDIDATES = 6
 
 
 # ── Common helpers ─────────────────────────────────────────────────────
 
 def _find_stock_item(repo: SqlAlchemyRepository, name: str) -> tuple[str, list[StockItem]]:
-    """Returns ('exact'|'fuzzy'|'none', [items]). Exact match wins outright."""
-    field = EntityField(StockItem, StockItem.Fields.NAME)
-    exact = (
-        repo.get(StockItem)
+    """Returns ('exact'|'fuzzy'|'none', [items])."""
+    return _match_kind(resolve_by_name(
+        lambda: repo.get(StockItem)
         .include(StockItem.Fields.STOCK_LEVEL)
-        .include(StockItem.Fields.STOCK_LOCATION)
-        .all(field.eq(name))
-    )
-    if exact:
-        return "exact", exact
-    fuzzy = (
-        repo.get(StockItem)
-        .include(StockItem.Fields.STOCK_LEVEL)
-        .include(StockItem.Fields.STOCK_LOCATION)
-        .all(field.contains(name))
-    )
-    return ("fuzzy" if fuzzy else "none"), fuzzy
+        .include(StockItem.Fields.STOCK_LOCATION),
+        StockItem, name,
+    ))
 
 
-def _stock_item_candidate(item: StockItem) -> dict[str, Any]:
-    return {
-        "stock_item_id": str(item.id),
-        "name": item.name,
-        "location": item.stock_location.name if item.stock_location else None,
-        "stock_level": item.stock_level.name if item.stock_level else None,
-    }
+def _match_kind(resolution) -> tuple[str, list]:
+    kind = "exact" if resolution.exact else ("fuzzy" if resolution.matches else "none")
+    return kind, resolution.matches
 
 
 def _resolve_single_item(name: str) -> dict[str, Any] | StockItem:
@@ -105,7 +95,7 @@ def _resolve_single_item(name: str) -> dict[str, Any] | StockItem:
     return {
         "status": "ambiguous",
         "summary": f"A few items match \"{name}\". Which one?",
-        "candidates": [_stock_item_candidate(m) for m in matches[:_MAX_CANDIDATES]],
+        "candidates": [stock_item_candidate(m) for m in matches[:MAX_CANDIDATES]],
     }
 
 
@@ -360,7 +350,7 @@ def propose_tick_shopping_line(args: dict) -> dict[str, Any]:
                     "name": item_by_id[line.stock_item_id].name,
                     "is_ticked": line.is_ticked,
                 }
-                for line in matching[:_MAX_CANDIDATES]
+                for line in matching[:MAX_CANDIDATES]
             ],
         }
     line = matching[0]
@@ -405,12 +395,7 @@ def commit_tick_shopping_line(payload: dict[str, Any]) -> dict[str, Any]:
 # ── move_item ──────────────────────────────────────────────────────────
 
 def _find_location(repo: SqlAlchemyRepository, name: str) -> tuple[str, list[StockLocation]]:
-    field = EntityField(StockLocation, StockLocation.Fields.NAME)
-    exact = repo.get(StockLocation).all(field.eq(name))
-    if exact:
-        return "exact", exact
-    fuzzy = repo.get(StockLocation).all(field.contains(name))
-    return ("fuzzy" if fuzzy else "none"), fuzzy
+    return _match_kind(resolve_by_name(lambda: repo.get(StockLocation), StockLocation, name))
 
 
 def propose_move_item(args: dict) -> dict[str, Any]:
@@ -435,7 +420,7 @@ def propose_move_item(args: dict) -> dict[str, Any]:
             "summary": f"A few locations match \"{dest_name}\". Which one?",
             "candidates": [
                 {"location_id": str(l.id), "name": l.name, "kind": l.kind}
-                for l in locations[:_MAX_CANDIDATES]
+                for l in locations[:MAX_CANDIDATES]
             ],
         }
     destination = locations[0]
@@ -474,18 +459,7 @@ def commit_move_item(payload: dict[str, Any]) -> dict[str, Any]:
 # Chunk 2 removed `set_primary_list` — "primary" is now inferred from DRAFT
 # count at read time, so there's no stored flag for the assistant to set.
 
-def _find_shopping_list(repo: SqlAlchemyRepository, name: str) -> list[ShoppingList]:
-    field = EntityField(ShoppingList, ShoppingList.Fields.NAME)
-    active = EntityField(ShoppingList, ShoppingList.Fields.STATUS).ne(SHOPPING_LIST_STATUS_DONE)
-    exact = repo.get(ShoppingList).all(field.eq(name) & active)
-    if exact:
-        return exact
-    return repo.get(ShoppingList).all(field.contains(name) & active)
-
-
 # ── plan_meal_for_date ────────────────────────────────────────────────
-
-_DEFAULT_SLOT = "Dinner"
 
 
 def _plan_covering(repo: SqlAlchemyRepository, target: date) -> MealPlan | None:
@@ -518,13 +492,16 @@ def propose_plan_meal_for_date(args: dict) -> dict[str, Any]:
     except ValueError:
         return {"type": "plan_meal_for_date", "status": "invalid",
                 "summary": "I need a date in yyyy-mm-dd format.", "candidates": []}
-    slot = str(args.get("slot") or _DEFAULT_SLOT).strip() or _DEFAULT_SLOT
     try:
         servings = max(1, int(args.get("servings", 1)))
     except (TypeError, ValueError):
         servings = 1
 
     repo = SqlAlchemyRepository()
+    # No slot named → the household's first slot. The vocabulary is the
+    # household's own, so the assistant doesn't assume a "Dinner" exists
+    # (the 02-R32 rule).
+    slot = str(args.get("slot") or "").strip() or next(iter(ordered_slot_names(repo)), "")
     recipes = _find_recipe(repo, name)
     if not recipes:
         return {"type": "plan_meal_for_date", "status": "not_found",
@@ -534,7 +511,7 @@ def propose_plan_meal_for_date(args: dict) -> dict[str, Any]:
             "type": "plan_meal_for_date",
             "status": "ambiguous",
             "summary": f"A few meals match \"{name}\". Which?",
-            "candidates": [{"recipe_id": str(r.id), "name": r.name} for r in recipes[:_MAX_CANDIDATES]],
+            "candidates": [{"recipe_id": str(r.id), "name": r.name} for r in recipes[:MAX_CANDIDATES]],
         }
     recipe = recipes[0]
     plan = _plan_covering(repo, scheduled)
@@ -602,11 +579,7 @@ def commit_plan_meal_for_date(payload: dict[str, Any]) -> dict[str, Any]:
 # ── add_recipe_to_list ────────────────────────────────────────────────
 
 def _find_recipe(repo: SqlAlchemyRepository, name: str) -> list[Recipe]:
-    field = EntityField(Recipe, Recipe.Fields.NAME)
-    exact = repo.get(Recipe).all(field.eq(name))
-    if exact:
-        return exact
-    return repo.get(Recipe).all(field.contains(name))
+    return resolve_by_name(lambda: repo.get(Recipe), Recipe, name).matches
 
 
 def propose_add_recipe_to_list(args: dict) -> dict[str, Any]:
@@ -625,7 +598,7 @@ def propose_add_recipe_to_list(args: dict) -> dict[str, Any]:
             "type": "add_recipe_to_list",
             "status": "ambiguous",
             "summary": f"A few recipes match \"{name}\". Which?",
-            "candidates": [{"recipe_id": str(r.id), "name": r.name} for r in recipes[:_MAX_CANDIDATES]],
+            "candidates": [{"recipe_id": str(r.id), "name": r.name} for r in recipes[:MAX_CANDIDATES]],
         }
     recipe = recipes[0]
     primary = _primary_list(repo)
@@ -651,7 +624,7 @@ def propose_add_recipe_to_list(args: dict) -> dict[str, Any]:
         # Cookbook revision §1.9 — optional ingredients are excluded from
         # the assistant's add-recipe-to-list candidates (mirrors the
         # picker modal default: opt-in only).
-        if getattr(ing, "is_optional", False):
+        if ing.is_optional:
             continue
         if missing_only and not is_missing(item.stock_level):
             continue
@@ -696,7 +669,9 @@ def commit_add_recipe_to_list(payload: dict[str, Any]) -> dict[str, Any]:
                 AddLineRequest(stock_item_id=UUID(str(raw)), quantity=1),
                 shopping_list_id=list_id,
             )
-        except Exception:
+        except ValueError:
+            # A malformed id in the payload (pydantic's ValidationError is a
+            # ValueError); anything else is a real failure and raises.
             missing += 1
             continue
         if response.item_not_found or response.list_not_found:
@@ -749,7 +724,7 @@ def propose_cook_recipe(args: dict) -> dict[str, Any]:
             "type": "cook_recipe",
             "status": "ambiguous",
             "summary": f"A few recipes match \"{name}\". Which?",
-            "candidates": [{"recipe_id": str(r.id), "name": r.name} for r in recipes[:_MAX_CANDIDATES]],
+            "candidates": [{"recipe_id": str(r.id), "name": r.name} for r in recipes[:MAX_CANDIDATES]],
         }
     recipe = recipes[0]
     suffix = "meal" if count == 1 else "meals"
@@ -823,7 +798,7 @@ def propose_adjust_recipe_meals(args: dict) -> dict[str, Any]:
             "type": "adjust_recipe_meals",
             "status": "ambiguous",
             "summary": f"A few recipes match \"{name}\". Which?",
-            "candidates": [{"recipe_id": str(r.id), "name": r.name} for r in recipes[:_MAX_CANDIDATES]],
+            "candidates": [{"recipe_id": str(r.id), "name": r.name} for r in recipes[:MAX_CANDIDATES]],
         }
     recipe = recipes[0]
     # FU-317 Chunk 2 — preview shares the same floor rule as the write
@@ -866,16 +841,6 @@ def commit_adjust_recipe_meals(payload: dict[str, Any]) -> dict[str, Any]:
 
 # ── trim_list_to_budget ────────────────────────────────────────────────
 
-def _session_user_id() -> UUID | None:
-    raw = session.get("user_id")
-    if not raw:
-        return None
-    try:
-        return UUID(str(raw))
-    except (TypeError, ValueError):
-        return None
-
-
 def propose_trim_list_to_budget(_args: dict) -> dict[str, Any]:
     """FU-448 — preview the trim on the user's primary list. Returns
     'ready' with a summary sentence that names the amount to trim and
@@ -888,17 +853,14 @@ def propose_trim_list_to_budget(_args: dict) -> dict[str, Any]:
             "summary": "You don't have a primary shopping list set yet.",
             "candidates": [],
         }
-    user_id = _session_user_id()
-    if user_id is None:
+    if current_user_id() is None:
         return {
             "type": "trim_list_to_budget", "status": "invalid",
             "summary": "I can't see who's asking. Try refreshing.",
             "candidates": [],
         }
-    handler = TrimToBudgetHandler(SqlAlchemyRepository())
-    preview = handler.handle(
-        primary.id, TrimToBudgetRequest(mode="preview"), user_id,
-    )
+    preview = TrimToBudgetHandler(repo).handle(primary.id, TrimToBudgetRequest(mode="preview"))
+    currency = get_or_create_app_setting(repo).currency
     if preview is None:
         return {
             "type": "trim_list_to_budget", "status": "invalid",
@@ -919,7 +881,7 @@ def propose_trim_list_to_budget(_args: dict) -> dict[str, Any]:
             "type": "trim_list_to_budget", "status": "invalid",
             "summary": (
                 f"\"{primary.name}\" is already inside your "
-                f"${preview.budget_target:.2f} remaining, so nothing to trim."
+                f"{format_money(preview.budget_target, currency)} remaining, so nothing to trim."
             ),
             "candidates": [],
         }
@@ -928,7 +890,7 @@ def propose_trim_list_to_budget(_args: dict) -> dict[str, Any]:
         return {
             "type": "trim_list_to_budget", "status": "invalid",
             "summary": (
-                f"\"{primary.name}\" is ${preview.overshoot:.2f} over budget "
+                f"\"{primary.name}\" is {format_money(preview.overshoot, currency)} over budget "
                 f"but everything on it is either essential or booked for a "
                 f"meal soon, so nothing is safe to cut."
             ),
@@ -936,17 +898,17 @@ def propose_trim_list_to_budget(_args: dict) -> dict[str, Any]:
         }
     cut_count = len(preview.trimmed)
     still_hint = (
-        f" Still ${preview.still_over:.2f} over after that."
+        f" Still {format_money(preview.still_over, currency)} over after that."
         if preview.still_over > 0 else ""
     )
     return {
         "type": "trim_list_to_budget",
         "status": "ready",
         "summary": (
-            f"Trim ${sum(t.saved for t in preview.trimmed):.2f} off "
+            f"Trim {format_money(sum(t.saved for t in preview.trimmed), currency)} off "
             f"\"{primary.name}\" ({cut_count} item"
             f"{'' if cut_count == 1 else 's'}) to fit your "
-            f"${preview.budget_target:.2f} remaining budget?{still_hint}"
+            f"{format_money(preview.budget_target, currency)} remaining budget?{still_hint}"
         ),
         "payload": {
             "shopping_list_id": str(primary.id),
@@ -961,13 +923,13 @@ def commit_trim_list_to_budget(payload: dict[str, Any]) -> dict[str, Any]:
     preview payload's specific cut set — the classifier is deterministic
     given current state, and a fresh apply is the honest behaviour if
     anything shifted between propose + commit."""
-    user_id = _session_user_id()
-    if user_id is None:
+    if current_user_id() is None:
         return {"ok": False, "message": "I couldn't confirm who's asking."}
-    list_id = UUID(payload["shopping_list_id"])
-    result = TrimToBudgetHandler(SqlAlchemyRepository()).handle(
-        list_id, TrimToBudgetRequest(mode="apply"), user_id,
+    repo = SqlAlchemyRepository()
+    result = TrimToBudgetHandler(repo).handle(
+        UUID(payload["shopping_list_id"]), TrimToBudgetRequest(mode="apply"),
     )
+    currency = get_or_create_app_setting(repo).currency
     if result is None or not result.applied or not result.trimmed:
         return {"ok": False, "message": "Couldn't trim that list right now."}
     saved = sum(t.saved for t in result.trimmed)
@@ -975,13 +937,13 @@ def commit_trim_list_to_budget(payload: dict[str, Any]) -> dict[str, Any]:
     tail = ""
     if result.still_over > 0:
         tail = (
-            f" Still ${result.still_over:.2f} over. I've cut everything "
+            f" Still {format_money(result.still_over, currency)} over. I've cut everything "
             f"that was safe."
         )
     return {
         "ok": True,
         "message": (
-            f"Done. Trimmed ${saved:.2f} off "
+            f"Done. Trimmed {format_money(saved, currency)} off "
             f"\"{payload['list_name']}\" ({n} item"
             f"{'' if n == 1 else 's'} moved to Deferred).{tail}"
         ),

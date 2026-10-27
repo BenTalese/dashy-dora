@@ -781,3 +781,14 @@ def test__delete_recipe__RecipeDoesNotExist__RecipeNotFound(api):
     assert _Body["detail"] == f"Recipe with the ID '{_FakeID}' was not found."
 
 #endregion delete
+
+
+def test__get_recipe_image__a_non_image_mimetype_is_never_served(api):
+    """QA2-01 — a recipe "image" declared as text/html must not come back as
+    HTML from the image route."""
+    html = "data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg=="
+    resp = requests.post("http://localhost:5170/api/recipes", json={"name": f"xss-{uuid4().hex[:8]}", "image": html})
+    assert resp.status_code == 201, resp.text
+    image = requests.get(f"http://localhost:5170/api/recipes/{resp.json()['recipe_id']}/image")
+    assert image.status_code == 404
+    assert "text/html" not in image.headers.get("Content-Type", "")

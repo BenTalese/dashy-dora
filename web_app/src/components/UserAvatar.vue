@@ -3,10 +3,10 @@
         Settings rebuild Phase 4 (§2.9) — the one place "the user" is drawn.
         Shows the uploaded profile picture when present; otherwise a
         per-consumer fallback (the menu-bar keeps the person icon, the
-        Account header + admin rows keep initials). The `imgFailed` latch
-        drops a broken <img> to the fallback rather than a broken-image glyph
-        (mirrors StockItemRow); it resets when the store's image-version
-        counter bumps after an upload / clear.
+        Account header + admin rows keep initials). The picture is fetched
+        through the HTTP client (R-045); a failed fetch shows the fallback,
+        and the store's image-version counter refetches after an upload /
+        clear.
     -->
     <q-avatar
         :size="size"
@@ -15,9 +15,8 @@
     >
         <img
             v-if="showImage"
-            :src="src"
+            :src="src!"
             :alt="alt"
-            @error="imgFailed = true"
         />
         <q-icon
             v-else-if="fallback === 'icon'"
@@ -29,9 +28,9 @@
 
 <script setup lang="ts">
     import { ICONS } from 'src/style/icons';
-    import { userImageUrl } from 'src/services/api/authApiService';
+    import { useAuthedImage } from 'src/composables/useAuthedImage';
     import { useAuthStore } from 'src/stores/authStore';
-    import { computed, ref, watch } from 'vue';
+    import { computed } from 'vue';
 
     const props = withDefaults(
         defineProps<{
@@ -55,18 +54,14 @@
     );
 
     const authStore = useAuthStore();
-    const imgFailed = ref(false);
 
-    // Reactive cache-buster: any upload / clear bumps the store counter, which
-    // both refreshes the URL and clears a stale failure latch.
+    // The store's version counter bumps on any upload / clear; it rides the
+    // path as a cache-buster, so a new picture refetches.
     const version = computed(() => authStore.imageVersionOf(props.userId));
-    watch(version, () => { imgFailed.value = false; });
-    // A fresh `hasImage=true` (e.g. another surface uploaded) should also
-    // re-attempt the image.
-    watch(() => props.hasImage, (has) => { if (has) imgFailed.value = false; });
-
-    const showImage = computed(() => props.hasImage && !imgFailed.value);
-    const src = computed(() => userImageUrl(props.userId, version.value));
+    const src = useAuthedImage(() => (
+        props.hasImage ? `/users/${props.userId}/image?v=${encodeURIComponent(String(version.value))}` : null
+    ));
+    const showImage = computed(() => src.value !== null);
     const fallbackIcon = computed(() => props.fallbackIcon ?? ICONS.person);
     const alt = computed(() => props.username ?? 'Profile picture');
     const initial = computed(() => {

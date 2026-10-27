@@ -26,7 +26,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from dora_api.domain.entities.audit_event import SEVERITY_AUDIT
 from dora_api.domain.entities.user import User
 from dora_api.features.routers import USER_ROUTER
-from dora_api.features.users.update_user_as_admin import _require_admin
+from dora_api.features.auth.admin_gate import require_admin
 from dora_api.infrastructure.api_response import (not_found, ok, ProblemDetails,
                                                   unprocessable_entity)
 from dora_api.infrastructure.audit import emit as audit_emit
@@ -35,6 +35,8 @@ from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
+
+_LOGGER = logging.getLogger(__name__)
 
 
 # 12-char alphanumeric — readable enough to relay over chat, strong enough
@@ -81,8 +83,7 @@ class ResetUserPasswordHandler:
 @USER_ROUTER.route("<uuid:user_id>/reset-password", methods=["POST"])
 @has_request_body(AdminSetPasswordRequest)
 def reset_user_password(user_id: UUID):
-    _Logger = logging.getLogger(__name__)
-    _CallerId, err = _require_admin()
+    _CallerId, err = require_admin()
     if err is not None:
         return err
 
@@ -126,5 +127,5 @@ def reset_user_password(user_id: UUID):
         entity_type="User", entity_id=user_id,
         payload={"generated": _Chosen is None},
     )
-    _Logger.info(f"Admin set password for user {user_id}")
+    _LOGGER.info("Admin set password for user %s", user_id)
     return ok({"new_password": _Response.new_password})

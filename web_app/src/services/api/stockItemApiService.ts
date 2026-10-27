@@ -1,11 +1,17 @@
 import type { StockItem } from 'src/models/stockItem';
-import type { StockItemDetail } from 'src/models/stockItemDetail';
+import type {
+    LinkedProduct,
+    PreferredBuy,
+    PriceEntryPrefill,
+    StockItemDetail,
+    Substitute,
+} from 'src/models/stockItemDetail';
 import type { PantryBeliefsResponse } from 'src/models/pantryBelief';
 import type { PlannedDemandResponse } from 'src/models/plannedDemand';
 import type { StockItemPriceHistory } from './priceHistoryApiService';
 import type { CreatedResponse } from './axiosHttpClient';
 import AxiosHttpClient from './axiosHttpClient';
-import { createQueryString, FilterOperator, type Page } from './queryStringBuilder';
+import { createQueryString, fetchAllPages, FilterOperator, type Page } from './queryStringBuilder';
 
 /** FU-034 — wire-level body for substitute notes + optional ratio. All
  *  fields are optional; sending nothing clears the metadata. Direction
@@ -61,31 +67,29 @@ export default class StockItemApiService {
         return await this.httpClient.get<Page<StockItem>>(`/stock-items${qs}`);
     };
 
-    /** C-1 Stock Overview Chunk 1 — load every stock item by paging until
-     *  the server stops returning a full page. The backend caps `limit`
-     *  at 500 (`query_options.MAX_LIMIT`); we ask for that to minimise
-     *  round-trips and stop as soon as a short page arrives (or we've
-     *  collected `total`). The overview store calls this so a pantry of
-     *  >50 items is no longer silently truncated (FU-035). */
-    getAllPagesAsync = async (limit: number = 500): Promise<StockItem[]> => {
-        const collected: StockItem[] = [];
-        let page = 1;
-        while (true) {
-            const result = await this.getAllAsync({ page, limit });
-            collected.push(...result.items);
-            if (
-                result.items.length < limit
-                || collected.length >= (result.total ?? collected.length)
-            ) {
-                break;
-            }
-            page += 1;
-        }
-        return collected;
-    };
+    /** Every stock item, paged (FU-035): the overview filters client-side. */
+    getAllPagesAsync = async (): Promise<StockItem[]> =>
+        await fetchAllPages((page, limit) => this.getAllAsync({ page, limit }));
 
     getDetailAsync = async (stockItemID: string): Promise<StockItemDetail> =>
         await this.httpClient.get<StockItemDetail>(`/stock-items/${stockItemID}/detail`);
+
+    // One slice of the detail each, for surfaces that need only that slice
+    // (a full detail read runs every feed).
+    getSubstitutesAsync = async (stockItemID: string): Promise<Substitute[]> =>
+        (await this.httpClient.get<{ items: Substitute[] }>(`/stock-items/${stockItemID}/substitutes`)).items;
+
+    getPriceEntryPrefillAsync = async (stockItemID: string): Promise<PriceEntryPrefill | null> =>
+        (await this.httpClient.get<{ prefill: PriceEntryPrefill | null }>(
+            `/stock-items/${stockItemID}/price-entry-prefill`,
+        )).prefill;
+
+    getBuyChoicesAsync = async (
+        stockItemID: string,
+    ): Promise<{ preferred_buys: PreferredBuy[]; products: LinkedProduct[] }> =>
+        await this.httpClient.get<{ preferred_buys: PreferredBuy[]; products: LinkedProduct[] }>(
+            `/stock-items/${stockItemID}/buy-choices`,
+        );
 
     /** P8-07 — inferred pantry beliefs for every stock item (keyed by id).
      *  `enabled: false` when the user has inference switched off. */
@@ -105,6 +109,14 @@ export default class StockItemApiService {
      *  auto-add-when-low hook (`update_stock_item.py:255-263`). Non-trigger
      *  updates come back as 204 (undefined). Callers use this to toast
      *  "Added <item> to <list>" + refresh the shopping-list store. */
+    /** "+N days" on the expiry: from the later of the household's today and
+     *  the current expiry (the rule lives server-side, R-003 / R-021). */
+    pushExpiryAsync = async (stockItemId: string, days: number): Promise<{ expiry_date: string }> =>
+        await this.httpClient.post<{ expiry_date: string }, { days: number }>(
+            `/stock-items/${stockItemId}/push-expiry`,
+            { days },
+        );
+
     updateAsync = async (
         stockItemToUpdate: UpdateStockItemCommand,
     ): Promise<UpdateStockItemResponse> => {

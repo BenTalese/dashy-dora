@@ -6,13 +6,16 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from dora_api.domain.entities.product import Product
-from dora_api.domain.entities.product_historic_offer import ProductHistoricOffer
+from dora_api.features.ingestion.offer_mapping import (OFFER_SOURCE_MANUAL,
+                                                       apply_offer_to_product)
 from dora_api.features.routers import PRODUCT_ROUTER
 from dora_api.infrastructure.api_response import business_rule_violation, no_content, not_found
 from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class UpdateProductRequest(BaseModel):
@@ -93,21 +96,21 @@ class UpdateProductHandler:
         elif _ImageSet:
             _Product.image = request.image.encode("utf-8")
 
-        if _PriceNowSet and _PriceWasSet:
-            _HistoricOffer = ProductHistoricOffer(
-                offered_on = _Product.current_offer.offered_on,
-                price_now = _Product.current_offer.price_now,
-                price_was = _Product.current_offer.price_was)
-
-            _Product.historic_offers.append(_HistoricOffer)
-            # Without repo.add() the cascaded insert carries EMPTY_UUID, so
-            # the SECOND archived offer in an install's lifetime collides on
-            # the primary key and 500s (the ingest path and seed both add()).
-            self.repository.add(_HistoricOffer)
-
-            _Product.current_offer.offered_on = datetime.now(UTC)
-            _Product.current_offer.price_now = request.price_now
-            _Product.current_offer.price_was = request.price_was
+        # One offer-append rule for create, edit and ingest (R-003): an edit
+        # that changes the price records it as a manual observation; one that
+        # restates the current price records nothing.
+        _Current = _Product.current_offer
+        _PriceChanged = _Current is None or (
+            _Current.price_now != request.price_now or _Current.price_was != request.price_was
+        )
+        if _PriceNowSet and _PriceWasSet and _PriceChanged:
+            apply_offer_to_product(
+                self.repository, _Product,
+                price_now=request.price_now,
+                price_was=request.price_was,
+                observed_at=datetime.now(UTC),
+                source=OFFER_SOURCE_MANUAL,
+            )
 
         self.repository.save_changes()
         return UpdateProductResponse()
@@ -116,22 +119,21 @@ class UpdateProductHandler:
 @PRODUCT_ROUTER.route("<uuid:product_id>", methods=["PATCH"])
 @has_request_body(UpdateProductRequest)
 def update_product(product_id: UUID):
-    _Logger = logging.getLogger(__name__)
-    _Logger.info("Received request to update product.")
+    _LOGGER.info("Received request to update product.")
     _Handler = UpdateProductHandler(SqlAlchemyRepository())
     _Request: UpdateProductRequest = get_request_body()
     _Response = _Handler.handle(_Request, product_id)
 
     if _Response.product_not_found:
-        _Logger.warning(f"Product not found with ID: {product_id}")
+        _LOGGER.warning(f"Product not found with ID: {product_id}")
         return not_found(Product.__name__, product_id)
 
     if _Response.incomplete_price_info:
-        _Logger.warning("price_now or price_was was set without the other.")
+        _LOGGER.warning("price_now or price_was was set without the other.")
         return business_rule_violation("price_now and price_was must both be set.")
 
     if _Response.image_not_custom:
-        _Logger.warning(f"Refused a photo change on non-custom product {product_id}.")
+        _LOGGER.warning(f"Refused a photo change on non-custom product {product_id}.")
         return business_rule_violation(
             "Only products you added yourself can have their photo changed."
         )
@@ -141,5 +143,5 @@ def update_product(product_id: UUID):
             "The photo must be a 'data:image/<type>;base64,...' data URL."
         )
 
-    _Logger.info(f"Successfully updated product with ID: {product_id}")
+    _LOGGER.info(f"Successfully updated product with ID: {product_id}")
     return no_content()

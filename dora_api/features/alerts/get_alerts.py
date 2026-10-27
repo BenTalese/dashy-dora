@@ -10,14 +10,14 @@ reads the same evaluator so a row's outline and the bell can't disagree
 (R-003); nothing re-derives "needs attention" client-side.
 
 What *is* persisted (C-9.1) is each user's *decisions* about an alert —
-read / snooze / dismiss — in `AlertInteraction`, keyed by the alert's
+snooze / dismiss — in `AlertInteraction`, keyed by the alert's
 stable `<scope>:<id>:<kind>` key. This handler overlays the requesting
 user's interactions so the badge, the bell list, the page, and (later)
 the channels all agree on one definition of "what counts":
 
   - dismissed  → hidden everywhere.
   - snoozed    → moved to the `snoozed` list, out of the active counts.
-  - everything else → `items`, with `read` stamped.
+  - everything else → `items`.
 
 The badge counts the **actionable** tier; the **FYI** tier is shown in the
 list but never inflates it — the rule is explicit (`actionable_count` == the
@@ -34,11 +34,9 @@ from datetime import date, datetime, timedelta, timezone
 from typing import List
 from uuid import UUID
 
-from flask import session
 
 from dora_api.domain.entities.alert_interaction import AlertInteraction
 from dora_api.domain.entities.alert_preference import AlertPreference
-from dora_api.domain.entities.app_setting import AppSetting
 from dora_api.domain.entities.meal_plan_entry import MealPlanEntry
 from dora_api.domain.entities.shopping_list import (SHOPPING_LIST_STATUS_DONE,
                                                     ShoppingList)
@@ -51,7 +49,8 @@ from dora_api.domain.entities.user import User
 from dora_api.features.alerts.alert_key import (list_alert_key, meal_alert_key,
                                                 product_alert_key,
                                                 stock_alert_key)
-from dora_api.features.app_settings.access import money_features_enabled
+from dora_api.features.app_settings.access import (get_or_create_app_setting,
+                                                  money_features_enabled)
 from dora_api.features.alerts.alert_kinds import (SEVERITY_HIGH, SEVERITY_LOW,
                                                   SEVERITY_MEDIUM,
                                                   SEVERITY_ORDER,
@@ -68,6 +67,9 @@ from dora_api.infrastructure.utils import pluralize
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
+from dora_api.infrastructure.session_user import current_user_id
+
+_LOGGER = logging.getLogger(__name__)
 
 
 # Severity is the one importance scale; the UI sorts high first. The bell badge
@@ -96,7 +98,7 @@ class AlertDto:
     # endpoints. Named `alert_id` for frontend continuity; its *value* is the
     # generalised key (alert_key.py).
     alert_id: str
-    # One of the six in `alert_kinds.SEVERITY_BY_KIND` — don't restate the
+    # One of the kinds in `alert_kinds.SEVERITY_BY_KIND` — don't restate the
     # list here, it drifted twice before (R-003).
     kind: str
     severity: str
@@ -140,19 +142,10 @@ class AlertsDto:
     medium_count: int = 0
     low_count: int = 0
     # The canonical numbers (PROPOSAL_ALERTS §3.4):
-    actionable_count: int = 0  # active actionable-tier — drives the bell badge
-    fyi_count: int = 0         # active FYI-tier
+    # Active actionable tier, drives the bell badge. The FYI tier is exactly
+    # `low_count` (tier derives from severity), so it has no second field.
+    actionable_count: int = 0
     snoozed_count: int = 0
-
-
-def _current_user_id() -> UUID | None:
-    raw = session.get("user_id")
-    if not raw:
-        return None
-    try:
-        return UUID(raw)
-    except (ValueError, TypeError):
-        return None
 
 
 def _active_snooze_until(interaction: AlertInteraction | None, now: datetime) -> datetime | None:
@@ -190,8 +183,7 @@ class GetAlertsHandler:
         # Household-wide threshold (C-9.2): the expiring-soon window resolves
         # from AppSetting, falling back to the seeded default — one source
         # (R-003), never a second literal 7 here.
-        settings: List[AppSetting] = self.repository.get(AppSetting).all()
-        window = effective_expiring_soon_window(settings[0] if settings else None)
+        window = effective_expiring_soon_window(get_or_create_app_setting(self.repository))
 
         # Build the raw alert set (conditions, no counting yet — counts are
         # derived after the per-user interaction + preference overlay).
@@ -227,7 +219,7 @@ class GetAlertsHandler:
                         stock_item_name = item.name,
                         message = f"{item.name} expires soon",
                         detail = (
-                            f"Expires today."
+                            "Expires today."
                             if days_remaining == 0
                             else f"Expires in {days_remaining} {pluralize(days_remaining, 'day')}."
                         ),
@@ -318,7 +310,7 @@ class GetAlertsHandler:
         active: List[AlertDto] = []
         snoozed: List[AlertDto] = []
         high = medium = low = 0
-        actionable = fyi = 0
+        actionable = 0
 
         for alert in raw:
             # a kind this user disabled contributes nothing to their
@@ -346,8 +338,8 @@ class GetAlertsHandler:
                 ))
                 continue
             active.append(replace(alert, tier=tier, snoozed_until=None))
-            # Severity counts feed the "X high · Y medium · Z low" caption; the
-            # tier split feeds the badge (so a promoted low kind bumps it).
+            # Severity counts feed the bell colour and Dora's attention answer;
+            # the actionable tier feeds the badge.
             if alert.severity == SEVERITY_HIGH:
                 high += 1
             elif alert.severity == SEVERITY_MEDIUM:
@@ -356,8 +348,6 @@ class GetAlertsHandler:
                 low += 1
             if tier == TIER_ACTIONABLE:
                 actionable += 1
-            else:
-                fyi += 1
 
         # Severity-first ordering so the panel scans top-down.
         def _sort_key(a: AlertDto):
@@ -376,7 +366,6 @@ class GetAlertsHandler:
             medium_count=medium,
             low_count=low,
             actionable_count=actionable,
-            fyi_count=fyi,
             snoozed_count=len(snoozed),
         )
 
@@ -557,10 +546,9 @@ class GetAlertsHandler:
 
 @ALERT_ROUTER.route("", methods=["GET"])
 def get_alerts():
-    _Logger = logging.getLogger(__name__)
-    _Alerts = GetAlertsHandler(SqlAlchemyRepository()).handle(_current_user_id())
-    _Logger.debug(
+    _Alerts = GetAlertsHandler(SqlAlchemyRepository()).handle(current_user_id())
+    _LOGGER.debug(
         "Alerts: %d actionable, %d fyi, %d snoozed",
-        _Alerts.actionable_count, _Alerts.fyi_count, _Alerts.snoozed_count,
+        _Alerts.actionable_count, _Alerts.low_count, _Alerts.snoozed_count,
     )
     return ok(_Alerts)

@@ -216,9 +216,8 @@
     import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
     import { useSettingsSave } from 'src/composables/useSettingsSave';
     import { useFeatureFlags } from 'src/composables/useFeatureFlags';
-    import AppSettingsApiService, {
-        type UpdateAppSettingsCommand,
-    } from 'src/services/api/appSettingsApiService';
+    import type { UpdateAppSettingsCommand } from 'src/services/api/appSettingsApiService';
+    import { useAppSettingsStore } from 'src/stores/appSettingsStore';
     import NutritionApiService, {
         type NutritionSourceStatus,
     } from 'src/services/api/nutritionApiService';
@@ -233,7 +232,7 @@
     type NutritionMode = 'off' | 'simple' | 'complex';
 
     const nutritionApi = new NutritionApiService();
-    const appSettingsApi = new AppSettingsApiService();
+    const appSettingsStore = useAppSettingsStore();
     const { update, notifyError } = useSettingsSave();
     const { refresh: refreshFlags } = useFeatureFlags();
     const recipeStore = useRecipeStore();
@@ -357,7 +356,7 @@
 
     async function loadSettings() {
         try {
-            const settings = await appSettingsApi.getAsync();
+            const settings = await appSettingsStore.loadAsync();
             offLookupEnabled.value = settings.nutrition_off_lookup_enabled;
             ratingScheme.value = (settings.nutrition_rating_scheme ?? 'none') as RatingScheme;
             savedUsdaKey.value = settings.nutrition_usda_api_key ?? '';
@@ -372,7 +371,7 @@
     async function patch(message: string, body: UpdateAppSettingsCommand) {
         saving.value = true;
         try {
-            await update(message, () => appSettingsApi.updateAsync(body));
+            await update(message, () => appSettingsStore.saveAsync(body));
             // The mode drives /api/health gates all over the app; refresh the
             // cached flag map so other surfaces don't run on a stale answer.
             await refreshFlags();
@@ -469,12 +468,6 @@
         font-size: 0.8125rem;
         line-height: 1.4;
         margin-top: 4px;
-    }
-    .settings-divider {
-        border: 0;
-        height: 1px;
-        background: color-mix(in srgb, var(--text-primary) 8%, transparent);
-        margin: 0;
     }
     .dataset-row {
         display: flex;

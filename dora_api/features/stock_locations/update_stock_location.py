@@ -14,6 +14,8 @@ from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 
+_LOGGER = logging.getLogger(__name__)
+
 
 class UpdateStockLocationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -60,19 +62,18 @@ class UpdateStockLocationHandler:
 @STOCK_LOCATION_ROUTER.route("<uuid:stock_location_id>", methods=["PATCH"])
 @has_request_body(UpdateStockLocationRequest)
 def update_stock_location(stock_location_id: UUID):
-    _Logger = logging.getLogger(__name__)
-    _Logger.info("Received request to update stock location.")
+    _LOGGER.info("Received request to update stock location.")
     _Handler = UpdateStockLocationHandler(SqlAlchemyRepository())
     _Request: UpdateStockLocationRequest = get_request_body()
     _Response = _Handler.handle(_Request, stock_location_id)
 
     if _Response.stock_location_not_found:
-        _Logger.warning(f"Stock location not found with ID: {stock_location_id}")
+        _LOGGER.warning(f"Stock location not found with ID: {stock_location_id}")
         return not_found(StockLocation.__name__, stock_location_id)
 
     if _Response.stock_location_already_exists:
-        _Logger.warning(f"Stock location already exists with name: {_Request.name}")
+        _LOGGER.warning(f"Stock location already exists with name: {_Request.name}")
         return business_rule_violation(f"A stock location with the name '{_Request.name}' already exists.")
 
-    _Logger.info(f"Successfully updated stock location with ID: {stock_location_id}")
+    _LOGGER.info(f"Successfully updated stock location with ID: {stock_location_id}")
     return no_content()

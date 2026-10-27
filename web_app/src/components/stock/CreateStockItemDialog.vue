@@ -248,17 +248,16 @@
     import FormErrorSummary from 'src/components/FormErrorSummary.vue';
     import StockLevelDot from 'src/components/stock/StockLevelDot.vue';
     import StoreLogo from 'src/components/StoreLogo.vue';
-    import type { LocationNode } from 'src/models/location';
     import type { StockLevel } from 'src/models/stockLevel';
     import type { CreateStockItemPrefill } from 'src/components/stock/createStockItemPrefill';
-    import type { StockGroup } from 'src/models/stockGroup';
     import BarcodeApiService from 'src/services/api/barcodeApiService';
-    import StockGroupApiService from 'src/services/api/stockGroupApiService';
+    import { useStockGroupStore } from 'src/stores/stockGroupStore';
     import type { CreateStockItemCommand } from 'src/services/api/stockItemApiService';
     import { useFormErrors } from 'src/composables/useFormErrors';
     import { useLocationStore } from 'src/stores/locationStore';
     import { useStockItemStore } from 'src/stores/stockItemStore';
     import { useStockLevelStore } from 'src/stores/stockLevelStore';
+    import { useLocationOptions } from 'src/composables/useLocationOptions';
     import { useStoresStore } from 'src/stores/storesStore';
     import { useFeatureFlags } from 'src/composables/useFeatureFlags';
     import { useStocktakePolicy } from 'src/composables/useStocktakePolicy';
@@ -282,7 +281,7 @@
 
     const $q = useQuasar();
     const barcodeApi = new BarcodeApiService();
-    const stockGroupApi = new StockGroupApiService();
+    const stockGroupStore = useStockGroupStore();
 
     const dialogTitle = computed(() =>
         props.prefill?.barcode ? 'Add a stock item from scan' : 'Add a stock item',
@@ -299,36 +298,13 @@
     // Walk the location tree into path-labelled options — same shape as
     // the Stock Overview filter and the detail-page picker so the user
     // gets a single, consistent location-pick experience.
-    type LocationOption = { label: string; value: string };
-    const allLocationOptions = computed<LocationOption[]>(() => {
-        const out: LocationOption[] = [];
-        const walk = (nodes: LocationNode[], prefix: string) => {
-            for (const n of nodes) {
-                const path = prefix ? `${prefix} › ${n.name}` : n.name;
-                out.push({ label: path, value: n.location_id });
-                walk(n.children, path);
-            }
-        };
-        walk(locationStore.tree, '');
-        return out.sort((a, b) => a.label.localeCompare(b.label));
-    });
-    const locationOptions = ref<LocationOption[]>([]);
-    watch(allLocationOptions, (v) => { locationOptions.value = v; }, { immediate: true });
-    function filterLocations(val: string, update: (cb: () => void) => void) {
-        update(() => {
-            const needle = val.toLowerCase();
-            locationOptions.value = needle
-                ? allLocationOptions.value.filter((o) => o.label.toLowerCase().includes(needle))
-                : allLocationOptions.value;
-        });
-    }
+    const { locationOptions, filterLocations } = useLocationOptions(() => locationStore.tree);
 
     // Stock groups — fetched straight from the API like the detail-page
     // picker does; there's no store for them and this dialog is the only
     // other consumer.
-    const stockGroups = ref<StockGroup[]>([]);
     const groupOptions = computed(() =>
-        stockGroups.value.map((g) => ({ label: g.name, value: g.stock_group_id })),
+        stockGroupStore.stockGroups.map((g) => ({ label: g.name, value: g.stock_group_id })),
     );
 
     // Same option shape as the detail-page picker (label/value plus the flag
@@ -361,7 +337,7 @@
     const selectedLevelSequence = computed<number | null>(() => {
         const id = form.stock_level_id;
         if (!id) return null;
-        const seq = stockLevels.value.find((l) => l.stock_level_id === id)?.sequence;
+        const seq = stockLevelStore.levelById.get(id ?? '')?.sequence;
         return typeof seq === 'number' ? seq : null;
     });
     // R-001 form-error plumbing.
@@ -392,14 +368,10 @@
                 resetForm();
                 void locationStore.ensureLoadedAsync();
                 void storesStore.ensureLoadedAsync();
-                void loadStockGroupsAsync();
+                void stockGroupStore.ensureLoadedAsync();
             }
         },
     );
-
-    async function loadStockGroupsAsync() {
-        stockGroups.value = await stockGroupApi.getAllAsync();
-    }
 
     function onDialogUpdate(value: boolean) {
         emit('update:modelValue', value);

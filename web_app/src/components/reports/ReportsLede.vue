@@ -27,6 +27,7 @@
      */
     import { computed } from 'vue';
     import { ICONS } from 'src/style/icons';
+    import { rangePriorWords, rangeWindowWords } from 'src/helpers/reportRangeWords';
     import { formatMoney } from 'src/composables/useMoney';
     import DashboardCard from 'src/components/dashboard/DashboardCard.vue';
     import type {
@@ -41,24 +42,6 @@
         spendYoY: SpendYoYResponse | null;
     }>();
 
-    const WINDOW_WORDS: Record<ReportRange, string> = {
-        '30d': 'in the last 30 days',
-        '90d': 'in the last 90 days',
-        '1y': 'in the last year',
-        '2y': 'in the last 2 years',
-        '5y': 'in the last 5 years',
-        'all': 'all time',
-    };
-    // The comparison window is the same length as the current one, immediately
-    // before it — so the sentence must not say "than last month" on a 90-day view.
-    const PRIOR_WORDS: Record<ReportRange, string> = {
-        '30d': 'the 30 days before',
-        '90d': 'the 90 days before',
-        '1y': 'the year before',
-        '2y': 'the 2 years before',
-        '5y': 'the 5 years before',
-        'all': '',
-    };
 
     const sentence = computed<string | null>(() => {
         const total = props.storeSpend?.total_spend ?? 0;
@@ -67,17 +50,17 @@
         const shops = props.storeSpend?.store_count ?? 0;
         const parts = [
             `You spent ${formatMoney(total)} across `
-            + `${shops} shop${shops === 1 ? '' : 's'} ${WINDOW_WORDS[props.range]}`,
+            + `${shops} shop${shops === 1 ? '' : 's'} ${rangeWindowWords(props.range)}`,
         ];
 
         // `delta_pct` is null when the prior window had no spend — a new
         // household, not a 100% rise (the handler is careful about this and so
         // is the sentence).
         const yoy = props.spendYoY;
-        if (yoy && yoy.delta_pct !== null && PRIOR_WORDS[props.range]) {
+        if (yoy && yoy.delta_pct !== null && rangePriorWords(props.range)) {
             const direction = yoy.delta_pct >= 0 ? 'more' : 'less';
             parts.push(
-                `, ${Math.abs(yoy.delta_pct)}% ${direction} than ${PRIOR_WORDS[props.range]}`,
+                `, ${Math.abs(yoy.delta_pct)}% ${direction} than ${rangePriorWords(props.range)}`,
             );
         }
         parts.push('.');

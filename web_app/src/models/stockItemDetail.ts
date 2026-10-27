@@ -8,11 +8,8 @@ export type { NutritionFoodSuggestion };
 export type LinkedProduct = {
     product_id: string;
     name: string;
-    brand: string | null;
     store_id: string;
     store_name: string;
-    /** FU-189 carve-out: producer's SKU code, retained verbatim. */
-    merchant_stockcode: string | null;
     size: string | null;
     web_url: string | null;
     price_now: number | null;
@@ -42,6 +39,8 @@ export type Substitute = {
     name: string;
     stock_level_id: string | null;
     stock_level_name: string | null;
+    /** Ladder position (0 stocked, 1 low, 2 out); null when unlevelled. */
+    stock_level_sequence: number | null;
     /** FU-034 — free-text hint shown in the substitute list and in the
      *  cook-mode swap picker. Null when the user didn't set one. */
     notes: string | null;
@@ -57,8 +56,9 @@ export type Substitute = {
 
 export type LevelChange = {
     changed_at: string; // ISO datetime
-    stock_level_id: string | null;
     stock_level_name: string | null;
+    /** Ladder position when the level still exists; null once deleted. */
+    stock_level_sequence: number | null;
 };
 
 // lifecycle timeline inputs. The History tab merges
@@ -67,9 +67,6 @@ export type LevelChange = {
 export type WasteEvent = {
     occurred_at: string; // ISO datetime
     reason: string;
-    quantity: number | null;
-    estimated_value: number | null;
-    note: string | null;
 };
 
 export type ListAddEvent = {
@@ -87,7 +84,6 @@ export type PurchaseEvent = {
     occurred_at: string; // ISO datetime (parent list's completed_at)
     quantity: number;
     actual_unit_price: number | null;
-    store_id: string | null;
     store_name: string | null;
     shopping_list_id: string;
     shopping_list_name: string;
@@ -127,17 +123,15 @@ export type PreferredBuy = {
 // derived server-side (R-003) — client never divides total_price by total_measure.
 // `store_name` populated when a store was attached at entry (A2). When the row
 // was harvested from a finished shopping line at /finish (chunk 5),
-// `shopping_list_line_id` + `shopping_list_name` carry the provenance label
-// ("from Wed's shopping list"); both null for manual entries.
+// `shopping_list_name` carries the provenance label ("from Wed's shopping
+// list"); null for manual entries.
 export type PriceObservation = {
     observation_id: string;
     total_price: number;
     total_measure: number;
     unit: string;
     observed_at: string; // ISO datetime
-    store_id: string | null;
     store_name: string | null;
-    shopping_list_line_id: string | null;
     shopping_list_name: string | null;
     /** Multipack metadata (FU-227 follow-up). When set, the obs list
      *  renders "4 × 125g" instead of "500g flat". Math is unaffected —
@@ -190,10 +184,7 @@ export type StockItemDetail = {
     stock_level_id: string | null;
     stock_level_name: string | null;
     stock_location_id: string | null;
-    stock_location_name: string | null;
-    stock_location_breadcrumb: string[];
     stock_group_id: string | null;
-    stock_group_name: string | null;
     stock_level_last_updated: string; // ISO datetime
     expiry_date: string | null;
     is_open: boolean;
@@ -202,7 +193,6 @@ export type StockItemDetail = {
     /** FU-189 — usual store hint (nullable). Drives the shopping-list
      *  grouping + a small picker on the stock-item detail. */
     usual_store_id: string | null;
-    usual_store_name: string | null;
     products: LinkedProduct[];
     recipes: LinkedRecipe[];
     substitutes: Substitute[];
@@ -228,19 +218,16 @@ export type StockItemDetail = {
      *  per-kind cap. Summed across every event kind. Drives the honest
      *  "N older events not shown" footer under the timeline. */
     history_older_count?: number;
-    /** FU-211 — free-text "what I buy" reminders, ordered by position.
+    /** FU-211 — free-text "what I buy" reminders, A–Z (server order).
      *  Always present (not gated by products/money). */
     preferred_buys?: PreferredBuy[];
-    /** FU-213 — price observations (newest first) + the server-derived
-     *  per-unit cost. Money-gated at the UI. */
+    /** FU-213 — price observations (newest first). Money-gated at the UI. */
     price_observations?: PriceObservation[];
-    unit_cost?: number | null;
     /** FU-227 chunk 3 — what the PriceEntry widget should seed itself with
      *  on open (F2). Null when no prior observation exists for this item. */
     price_entry_prefill?: PriceEntryPrefill | null;
-    /** FU-227 chunk 3 placeholder — chunk 4 lights it up with the real
-     *  baseline/threshold output. Until then the widget renders the
-     *  empty state. */
+    /** FU-227 — the server-derived baseline / current / above-usual block
+     *  the "Your prices" widget renders. */
     your_prices?: YourPrices | null;
     /** X1 — last "still correct" check; surfaced in the lifecycle
      *  timeline as a synthetic Checked entry when it differs from the
@@ -290,15 +277,4 @@ export type LinkedNutritionFood = {
     /** Everything the source knows, in panel order. A nutrient it didn't state
      *  is simply not in the list. */
     nutrient_rows: NutrientRow[];
-};
-
-export type PricePoint = {
-    offered_on: string; // ISO datetime
-    price_now: number | null;
-    price_was: number | null;
-};
-
-export type PriceHistory = {
-    product_id: string;
-    points: PricePoint[];
 };

@@ -27,7 +27,7 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID, uuid4
 
-from flask import g, has_request_context, request, session
+from flask import g, has_request_context, request
 
 from dora_api.app import db
 from dora_api.domain.entities.audit_event import (
@@ -35,6 +35,9 @@ from dora_api.domain.entities.audit_event import (
     SEVERITY_AUDIT, SEVERITY_INFO, SOURCE_DAPI, SOURCE_SYSTEM,
 )
 from dora_api.infrastructure.log_context import get_request_id
+from dora_api.infrastructure.session_user import current_user_id
+
+_LOGGER = logging.getLogger(__name__)
 
 
 # Keys we always drop from payloads. Case-insensitive substring match —
@@ -179,7 +182,6 @@ def emit(
     (non-auto) emit inside a request marks the request so the middleware
     skips its duplicate generic row (FU-599).
     """
-    _Logger = logging.getLogger(__name__)
     try:
         if source not in ALLOWED_SOURCES:
             source = SOURCE_SYSTEM
@@ -189,12 +191,7 @@ def emit(
         # Pull request-bound context when running inside a Flask request.
         if has_request_context():
             if actor_user_id is None:
-                raw = session.get("user_id")
-                if raw:
-                    try:
-                        actor_user_id = UUID(raw)
-                    except (ValueError, TypeError):
-                        actor_user_id = None
+                actor_user_id = current_user_id()
             if actor_ip is None:
                 actor_ip = request.remote_addr
             if request_id is None:
@@ -236,7 +233,7 @@ def emit(
             db.session.rollback()
         except Exception:  # noqa: BLE001
             pass
-        _Logger.warning("audit.emit failed for action=%s: %s", action, exc)
+        _LOGGER.warning("audit.emit failed for action=%s: %s", action, exc)
 
 
 # ── Middleware hook ────────────────────────────────────────────────────
@@ -290,7 +287,7 @@ def auto_audit_after_request(response):
             _auto=True,
         )
     except Exception as exc:  # noqa: BLE001
-        logging.getLogger(__name__).warning(
+        _LOGGER.warning(
             "auto_audit_after_request failed: %s", exc,
         )
     return response

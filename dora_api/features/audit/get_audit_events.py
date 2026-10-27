@@ -33,6 +33,8 @@ from dora_api.features.routers import AUDIT_ROUTER
 from dora_api.infrastructure.api_response import (
     bad_request, not_found, ok, paginated,
 )
+
+_LOGGER = logging.getLogger(__name__)
 # Cap on `size` so the admin UI can't accidentally fetch the whole table.
 MAX_PAGE_SIZE = 500
 DEFAULT_PAGE_SIZE = 50
@@ -164,7 +166,6 @@ def _resolve_usernames(actor_ids: list[UUID]) -> dict[UUID, str]:
 
 @AUDIT_ROUTER.route("/events", methods=["GET"])
 def get_audit_events():
-    _Logger = logging.getLogger(__name__)
     _, err = require_admin()
     if err is not None:
         return err
@@ -208,7 +209,7 @@ def get_audit_events():
     usernames = _resolve_usernames(actor_ids)
 
     items = [_row_to_dto(dict(r), usernames) for r in rows]
-    _Logger.debug("Audit events page=%d size=%d returned %d/%d", page, size, len(items), total)
+    _LOGGER.debug("Audit events page=%d size=%d returned %d/%d", page, size, len(items), total)
     return paginated(items, total, page, size)
 
 

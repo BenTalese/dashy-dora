@@ -2,7 +2,7 @@
 me" substrate (PROPOSAL_PRODUCTS_AS_OVERLAY §3.2 / FU-227 chunk 2).
 
 Folded shape (A1): the user logs TOTAL price + TOTAL measure + unit. Per-unit
-cost is derived server-side (R-003 — ``get_stock_item_unit_cost_at``); the
+cost is derived server-side (R-003 — ``get_stock_item_unit_cost_with_unit_at``); the
 client never divides. Optional ``store_id`` (A2) for "Last seen at Coles".
 The ``source`` enum is gone (A4 revised) — provenance comes from the FK
 ``shopping_list_line_id`` on rows the ``/finish`` handler harvests (chunk 5);
@@ -30,6 +30,8 @@ from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class AddPriceObservationRequest(BaseModel):
@@ -120,7 +122,7 @@ def add_price_observation(stock_item_id: UUID):
         )
     if _Response.store_not_found:
         return not_found(Store.__name__, _Request.store_id)
-    logging.getLogger(__name__).info("Logged a price for stock item %s", stock_item_id)
+    _LOGGER.info("Logged a price for stock item %s", stock_item_id)
     return no_content()
 
 

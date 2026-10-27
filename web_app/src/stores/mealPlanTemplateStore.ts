@@ -37,13 +37,8 @@ export const useMealPlanTemplateStore = defineStore('mealPlanTemplate', () => {
         await getTemplatesAsync();
     };
 
-    const cloneAsync = async (id: string) => {
-        await api.cloneAsync(id);
-        await getTemplatesAsync();
-    };
-
     // Apply returns its result for the caller's toast; the planner refreshes
-    // its own plan/ingredient/shortfall state after.
+    // its own plan and ingredient state after.
     const applyAsync = async (command: ApplyTemplateCommand): Promise<ApplyTemplateResult> =>
         await api.applyAsync(command);
 
@@ -56,7 +51,6 @@ export const useMealPlanTemplateStore = defineStore('mealPlanTemplate', () => {
         createFromPlanAsync,
         updateAsync,
         deleteAsync,
-        cloneAsync,
         applyAsync,
         applyRecurringAsync,
     };

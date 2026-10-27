@@ -21,28 +21,20 @@ import logging
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from flask import session
 from pydantic import BaseModel, ConfigDict, Field
 
 from dora_api.domain.entities.alert_interaction import AlertInteraction
+from dora_api.features.alerts import _ledger as ledger
 from dora_api.features.alerts.get_alerts import GetAlertsHandler
 from dora_api.features.routers import ALERT_ROUTER
 from dora_api.infrastructure.api_response import no_content, unauthorized
 from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.utils import get_request_body
-from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
+from dora_api.infrastructure.session_user import current_user_id
 
-
-def _current_user_id() -> UUID | None:
-    raw = session.get("user_id")
-    if not raw:
-        return None
-    try:
-        return UUID(raw)
-    except (ValueError, TypeError):
-        return None
+_LOGGER = logging.getLogger(__name__)
 
 
 class SnoozeRequest(BaseModel):
@@ -63,16 +55,10 @@ class AlertInteractionHandler:
     def __init__(self, repository: Repository) -> None:
         self.repository = repository
 
-    def _find(self, user_id: UUID, alert_key: str) -> AlertInteraction | None:
-        return self.repository.get(AlertInteraction).one(
-            EntityField(AlertInteraction, AlertInteraction.Fields.USER_ID).eq(user_id)
-            & EntityField(AlertInteraction, AlertInteraction.Fields.ALERT_KEY).eq(alert_key)
-        )
-
     def _get_or_create(self, user_id: UUID, alert_key: str) -> AlertInteraction | None:
         if len(alert_key) > _ALERT_KEY_MAX_LENGTH:
             return None
-        existing = self._find(user_id, alert_key)
+        existing = ledger.interaction_for(self.repository, user_id, alert_key)
         if existing is not None:
             return existing
         interaction = AlertInteraction(
@@ -99,7 +85,7 @@ class AlertInteractionHandler:
         self.repository.save_changes()
 
     def clear_suppression(self, user_id: UUID, alert_key: str) -> None:
-        interaction = self._find(user_id, alert_key)
+        interaction = ledger.interaction_for(self.repository, user_id, alert_key)
         if interaction is not None:
             interaction.snoozed_until = None
             interaction.dismissed_at = None
@@ -107,7 +93,7 @@ class AlertInteractionHandler:
 
     def dismiss_all(self, user_id: UUID) -> None:
         # Server-derived: dismiss exactly the user's current active set.
-        alerts = GetAlertsHandler(SqlAlchemyRepository()).handle(user_id)
+        alerts = GetAlertsHandler(self.repository).handle(user_id)
         now = datetime.now(timezone.utc)
         for alert in alerts.items:
             interaction = self._get_or_create(user_id, alert.alert_id)
@@ -119,7 +105,7 @@ class AlertInteractionHandler:
 
 @ALERT_ROUTER.route("/dismiss-all", methods=["POST"])
 def dismiss_all_alerts():
-    user_id = _current_user_id()
+    user_id = current_user_id()
     if user_id is None:
         return unauthorized()
     AlertInteractionHandler(SqlAlchemyRepository()).dismiss_all(user_id)
@@ -129,18 +115,18 @@ def dismiss_all_alerts():
 @ALERT_ROUTER.route("/<alert_id>/snooze", methods=["POST"])
 @has_request_body(SnoozeRequest)
 def snooze_alert(alert_id: str):
-    user_id = _current_user_id()
+    user_id = current_user_id()
     if user_id is None:
         return unauthorized()
     _Request: SnoozeRequest = get_request_body()
     AlertInteractionHandler(SqlAlchemyRepository()).snooze(user_id, alert_id, _Request.days)
-    logging.getLogger(__name__).info("Alert %s snoozed %dd by %s", alert_id, _Request.days, user_id)
+    _LOGGER.info("Alert %s snoozed %dd by %s", alert_id, _Request.days, user_id)
     return no_content()
 
 
 @ALERT_ROUTER.route("/<alert_id>/dismiss", methods=["POST"])
 def dismiss_alert(alert_id: str):
-    user_id = _current_user_id()
+    user_id = current_user_id()
     if user_id is None:
         return unauthorized()
     AlertInteractionHandler(SqlAlchemyRepository()).dismiss(user_id, alert_id)
@@ -149,7 +135,7 @@ def dismiss_alert(alert_id: str):
 
 @ALERT_ROUTER.route("/<alert_id>/suppression", methods=["DELETE"])
 def clear_alert_suppression(alert_id: str):
-    user_id = _current_user_id()
+    user_id = current_user_id()
     if user_id is None:
         return unauthorized()
     AlertInteractionHandler(SqlAlchemyRepository()).clear_suppression(user_id, alert_id)

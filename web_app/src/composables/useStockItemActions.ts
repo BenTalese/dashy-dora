@@ -1,4 +1,3 @@
-import { storeToRefs } from 'pinia';
 import { useQuasar } from 'quasar';
 import MarkOpenExpiryDialog from 'src/components/stock/MarkOpenExpiryDialog.vue';
 import {
@@ -6,13 +5,13 @@ import {
     type OpenExpiryDecision,
     type OpenToggleTarget,
     type OpenTogglePatch,
-} from 'src/composables/openToggle';
+} from 'src/helpers/openToggle';
 import { invalidateBuyVerdict } from 'src/composables/useBuyVerdict';
 import ShoppingListApiService from 'src/services/api/shoppingListApiService';
 import { useShoppingListStore } from 'src/stores/shoppingListStore';
 import { useStockItemStore } from 'src/stores/stockItemStore';
-import { useStockLevelStore } from 'src/stores/stockLevelStore';
 import { useRouter } from 'vue-router';
+import { formatDate } from 'src/composables/useDateFormat';
 
 const shoppingListApi = new ShoppingListApiService();
 
@@ -29,8 +28,6 @@ export function useStockItemActions() {
     const router = useRouter();
     const stockItemStore = useStockItemStore();
     const shoppingListStore = useShoppingListStore();
-    const stockLevelStore = useStockLevelStore();
-    const { stockLevels } = storeToRefs(stockLevelStore);
 
     // resolve a shopping list's display name from the store's
     // hydrated summaries. Falls back to a generic label so we never
@@ -88,7 +85,7 @@ export function useStockItemActions() {
             // No explicit list — resolve the quick-add target. We never send a
             // remembered hint, so with 2+ drafts the server replies `ambiguous`
             // and we always ask which list.
-            let outcome = await shoppingListApi.quickAddToPrimaryAsync(stockItemId);
+            let outcome = await shoppingListApi.quickAddAsync(stockItemId);
             if (outcome.result === 'no_draft') {
                 $q.dialog({
                     title: 'No draft list',
@@ -124,7 +121,7 @@ export function useStockItemActions() {
                         .onDismiss(() => resolve(null));
                 });
                 if (!choice) return null;
-                outcome = await shoppingListApi.quickAddToPrimaryAsync(stockItemId, choice);
+                outcome = await shoppingListApi.quickAddAsync(stockItemId, choice);
                 if (outcome.result !== 'added') {
                     err('Could not add to the chosen list.');
                     return null;
@@ -149,52 +146,13 @@ export function useStockItemActions() {
         }
     }
 
-    /** Bump the level back to the most-stocked level (lowest sequence). */
-    async function markRestocked(stockItemId: string, options?: { silent?: boolean }) {
-        const silent = options?.silent ?? false;
-        const top = stockLevels.value[0];
-        if (!top) {
-            if (!silent) notifyErr('No stock levels configured.');
-            return;
-        }
-        try {
-            await stockItemStore.updateStockLevelAsync({
-                stock_item_id: stockItemId,
-                stock_level_id: top.stock_level_id,
-            });
-            // FU-572: the level feeds the verdict's need axis.
-            invalidateBuyVerdict(stockItemId);
-            if (!silent) notifyOk('Marked restocked.');
-        } catch (err) {
-            if (!silent) notifyErr('Could not restock.', String(err));
-        }
-    }
-
-    /** Push the expiry date forward by `days`. FU-123: pushes from
-     *  `max(today, current expiry)` so the natural read of "+1 day" on
-     *  an existing expiry actually shifts that expiry by a day, while
-     *  long-stale items don't end up with a "+1 = yesterday" result.
-     *  When no expiry is set yet, falls back to today + days. */
+    /** Push the expiry date forward by `days`: from the later of the
+     *  household's today and the current expiry, so "+1" on an expired item
+     *  reads "tomorrow" (the rule is server-side, finalisation 05-R2). */
     async function pushExpiry(stockItemId: string, days = 7) {
-        const current = stockItemStore.stockItems.find(
-            (si) => si.stock_item_id === stockItemId,
-        )?.expiry_date ?? null;
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const base = (() => {
-            if (!current) return today;
-            const parsed = new Date(`${current}T00:00:00`);
-            if (Number.isNaN(parsed.getTime())) return today;
-            return parsed.getTime() > today.getTime() ? parsed : today;
-        })();
-        base.setDate(base.getDate() + days);
-        const iso = `${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, '0')}-${String(base.getDate()).padStart(2, '0')}`;
         try {
-            await stockItemStore.updateStockItemAsync({
-                stock_item_id: stockItemId,
-                expiry_date: iso,
-            });
-            notifyOk(`Expiry pushed to ${iso}.`);
+            const expiry = await stockItemStore.pushExpiryAsync(stockItemId, days);
+            notifyOk(`Expiry pushed to ${formatDate(expiry)}.`);
         } catch (err) {
             notifyErr('Could not update expiry.', String(err));
         }
@@ -237,23 +195,10 @@ export function useStockItemActions() {
         void router.push(`/stock/${stockItemId}`);
     }
 
-    /** A stock item's substitutes live on its detail page (built in P2). */
-    function findSubstitutes(stockItemId: string) {
-        void router.push({ path: `/stock/${stockItemId}`, query: { section: 'substitutes' } });
-    }
-
-    /** Recipes that use this item — opens the recipes screen pre-filtered. */
-    function seeRecipesUsing(stockItemId: string) {
-        void router.push({ path: '/cookbook', query: { usesStockItem: stockItemId } });
-    }
-
     return {
         addToList,
-        markRestocked,
         pushExpiry,
         planOpenToggle,
         openDetail,
-        findSubstitutes,
-        seeRecipesUsing,
     };
 }

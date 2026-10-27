@@ -6,7 +6,7 @@ from dora_api.domain.entities.base_entity import BaseEntity
 
 
 # Sentinel reasons — plain str so SQLAlchemy stores varchar, matching the
-# ADDED_VIA_* pattern on ShoppingListLine. Anything outside this set is
+# SHOPPING_LIST_STATUS_* sentinels on ShoppingList. Anything outside this set is
 # rejected at the request layer (the entity itself stays permissive so a
 # future reason added in a newer install doesn't blow up an older API).
 WASTE_REASON_EXPIRED = "expired"

@@ -122,7 +122,7 @@
                 <BaseSelect
                     v-model="axisDifficulty"
                     class="picker-axes__field"
-                    :options="difficultyOptions"
+                    :options="DIFFICULTY_OPTIONS"
                     behavior="menu"
                     clearable
                     empty-text="Any difficulty"
@@ -147,19 +147,14 @@
             >
                 <template #default="{ item }">
                     <div :key="item.recipe_id" class="recipe-list__slot">
-                        <q-checkbox
-                            v-if="isMultiSelect"
-                            :model-value="isSelected(item.recipe_id)"
-                            @update:model-value="toggleSelection(item.recipe_id)"
-                        />
                         <MealPlanRecipeRow
                             :recipe="item"
                             :mode="rowMode"
                             :target-slot="focusedTarget?.slot"
                             :reason-text="reasonFor(item.recipe_id)"
                             :cost-text="costTextFor(item)"
-                            :batch-enabled="batchEnabled && !isMultiSelect"
-                            @pick="onRowPick"
+                            :batch-enabled="batchEnabled"
+                            @pick="(id) => emit('recipePick', id)"
                             @pool-adjust="(id, delta) => emit('paletteMealAdjust', id, delta)"
                         />
                     </div>
@@ -172,19 +167,14 @@
                     :key="recipe.recipe_id"
                     class="recipe-list__slot"
                 >
-                    <q-checkbox
-                        v-if="isMultiSelect"
-                        :model-value="isSelected(recipe.recipe_id)"
-                        @update:model-value="toggleSelection(recipe.recipe_id)"
-                    />
                     <MealPlanRecipeRow
                         :recipe="recipe"
                         :mode="rowMode"
                         :target-slot="focusedTarget?.slot"
                         :reason-text="reasonFor(recipe.recipe_id)"
                         :cost-text="costTextFor(recipe)"
-                        :batch-enabled="batchEnabled && !isMultiSelect"
-                        @pick="onRowPick"
+                        :batch-enabled="batchEnabled"
+                        @pick="(id) => emit('recipePick', id)"
                         @pool-adjust="(id, delta) => emit('paletteMealAdjust', id, delta)"
                     />
                 </div>
@@ -218,7 +208,7 @@
     import type { Recipe } from 'src/models/recipe';
     import type { MealPlanSuggestion } from 'src/models/mealPlan';
     import { useBatchEnabled } from 'src/composables/useBatchEnabled';
-    import { DEFAULT_MEAL_SLOTS, DIFFICULTY_VALUES } from 'src/helpers/recipeVocabulary';
+    import { DIFFICULTY_OPTIONS } from 'src/helpers/recipeVocabulary';
     import {
         buildFilterChips, filterRecipes, matchesAxes,
         type RecipeAxisFilters, type RecipeFilterKey,
@@ -246,13 +236,6 @@
              *  until loaded; the "Dora suggests" chip shows the plain list
              *  meanwhile rather than an empty rail. */
             suggestions?: MealPlanSuggestion[] | undefined;
-            /** When set to 'multi-select', rows show a checkbox and click
-             *  toggles selection (used by the sequential builder, §9-B).
-             *  Default 'click-add' is the original behaviour — click a row
-             *  to add the recipe to the focused day/slot. */
-            selectionMode?: 'click-add' | 'multi-select' | undefined;
-            /** Selected recipe ids in 'multi-select' mode. Ignored otherwise. */
-            selectedIds?: string[] | undefined;
             /** Whether to render the "→ slot · date" target line. False on the
              *  phone sheet, whose own title bar names the destination — an
              *  explicit prop, never a viewport sniff (R-019 / ADR-014): this
@@ -261,14 +244,12 @@
             showTarget?: boolean | undefined;
         }>(),
         {
-            selectionMode: 'click-add', selectedIds: () => [],
             suggestions: () => [], showTarget: true,
         },
     );
 
     const emit = defineEmits<{
         (e: 'update:recipeSearch', value: string): void;
-        (e: 'update:selectedIds', ids: string[]): void;
         (e: 'cancelTarget'): void;
         (e: 'recipePick', recipeId: string): void;
         (e: 'paletteMealAdjust', recipeId: string, delta: number): void;
@@ -290,14 +271,7 @@
     }));
 
     // R-003 — the household slot vocabulary, from the one store that owns it.
-    // `DEFAULT_MEAL_SLOTS` is the pre-first-load fallback only, exactly as the
-    // recipe `time_of_day` pickers use it.
-    const mealSlotStore = useMealSlotStore();
-    const { mealSlotNames } = storeToRefs(mealSlotStore);
-    const slotOptions = computed<string[]>(() => (
-        mealSlotNames.value.length ? mealSlotNames.value : [...DEFAULT_MEAL_SLOTS]
-    ));
-    const difficultyOptions = [...DIFFICULTY_VALUES];
+    const { slotNamesOrDefault: slotOptions } = storeToRefs(useMealSlotStore());
 
     // Owner 2026-09-05 — the rail's ordering. `name` is the resting order every
     // chip but `regulars` already produced, so picking it changes nothing about
@@ -401,24 +375,6 @@
         if (activeFilter.value === 'suggests') return 'Nothing to suggest for this week.';
         return 'Nothing here yet.';
     });
-
-    // ── Selection ──────────────────────────────────────────────────────────
-    const isMultiSelect = computed(() => props.selectionMode === 'multi-select');
-    function isSelected(recipeId: string): boolean {
-        return props.selectedIds.includes(recipeId);
-    }
-    function toggleSelection(recipeId: string) {
-        const next = isSelected(recipeId)
-            ? props.selectedIds.filter((id) => id !== recipeId)
-            : [...props.selectedIds, recipeId];
-        emit('update:selectedIds', next);
-    }
-    /** In multi-select the whole row is a selection toggle; in click-add it
-     *  adds to the armed slot. One row component, two host contracts. */
-    function onRowPick(recipeId: string) {
-        if (isMultiSelect.value) toggleSelection(recipeId);
-        else emit('recipePick', recipeId);
-    }
 
     // ── Focus on arming (§4.6) ─────────────────────────────────────────────
     //

@@ -17,7 +17,6 @@ not a user count — never leaks the population size.
 """
 import logging
 import os
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from http.client import GONE
 
@@ -41,6 +40,9 @@ from dora_api.infrastructure.auth_helpers import (hash_password,
 from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
+from dora_api.infrastructure.api_response import too_many_requests
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class BootstrapAdminRequest(BaseModel):
@@ -70,19 +72,6 @@ def _gone(detail: str):
     return response
 
 
-def _too_many_requests(retry_after: int):
-    from http.client import TOO_MANY_REQUESTS
-    response = jsonify(ProblemDetails(
-        detail=f"Too many requests. Try again in {retry_after}s.",
-        errors={}, status=TOO_MANY_REQUESTS, title="Rate limit exceeded.",
-        type="https://datatracker.ietf.org/doc/html/rfc6585#section-4",
-    ))
-    response.content_type = "application/problem+json"
-    response.status_code = TOO_MANY_REQUESTS
-    response.headers["Retry-After"] = str(max(retry_after, 1))
-    return response
-
-
 def _user_count() -> int:
     return SqlAlchemyRepository().get(User).count()
 
@@ -102,10 +91,9 @@ def bootstrap_required():
 @AUTH_ROUTER.route("/bootstrap-admin", methods=["POST"])
 @has_request_body(BootstrapAdminRequest)
 def bootstrap_admin():
-    _Logger = logging.getLogger(__name__)
 
     if not rate_limit("auth.bootstrap", max_per_minute=5):
-        return _too_many_requests(
+        return too_many_requests(
             rate_limit_remaining_seconds("auth.bootstrap", 5),
         )
 
@@ -144,7 +132,7 @@ def bootstrap_admin():
             severity=SEVERITY_WARN,
             payload={"reason": "email_mismatch"},
         )
-        _Logger.warning(
+        _LOGGER.warning(
             "bootstrap-admin rejected: submitted email does not match "
             "ADMIN_BOOTSTRAP_EMAIL"
         )
@@ -203,7 +191,7 @@ def bootstrap_admin():
         entity_type="User", entity_id=new_user.id,
         payload={"username": new_user.username},
     )
-    _Logger.info(
+    _LOGGER.info(
         f"Bootstrapped first admin {new_user.username} ({new_user.id})"
     )
 

@@ -1,7 +1,6 @@
 import type { Recipe, RecipeStepsMode, RecipeTagCatalogue } from 'src/models/recipe';
-import type { CreatedResponse } from './axiosHttpClient';
 import AxiosHttpClient, { resolveBaseURL } from './axiosHttpClient';
-import { type Page } from './queryStringBuilder';
+import { fetchAllPages, type Page } from './queryStringBuilder';
 
 /** C-4 Chunk 5 — URL for a recipe's image (served as raw bytes). Pass a
  *  `version` (e.g. a counter bumped after upload) to bust the browser cache. */
@@ -195,14 +194,15 @@ export default class RecipeApiService {
         this.httpClient = new AxiosHttpClient();
     }
 
-    createAsync = async (recipeToCreate: CreateRecipeCommand): Promise<CreatedResponse> =>
-        await this.httpClient.post<CreatedResponse>('/recipes', recipeToCreate);
+    /** The 201 body is the full recipe DTO (`create_recipe.py`). */
+    createAsync = async (recipeToCreate: CreateRecipeCommand): Promise<Recipe> =>
+        await this.httpClient.post<Recipe>('/recipes', recipeToCreate);
 
     // copies the recipe into a sibling version (same
     // `version_group_id`). If the source had no group id yet, the server
     // allocates one and back-fills the source so both rows form the group.
-    createNewVersionAsync = async (recipeId: string): Promise<CreatedResponse> =>
-        await this.httpClient.post<CreatedResponse>(
+    createNewVersionAsync = async (recipeId: string): Promise<Recipe> =>
+        await this.httpClient.post<Recipe>(
             `/recipes/${recipeId}/new-version`,
             {},
         );
@@ -222,33 +222,10 @@ export default class RecipeApiService {
         return await this.httpClient.get<Page<Recipe>>(`/recipes${qs}`);
     };
 
-    /** Load every recipe by paging until the server stops returning a full
-     *  page. Same shape and same reason as `StockItemApiService`'s (FU-035):
-     *  the cookbook filters and searches client-side over whatever the store
-     *  holds, so a single default page silently hid every recipe past the
-     *  50th — a recipe could sit on the meal planner yet be unfindable in
-     *  the cookbook with zero filters on. `limit` is capped server-side at
-     *  `query_options.MAX_LIMIT` (500); we ask for that to minimise
-     *  round-trips. */
-    getAllPagesAsync = async (
-        filters?: RecipeFilterArgs,
-        limit: number = 500,
-    ): Promise<Recipe[]> => {
-        const collected: Recipe[] = [];
-        let page = 1;
-        while (true) {
-            const result = await this.getAllAsync({ ...filters, page, limit });
-            collected.push(...result.items);
-            if (
-                result.items.length < limit
-                || collected.length >= (result.total ?? collected.length)
-            ) {
-                break;
-            }
-            page += 1;
-        }
-        return collected;
-    };
+    /** Every recipe, paged (FU-035): the cookbook filters and searches
+     *  client-side over whatever the store holds. */
+    getAllPagesAsync = async (filters?: RecipeFilterArgs): Promise<Recipe[]> =>
+        await fetchAllPages((page, limit) => this.getAllAsync({ ...filters, page, limit }));
 
     /** P2-08 — pulls the canonical tag catalogue + disclaimer. The
      *  SPA caches this for the session; the picker re-renders on
@@ -261,8 +238,8 @@ export default class RecipeApiService {
         await this.httpClient.patch<void>(`/recipes/${recipe_id}`, payload);
     };
 
-    cookAsync = async (recipeId: string, mealsCooked: number): Promise<{ available_meals: number } | void> =>
-        await this.httpClient.post<{ available_meals: number } | void, { meals_cooked: number }>(
+    cookAsync = async (recipeId: string, mealsCooked: number): Promise<{ available_meals: number }> =>
+        await this.httpClient.post<{ available_meals: number }, { meals_cooked: number }>(
             `/recipes/${recipeId}/cook`,
             { meals_cooked: mealsCooked },
         );

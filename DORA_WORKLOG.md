@@ -41,7 +41,301 @@ next.
 
 ---
 
-## 2026-10-23 (latest): **Finalisation Stage 1 — all 20 chunks analysed; master docs assembled; Stage 2 started**
+## 2026-10-24 (latest): **Finalisation Stage 2 continued — units 12+ (chunks 9, 10 and the cross-chunk sweeps)**
+
+**Status: in progress (owner away; long-running solo session on the Linux box). Nothing committed (commit only when asked).**
+Picked up from the 2026-10-23 entry below: the WIP commit `6030db0b` holds units 1–11. Baseline on this box before any
+change: pytest **2498 passed / 1 skip / 1 xfail** (`.venv/bin/python -m pytest` works here; the Windows note about the
+system python does not apply), vitest 760/70, vue-tsc + eslint clean.
+
+**Half-done items found in the WIP commit:** unit 11 never reached the close-gate (no CHANGELOG / DORA_VERIFY lines, FU-765
+not moved to RESOLVED); `git rm --cached web_app/src-capacitor/www/index.html` still owed; chunks 9 and 10 had no Stage-2
+work at all (Applied ⬜). All three are handled in this session's close-gate.
+
+**Stage 2 — progress log (continues the 2026-10-23 list):**
+- **Unit 12 — chunk 9 (alerts + suggestions) + FU-654 + the R-008 logger sweep, done.** FU-654: new
+  `infrastructure/session_user.py` (`SESSION_USER_ID_KEY`, `current_user_id()`, `current_user(repo)`) replaces 15
+  `_current_user_id` copies, `confirm_actions._session_user_id`, `inference_overlay.current_user`, two inline parses in
+  `tools.py`, `get_stock_items._disabled_kinds`, `ask_assistant` ×2 and `audit.emit`; the auth shell's own parses
+  (`get_me`, `admin_gate`, `change_password`, `update_me`, `logout`) are left alone on purpose (a malformed id there clears
+  the session, a different contract). Unused imports in every touched module removed. 09-R1 the over-budget suggestion
+  carries no figures in prose (amounts ride `payload`), its period word comes from a map, and 09-R3 "Review budget" opens
+  `/settings/budget`; 09-R2 `likely_due` uses `cadence_math.mean_gap_days`; 09-R5 `DEFAULT_SNOOZE_DAYS` in `models/alert.ts`
+  (store, API service, row copy); 09-R6 `get_or_create_app_setting`; 09-R7 one session per request (`dismiss_all`, push
+  job, over-budget generator); 09-R8 VAPID 404 is problem+json via new `api_response.not_found_detail`; 09-R9/R12 + 10-R42
+  new `alerts/_ledger.py` (`subscriptions_by_user`, `interactions_by_key`, `interaction_for`) shared by the push job, the
+  daily brief, the deals mail and the interaction handler (`_NO_ROW` sentinel gone); 09-R10 the attention cheat sheet
+  derives its bands from `attentionBand()`; 09-R13 `AlertPrefDto.available` (server) replaces the client's kind filter;
+  09-R14/R27 stale docstrings; **09-R15 deviation:** `low_count` *is* read (Dora's attention answer), so only `fyi_count`
+  (always equal to it) was dropped; 09-R16 two missing `SuggestionKind`s; 09-R17 `kindTheme` falls back to the raw kind;
+  09-R18 `SuggestionCard.vue` out of `DoraChat`; 09-R19 the admin page is "Expiring-soon window" with true copy; 09-R20/R21
+  tokens; 09-R26 horizon constant in prose; 08-R8 the dashboard calendar's today ring reads `/alerts/upcoming`'s `start`
+  (already household today — no new field needed). **R-008 sweep:** a codemod gave every backend module one module-level
+  `_LOGGER` (151 files: 157 per-call `_Logger`, 9 local `log`, 17 inline `getLogger(...).x`, 6 `_LOG`, 23 module `_Logger`).
+  **Found while sweeping:** `assistant/shopping_actions.py` used `EntityField` without importing it, so every LLM-mode
+  "add X to my list" raised a NameError (pre-dates the WIP commit) — import added, pinned by a new registry test.
+  Tests: suggestions +1 (no currency symbol, must-write), alerts +1 (prefs `available`), registry +1, DTO snapshot
+  refreshed. **Full backend after unit 12: 2501 passed.**
+- **Unit 13 — chunk 10 (products / history / deals) + 13-R4 + 13-R37 + 19-R6/R9/R20/R21/R26, done.** 10-R1 the deals mail
+  links `/my-products` (route constants pinned against `routes.ts`); 10-R2 the all-time-low tip states what the figure is;
+  10-R9 products load every page through a new shared `fetchAllPages` (stock items + recipes moved onto it too); 10-R4
+  no double fetch on deep link; 10-R37 dead slices; 10-R40 the price-history cards and the Manage-alerts rows open the one
+  `ProductPriceWatchDialog` (inline threshold field + `onSetAlert` gone); 10-R19 the product store's mutations have callers
+  and My products refreshes only what a change touched (no five-store reload per toggle); 10-R3 comment fixed (gating stays
+  an owner call); 10-R30 Product Search buttons follow setup + role (configured → open; admin → set up; member → copy only);
+  **13-R4** `products_policy.search_url` on `/health` so members get the nav link; **13-R37** one shared `/health` probe
+  per session (`healthApiService.getInfoAsync` memo + `invalidateHealthInfo()` from every policy refresh); 10-R35 + 13-R41
+  new `composables/useAuthedImage.ts` — store logos, user avatars and product thumbs fetch through the HTTP client (R-045;
+  object URLs revoked on change/unmount instead of a 60 s timer; `userImageUrl` deleted); 10-R5 a price edit goes through
+  `apply_offer_to_product` (`OFFER_SOURCE_MANUAL`), a restated price records nothing; **found while landing 10-R5:** the
+  "new low" price-drops report took its low over a history that already contains the current price (every ingest push
+  appends it), so no ingested product could ever be a new low — it now compares against points *before* the current offer,
+  and a new custom product records its first price as an observation like ingest does (pinned by an ingest test); 10-R43
+  deal window opens at household midnight; 10-R12 `product_links.has_image_by_product` + `linked_stock_items` are the only
+  link/image readers in reports + deal quality; 10-R6 `discount_percent`; 10-R14 one history query; 10-R15
+  `features/_ranges.py` (`RANGE_DAYS`, `range_start` at household midnight) shared by reports + price history; 10-R17 price
+  watches create/delete through the repository, the two multi-table reads carry R-005 carve-out comments; **10-R39 / FU-917
+  (half):** `PriceAlert.last_fired_at` dropped (migration `b8d2f4a6c1e3`; the `threshold_unit_price` rename stays FU-911's);
+  10-R38a / FU-838 `/products/best-deals` + `getBestDealsAsync` deleted (the handler stays, the deals mail uses it); 10-R23
+  `helpers/offerLogic.ts` (`isOnSpecial`, `discountPercent`; renamed from the orphan) used by the card, My products, the item
+  page and `DiscountChip`; 10-R25 `stores/find_store.find_store_by_name` for create, rename and product-add; 10-R26 FIXME and
+  TODO replaced; 10-R7 Product TS types match the DTO; 10-R10 `?? 0` guards; 10-R22 `helpers/packCount.ts`; 10-R8 custom
+  sizes store the unit table key and reject unknown units; 10-R21 `PriceEntry` uses `MoneyInput`; 10-R24; 10-R28
+  `useProductStoreLink` makes the row's identity a real link like the card's; 10-R31 `stockLevelStore.levelById`; 10-R34
+  motion tokens; 10-R36 sparkline paints `var(--semantic-*)`; 10-R46 test rename. **health_check:** 19-R6 DEBUG log, 19-R9
+  `current_profile()`, 19-R20 direct attribute reads, 19-R21 one `_safe()` wrapper that logs a failed block, 19-R26 the DB
+  revision is cached once known + docstring fixed. Tests: health +1, deals +1, product router +1 (replaces a commented-out
+  test), ingest +1, DTO snapshot refreshed.
+  Not executed from chunk 10: 10-R20 (with 06-R10), 10-R27 (with chunk 6), 10-R33 (FU-671 sweep), 10-R13 / 10-R45 (FU —
+  recipe and stock-item images still bind bare URLs), 10-R41 waived (09-R1 removed the figures instead of formatting them,
+  so `format_money` keeps one consumer), 10-R47 waived.
+
+- **Unit 14 — chunk 6 (stock-item detail) + 05-R2, done.** 06-R3/R6/R39 level-change and substitute DTOs carry
+  `stock_level_sequence` (timeline reads restocked/dropped off it, not a name regex; substitute dot is `StockLevelDot`;
+  fabricated `stockItemFor` gone); 06-R4 `stockItemStore.invalidateLevelOverlays` (verdict + belief + demand, debounced
+  300 ms) on the one level write path, three caller copies deleted; 06-R5 `stockLevelStore.stockedLevel` (by sequence)
+  used by `markStocked` and bulk restock, dead `useStockItemActions.markRestocked` removed; 06-R16 unsaved name/notes
+  survive a same-item reload (the peek id-swap prompt is NOT done, needs a parent hook: owed FU); 06-R24/R25/R26 nine dead
+  detail fields + `unit_cost` dropped (tests repointed to `your_prices.current` and list names); 06-R28 dead UUID
+  coercions; 06-R30 / FU-910 `canonical_unit` → `display_unit`; 06-R31 stale comments; 06-R12 link upgrade N+1 gone;
+  06-R14 one `_baseline_from_observations` for item + product; 06-R42; 06-R18 `headlineFor` / `dataUsedLine`; 06-R19;
+  06-R20 new `css/signalCards.scss` shell for the three signal cards; 06-R22 server owns preferred-buy order (two client
+  sorts dropped); 06-R23; 06-R27; 06-R33/R47 `NutritionFoodPicker` on `BaseDialog`; 06-R34 `openToggle` → helpers;
+  06-R36/R37/R38 inline styles → classes, type literals → tokens, white-text chips → tint classes; **06-R40 security:**
+  the "Still used by recipes" dialog rendered recipe names as HTML — now `BlockedByRecipesDialog.vue` (plain text); the
+  other three `html: true` dialogs dropped too (incl. 18-R5 sheet name); 06-R44 `WaitHintDto.days_until`; 06-R46/R48/R50/R52;
+  06-R51 + 10-R27 sparklines batch through `/price-history` and `/products/<id>/price-history` + its client method + types
+  are deleted (06-R35 moot); **06-R10/R11** the detail handler is per-feed builders and three slice endpoints
+  (`get_stock_item_parts.py`: substitutes, price-entry-prefill, buy-choices) serve the five former full-detail callers;
+  **05-R2/06-R1** `expiry_change.py`: one `apply_expiry_change` (PATCH, alert actions — which used to skip the History
+  event — and new `POST /stock-items/<id>/push-expiry`, rule max(household today, current)+N); row menu, item page and
+  bell all use it (client spec `useStockItemActionsPushExpiry.spec.ts` retired, pinned server-side by
+  `test_push_expiry.py`). Tests +: parts (2), push-expiry (4), level history (1). **Full backend after unit 14: 2512 passed /
+  1 skip / 1 xfail; vitest 752/69; vue-tsc + eslint clean.** Not done from chunk 6: 06-R21 (conditional), 06-R32/R13 + 06-D*
+  (FU), 06-R16 peek-swap half.
+
+- **Unit 15 — chunk 1 (cookbook) execute list + QA2-01, done.** **QA2-01 / SEC-1 (stored XSS) fixed:** new
+  `infrastructure/data_url.py` (`decode_data_url`, `data_url_response`) is the one decoder for every image route (recipe,
+  recipe step, product, store, user, shopping-list attachment, store-logo colour, ingest store image) and serves only
+  raster image types, so a `data:text/html` "image" reads as no image (01-R7; pinned by `tests/test_data_url.py` + a
+  recipe e2e test). 01-R8 `persistence/uuid_key.py`; 01-R9 / FU-761 `domain/rating_tables.py` (`points_for`,
+  `kcal_to_kj`); 01-R10 one `nutrients.to_float` (the injected parameter on `off_values` is gone); 01-R11 lookup portions
+  via `portions_by_food`; 01-R12/R13 `recipes/_recipe_errors.py` (`RecipeWriteOutcome` + `recipe_write_error_response`)
+  for create and update, with a real `invalid_tool_message`; 01-R46 `recipes/recipe_requests.py` (one ingredient / step /
+  section request model); 01-R25 sections back-filled through the ORM; 01-R30/R31/R44 every in-method import in the
+  recipe handlers hoisted; 01-R45 defensive `getattr`s replaced (test stubs given the entity's fields); 01-R49 `.count()`;
+  01-R39 `meal_plans/commitment_access.py` owns the commitment aggregates; 01-R34 legacy `is_cookable` removed; 01-R35
+  `has_step_images` (unread) removed with its hydration and helpers, `has_structured_steps` kept (the editor reads it);
+  **01-R5** `features/_vocabulary.py` (`VocabularyHandler` + two counters) behind explicit routes in the category /
+  cuisine / tool modules (about 600 lines to 3×95, URLs and messages unchanged; dietary tags / stock groups / meal slots
+  left as they are, their extra behaviour doesn't fit); **01-R6** `recipes/_recipe_link_access.RecipeLinkAccess` with
+  the tag and tool modules as thin instances (import names unchanged). Client: 01-R16/R42 `scripts/dump_recipe_vocabulary.py`
+  → `generated/recipe_vocabulary.ts` (difficulty, steps modes, meal-slot defaults; pinned by
+  `tests/test_recipe_vocabulary_generated.py`), `DIFFICULTY_OPTIONS` exported once; 01-R14 store option getters
+  (`cuisineOptions`, `categoryOptions`, `dietaryTagOptions`, `toolOptions`, `collectionOptions`); 01-R15
+  `mealSlotStore.slotNamesOrDefault`; 01-R17 `helpers/clientId.ts`; 01-R18 `helpers/recipeTime.totalMinutes` (the page now
+  shows "0 min" only when both times are 0, null when neither is set); 01-R19/R47 `RecipeActions.vue` for card + row
+  (favourite colour `negative`); 01-R21 recipe creates typed as `Recipe` (both casts gone); **01-R22**
+  `composables/useFilterRegistry.ts` — RecipesOverview declares its 21 filters once (+ vitest); 01-R23; 01-R24 cost dialog
+  shows the server's per-serving figure; 01-R27 client CSV export deleted (route → **FU-933**, owner call); 01-R28/R29 dead
+  CSS (new scratch tool `dead_css.py`); 01-R32/R33 comments; 01-R40 ingredient rows read the server's `is_missing`; 01-R50
+  `stockItemStore.byId`. Not done: 01-R36/R37 → **FU-934** (page splits), 01-R41 FU-669, 01-R52 FU-908, 01-R26 with
+  chunk 15; waived 01-R3/R38/R48/R51/R53. **Full backend 2527 passed (one order-dependent test of mine fixed after);
+  vitest 753/70; vue-tsc + eslint clean.** Also opened FU-931/932 (unit 13/14 leftovers), resolved FU-654/765/838/910/761,
+  wrote the units 11–14 CHANGELOG + DORA_VERIFY entries and refreshed the coverage register + PROJECT_STATE.
+
+- **Unit 16 — chunk 2 (meal plans) execute list, done.** Backend: 02-R13 / FU-759 `budget.household_budget` +
+  `budget_remaining` (memoised setting, money gate) and `access.money_features_enabled` replace the private reads in
+  `build_week` and `swap_suggestions`; 02-R14 `recipes/all_recipes.load_all_recipe_dtos` (the seam for 02-R29 → FU-935);
+  02-R15 `slot_validation.ordered_slot_names` instead of the full slot handler; 02-R30 slot usage counts are two grouped
+  queries (R-005 carve-out comment; new e2e usage-count test); 02-R31 one batched recipe load in
+  `aggregate_meal_plan_ingredients` (its fake repo answers `.all(in_)`); 02-R32 server: no `"Dinner"` fallback (no slots →
+  no placements); **02-R7/R8** `meal_plans/_entry_writes.py` (`MealPlanEntryRequest` base, `check_entries`,
+  `resolve_recipes`, `mint_batches`, `new_entry` / `apply_to_entry`, `MealPlanWriteOutcome` +
+  `meal_plan_write_error_response`) — create and update are orchestration only, the FU-878 match-and-update and the
+  preserved-batch re-attach unchanged; 02-R9 reconcile's five latest-receipt queries are one `_receipt_rows` + one
+  `_receipt_count` over shared fragments (signal reuses the filter); 02-R10 `uuid_key` + new `persistence/uuid_key.uuid_bind`
+  (reconcile `_bind`, `pool.bump_pool`). Client: 02-R16 picker + planner read `slotNamesOrDefault`; 02-R17/R18
+  `shoppingSummaryProps` + `entryHandlers` on the page, `entryListeners(entry)` in the day card; **02-R19b**
+  `composables/useMealEntryPresentation.ts` + `MealEntryGlyphs.vue` shared by the chip and the phone card (+ spec);
+  02-R19 13 dead planner members gone; 02-R20; **02-R21 / FU-862** client shortfall plumbing deleted; **02-R22
+  conditional, kept:** `NewListDialog` reads `plan.name` — and printed "null (5 meals)" for every nameless plan, now
+  "Week of …"; 02-R23 picker multi-select mode; 02-R24; 02-R25 skeleton grid variant; 02-R26 client clone (server → FU-936);
+  **02-R27** `helpers/appShell.appShellStyleFn` for the six shell pages (+ spec); **02-R28** `components/RunnerShell.vue` for
+  the reconcile runner + meal log — StocktakeRunner left on its own shell (deliberately theme-toned; FU-938); **02-R40**
+  both reconcile `(?)` dialogs became Help → "Reconcile past meals"; 02-R32 client: builder defaults to every slot,
+  `slotFor` → `pool[0]`; 02-R33 name lookup map; 02-R37/R38 palette vars → brand/semantic tokens, `white` →
+  `--text-on-primary`, durations → motion tokens; 02-R39 16 exact-match spacing/radius swaps (off-scale 2/3/6/10/14px and
+  8px radii left: no token, a D-017 scale call, not a substitution); 02-R42 docstring; §C7 R-039 template-delete cancel.
+  FU: 02-R29 → FU-935, 02-D1 → FU-939, 02-D3 → `MULTI_USER_READINESS.md` §2.5, 02-D4 is in FU-934, new FU-937 (`day_cost` /
+  `day_nutrition` unread). Waived 02-R43/R44. ADR evaluation: **R-097 / ADR-094** (create/update share one write module).
+  Also corrected FU-931 (only recipe images remain); note for chunk 15: **15-R7** (five hand-rolled 429s) is already done
+  by 02-R11's `api_response.too_many_requests` (unit 15). **Full backend 2528 passed / 1 skip / 1 xfail; vitest 760/72; vue-tsc
+  + eslint clean.**
+
+- **Unit 17 — chunk 3 (shopping lists) execute list, done.** (C1 bugs 03-R2..R8 and R5/R6/R14 landed in units 9/12.)
+  **03-R1 deviation:** the copy route was *fixed* rather than deleted (both anchors, store and "which one" choices,
+  `added_at`, `apply_line_defaults`; was a 500 on a product-only line) and the delete question folded into **FU-936** with
+  the template-clone route, since deleting live routes has been an owner call (FU-933). 03-R9 `_remove_nested_product_lines`;
+  03-R11 direct `_product_id` / `_recipe_id` reads; 03-R12 auto-generate's recipe and plan-week sources are one
+  `_collect_recipes` (one recipe load, one item load; plan week reads `MealPlanEntry` by date range) + new recipe-source
+  e2e; 03-R13 `is_low_stock` / `is_out_of_stock` / `needs_restock` instead of sequence literals; 03-R15 `budget._spend_of`;
+  03-R16 `_first_or_selected`; 03-R17 grouped template line counts (+ e2e); 03-R21 `snapshot_offer_price` + its test deleted,
+  `picked_offer_price` comment rewritten; **03-R22/R23 / FU-766** `has_substitutes`, bulk-tick and move-to deleted (client
+  halves too); 03-R24/R25 dead client helpers; **03-R26** `prefill_unit_price`, `last_paid_unit_price`, `stock_level_name`,
+  `added_at` dropped (and the now-unneeded `stock_level` include) — `stock_location_id` **kept**, PutAwayDialog groups by it
+  (the record's caveat); **03-R27 partial:** the empty `FinishShoppingListRequest` stays (it is the FU-582 guard that
+  rejects `level_overrides`, pinned by a test); only the client command type went; 03-R28/R30 comment sweep; 03-R29;
+  **03-R33** `instantiate` takes `merge_into_list_id` (+ e2e) and `NewListDialog` uses it + `bulkAddLinesAsync` — **found
+  while landing it:** "new list from a template" deleted the list it had just created and instantiated a fresh one, so the
+  typed name and shop date were lost; it now merges into the created list; 03-R34 / FU-713 (half) bulk add/remove commit once
+  via `commit=False`; **03-R35** detail handler is `_load_context` + `_prior_purchases` + `_line_dto` over a `_DetailContext`;
+  03-R36 inference gate before the pantry load; 03-R37 attachments through the repository (the two column-only reads stay
+  Core with an R-005 carve-out: entity loads would pull every image blob); 03-R38/R39/R40 trim-to-budget gathers verdict
+  inputs once with the bulk helper (`_AxisInputs` renamed public `VerdictInputs`), no `user_id` / `User` load, `mode` is a
+  `Literal`; 03-R41/R42/R43 hoisted imports, `field(default_factory=list)`, typed path params; 03-R45
+  `QuickAddToDraftHandler` / `quickAddAsync`; 03-R19 `writeLinePurchase` (one optimistic write + rollback for the three
+  price/store writers); D-010 motion tokens. FU: 03-R31 stays **FU-780**; 03-R48 noted on **FU-725**; 03-D1/D2/D4 → **FU-940**;
+  03-D3 → `MULTI_USER_READINESS.md` §2.5; FU-714 progress note. Waived 03-R32/R44/R46/R47. Tests: copy product-only,
+  auto-generate recipe source, template line_count, template merge; `test_line_has_substitutes.py` and
+  `test_snapshot_offer_price.py` removed; vitest 753/72 (7 specs of deleted helpers removed). **Full backend 2527 passed /
+  1 skip / 1 xfail; vue-tsc + eslint clean.**
+
+- **Unit 18 — chunk 4 (cook mode) execute list, done.** (04-R1/R2/R3/R5/R7 landed in units 9/15; 04-R10 FU-654; 04-R14
+  `uuid_bind`.) **04-R8** (listed as done in the 10-23 plan but it wasn't): new `composables/useCookTimer.ts` counts against a
+  deadline and re-syncs on `visibilitychange`, so a backgrounded tab no longer runs the timer slow (+ `useCookTimer.spec.ts`,
+  7 cases incl. a throttled tab); 04-R11/R12 `stockLevelStore.levelById` / `stockItemStore.byId` in cook mode and QuickAddSheet
+  (LogPriceSheet already used it); **04-R13/R28** `components/recipes/CookNavRow.vue` for the step face, photo face and zoom
+  (the photo face now takes the host's phone size, `navSize`), `RecipeCookModeImageView` → `CookImageView`; 04-R17 epitaph
+  comments; 04-R19 `/cook` always answers `200 {available_meals}`; 04-R22 Sub-step chip → `dora-text-on-primary` (the
+  secondary swap chip keeps white ink with an R-002 comment: no `--text-on-secondary` token, FU-671/FU-652); 04-R23/R25 type,
+  spacing and easing tokens; 04-R26 voice reads `currentLocale()`; 04-R16 FU-722 diagnostic comment. FU: 04-R20 → **FU-942**,
+  04-R24 (+13-R40) → **FU-941**, 04-D2 → **FU-943**, 04-D1 answered on **FU-728** (cook half). 04-R18 (help) waits on the
+  20-D4 Help IA decision. Waived 04-R9/R15/R21/R27. vitest 760/73; cook/recipe backend 390 green; vue-tsc + eslint clean.
+  Also **FU-725 resolved**: new `test_shopping_list_ladders.py` drives every money and store rung through the real detail read
+  (due now that 03-R35 restructured that handler); 03-R48's optimisation note moved onto `_prior_purchases`.
+
+- **Unit 19 — chunk 5 (stock overview + stocktake) execute list, done.** (05-R2/R3/R5/R6/R7/R41 landed earlier; 05-R30 did not
+  reproduce.) Backend: **05-R9** `persistence/aware.as_utc` replaces eight naive→aware copies (stocktake ×2, `sweep._aware`,
+  reconcile, `get_buy_verdict._as_utc`, `reports._as_utc`, deal quality, suggestions); **05-R10** `stocktake.ranked_overdue` →
+  `RankedOverdue` shared by `/queue` and `/session`; 05-R28 hoisted imports (create/update/get stock items; `_try_auto_add`'s
+  documented cycle left); 05-R8 R-005 carve-out comments + `bulk_check` commits through the repository; 05-R31 group counts
+  are one GROUP BY; **05-R15** `stock_level_name` and `last_checked_at` dropped from the list DTO (`RecipeDetailPage` and the
+  item page now name a level via `levelById`) — **`opened_on` kept**: the item page mirrors it from the store (tests
+  repointed; DTO snapshot refreshed). Client: 05-R4 `needsRestockSequence`, unused param gone; 05-R12 dead flat-location
+  fallback in `StockItemRow`; **05-R13** `stores/stockGroupStore.ts` for the overview, create dialog, item page, onboarding and
+  the Settings page (writes mark it stale); 05-R14/R38 dead filter exports and action helpers (+ their spec cases); 05-R19
+  `confirmMute`; **05-R24** `helpers/beliefBand.ts` (+ spec) — the four "word" maps were all identity and simply went;
+  **05-R25** `composables/useLocationOptions.ts` for the three path-labelled pickers; C9 `locationStore.breadcrumb` builds its
+  maps once per tree load; 05-R26 `levelById` at the last six lookups; 05-R29 `noCaps`; **05-R34** CSV through a new
+  `AxiosHttpClient.getFile` (blob + filename) instead of raw `fetch`; 05-R22/R23 palette vars → brand/semantic tokens,
+  durations → motion tokens, the undefined `--text-md/xs/sm` and `--surface-hover` (always painted their fallbacks) → real
+  tokens (the R-060 ratchet dropped three names), camera caption R-002 carve-out comment, 10 spacing swaps; 05-R36
+  `StocktakeItemBase`. **Not done:** 05-R11 (+05-D2) → **FU-944** (deleting the flat location API needs the owner's OK on
+  onboarding); 05-R33 → **FU-934** note. FU: **FU-728 resolved** (both halves answered), **FU-699** and **FU-698** resolved.
+  Waived 05-R21/R27/R37/R40. vitest 759/74; vue-tsc + eslint clean. ADR evaluation: **R-098 / ADR-095** (`as_utc`, never inline).
+  **Full backend 2529 passed / 1 skip / 1 xfail.**
+
+- **Unit 20 — chunk 7 (zero-input pantry) execute list, done.** (07-R1/R2-gate/R3 landed in unit 9; 07-R4 in unit 19 — the
+  identity word maps; 07-R8/R14 with FU-654; 07-R20 with 03-R36.) **07-R2:** `divergent_items` reads the recorded level from
+  the gathered inputs (FK-resolved) via new `stock_status.is_missing_sequence`, never `item.stock_level`, so the
+  `.include(STOCK_LEVEL)` crutches in the recipe hydration, the pantry-check generator, the shopping-list suggestions and
+  the beliefs endpoint are gone (07-R19); **07-R9** `gather_belief_inputs_for_items` (typed) +
+  `gather_beliefs_for_items` computes over it (the private `_return_inputs` flag is gone); 07-R7
+  `IngredientRow.from_dto` / `from_entity`; **07-R5/R15** `helpers/inferenceHint.ts` (`inferenceTooltip(hint, names,
+  surface)`, `inferenceTone`) for the planner, phone card and recipe chip (+ spec), the planner glyph on new
+  `.dora-glyph--warning/--positive` (the recipe chip's darkened tones) instead of Quasar `text-warning`; **07-R6**
+  `composables/createOverlayCache.ts` behind `usePantryBeliefs` and `usePlannedDemand` (+ spec; FU-851 note); 07-R12 the
+  beliefs endpoint returns the five rendered fields (`believed_sequence` and the float `confidence` stay on the dataclass);
+  07-R18 `_household_date` (via `as_utc`). FU: 07-R10/D2 → **FU-945**; 07-R13 rides chunk 13 (settings flag rows); 07-R21 not
+  done: `missing_count_for` still reads the level relationship on the same load, so the include chain there stays.
+  Waived 07-R11/R16/R17/R22. vitest 765/76; full backend 2529 passed / 1 skip / 1 xfail; vue-tsc + eslint clean.
+
+- **Unit 21 — chunk 8 (dashboard) execute list, done (2026-10-27).** (08-R1/R2/R3/R4/R5/R6/R7/R8 landed earlier.) **08-R16:**
+  the summary and the score load cookability for just the week's recipes — **found while landing it:** loading after the
+  entry query hit the R-032 identity-map trap (the entry's `include(RECIPE)` had already put the recipes in the session
+  without ingredients, so every entry read "no ingredients" → `missing_count` null), so new
+  `commitment_access.recipe_ids_scheduled_between` reads the ids first and cookability loads before the entries (the score's
+  plan coverage had the same ordering); `dora_score.is_expired_on` (no caller) deleted; 08-R25/R26 hoisted imports,
+  `timedelta` arithmetic; 08-R29 summary locals. Client: 08-R9 `relativeTime(iso, { style: 'coarse' })` (+ spec cases);
+  08-R10 / **FU-896** dead `invalidateDoraScore` / `clearDoraScoreCache` deleted (the cache stays its own shape: a single value
+  with an error ref and staleness); 08-R11 / **FU-899** `DashboardCard` is a plain `<article>`; 08-R12/R14
+  `helpers/dashboardCalendar.buildCalendarCells` (+ spec) with locale weekday names via `formatDate(…, { weekday: 'short' })`;
+  08-R13 period-word map; 08-R15/R17 stale comments, `RETIRED_CARD_IDS` constant read by the spec; **08-R18**
+  `composables/useCardLayout.ts` (+ spec; FU-832 progress, 08-R19 `CardsMenu.vue` left with it); 08-R21 motion tokens (the
+  1200 ms retry hold is a JS delay, left); 08-R22/R23 tint chip + `dora-text-accent`; 08-R24 menu width class; 08-R28
+  `StockDonutCard`. **Found while landing 08-R22:** `font-size: var(--font-size-xs)` (×9, incl. the shared `.dora-chip--tint`)
+  is invalid because the scale tokens are unitless, so those sizes never applied — all now `calc(... * 1rem)` (DORA_VERIFY
+  line), and `designTokensDeclared.spec.ts` gained a case that fails on a bare `var(--font-size-*)` (ADR evaluation: a guard,
+  not a new rule; D-003 already says use the scale). Waived 08-R20/R27/R30/R31. vitest 774/78; full backend 2529 passed / 1 skip / 1 xfail; vue-tsc + eslint clean.
+
+- **Unit 22 — chunk 11 (assistant) execute list, done (2026-10-27).** (11-R1..R8, R33 landed earlier; 11-R31 with FU-654;
+  11-R22/R24 were already clean.) **Regression found and fixed:** unit 17's 03-R39 dropped `user_id` from
+  `TrimToBudgetHandler.handle`, but `confirm_actions` still passed it, so both trim-to-budget propose and commit would raise;
+  the proposer smoke test returns before the handler without a signed-in user, so nothing caught it — now pinned by a
+  signed-in propose + commit test. Backend: **11-R9/R10/R36** `assistant/_name_resolution.py` (`resolve_by_name` →
+  `NameResolution`, `stock_item_candidate`) for every "exact, else contains" copy (an ambiguous *exact* match now offers its
+  candidates; it used to offer none); 11-R11 `_limits.MAX_CANDIDATES`; **11-R12** `domain/substitutes.py` +
+  `scripts/dump_substitutes.py` → `generated/substitutes_table.ts` (+ staleness test), Basic mode reads it (its wrong aliases
+  went); **11-R13** `domain/money.format_money` lifted from the deals digest, the trim summaries use the install currency;
+  11-R14/R20/R21 (dead `_find_shopping_list`); 11-R15 probe answers 429; **11-R16** `factory.PROVIDER_DEFAULTS` served as
+  `default_base_url` / `example_model` on `/assistant/providers`, the settings page renders them; 11-R17/R18 `mean_gap_days`
+  / `discount_percent`; 11-R19 coverage through `missing_stock_item_names_for`; 11-R27/R28 tool copy (the alert-kind list
+  is derived from `SEVERITY_BY_KIND`); 11-R32 `factory.unavailable_client`; 11-R35 household-midnight windows; 11-R37 narrowed
+  `except`; **11-R41** `recipes_using_item` finds recipes from the ingredient side (+ test); **11-R43 (verified true):**
+  every `/ask` paid a network availability probe because the cache lived on a per-request client — now
+  `llm_client.remembered_availability` per endpoint, 60 s (+ test); the assistant's meal-planning default slot is the
+  household's first, not "Dinner". Client: **11-R34** `/health.alerts_policy.expiring_soon_window_days` → Basic mode (offline
+  fallback commented); 11-R23/R38/R40; 11-R39 icons via `ICONS` (+ `volume_up/off`); **11-D3 / FU-663** slider 32px pill in a
+  44px hit area. FU: 11-R25/R26/R30/R42/R16-ids/D1/D4 → **FU-946**. Waived 11-R29. vitest 775/78; full backend 2533 passed /
+  1 skip / 1 xfail; vue-tsc + eslint clean.
+
+- **Unit 23 — chunk 12 (reports, budget, waste) execute list, done (2026-10-27).** (12-R1..R9, R14, R15, R17-client, R29,
+  R30 landed earlier; 12-R5 took the "last added priced line" path rather than `your_prices`, its comment says why.)
+  **12-R10/R11 (R-099 / ADR-096 new):** `_line_price.spend_lines` → `SpendLine` is the one "bought in this window" read; the
+  budget period + history, spend by store / category / YoY, savings and most-bought all sum it (YoY calls the category
+  handler per window). It made two drifts uniform: deferred-by-budget lines were skipped by the budget only, and quantity 0
+  counted as 1 in two reports; `lifetime_spend` mirrors the filter in SQL so About agrees. Parity test T3 in
+  `test_budget_spend_excludes_unticked.py`. **12-R24/R25/R31:** `reports.py` split into `reports/{_common, range_window,
+  spend, memory, price_drops, price_movers}.py`, each with an R-005 carve-out note and an accurate docstring; the shared
+  helpers lost their leading underscore (`parse_range`, `range_days`, ...); `tools.py` and the tests re-import. **12-R18:**
+  the budget handlers never return None, so their types were tightened and the dead branches (route ×2, `tools.py`,
+  `generators.py`, `get_dora_score.py`) went. **12-R12** `helpers/reportRangeWords.ts`; **12-R13**
+  `useThemePalette.categoricalColour`; **12-R20** duplicate CSS; **12-R21 / FU-841** focus ring + no fallbacks on the
+  Mark-as-wasted tiles; **12-R23** `composables/useSlotLoader.ts` (+ spec) for Reports and the dashboard (FU-844 stays: it is
+  the flag-race watchers, not this); **12-R27** the rescue scan finds recipes from the ingredient side; **12-R32**
+  BudgetSettings tokens. **Dead code found by 12-R1:** `stock_status.get_stock_item_unit_cost_at` had no production caller
+  after the stock-value report went; deleted, its property tests now drive `get_stock_item_unit_cost_with_unit_at`. FU:
+  12-R16 public `product_id`, 12-R19, 12-D1, YoY's UTC windows → **FU-947**; the two waste routes → FU-936; 12-D5 is FU-848.
+  Waived 12-R26. vitest 777/79; full backend 2534 passed / 1 skip / 1 xfail; vue-tsc + eslint clean.
+
+**Stop point (first usage limit, resumed the same day):** the units 11–14 close-gate was done on resume (see unit 15). `git rm --cached
+web_app/src-capacitor/www/index.html` is staged (17-R3 done). `scratchpad/rm_unused.py` + `logger_sweep.py` were the
+codemods used (session scratchpad, not in repo).
+
+---
+
+## 2026-10-23: **Finalisation Stage 1 — all 20 chunks analysed; master docs assembled; Stage 2 started**
 
 **Status: Stage 1 complete. Stage 2 (test-guarded execution) in progress — see the end of this entry for exactly
 where it stopped. Nothing committed (owner: commit only when asked).** Overnight solo run (owner: no subagents) through

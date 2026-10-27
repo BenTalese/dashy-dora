@@ -477,7 +477,7 @@
         border-radius: var(--radius-pill, 999px);
         background: var(--surface-sunken);
         color: var(--text-secondary);
-        font-size: var(--font-size-xs, 0.6875rem);
+        font-size: calc(var(--font-size-xs) * 1rem);
         font-weight: 700;
         letter-spacing: 0.06em;
         text-transform: uppercase;
@@ -495,7 +495,7 @@
     }
     .rnut__cell { min-width: 0; }
     .rnut__k {
-        font-size: var(--font-size-xs, 0.6875rem);
+        font-size: calc(var(--font-size-xs) * 1rem);
         font-weight: 700;
         letter-spacing: 0.06em;
         text-transform: uppercase;
@@ -538,7 +538,7 @@
 
     .rnut__grouphead {
         margin-top: var(--space-3, 12px);
-        font-size: var(--font-size-xs, 0.6875rem);
+        font-size: calc(var(--font-size-xs) * 1rem);
         font-weight: 700;
         letter-spacing: 0.06em;
         text-transform: uppercase;

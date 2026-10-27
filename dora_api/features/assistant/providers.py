@@ -15,25 +15,24 @@ successful live probe (`probe_assistant.py`), so a provider isn't offered as
 a selectable Mode until it has actually answered.
 """
 from dataclasses import dataclass
-from datetime import datetime
 from uuid import UUID
 
-from flask import session
 from pydantic import BaseModel, ConfigDict, Field
 
 from dora_api.domain.entities.user import ALLOWED_LLM_PROVIDERS
 from dora_api.domain.entities.user_llm_provider import UserLlmProvider
-from dora_api.features.auth.register_user import SESSION_USER_ID_KEY
 from dora_api.features.routers import ASSISTANT_ROUTER
 from dora_api.infrastructure.api_response import (bad_request,
                                                   business_rule_violation, ok,
                                                   unauthorized)
 from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.llm import EncryptionUnavailable, encrypt_api_key
+from dora_api.infrastructure.llm.factory import PROVIDER_DEFAULTS
 from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
+from dora_api.infrastructure.session_user import current_user_id
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,9 +43,14 @@ class ProviderConfigDto:
     has_api_key: bool
     verified: bool
     verified_at: str | None
+    # Placeholders for the settings form (11-R16): the endpoint used when the
+    # base URL is left empty ("" for Ollama, which has none), and an example id.
+    default_base_url: str
+    example_model: str
 
     @classmethod
     def from_row(cls, provider: str, row: UserLlmProvider | None) -> "ProviderConfigDto":
+        default_base_url, example_model = PROVIDER_DEFAULTS[provider]
         if row is None:
             return cls(
                 provider=provider,
@@ -55,8 +59,12 @@ class ProviderConfigDto:
                 has_api_key=False,
                 verified=False,
                 verified_at=None,
+                default_base_url=default_base_url,
+                example_model=example_model,
             )
         return cls(
+            default_base_url=default_base_url,
+            example_model=example_model,
             provider=provider,
             base_url=row.base_url,
             model=row.model,
@@ -80,16 +88,6 @@ class UpdateProviderRequest(BaseModel):
     model: str | None = Field(default=None, max_length=255)
     api_key: str | None = Field(default=None, max_length=512)
     clear_api_key: bool = False
-
-
-def _current_user_id() -> UUID | None:
-    raw = session.get(SESSION_USER_ID_KEY)
-    if not raw:
-        return None
-    try:
-        return UUID(raw)
-    except (ValueError, TypeError):
-        return None
 
 
 def get_provider_config(
@@ -150,7 +148,7 @@ class ProvidersHandler:
 
 @ASSISTANT_ROUTER.route("/providers", methods=["GET"])
 def get_providers():
-    user_id = _current_user_id()
+    user_id = current_user_id()
     if user_id is None:
         return unauthorized()
     return ok(ProvidersHandler(SqlAlchemyRepository()).list_providers(user_id))
@@ -159,7 +157,7 @@ def get_providers():
 @ASSISTANT_ROUTER.route("/providers/<provider>", methods=["PATCH"])
 @has_request_body(UpdateProviderRequest)
 def update_provider(provider: str):
-    user_id = _current_user_id()
+    user_id = current_user_id()
     if user_id is None:
         return unauthorized()
     if provider not in ALLOWED_LLM_PROVIDERS:

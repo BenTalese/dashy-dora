@@ -40,6 +40,8 @@ from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 
+_LOGGER = logging.getLogger(__name__)
+
 
 # ───── Add line ───────────────────────────────────────────────────────────
 
@@ -78,7 +80,11 @@ class AddLineHandler:
     def __init__(self, repository: Repository) -> None:
         self.repository = repository
 
-    def handle(self, request: AddLineRequest, shopping_list_id: UUID) -> AddLineResponse:
+    def handle(
+        self, request: AddLineRequest, shopping_list_id: UUID, *, commit: bool = True,
+    ) -> AddLineResponse:
+        """`commit=False` leaves the save to a bulk caller (one commit per
+        request, FU-713)."""
         # anchor validation. At least one of
         # stock_item_id/product_id is required; the DB enforces it too
         # but failing early gives the SPA a clean 400.
@@ -145,14 +151,14 @@ class AddLineHandler:
         )
         apply_line_defaults(self.repository, [line])
         self.repository.add(line)
-        self.repository.save_changes()
+        if commit:
+            self.repository.save_changes()
         return AddLineResponse(line_id=line.id)
 
 
 @SHOPPING_LIST_ROUTER.route("/<uuid:shopping_list_id>/lines", methods=["POST"])
 @has_request_body(AddLineRequest)
 def add_line(shopping_list_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _Request: AddLineRequest = get_request_body()
     _Response = AddLineHandler(SqlAlchemyRepository()).handle(_Request, shopping_list_id)
     if _Response.list_not_found:
@@ -165,7 +171,7 @@ def add_line(shopping_list_id: UUID):
         return not_found("StockItem", _Request.stock_item_id)
     if _Response.product_not_found and _Request.product_id is not None:
         return not_found("Product", _Request.product_id)
-    _Logger.info(
+    _LOGGER.info(
         f"Added line {_Response.line_id} to shopping list {shopping_list_id} "
         f"(stock_item={_Request.stock_item_id}, already_on_list={_Response.already_on_list})"
     )
@@ -202,34 +208,6 @@ def snapshot_offer_rrp(repository: SqlAlchemyRepository, line: ShoppingListLine)
         return
     line.list_price_at_pick = float(offer.price_was)
 
-
-
-def snapshot_offer_price(repository: SqlAlchemyRepository, line: ShoppingListLine) -> None:
-    """Freeze the current offer of `line.selected_product_id` onto the line.
-
-    **Nothing calls this any more (2026-09-17.)** It is kept because the
-    columns it writes still hold real history — `picked_offer_price` /
-    `list_price_at_pick` on lines finished before this change, which Reports
-    reads — and deleting the writer would make that data look like it came from
-    nowhere.
-
-    Why it stopped being called: an offer price is the shop's advertised
-    number, not the user's money, and writing it onto a line meant a shop the
-    user never priced still recorded spend they had never confirmed. The owner
-    chose to make pricing explicit instead — nothing is recorded unless it is
-    entered, and the price editor offers a one-tap way to pull an offer's
-    price in when that is genuinely what was paid. A list with no prices
-    entered now records no spend, which is the honest outcome.
-    """
-    if line.selected_product_id is None:
-        return
-    offer: ProductOffer | None = repository.get(ProductOffer).one(
-        EntityField(ProductOffer, "_product_id").eq(line.selected_product_id)
-    )
-    if offer is None:
-        return
-    line.picked_offer_price = float(offer.price_now)
-    line.list_price_at_pick = float(offer.price_was) if offer.price_was else None
 
 
 # ───── Update line (tick, quantity, selected_product) ─────────────────────
@@ -300,7 +278,7 @@ class UpdateLineHandler:
             # Ticking is "I put it in the trolley" and nothing more. It does
             # not record a price: an offer's price is the shop's claim, not
             # the user's, and since 2026-09-17 nothing writes one on their
-            # behalf (see `snapshot_offer_price`).
+            # behalf (see `ShoppingListLine.picked_offer_price`).
             line.is_ticked = request.is_ticked
         if "sequence" in set_fields and request.sequence is not None:
             line.sequence = request.sequence
@@ -397,12 +375,11 @@ class UpdateLineHandler:
 @SHOPPING_LIST_ROUTER.route("/<uuid:shopping_list_id>/lines/<uuid:line_id>", methods=["PATCH"])
 @has_request_body(UpdateLineRequest)
 def update_line(shopping_list_id: UUID, line_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _Request: UpdateLineRequest = get_request_body()
     _Response = UpdateLineHandler(SqlAlchemyRepository()).handle(_Request, shopping_list_id, line_id)
     if _Response.line_not_found:
         return not_found("ShoppingListLine", line_id)
-    _Logger.debug(f"Updated line {line_id} on list {shopping_list_id}")
+    _LOGGER.debug(f"Updated line {line_id} on list {shopping_list_id}")
     return no_content()
 
 
@@ -411,6 +388,29 @@ def update_line(shopping_list_id: UUID, line_id: UUID):
 @dataclass(slots=True)
 class DeleteLineResponse:
     line_not_found: bool = False
+
+
+def _remove_nested_product_lines(
+    repository: Repository, shopping_list_id: UUID, stock_item_id: UUID,
+) -> None:
+    """Removing a stock-item line also removes the product-only lines on the
+    same list whose product is linked to that item (Cart Button rule 3): a
+    "nested product line" has `product_id` set and no `stock_item_id`."""
+    stock_item = (
+        repository.get(StockItem)
+        .include(StockItem.Fields.PRODUCTS)
+        .by_id(stock_item_id)
+    )
+    product_ids = [p.id for p in (stock_item.products or [])] if stock_item else []
+    if not product_ids:
+        return
+    nested = repository.get(ShoppingListLine).all(
+        EntityField(ShoppingListLine, "shopping_list_id").eq(shopping_list_id)
+        & EntityField(ShoppingListLine, "stock_item_id").is_null()
+        & EntityField(ShoppingListLine, "product_id").in_(product_ids)
+    )
+    for child in nested:
+        repository.remove(child)
 
 
 class DeleteLineHandler:
@@ -423,28 +423,8 @@ class DeleteLineHandler:
         # strings so the parent-ownership guard doesn't always mismatch.
         if line is None or str(line.shopping_list_id) != str(shopping_list_id):
             return DeleteLineResponse(line_not_found=True)
-        # when a stock-item-anchored line is
-        # removed, cascade-remove any nested product-only lines on
-        # the same list whose product is linked to that stock item.
-        # A "nested product line" here = product_id set, stock_item_id
-        # null, on the same list, where the product appears under the
-        # removed item's `products` relationship.
         if line.stock_item_id is not None and line.product_id is None:
-            stock_item = (
-                self.repository.get(StockItem)
-                .include(StockItem.Fields.PRODUCTS)
-                .by_id(line.stock_item_id)
-            )
-            if stock_item is not None:
-                product_ids = {p.id for p in (stock_item.products or [])}
-                if product_ids:
-                    nested = self.repository.get(ShoppingListLine).all(
-                        EntityField(ShoppingListLine, "shopping_list_id").eq(line.shopping_list_id)
-                        & EntityField(ShoppingListLine, "stock_item_id").is_null()
-                        & EntityField(ShoppingListLine, "product_id").in_(list(product_ids))
-                    )
-                    for child in nested:
-                        self.repository.remove(child)
+            _remove_nested_product_lines(self.repository, line.shopping_list_id, line.stock_item_id)
         self.repository.remove(line)
         self.repository.save_changes()
         return DeleteLineResponse()
@@ -452,11 +432,10 @@ class DeleteLineHandler:
 
 @SHOPPING_LIST_ROUTER.route("/<uuid:shopping_list_id>/lines/<uuid:line_id>", methods=["DELETE"])
 def delete_line(shopping_list_id: UUID, line_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _Response = DeleteLineHandler(SqlAlchemyRepository()).handle(shopping_list_id, line_id)
     if _Response.line_not_found:
         return not_found("ShoppingListLine", line_id)
-    _Logger.info(f"Deleted line {line_id} from list {shopping_list_id}")
+    _LOGGER.info(f"Deleted line {line_id} from list {shopping_list_id}")
     return no_content()
 
 
@@ -479,7 +458,11 @@ class RemoveLineByStockItemHandler:
     def __init__(self, repository: Repository) -> None:
         self.repository = repository
 
-    def handle(self, shopping_list_id: UUID, stock_item_id: UUID) -> RemoveByStockItemResponse:
+    def handle(
+        self, shopping_list_id: UUID, stock_item_id: UUID, *, commit: bool = True,
+    ) -> RemoveByStockItemResponse:
+        """`commit=False` leaves the save to a bulk caller (one commit per
+        request, FU-713)."""
         lst: ShoppingList | None = self.repository.get(ShoppingList).by_id(shopping_list_id)
         if lst is None:
             return RemoveByStockItemResponse(list_not_found=True)
@@ -489,26 +472,10 @@ class RemoveLineByStockItemHandler:
             & EntityField(ShoppingListLine, "stock_item_id").eq(stock_item_id)
         )
         if existing is not None:
-            # cascade-remove nested product
-            # lines (same rule as the by-line delete; see comment
-            # above DeleteLineHandler).
-            stock_item = (
-                self.repository.get(StockItem)
-                .include(StockItem.Fields.PRODUCTS)
-                .by_id(stock_item_id)
-            )
-            if stock_item is not None:
-                product_ids = {p.id for p in (stock_item.products or [])}
-                if product_ids:
-                    nested = self.repository.get(ShoppingListLine).all(
-                        EntityField(ShoppingListLine, "shopping_list_id").eq(shopping_list_id)
-                        & EntityField(ShoppingListLine, "stock_item_id").is_null()
-                        & EntityField(ShoppingListLine, "product_id").in_(list(product_ids))
-                    )
-                    for child in nested:
-                        self.repository.remove(child)
+            _remove_nested_product_lines(self.repository, shopping_list_id, stock_item_id)
             self.repository.remove(existing)
-            self.repository.save_changes()
+            if commit:
+                self.repository.save_changes()
             return RemoveByStockItemResponse(removed=True)
         return RemoveByStockItemResponse()
 
@@ -517,13 +484,12 @@ class RemoveLineByStockItemHandler:
     "/<uuid:shopping_list_id>/lines/by-stock-item/<uuid:stock_item_id>", methods=["DELETE"]
 )
 def remove_line_by_stock_item(shopping_list_id: UUID, stock_item_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _Response = RemoveLineByStockItemHandler(SqlAlchemyRepository()).handle(
         shopping_list_id, stock_item_id,
     )
     if _Response.list_not_found:
         return not_found("ShoppingList", shopping_list_id)
-    _Logger.info(
+    _LOGGER.info(
         f"Cart-remove on list {shopping_list_id} for item {stock_item_id}: "
         f"removed={_Response.removed}"
     )
@@ -555,7 +521,7 @@ class QuickAddResponse:
     candidates: list[QuickAddTargetCandidate] | None = None
 
 
-class QuickAddToPrimaryHandler:
+class QuickAddToDraftHandler:
     """Resolves the quick-add target by DRAFT-count inference (Chunk 2) and
     adds a line. The client may pass `shopping_list_id` to resolve the
     ambiguous (2+ drafts) case; sessionStorage on the client remembers the
@@ -610,9 +576,8 @@ class QuickAddToPrimaryHandler:
 @SHOPPING_LIST_ROUTER.route("/quick-add/lines", methods=["POST"])
 @has_request_body(QuickAddRequest)
 def quick_add_to_draft():
-    _Logger = logging.getLogger(__name__)
     _Request: QuickAddRequest = get_request_body()
-    _Response = QuickAddToPrimaryHandler(SqlAlchemyRepository()).handle(_Request)
+    _Response = QuickAddToDraftHandler(SqlAlchemyRepository()).handle(_Request)
     if _Response.result == "item_not_found":
         return not_found("StockItem", _Request.stock_item_id)
     if _Response.result == "hint_invalid":
@@ -631,7 +596,7 @@ def quick_add_to_draft():
                 for c in (_Response.candidates or [])
             ],
         })
-    _Logger.info(
+    _LOGGER.info(
         f"Quick-added stock item {_Request.stock_item_id} to list "
         f"{_Response.shopping_list_id} (already_on_list={_Response.already_on_list})"
     )

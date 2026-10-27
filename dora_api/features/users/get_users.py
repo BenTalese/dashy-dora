@@ -16,6 +16,8 @@ from dora_api.persistence.page import Page
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 
+_LOGGER = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True, slots=True)
 class UserDto:
@@ -83,10 +85,9 @@ class GetUsersHandler:
 
 @USER_ROUTER.route("")
 def get_users():
-    _Logger = logging.getLogger(__name__)
     # Admin-only — non-admin users shouldn't be able to enumerate accounts.
-    from dora_api.features.users.update_user_as_admin import _require_admin
-    _, err = _require_admin()
+    from dora_api.features.auth.admin_gate import require_admin
+    _, err = require_admin()
     if err is not None:
         return err
     try:
@@ -94,5 +95,5 @@ def get_users():
         _Page = GetUsersHandler(SqlAlchemyRepository()).handle(_Options)
     except InvalidQueryParameter as exc:
         return bad_request(str(exc))
-    _Logger.info(f"Retrieved {len(_Page.items)} of {_Page.total} users.")
+    _LOGGER.info("Retrieved %d of %d users.", len(_Page.items), _Page.total)
     return paginated(_Page.items, _Page.total, _Page.page, _Page.limit)

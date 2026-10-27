@@ -42,16 +42,15 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
-from dora_api.domain.entities.app_setting import AppSetting
 from dora_api.domain.entities.meal_plan import MealPlan
 from dora_api.domain.entities.meal_plan_entry import MealPlanEntry
 from dora_api.domain.entities.meal_plan_swap_ledger import MealPlanSwapLedger
 from dora_api.domain.entities.recipe import Recipe
+from dora_api.features.app_settings.access import money_features_enabled
 from dora_api.features.app_settings.clock import household_today
-from dora_api.features.auth.register_user import SESSION_USER_ID_KEY
-from dora_api.features.budget.budget import period_bounds, period_spent
+from dora_api.features.budget.budget import budget_remaining, household_budget
 from dora_api.features.meal_plans.get_meal_plans import GetMealPlansHandler
-from dora_api.features.recipes.get_recipes import GetRecipesHandler
+from dora_api.features.recipes.all_recipes import load_all_recipe_dtos
 from dora_api.features.recipes.recipe_cost import CostEstimate, estimate_costs_for
 from dora_api.features.routers import MEAL_PLAN_ROUTER
 from dora_api.infrastructure.api_response import (bad_request,
@@ -59,12 +58,10 @@ from dora_api.infrastructure.api_response import (bad_request,
                                                   conflict, not_found, ok,
                                                   unauthorized)
 from dora_api.infrastructure.decorators import has_request_body
-from dora_api.infrastructure.query_options import QueryOptions
 from dora_api.infrastructure.utils import get_request_body
-from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
+from dora_api.infrastructure.session_user import current_user_id
 
-from flask import session
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -311,37 +308,12 @@ def rank_lighter_swaps(
 # ── Repo-touching orchestration ────────────────────────────────────────
 
 
-def _current_user_id() -> Optional[UUID]:
-    raw = session.get(SESSION_USER_ID_KEY)
-    if not raw:
-        return None
-    try:
-        return UUID(str(raw))
-    except (TypeError, ValueError):
-        return None
-
-
-def _money_features_on(repository: SqlAlchemyRepository) -> bool:
-    """Money is a single install-wide concern now — no per-user layer."""
-    settings = repository.get(AppSetting).all()
-    return bool(settings[0].money_enabled) if settings else False
-
-
 def _week_entries(plan_dto, start: date):
     end = date.fromordinal(start.toordinal() + WEEK_LENGTH_DAYS)
     return [
         e for e in plan_dto.entries
         if start <= e.scheduled_for < end and e.consumed_at is None
     ]
-
-
-def _all_recipe_dtos(repository: SqlAlchemyRepository) -> list:
-    # Large single page — the household cookbook is bounded (tens–hundreds).
-    return list(
-        GetRecipesHandler(repository)
-        .handle(QueryOptions(page=1, limit=10_000))
-        .items
-    )
 
 
 def compute_suggestions(
@@ -355,7 +327,7 @@ def compute_suggestions(
     if plan_dto is None:
         return None
 
-    if not _money_features_on(repository):
+    if not money_features_enabled(repository):
         return SwapSuggestionsResponse(
             projected_over=False, cost_per_week=0.0,
             cost_per_week_priced_ratio={"priced": 0, "total": 0, "unpriced_recipe_ids": []},
@@ -363,7 +335,7 @@ def compute_suggestions(
             projected_after_applying_all=0.0, candidates=[],
         )
 
-    recipes = _all_recipe_dtos(repository)
+    recipes = load_all_recipe_dtos(repository)
     recipes_by_id = {r.recipe_id: r for r in recipes}
     cost_by_id = estimate_costs_for(repository, recipes)
 
@@ -382,21 +354,11 @@ def compute_suggestions(
     cost_per_week = round(cost_per_week, 2)
 
     today = household_today(repository)
-    _settings = repository.get(AppSetting).all()
-    _setting = _settings[0] if _settings else None
-    budget_amount = (
-        float(_setting.budget_amount)
-        if _setting is not None and _setting.budget_amount is not None and _setting.budget_amount > 0
-        else None
-    )
-    spent = 0.0
-    if budget_amount is not None:
-        p_start, p_end = period_bounds(today, _setting.budget_period or "weekly")
-        spent = period_spent(p_start, p_end, repository)
-    projected_over = (
-        budget_amount is not None and (spent + cost_per_week) > budget_amount
-    )
-    overshoot = round(max(0.0, (spent + cost_per_week) - budget_amount), 2) if budget_amount is not None else 0.0
+    budget = household_budget(repository)
+    budget_amount = budget.amount if budget is not None else None
+    remaining = budget_remaining(repository, today)
+    projected_over = remaining is not None and cost_per_week > remaining
+    overshoot = round(max(0.0, cost_per_week - remaining), 2) if remaining is not None else 0.0
 
     candidates: List[RecipeSwapCandidate] = []
     if projected_over:
@@ -481,7 +443,6 @@ class UndoSwapRequest(BaseModel):
 
 
 def _load_plan_with_entries(repository: SqlAlchemyRepository, meal_plan_id: UUID):
-    from dora_api.domain.entities.recipe import Recipe as _Recipe
     return (
         repository.get(MealPlan)
         .include(MealPlan.Fields.ENTRIES)
@@ -539,7 +500,7 @@ def compute_lighter_alternatives(
     if nutrition_mode(get_or_create_app_setting(repository)) == NUTRITION_MODE_OFF:
         return empty
 
-    recipes = _all_recipe_dtos(repository)
+    recipes = load_all_recipe_dtos(repository)
     recipes_by_id = {r.recipe_id: r for r in recipes}
     from_recipe = recipes_by_id.get(entry.recipe_id)
     if from_recipe is None:
@@ -588,7 +549,7 @@ def get_lighter_alternatives(meal_plan_id: UUID):
 @has_request_body(ApplySwapRequest)
 def apply_swap(meal_plan_id: UUID):
     repo = SqlAlchemyRepository()
-    user_id = _current_user_id()
+    user_id = current_user_id()
     if user_id is None:
         return unauthorized()
     request: ApplySwapRequest = get_request_body()
@@ -597,7 +558,7 @@ def apply_swap(meal_plan_id: UUID):
     if request.reason not in SWAP_REASONS:
         return bad_request("Unknown swap reason.")
 
-    if request.reason == SWAP_REASON_BUDGET and not _money_features_on(repo):
+    if request.reason == SWAP_REASON_BUDGET and not money_features_enabled(repo):
         return business_rule_violation("Money features are off; swaps are unavailable.")
 
     plan = _load_plan_with_entries(repo, meal_plan_id)
@@ -651,7 +612,7 @@ def apply_swap(meal_plan_id: UUID):
 @has_request_body(UndoSwapRequest)
 def undo_swap(meal_plan_id: UUID):
     repo = SqlAlchemyRepository()
-    user_id = _current_user_id()
+    user_id = current_user_id()
     if user_id is None:
         return unauthorized()
 

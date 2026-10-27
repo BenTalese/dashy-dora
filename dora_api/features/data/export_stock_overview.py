@@ -23,6 +23,8 @@ from dora_api.infrastructure.api_response import bad_request
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 
+_LOGGER = logging.getLogger(__name__)
+
 
 def _location_name(item: StockItem) -> str:
     return item.stock_location.name if item.stock_location else "(no location)"
@@ -166,7 +168,7 @@ def export_stock_overview():
     body = _build_csv(items)
     today = datetime.now(timezone.utc).date().isoformat()
     filename = f"stock-overview-{today}.csv"
-    logging.getLogger(__name__).info(
+    _LOGGER.info(
         "Exported stock overview as %s (%d items)", fmt, len(items),
     )
     response = Response(body, mimetype="text/csv; charset=utf-8")

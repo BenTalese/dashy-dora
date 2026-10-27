@@ -370,7 +370,7 @@ def normalise_email(value: str | None) -> str | None:
     return value.strip().lower() if value else None
 
 
-_Logger = logging.getLogger(__name__)
+_LOGGER = logging.getLogger(__name__)
 
 
 def try_send(send_fn, *args, **kwargs) -> None:
@@ -381,7 +381,7 @@ def try_send(send_fn, *args, **kwargs) -> None:
     try:
         send_fn(*args, **kwargs)
     except Exception as exc:  # noqa: BLE001
-        _Logger.warning("auth email send failed: %s", exc)
+        _LOGGER.warning("auth email send failed: %s", exc)
 
 
 # Re-export so callers don't have to know the underlying entity layout.

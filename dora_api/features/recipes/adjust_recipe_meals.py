@@ -13,6 +13,8 @@ from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 
+_LOGGER = logging.getLogger(__name__)
+
 
 class AdjustRecipeMealsRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -47,13 +49,12 @@ class AdjustRecipeMealsHandler:
 @RECIPE_ROUTER.route("<uuid:recipe_id>/adjust-meals", methods=["POST"])
 @has_request_body(AdjustRecipeMealsRequest)
 def adjust_recipe_meals(recipe_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _Handler = AdjustRecipeMealsHandler(SqlAlchemyRepository())
     _Request: AdjustRecipeMealsRequest = get_request_body()
     _Response = _Handler.handle(_Request, recipe_id)
     if _Response.recipe_not_found:
         return not_found(Recipe.__name__, recipe_id)
-    _Logger.info(
+    _LOGGER.info(
         f"Adjusted recipe {recipe_id} meals by {_Request.delta} "
         f"(pool now {_Response.available_meals})"
     )

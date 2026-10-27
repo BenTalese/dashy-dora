@@ -40,6 +40,8 @@ from dora_api.infrastructure.api_response import ok
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 
+_LOGGER = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True, slots=True)
 class UsageStatsDto:
@@ -89,9 +91,8 @@ class GetUsageStatsHandler:
 
 @DASHBOARD_ROUTER.route("/usage-stats", methods=["GET"])
 def get_usage_stats():
-    _Logger = logging.getLogger(__name__)
     _Result = GetUsageStatsHandler(SqlAlchemyRepository()).handle()
-    _Logger.debug(
+    _LOGGER.debug(
         "Usage stats: %d items, %d recipes, %d meals planned",
         _Result.stock_items, _Result.recipes, _Result.meals_planned,
     )

@@ -12,9 +12,11 @@ from dora_api.domain.entities.app_setting import (
 )
 from dora_api.features.app_settings.access import get_or_create_app_setting
 from dora_api.features.routers import APP_SETTINGS_ROUTER
-from dora_api.features.users.update_user_as_admin import _require_admin
+from dora_api.features.auth.admin_gate import require_admin
 from dora_api.infrastructure.api_response import ok
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,7 +97,7 @@ def _to_dto(setting) -> AppSettingsDto:  # noqa: ANN001 — duck-typed AppSettin
     return AppSettingsDto(
         scanning_enabled=bool(setting.scanning_enabled),
         nutrition_rating_scheme=str(
-            getattr(setting, "nutrition_rating_scheme", RATING_SCHEME_NONE)
+            setting.nutrition_rating_scheme
             or RATING_SCHEME_NONE),
         money_enabled=bool(setting.money_enabled),
         nutrition_mode=setting.nutrition_mode or NUTRITION_MODE_OFF,
@@ -104,53 +106,52 @@ def _to_dto(setting) -> AppSettingsDto:  # noqa: ANN001 — duck-typed AppSettin
         timezone=setting.timezone or "UTC",
         expiring_soon_window_days=int(setting.expiring_soon_window_days),
         product_search_url=setting.product_search_url or "",
-        measurement_system=getattr(setting, "measurement_system", None) or "metric",
-        currency=getattr(setting, "currency", None) or "AUD",
-        locale=getattr(setting, "locale", None) or "en-AU",
-        backup_retention_count=int(getattr(setting, "backup_retention_count", 5) or 5),
-        backup_storage_path=getattr(setting, "backup_storage_path", None) or "",
-        image_quality=int(getattr(setting, "image_quality", 85) or 85),
-        image_max_dimension=int(getattr(setting, "image_max_dimension", 1920) or 1920),
+        measurement_system=setting.measurement_system or "metric",
+        currency=setting.currency or "AUD",
+        locale=setting.locale or "en-AU",
+        backup_retention_count=int(setting.backup_retention_count or 5),
+        backup_storage_path=setting.backup_storage_path or "",
+        image_quality=int(setting.image_quality or 85),
+        image_max_dimension=int(setting.image_max_dimension or 1920),
         stocktake_default_cadence_band=(
-            getattr(setting, "stocktake_default_cadence_band", None) or "fortnightly"
+            setting.stocktake_default_cadence_band or "fortnightly"
         ),
         stocktake_auto_tuning_enabled=bool(
-            getattr(setting, "stocktake_auto_tuning_enabled", True)
+            setting.stocktake_auto_tuning_enabled
         ),
-        stocktake_enabled=bool(getattr(setting, "stocktake_enabled", True)),
+        stocktake_enabled=bool(setting.stocktake_enabled),
         stocktake_new_items_opt_in=bool(
-            getattr(setting, "stocktake_new_items_opt_in", True)
+            setting.stocktake_new_items_opt_in
         ),
-        auto_add_mode=(getattr(setting, "auto_add_mode", None) or "essential_only"),
+        auto_add_mode=(setting.auto_add_mode or "essential_only"),
         household_headcount=(
             int(setting.household_headcount)
-            if getattr(setting, "household_headcount", None) is not None else None
+            if setting.household_headcount is not None else None
         ),
-        batch_features_enabled=bool(getattr(setting, "batch_features_enabled", False)),
-        auto_drain_past_meals=bool(getattr(setting, "auto_drain_past_meals", True)),
-        smtp_host=getattr(setting, "smtp_host", None) or "",
-        smtp_port=int(getattr(setting, "smtp_port", 587) or 587),
-        smtp_username=getattr(setting, "smtp_username", None) or "",
-        smtp_password_configured=bool((getattr(setting, "smtp_password_encrypted", None) or "").strip()),
-        smtp_from=getattr(setting, "smtp_from", None) or "",
-        smtp_use_tls=bool(getattr(setting, "smtp_use_tls", True)),
-        vapid_public_key=getattr(setting, "vapid_public_key", None) or "",
-        vapid_private_key_configured=bool((getattr(setting, "vapid_private_key_encrypted", None) or "").strip()),
-        vapid_subject=getattr(setting, "vapid_subject", None) or "mailto:admin@dora.local",
-        piper_bin=getattr(setting, "piper_bin", None) or "",
-        piper_bundled_voice_dir=getattr(setting, "piper_bundled_voice_dir", None) or "",
-        email_enabled=bool(getattr(setting, "email_enabled", False)),
-        audit_retention_days=int(getattr(setting, "audit_retention_days", 365) or 365),
-        public_url=getattr(setting, "public_url", None) or "",
+        batch_features_enabled=bool(setting.batch_features_enabled),
+        auto_drain_past_meals=bool(setting.auto_drain_past_meals),
+        smtp_host=setting.smtp_host or "",
+        smtp_port=int(setting.smtp_port or 587),
+        smtp_username=setting.smtp_username or "",
+        smtp_password_configured=bool((setting.smtp_password_encrypted or "").strip()),
+        smtp_from=setting.smtp_from or "",
+        smtp_use_tls=bool(setting.smtp_use_tls),
+        vapid_public_key=setting.vapid_public_key or "",
+        vapid_private_key_configured=bool((setting.vapid_private_key_encrypted or "").strip()),
+        vapid_subject=setting.vapid_subject or "mailto:admin@dora.local",
+        piper_bin=setting.piper_bin or "",
+        piper_bundled_voice_dir=setting.piper_bundled_voice_dir or "",
+        email_enabled=bool(setting.email_enabled),
+        audit_retention_days=int(setting.audit_retention_days or 365),
+        public_url=setting.public_url or "",
     )
 
 
 @APP_SETTINGS_ROUTER.route("", methods=["GET"])
 def get_app_settings():
-    _Logger = logging.getLogger(__name__)
-    _, err = _require_admin()
+    _, err = require_admin()
     if err is not None:
         return err
     setting = get_or_create_app_setting(SqlAlchemyRepository())
-    _Logger.debug("Served app settings (scanning_enabled=%s)", setting.scanning_enabled)
+    _LOGGER.debug("Served app settings (scanning_enabled=%s)", setting.scanning_enabled)
     return ok(_to_dto(setting))

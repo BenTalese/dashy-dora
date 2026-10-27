@@ -37,7 +37,7 @@ function isMeasurementSystem(value: unknown): value is MeasurementSystem {
     return value === 'metric' || value === 'imperial' || value === 'us';
 }
 
-function load(): Promise<void> {
+function load(fresh = false): Promise<void> {
     if (!inflight) {
         // Imported lazily rather than at module scope. The health service pulls
         // in axios and Quasar, which touch `window` on import — and this
@@ -46,7 +46,10 @@ function load(): Promise<void> {
         // also means a page that never actually asks for the system never
         // loads the client at all.
         inflight = import('src/services/api/healthApiService')
-            .then((mod) => new mod.default().getInfoAsync())
+            .then((mod) => {
+                if (fresh) mod.invalidateHealthInfo();
+                return new mod.default().getInfoAsync();
+            })
             .then((info) => {
                 const value = info.locale_policy?.measurement_system;
                 if (isMeasurementSystem(value)) system.value = value;
@@ -88,7 +91,7 @@ export function useMeasurementSystem() {
         /** Force a re-read (used after Settings saves a new value). */
         reload: (): Promise<void> => {
             inflight = null;
-            return load();
+            return load(true);
         },
     };
 }

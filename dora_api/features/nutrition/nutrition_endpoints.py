@@ -31,7 +31,7 @@ from dora_api.features.nutrition.suggestions import (
 from dora_api.domain.entities.stock_item import StockItem
 from dora_api.persistence.field import EntityField
 from dora_api.features.routers import NUTRITION_ROUTER
-from dora_api.features.users.update_user_as_admin import _require_admin
+from dora_api.features.auth.admin_gate import require_admin
 from dora_api.infrastructure.api_response import bad_request, ok
 from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.utils import get_request_body
@@ -41,7 +41,7 @@ from dora_api.domain.entities.nutrition_food import (
 )
 from dora_api.domain.entities.app_setting import NUTRITION_MODE_COMPLEX
 
-_LOG = logging.getLogger(__name__)
+_LOGGER = logging.getLogger(__name__)
 
 
 class StartDatasetImportRequest(BaseModel):
@@ -270,14 +270,14 @@ def accept_all_suggestions():
         _Linked += 1
     _Repository.save_changes()
 
-    _LOG.info("Accepted %d confident nutrition suggestions in bulk.", _Linked)
+    _LOGGER.info("Accepted %d confident nutrition suggestions in bulk.", _Linked)
     return ok({"linked_count": _Linked})
 
 
 @NUTRITION_ROUTER.route("/datasets/import", methods=["POST"])
 @has_request_body(StartDatasetImportRequest)
 def start_dataset_import():
-    _, _Error = _require_admin()
+    _, _Error = require_admin()
     if _Error is not None:
         return _Error
 
@@ -287,6 +287,6 @@ def start_dataset_import():
         return bad_request(f"Unknown nutrition dataset '{_Source}'.")
     _Url = (_Body.url or "").strip() or None
 
-    _LOG.info("Starting nutrition dataset import: %s", dataset_label(_Source))
+    _LOGGER.info("Starting nutrition dataset import: %s", dataset_label(_Source))
     start_import(_Source, _Url)
     return ok(_source_payload())

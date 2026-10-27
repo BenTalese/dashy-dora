@@ -1,4 +1,5 @@
 import { Dark, setCssVar } from 'quasar';
+import { readonly, ref, type Ref } from 'vue';
 import type {
     FontFamilyPreference,
     FontSizePreference,
@@ -261,9 +262,26 @@ export const THEME_FAMILIES: readonly ThemeFamily[] = [
     },
 ];
 
+/** The theme keys an older build saved, mapped to the key that replaced them.
+ *  The server still accepts them (`user.py`), so both the applier and the
+ *  picker read a stored key through this one table (R-003). */
+const LEGACY_THEME_KEYS: Record<string, string> = {
+    light: 'pesto',
+    avocado: 'pesto',
+    'pesto-noir': 'pesto-dark',
+    'midnight-snack': 'lemon-tart-dark',
+    dark: 'pesto-dark',
+};
+
+function currentThemeKey(themeKey: string): string {
+    return LEGACY_THEME_KEYS[themeKey] ?? themeKey;
+}
+
 /** Reverse index: given a theme key (e.g. 'pesto-dark' / 'system-cherry-cola')
- *  return its family + which mode the picker should show as active. */
-export function familyAndModeOf(themeKey: string): { family: ThemeFamily; mode: 'system' | 'light' | 'dark' } | null {
+ *  return its family + which mode the picker should show as active. A legacy
+ *  key decodes as the theme it now renders. */
+export function familyAndModeOf(storedKey: string): { family: ThemeFamily; mode: 'system' | 'light' | 'dark' } | null {
+    const themeKey = currentThemeKey(storedKey);
     for (const fam of THEME_FAMILIES) {
         if (fam.system === themeKey) return { family: fam, mode: 'system' };
         if (fam.light === themeKey) return { family: fam, mode: 'light' };
@@ -295,16 +313,28 @@ export function osPrefersDark(): boolean {
     return window.matchMedia('(prefers-color-scheme: dark)').matches;
 }
 
+const osDark = ref(false);
+let osDarkWatched = false;
+
+/** `osPrefersDark` as a ref that follows the OS setting, for a picker that
+ *  previews "system" themes. One app-lifetime listener however many pages
+ *  read it, so nothing has to remove it on unmount. */
+export function osPrefersDarkRef(): Readonly<Ref<boolean>> {
+    if (!osDarkWatched && typeof window !== 'undefined' && window.matchMedia) {
+        osDarkWatched = true;
+        const mql = window.matchMedia('(prefers-color-scheme: dark)');
+        osDark.value = mql.matches;
+        mql.addEventListener('change', (e) => { osDark.value = e.matches; });
+    }
+    return readonly(osDark);
+}
+
 /** Map any persisted value (including legacy keys) to a current concrete
  *  theme key in `THEMES`. `system-<family>` and the legacy bare `system`
  *  flip between the family's light + dark variant based on the OS's
  *  `prefers-color-scheme`. */
-function resolveThemeKey(pref: ThemePreference): string {
-    // Legacy migrations
-    if (pref === 'light' || pref === 'avocado') return 'pesto';
-    if (pref === 'pesto-noir') return 'pesto-dark';
-    if (pref === 'midnight-snack') return 'lemon-tart-dark';
-    if (pref === 'dark') return 'pesto-dark';
+function resolveThemeKey(stored: ThemePreference): string {
+    const pref = currentThemeKey(stored) as ThemePreference;
     if (pref === 'system') return osPrefersDark() ? 'pesto-dark' : 'pesto';
     // Round-19: per-family system keys. Lookup the family + flip on OS pref.
     if (typeof pref === 'string' && pref.startsWith('system-')) {

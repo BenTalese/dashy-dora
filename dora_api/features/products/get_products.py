@@ -3,20 +3,21 @@ from dataclasses import dataclass
 from uuid import UUID
 
 from flask import request
-from sqlalchemy import select
 
 from dora_api.domain.entities.product import Product
 from dora_api.domain.product_offer import discount_percent
-from dora_api.features.products.product_links import linked_stock_items
+from dora_api.features.products.product_links import (has_image_by_product,
+                                                      linked_stock_items)
 from dora_api.features.routers import PRODUCT_ROUTER
 from dora_api.infrastructure.api_response import bad_request, ok, paginated
 from dora_api.infrastructure.query_options import (InvalidQueryParameter,
                                                    parse_query_options)
-from dora_api.app import db
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.page import Page
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
+
+_LOGGER = logging.getLogger(__name__)
 
 
 # Non-frozen so we can stamp `linked_stock_item_*` on after the page comes
@@ -62,7 +63,7 @@ class ProductDto:
             brand = product.brand,
             has_image = False,
             is_active = product.is_active,
-            is_custom = bool(getattr(product, "is_custom", False)),
+            is_custom = product.is_custom,
             is_available = product.is_available,
             store_id = product.store.id,
             store_name = product.store.name,
@@ -90,15 +91,7 @@ def stamp_has_image(repository, dtos: list[ProductDto]) -> None:
     pass that never touches the deferred image blob. Mirrors the
     stock-item / recipe pattern.
     """
-    if not dtos:
-        return
-    product_ids = [p.product_id for p in dtos]
-    product_table = db.metadata.tables["Product"]
-    rows = repository.session.execute(
-        select(product_table.c.id, product_table.c.image.isnot(None))
-        .where(product_table.c.id.in_(product_ids))
-    ).all()
-    flag_by_id: dict[UUID, bool] = {row[0]: bool(row[1]) for row in rows}
+    flag_by_id = has_image_by_product(repository, [p.product_id for p in dtos])
     for dto in dtos:
         dto.has_image = flag_by_id.get(dto.product_id, False)
 
@@ -106,7 +99,7 @@ def stamp_has_image(repository, dtos: list[ProductDto]) -> None:
 def stamp_linked_stock_items(repository, dtos: list[ProductDto]) -> None:
     """Stamp `linked_stock_item_*` on each DTO in place via the m2m join.
 
-    Shared by the products list and the best-deals query so the enrichment
+    Shared by the products list and the deals-email pool so the enrichment
     lives in one place; the join itself is `product_links.linked_stock_items`
     (also read by the price_drop alert).
     """
@@ -137,12 +130,8 @@ class GetProductsHandler:
 
 
 class GetBestDealsHandler:
-    """Top-N active products currently on special, ranked by discount %.
-
-    State-ownership Type B (§8.2): the dashboard used to download *every*
-    product and sort/slice in the browser. The server now owns the rank + slice
-    and returns only the top N, using the one `discount_percent` rule (R-003).
-    """
+    """Top-N active products currently on special, ranked by discount %, with
+    the one `discount_percent` rule (R-003). The weekly deals email's pool."""
     def __init__(self, repository: Repository) -> None:
         self.repository = repository
 
@@ -173,30 +162,10 @@ class GetBestDealsHandler:
 
 @PRODUCT_ROUTER.route("")
 def get_products():
-    _Logger = logging.getLogger(__name__)
     try:
         _Options = parse_query_options(request.args)
         _Page = GetProductsHandler(SqlAlchemyRepository()).handle(_Options)
     except InvalidQueryParameter as exc:
         return bad_request(str(exc))
-    _Logger.info(f"Retrieved {len(_Page.items)} of {_Page.total} products.")
+    _LOGGER.info(f"Retrieved {len(_Page.items)} of {_Page.total} products.")
     return paginated(_Page.items, _Page.total, _Page.page, _Page.limit)
-
-
-@PRODUCT_ROUTER.route("/best-deals")
-def get_best_deals():
-    """Top-N on-special products by discount %. `?limit=N` (default 3, max 20)."""
-    _Logger = logging.getLogger(__name__)
-    _RawLimit = request.args.get("limit")
-    _Limit = 3
-    if _RawLimit is not None and _RawLimit.strip():
-        try:
-            _Limit = int(_RawLimit)
-        except ValueError:
-            return bad_request("`limit` must be an integer.")
-    if _Limit < 1:
-        return bad_request("`limit` must be at least 1.")
-    _Limit = min(_Limit, 20)
-    _Deals = GetBestDealsHandler(SqlAlchemyRepository()).handle(_Limit)
-    _Logger.info(f"Retrieved {len(_Deals)} best deals (limit={_Limit}).")
-    return ok(_Deals)

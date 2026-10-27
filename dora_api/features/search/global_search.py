@@ -33,6 +33,8 @@ from dora_api.infrastructure.api_response import ok
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 
+_LOGGER = logging.getLogger(__name__)
+
 
 ALL_TYPES = (
     "stock_item",
@@ -258,7 +260,6 @@ class GlobalSearchHandler:
 
 @SEARCH_ROUTER.route("", methods=["GET"])
 def global_search():
-    _Logger = logging.getLogger(__name__)
     _Query = request.args.get("q", "").strip()
     _TypesRaw = request.args.get("types", "")
     _Types = [t for t in _TypesRaw.split(",") if t in ALL_TYPES] if _TypesRaw else []
@@ -269,5 +270,5 @@ def global_search():
     _Limit = max(1, min(_Limit, MAX_LIMIT))
 
     _Response = GlobalSearchHandler(SqlAlchemyRepository()).handle(_Query, _Types, _Limit)
-    _Logger.info("Search '%s' (types=%s, limit=%d): %d results", _Query, _Types or "all", _Limit, len(_Response.results))
+    _LOGGER.info("Search '%s' (types=%s, limit=%d): %d results", _Query, _Types or "all", _Limit, len(_Response.results))
     return ok(_Response)

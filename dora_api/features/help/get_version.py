@@ -19,6 +19,8 @@ from dora_api.features.help.version_info import CURRENT_VERSION, GITHUB_REPO
 from dora_api.features.routers import HELP_ROUTER
 from dora_api.infrastructure.api_response import ok
 
+_LOGGER = logging.getLogger(__name__)
+
 
 # Cache the latest-release lookup so every "is there an update?" check
 # doesn't hit GitHub. 30 minutes is fine — Dora is not a security tool.
@@ -84,10 +86,9 @@ def _is_newer(latest: str, current: str) -> bool:
 
 @HELP_ROUTER.route("/version", methods=["GET"])
 def get_version():
-    _Logger = logging.getLogger(__name__)
     latest, release_url, error = _fetch_latest_release()
     update_available = bool(latest) and _is_newer(latest, CURRENT_VERSION)
-    _Logger.debug(
+    _LOGGER.debug(
         "version=%s latest=%s update=%s err=%s",
         CURRENT_VERSION, latest, update_available, error,
     )

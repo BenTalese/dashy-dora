@@ -69,7 +69,8 @@ user rather than hidden:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Sequence, Tuple
+from typing import Optional, Tuple
+from dora_api.domain.rating_tables import points_for
 
 
 # ── Negative (N) component ──────────────────────────────────────────────
@@ -219,23 +220,6 @@ class NutriScore:
     protein_counted: bool
 
 
-def _points_for(value: Optional[float], table: Sequence[Tuple[int, float]]) -> int:
-    """The highest row in *table* whose threshold *value* strictly exceeds.
-
-    `None` → 0. Every table's row 0 is "≤ the first threshold", so a value at or
-    below it scores nothing and everything above steps up the table.
-    """
-    if value is None:
-        return 0
-    points = 0
-    for row_points, threshold in table:
-        if value > threshold:
-            points = row_points
-        else:
-            break
-    return points
-
-
 def sodium_mg_to_salt_g(sodium_mg: Optional[float]) -> Optional[float]:
     """The one place the conversion happens (R-003). See `SALT_G_PER_SODIUM_G`."""
     if sodium_mg is None:
@@ -249,15 +233,15 @@ def rate(profile: NutrientProfile) -> NutriScore:
     The published method in order: the four negative components, the three
     positive ones, then the branch on N that decides whether protein counts.
     """
-    energy = _points_for(profile.energy_kj, _N_ENERGY_KJ)
-    saturated_fat = _points_for(profile.saturated_fat_g, _N_SATURATED_FAT_G)
-    total_sugars = _points_for(profile.total_sugars_g, _N_SUGARS_G)
-    salt = _points_for(sodium_mg_to_salt_g(profile.sodium_mg), _N_SALT_G)
+    energy = points_for(profile.energy_kj, _N_ENERGY_KJ)
+    saturated_fat = points_for(profile.saturated_fat_g, _N_SATURATED_FAT_G)
+    total_sugars = points_for(profile.total_sugars_g, _N_SUGARS_G)
+    salt = points_for(sodium_mg_to_salt_g(profile.sodium_mg), _N_SALT_G)
     negative = energy + saturated_fat + total_sugars + salt
 
-    protein = _points_for(profile.protein_g, _P_PROTEIN_G)
-    fibre = _points_for(profile.fibre_g, _P_FIBRE_G)
-    fvl = _points_for(profile.fvl_percent, _P_FVL_PERCENT)
+    protein = points_for(profile.protein_g, _P_PROTEIN_G)
+    fibre = points_for(profile.fibre_g, _P_FIBRE_G)
+    fvl = points_for(profile.fvl_percent, _P_FVL_PERCENT)
 
     # Below the gate the whole positive component counts; at or above it,
     # protein drops out and only fibre and fvl are subtracted.

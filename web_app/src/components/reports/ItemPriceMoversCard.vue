@@ -142,6 +142,7 @@
     import { createFrameResizeObserver, type FrameResizeObserver } from 'src/composables/frameResizeObserver';
     import { computed, onBeforeUnmount, ref, watch } from 'vue';
     import { ICONS } from 'src/style/icons';
+    import { rangeWindowWords } from 'src/helpers/reportRangeWords';
     import AppSkeleton from 'src/components/AppSkeleton.vue';
     import AppSpinner from 'src/components/AppSpinner.vue';
     import CardEmpty from 'src/components/CardEmpty.vue';
@@ -169,14 +170,6 @@
 
     const stockItemApi = new StockItemApiService();
 
-    const WINDOW_WORDS: Record<ReportRange, string> = {
-        '30d': 'in the last 30 days',
-        '90d': 'in the last 90 days',
-        '1y': 'in the last year',
-        '2y': 'in the last 2 years',
-        '5y': 'in the last 5 years',
-        'all': 'since you started logging prices',
-    };
 
     const rows = computed(() => props.movers?.rows ?? []);
     const hasRows = computed(() => rows.value.length > 0);
@@ -192,7 +185,7 @@
     const headline = computed(() => {
         const moved = props.movers?.items_with_movement ?? 0;
         return `${moved} of your items changed price `
-            + `${WINDOW_WORDS[props.range]}.`;
+            + `${rangeWindowWords(props.range, 'since you started logging prices')}.`;
     });
 
     const emptyLine = computed(() => {

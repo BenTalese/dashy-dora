@@ -50,6 +50,8 @@ export interface BuyVerdictDataUsed {
 export interface BuyVerdictWaitHint {
     until: string;      // ISO date (yyyy-mm-dd)
     reason: string;
+    /** Days from the household's today to `until` (server-counted). */
+    days_until: number;
 }
 
 export interface BuyVerdict {

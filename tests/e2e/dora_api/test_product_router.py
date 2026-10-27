@@ -265,7 +265,7 @@ def test__create_product__EmptyStringOnOptionalField__IsBadRequest(api):
     assert 'brand' in _Response.json()['errors']
 
 
-def test__create_product__MerchantAlreadyExists__MerchantIsReused(api):
+def test__create_product__StoreAlreadyExists__StoreIsReused(api):
     _FirstProductRequest = CreateProductRequest(
         is_active=True,
         is_available=True,
@@ -827,20 +827,33 @@ def test__update_product__UpdatingIsAvailableOnly__OnlyIsAvailableChanges(api):
     assert _ProductAfterPatch['price_was'] == _ProductToUpdate['price_was']
 
 
-# def test__update_product__UpdatingPrices__PreviousOfferMovedToHistoric(api):
-#     _ProductToUpdate = requests.get(f'{base_route}?filter=merchant_stockcode:eq:50332BA').json()['items'][0]
-#     _OriginalPriceNow = _ProductToUpdate['price_now']
-#     _OriginalPriceWas = _ProductToUpdate['price_was']
+def _historic_offers(product_id: str) -> list:
+    from dora_api.app import app
+    from dora_api.domain.entities.product_historic_offer import ProductHistoricOffer
+    from dora_api.persistence.field import EntityField
+    from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 
-#     _ProductRequest = UpdateProductRequest(price_now=9.99, price_was=14.99).model_dump(exclude_unset=True)
-#     _PatchResponse = requests.patch(f"{base_route}/{_ProductToUpdate['product_id']}", json=_ProductRequest)
-#     _ProductAfterPatch = requests.get(f'{base_route}?filter=merchant_stockcode:eq:50332BA').json()['items'][0]
+    with app.app_context():
+        return SqlAlchemyRepository().get(ProductHistoricOffer).all(
+            EntityField(ProductHistoricOffer, "_product_id").eq(uuid.UUID(product_id))
+        )
 
-#     assert _PatchResponse.status_code == 204
-#     assert _ProductAfterPatch['price_now'] == 9.99
-#     assert _ProductAfterPatch['price_was'] == 14.99
-#     assert _ProductAfterPatch['price_now'] != _OriginalPriceNow
-#     assert _ProductAfterPatch['price_was'] != _OriginalPriceWas
+
+def test__update_product__UpdatingPrices__RecordsOneManualObservation(api):
+    """Finalisation 10-R5: the edit path appends through the shared offer rule
+    (`source == "manual"`), and restating the current price records nothing."""
+    _Product = requests.get(f'{base_route}?filter=merchant_stockcode:eq:50332BA').json()['items'][0]
+    _Before = len(_historic_offers(_Product['product_id']))
+
+    _Patch = requests.patch(f"{base_route}/{_Product['product_id']}", json={"price_now": 9.99, "price_was": 14.99})
+    assert _Patch.status_code == 204
+    _After = _historic_offers(_Product['product_id'])
+    assert len(_After) == _Before + 1
+    assert [o for o in _After if o.price_now == 9.99][0].source == "manual"
+
+    _Again = requests.patch(f"{base_route}/{_Product['product_id']}", json={"price_now": 9.99, "price_was": 14.99})
+    assert _Again.status_code == 204
+    assert len(_historic_offers(_Product['product_id'])) == _Before + 1
 
 
 def test__update_product__PriceNowAtZeroBoundary__IsBadRequest(api):

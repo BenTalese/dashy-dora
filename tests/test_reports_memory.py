@@ -20,30 +20,30 @@ from uuid import uuid4
 import pytest
 
 
-# ── Range parsing (_parse_range, _range_days) ────────────────────────
+# ── Range parsing (parse_range, range_days) ────────────────────────
 
 @pytest.mark.unit
 class TestRangeParsing:
     def test__2y_maps_to_730_days(self):
-        from dora_api.features.reports.reports import _range_days
-        assert _range_days("2y") == 730
+        from dora_api.features.reports._common import range_days
+        assert range_days("2y") == 730
 
     def test__5y_maps_to_1825_days(self):
-        from dora_api.features.reports.reports import _range_days
-        assert _range_days("5y") == 1825
+        from dora_api.features.reports._common import range_days
+        assert range_days("5y") == 1825
 
     def test__all_returns_none(self):
-        from dora_api.features.reports.reports import _range_days
-        assert _range_days("all") is None
+        from dora_api.features.reports._common import range_days
+        assert range_days("all") is None
 
     def test__unknown_token_falls_back_to_30(self):
-        from dora_api.features.reports.reports import _range_days
-        assert _range_days("bogus") == 30
+        from dora_api.features.reports._common import range_days
+        assert range_days("bogus") == 30
 
     def test__missing_token_defaults_to_30(self):
-        from dora_api.features.reports.reports import _range_days
-        assert _range_days(None) == 30
-        assert _range_days("") == 30
+        from dora_api.features.reports._common import range_days
+        assert range_days(None) == 30
+        assert range_days("") == 30
 
     def test__parse_range_2y_is_household_midnight_730_days_ago(self):
         # R-021 (finalisation 12-R3): the lower bound is the household's
@@ -52,18 +52,19 @@ class TestRangeParsing:
         # the day before.
         from datetime import date
         from zoneinfo import ZoneInfo
-        from dora_api.features.reports import reports
+        from dora_api.features import _ranges
+        from dora_api.features.reports import _common
 
         tz = ZoneInfo("Australia/Brisbane")
-        with patch.object(reports, "household_today", return_value=date(2026, 3, 1)), \
-             patch.object(reports, "household_timezone", return_value=tz):
-            since = reports._parse_range("2y", repository=object())
+        with patch.object(_ranges, "household_today", return_value=date(2026, 3, 1)), \
+             patch.object(_ranges, "household_timezone", return_value=tz):
+            since = _common.parse_range("2y", repository=object())
 
         assert since == datetime(2026, 3, 1, tzinfo=tz).astimezone(timezone.utc) - timedelta(days=730)
         assert since.tzinfo is timezone.utc
 
 
-# ── Bucket sizing (_bucket_size_days) ────────────────────────────────
+# ── Bucket sizing (bucket_size_days) ────────────────────────────────
 
 @pytest.mark.unit
 class TestBucketSize:
@@ -71,33 +72,33 @@ class TestBucketSize:
         return datetime.now(timezone.utc)
 
     def test__30d_is_daily(self):
-        from dora_api.features.reports.reports import _bucket_size_days
+        from dora_api.features.reports._common import bucket_size_days
         since = self._now() - timedelta(days=30)
-        assert _bucket_size_days(since) == 1
+        assert bucket_size_days(since) == 1
 
     def test__90d_is_daily(self):
-        from dora_api.features.reports.reports import _bucket_size_days
+        from dora_api.features.reports._common import bucket_size_days
         since = self._now() - timedelta(days=90)
-        assert _bucket_size_days(since) == 1
+        assert bucket_size_days(since) == 1
 
     def test__1y_is_weekly(self):
-        from dora_api.features.reports.reports import _bucket_size_days
+        from dora_api.features.reports._common import bucket_size_days
         since = self._now() - timedelta(days=365)
-        assert _bucket_size_days(since) == 7
+        assert bucket_size_days(since) == 7
 
     def test__2y_is_monthlyish(self):
-        from dora_api.features.reports.reports import _bucket_size_days
+        from dora_api.features.reports._common import bucket_size_days
         since = self._now() - timedelta(days=730)
-        assert _bucket_size_days(since) == 30
+        assert bucket_size_days(since) == 30
 
     def test__5y_is_monthlyish(self):
-        from dora_api.features.reports.reports import _bucket_size_days
+        from dora_api.features.reports._common import bucket_size_days
         since = self._now() - timedelta(days=1825)
-        assert _bucket_size_days(since) == 30
+        assert bucket_size_days(since) == 30
 
     def test__all_defaults_to_monthlyish(self):
-        from dora_api.features.reports.reports import _bucket_size_days
-        assert _bucket_size_days(None) == 30
+        from dora_api.features.reports._common import bucket_size_days
+        assert bucket_size_days(None) == 30
 
 
 # ── YoY delta math ───────────────────────────────────────────────────
@@ -109,7 +110,7 @@ class TestBucketSize:
 class TestSpendYoYMath:
     def _run(self, current: dict, previous: dict):
         """Stub SpendYoYHandler with pre-computed per-category totals."""
-        from dora_api.features.reports.reports import SpendYoYHandler
+        from dora_api.features.reports.spend import SpendYoYHandler
         handler = SpendYoYHandler(SimpleNamespace())  # repo unused — compute pinned below
         current_total = sum(current.values())
         previous_total = sum(previous.values())
@@ -233,7 +234,7 @@ def _cook_row(recipe_id, name, meals=1, occurred_at=None):
 @pytest.mark.unit
 class TestMealsCookedGrouping:
     def _run(self, rows, total_recipes: int = 0) -> dict:
-        from dora_api.features.reports.reports import MealsCookedHandler
+        from dora_api.features.reports.memory import MealsCookedHandler
 
         class _Res:
             def __init__(self, rows, scalar=None):

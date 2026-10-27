@@ -66,44 +66,29 @@ export type CardId =
     // Kitchen-health score.
     | 'dora_score';
 
-// ── Cards deleted in the 2026-09-04 owner batch ──────────────────────────
-//
-// Recorded here rather than silently dropped, because R-057 treats a replaced
-// surface's contracts as an inventory to check, not a casualty list. A stored
-// layout naming any of these is filtered out by the page's `parseLayout`.
-//
-//   `attention`          Needs your attention   — same content as the alerts
-//                        bell, one nav row above it.
-//   `suggestions`        Dora suggests          — same content as the Dora chat,
-//                        which is on the same screen.
-//                        Both replaced by `use_it_up` + `before_you_shop`.
-//   `draft_shop`         Draft this week's shop — a single button whose whole
-//                        job the shopping-list page does better, with the user
-//                        able to see what the list is being built from.
-//   `spend_trend`        Spend by store         — a report, and Reports has it.
-//                        The dashboard and the reports page shouldn't overlap.
-//   `pantry_value`       Pantry value           — the same judgement the reports
-//                        review already reached about stock valuation.
-//
-// ── Cards deleted in the 2026-09-08 owner batch ──────────────────────────
-//
-//   `before_you_shop`    Before you shop        — *"There's a lot of crossover
-//                        between before you shop and restock radar. I'm
-//                        inclined to axe before you shop and chuck 'planned' as
-//                        a chip on the rows for restock radar."* Done exactly
-//                        that: `restock` rows carry `is_planned` now, and
-//                        `/dashboard/before-you-shop` is deleted with its only
-//                        consumer. The one thing this loses is the "already on
-//                        a list" filter — logged as FU-897, not dropped
-//                        silently.
-//   `shopping_lists`     Shopping lists         — *"Shopping lists widget is
-//                        useless, axe it."* `/dashboard/lists` went with it; the
-//                        nav's own Shopping lists entry is the way there, which
-//                        is the same reasoning that cut the header links off
-//                        every remaining card in this batch.
-//
-//   `reconcile_pending`  Reconcile past meals   — a bare button card. Meal
-//                        reconciliation lives on the meal-plans header nudge.
+/**
+ * Card ids that existed once and must never be reused: a stored
+ * `dashboard_layout` may still name them, and `parseLayout` drops them only
+ * while they are absent from the registry (R-057; reusing one for a different
+ * card would inherit some users' hidden flag). The why of each cut is in the
+ * worklog / CHANGELOG for the batch named.
+ */
+export const RETIRED_CARD_IDS: readonly string[] = [
+    'calendar',           // merged into `whats_coming` (FU-818)
+    'budget',             // folded into `my_budget` (FU-830)
+    'best_deals',         // FU-819
+    'attention',          // 2026-09-04 — the alerts bell says it
+    'suggestions',        // 2026-09-04 — the Dora chat says it
+    'draft_shop',         // 2026-09-04 — the shopping-list page does it better
+    'spend_trend',        // 2026-09-04 — a report; Reports has it
+    'pantry_value',       // 2026-09-04 — same judgement as the reports review
+    'reconcile_pending',  // 2026-09-04 — the meal-plans header nudge
+    'cookable',           // 2026-09-04 rename
+    'primary_list',       // 2026-09-04 rename
+    'before_you_shop',    // 2026-09-08 — `restock` rows carry `is_planned` (FU-897)
+    'shopping_lists',     // 2026-09-08 — the nav entry is the way there
+    'savings',            // 2026-09-08 rename
+];
 
 export type CardGate = 'money' | 'products';
 

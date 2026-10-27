@@ -634,17 +634,9 @@
         return `Dora will plan ${n} meal${n === 1 ? '' : 's'}.`;
     });
 
-    // Default the slot selection to breakfast, lunch and dinner — the three
-    // main meals most households plan — matched against the configured slot
-    // vocabulary (household order preserved). If none of the three are named
-    // in this install's slots, fall back to a single dinner-ish slot so the
-    // builder always opens with something selected.
-    const defaultSlots = computed<string[]>(() => {
-        const mains = props.slotNames.filter((s) => /breakfast|lunch|dinner/i.test(s));
-        if (mains.length) return mains;
-        const dinner = props.slotNames.find((s) => /dinner/i.test(s));
-        return dinner ? [dinner] : props.slotNames.slice(-1);
-    });
+    // Every household slot starts selected; the vocabulary is the household's
+    // own, so the builder never guesses which names are "main meals" (R-003).
+    const defaultSlots = computed<string[]>(() => [...props.slotNames]);
 
     /** Where the Done step says the meals are landing. */
     const targetLabel = computed(() => {
@@ -811,7 +803,9 @@
     function slotFor(recipe: Recipe): string {
         const pool = selectedSlots.value.length ? selectedSlots.value : props.slotNames;
         if (recipe.time_of_day && pool.includes(recipe.time_of_day)) return recipe.time_of_day;
-        return pool[0] ?? 'Dinner';
+        // A household with no slots has nowhere to plan; the server's
+        // vocabulary check names the problem.
+        return pool[0] ?? '';
     }
 
     function onPickRecipe(recipeId: string) {
@@ -911,7 +905,7 @@
         // the headcount mid-session (the settings page refreshes it).
         defaultServings.value = householdHeadcount.value ?? 1;
         // Open on the obvious default: every day still ahead in this week, and
-        // the dinner slot. One tap gets you a week; the rest is fine-tuning.
+        // every slot. One tap gets you a week; the rest is fine-tuning.
         selectedDays.value = upcomingDays.value.map((d) => d.iso);
         selectedSlots.value = [...defaultSlots.value];
     });
@@ -924,8 +918,8 @@
     /* Quasar's step padding is sized for a desktop stepper; on a phone it
        costs 48px of an already-narrow content column. */
     .builder-stepper :deep(.q-stepper__step-inner) {
-        padding-left: 12px;
-        padding-right: 12px;
+        padding-left: var(--space-3);
+        padding-right: var(--space-3);
     }
     .builder-field__label {
         font-size: calc(var(--font-size-sm) * 1rem);
@@ -1109,7 +1103,7 @@
         max-height: 55vh;
         overflow-y: auto;
         border: 1px solid var(--border-default);
-        border-radius: 6px;
+        border-radius: var(--radius-md);
     }
     .builder-list {
         max-height: 40vh;

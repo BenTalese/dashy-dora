@@ -92,7 +92,6 @@ def _ctx(items, *, demand=None, verdicts=None, cover=None, habits=None):
         offer_by_product_id={},
         demand=demand or {},
         habit_item_ids=set(habits or []),
-        repository=None,
     )
     ctx.verdicts = verdicts or {}
     ctx.cover_days = cover or {}

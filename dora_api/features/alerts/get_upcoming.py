@@ -31,6 +31,8 @@ from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 from flask import request
 
+_LOGGER = logging.getLogger(__name__)
+
 # Default horizon (the "fortnight"); clamped so a caller can't ask for an
 # unbounded scan. One source for the bounds (R-003).
 _DEFAULT_DAYS = 14
@@ -151,7 +153,7 @@ def get_upcoming():
         days = _DEFAULT_DAYS
     days = max(1, min(days, _MAX_DAYS))
     _Upcoming = GetUpcomingHandler(SqlAlchemyRepository()).handle(days)
-    logging.getLogger(__name__).debug(
+    _LOGGER.debug(
         "Upcoming: %d day(s) with events over a %d-day window",
         len(_Upcoming.dates), days,
     )

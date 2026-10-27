@@ -28,6 +28,8 @@ from typing import Any
 
 from pywebpush import WebPushException, webpush
 
+_LOGGER = logging.getLogger(__name__)
+
 
 @dataclass(slots=True)
 class _VapidConfig:
@@ -97,10 +99,9 @@ def send_push(
     permanent failures (so the caller can drop the subscription row),
     or `WebPushException` for transient errors. In dry-run mode this is
     a no-op apart from a log line."""
-    log = logging.getLogger(__name__)
     cfg = _config()
     if cfg.dry_run:
-        log.info(
+        _LOGGER.info(
             "DRY-RUN push | endpoint=%s | payload=%s",
             endpoint, json.dumps(payload, default=str),
         )

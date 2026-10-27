@@ -6,20 +6,18 @@ Three endpoints, all under `/api/shopping-lists/<list_id>/attachments`:
   DELETE /<attachment_id>    → remove a single attachment
   GET    /<attachment_id>    → bytes endpoint (raw image with Content-Type)
 
-The bytes endpoint mirrors `/recipes/<id>/step-images/<image_id>` exactly:
-fetch encoded bytes → regex-parse data URL → base64 decode → raw response.
+The bytes endpoint mirrors `/recipes/<id>/step-images/<image_id>`: the
+stored data URL is decoded by `infrastructure/data_url.py`, which serves
+only raster image types.
 
 The lifecycle gate is enforced here (no attaching to a `draft` list); the
 access helper enforces shape + cap. Unlike step images, receipts are
 add/delete one at a time — there is no wholesale replace.
 """
-import base64
 import logging
-import re as _re
 from dataclasses import dataclass
 from uuid import UUID
 
-from flask import Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from dora_api.domain.entities.shopping_list import (
@@ -30,15 +28,13 @@ from dora_api.features.shopping_lists.shopping_list_attachment_access import (
     get_attachment_bytes)
 from dora_api.infrastructure.api_response import (business_rule_violation,
                                                   no_content, not_found, ok)
+from dora_api.infrastructure.data_url import data_url_response
 from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 
-
-_DATA_URL_RE = _re.compile(
-    r"^data:(?P<mime>[\w/+.-]+);base64,(?P<data>.+)$", _re.DOTALL
-)
+_LOGGER = logging.getLogger(__name__)
 
 
 # ───── Add ────────────────────────────────────────────────────────────────
@@ -78,7 +74,7 @@ class AddShoppingListAttachmentHandler:
 
         try:
             attachment_id = add_attachment(
-                shopping_list_id, request.image_data_url
+                self.repository, shopping_list_id, request.image_data_url
             )
         except ValueError as exc:
             return AddShoppingListAttachmentResponse(invalid_payload=str(exc))
@@ -92,7 +88,6 @@ class AddShoppingListAttachmentHandler:
 )
 @has_request_body(AddShoppingListAttachmentRequest)
 def add_shopping_list_attachment(shopping_list_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _Request: AddShoppingListAttachmentRequest = get_request_body()
     _Response = AddShoppingListAttachmentHandler(SqlAlchemyRepository()).handle(
         _Request, shopping_list_id,
@@ -106,7 +101,7 @@ def add_shopping_list_attachment(shopping_list_id: UUID):
         )
     if _Response.invalid_payload:
         return business_rule_violation(_Response.invalid_payload)
-    _Logger.info(
+    _LOGGER.info(
         "Added attachment %s to shopping list %s",
         _Response.attachment_id, shopping_list_id,
     )
@@ -132,7 +127,7 @@ class DeleteShoppingListAttachmentHandler:
         )
         if lst is None:
             return DeleteShoppingListAttachmentResponse(not_found=True)
-        removed = delete_attachment(shopping_list_id, attachment_id)
+        removed = delete_attachment(self.repository, shopping_list_id, attachment_id)
         if not removed:
             return DeleteShoppingListAttachmentResponse(not_found=True)
         self.repository.save_changes()
@@ -145,13 +140,12 @@ class DeleteShoppingListAttachmentHandler:
 def delete_shopping_list_attachment(
     shopping_list_id: UUID, attachment_id: UUID,
 ):
-    _Logger = logging.getLogger(__name__)
     _Response = DeleteShoppingListAttachmentHandler(SqlAlchemyRepository()).handle(
-        UUID(str(shopping_list_id)), UUID(str(attachment_id)),
+        shopping_list_id, attachment_id,
     )
     if _Response.not_found:
         return not_found("ShoppingListAttachment", attachment_id)
-    _Logger.info(
+    _LOGGER.info(
         "Deleted attachment %s from shopping list %s",
         attachment_id, shopping_list_id,
     )
@@ -163,24 +157,8 @@ def delete_shopping_list_attachment(
 @SHOPPING_LIST_ROUTER.route(
     "/<uuid:shopping_list_id>/attachments/<uuid:attachment_id>", methods=["GET"]
 )
-def get_shopping_list_attachment_bytes(
-    shopping_list_id, attachment_id,
-):
-    raw_bytes = get_attachment_bytes(
-        UUID(str(shopping_list_id)), UUID(str(attachment_id))
-    )
-    if not raw_bytes:
-        return not_found("ShoppingListAttachment", attachment_id)
-    data_url = raw_bytes.decode("utf-8", "ignore")
-    match = _DATA_URL_RE.match(data_url)
-    if not match:
-        return not_found("ShoppingListAttachment", attachment_id)
-    try:
-        raw = base64.b64decode(match.group("data"), validate=False)
-    except (ValueError, TypeError):
-        return not_found("ShoppingListAttachment", attachment_id)
-    return Response(
-        raw,
-        mimetype=match.group("mime"),
-        headers={"Cache-Control": "no-cache"},
+def get_shopping_list_attachment_bytes(shopping_list_id: UUID, attachment_id: UUID):
+    return data_url_response(
+        get_attachment_bytes(SqlAlchemyRepository(), shopping_list_id, attachment_id),
+        lambda: not_found("ShoppingListAttachment", attachment_id),
     )

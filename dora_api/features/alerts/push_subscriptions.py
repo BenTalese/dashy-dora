@@ -26,12 +26,13 @@ import logging
 from datetime import datetime, timezone
 from uuid import UUID
 
-from flask import jsonify, request, session
+from flask import request
 from pydantic import BaseModel, ConfigDict, Field
 
 from dora_api.domain.entities.push_subscription import PushSubscription
 from dora_api.features.routers import ALERT_ROUTER
-from dora_api.infrastructure.api_response import (no_content, ok,
+from dora_api.infrastructure.api_response import (no_content,
+                                                  not_found_detail, ok,
                                                   unauthorized)
 from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.push_sender import vapid_public_key
@@ -39,16 +40,9 @@ from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
+from dora_api.infrastructure.session_user import current_user_id
 
-
-def _current_user_id() -> UUID | None:
-    raw = session.get("user_id")
-    if not raw:
-        return None
-    try:
-        return UUID(raw)
-    except (ValueError, TypeError):
-        return None
+_LOGGER = logging.getLogger(__name__)
 
 
 class SubscribeKeys(BaseModel):
@@ -128,14 +122,14 @@ def get_vapid_public_key():
     (R-014)."""
     key = vapid_public_key()
     if not key:
-        return jsonify({"detail": "Web push is not configured on this install."}), 404
+        return not_found_detail("Web push is not configured on this install.")
     return ok({"public_key": key})
 
 
 @ALERT_ROUTER.route("/push/subscribe", methods=["POST"])
 @has_request_body(SubscribeRequest)
 def subscribe_to_push():
-    user_id = _current_user_id()
+    user_id = current_user_id()
     if user_id is None:
         return unauthorized()
     _Request: SubscribeRequest = get_request_body()
@@ -144,7 +138,7 @@ def subscribe_to_push():
     if not _Request.user_agent:
         _Request.user_agent = (request.headers.get("User-Agent") or "")[:255] or None
     PushSubscriptionHandler(SqlAlchemyRepository()).upsert(user_id, _Request)
-    logging.getLogger(__name__).info(
+    _LOGGER.info(
         "Push subscription upserted for user %s (ua=%s)",
         user_id, _Request.user_agent or "?",
     )
@@ -154,14 +148,14 @@ def subscribe_to_push():
 @ALERT_ROUTER.route("/push/unsubscribe", methods=["POST"])
 @has_request_body(UnsubscribeRequest)
 def unsubscribe_from_push():
-    user_id = _current_user_id()
+    user_id = current_user_id()
     if user_id is None:
         return unauthorized()
     _Request: UnsubscribeRequest = get_request_body()
     removed = PushSubscriptionHandler(SqlAlchemyRepository()).remove(
         user_id, _Request.endpoint,
     )
-    logging.getLogger(__name__).info(
+    _LOGGER.info(
         "Push subscription %s for user %s (endpoint=%s)",
         "removed" if removed else "not-found-no-op",
         user_id, _Request.endpoint[:80],

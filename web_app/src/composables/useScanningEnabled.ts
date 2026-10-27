@@ -1,5 +1,5 @@
 import { ref } from 'vue';
-import HealthApiService from 'src/services/api/healthApiService';
+import HealthApiService, { invalidateHealthInfo } from 'src/services/api/healthApiService';
 
 // Scanning + QR labels are one opt-in surface gated by the install-wide
 // `scanning_enabled` AppSetting, surfaced to the client as the `scanning`
@@ -35,6 +35,7 @@ export function useScanningEnabled() {
     function refresh(): Promise<void> {
         loaded.value = false;
         inflight = null;
+        invalidateHealthInfo();
         return load();
     }
     return { scanningEnabled: enabled, scanningLoaded: loaded, refreshScanning: refresh };

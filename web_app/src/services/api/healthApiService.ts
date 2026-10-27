@@ -75,6 +75,15 @@ export interface HealthInfo {
     stocktake_policy?: {
         new_items_opt_in: boolean;
     };
+    // The household's expiring-soon window (days), as the alerts use it.
+    alerts_policy?: {
+        expiring_soon_window_days: number;
+    };
+    // Admin-set Product Search (companion) URL. Every user's nav and the
+    // find-a-product buttons read it here; '' ⇒ not set up.
+    products_policy?: {
+        search_url: string;
+    };
     // FU-370 — install's support / report-an-issue channel. Optional in the
     // type because older backends won't emit it; both strings empty ⇒ dormant
     // (no report affordance renders). `url` wins over `email` when both set.
@@ -95,8 +104,22 @@ export default class HealthApiService {
             .catch(() => false);
     };
 
-    /** Fetch the full health payload for compatibility + feature gating. */
+    /** The health payload for compatibility + feature gating. Every policy
+     *  composable reads it, so one probe is shared per session (13-R37);
+     *  `invalidateHealthInfo()` makes the next read fetch again. */
     getInfoAsync = async (): Promise<HealthInfo> => {
-        return await this.httpClient.get<HealthInfo>('/health');
+        sharedInfo ??= this.httpClient.get<HealthInfo>('/health').catch((err: unknown) => {
+            sharedInfo = null;
+            throw err;
+        });
+        return await sharedInfo;
     };
+}
+
+let sharedInfo: Promise<HealthInfo> | null = null;
+
+/** Drop the shared probe so the next `getInfoAsync()` refetches. The policy
+ *  composables' `refresh…()` call this after an admin save. */
+export function invalidateHealthInfo(): void {
+    sharedInfo = null;
 }

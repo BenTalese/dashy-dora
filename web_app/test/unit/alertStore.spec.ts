@@ -59,7 +59,6 @@ function payload(overrides: Partial<Alerts> = {}): Alerts {
         medium_count: 0,
         low_count: 0,
         actionable_count: 0,
-        fyi_count: 0,
         snoozed_count: 0,
         ...overrides,
     };

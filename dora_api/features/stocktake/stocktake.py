@@ -55,25 +55,24 @@ from datetime import UTC, datetime, timedelta
 from typing import List
 from uuid import UUID
 
+from flask import request
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 
+from dora_api.persistence.aware import as_utc
 from dora_api.app import db
 from dora_api.domain.entities.shopping_list import (
     SHOPPING_LIST_STATUS_DONE,
 )
 from dora_api.domain.entities.stock_item import StockItem
-from dora_api.domain.entities.stock_level import StockLevel
-from dora_api.domain.entities.stock_level_change import StockLevelChange
 from dora_api.domain.stock_status import LOW_STOCK_SEQUENCE, OUT_OF_STOCK_SEQUENCE
 from dora_api.features.app_settings.access import get_or_create_app_setting
 from dora_api.features.routers import STOCK_ITEM_ROUTER, STOCKTAKE_ROUTER
 from dora_api.features.stock_items.inference_overlay import (SURFACE_STOCK,
-                                                             current_user,
                                                              surface_enabled)
 from dora_api.features.stock_items.pantry_belief import (PantryBelief,
                                                          gather_beliefs_for_items)
-from dora_api.features.stocktake.queue_ranking import rank_queue
+from dora_api.features.stocktake.queue_ranking import QueueRank, rank_queue
 from dora_api.features.stocktake.cadence import (AUTO_HISTORY_WINDOW_DAYS,
                                                  LOW_OUT_BUMP_WINDOW_DAYS,
                                                  CadenceBand, ItemHistory,
@@ -82,6 +81,9 @@ from dora_api.infrastructure.api_response import bad_request, not_found, ok
 from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
+from dora_api.infrastructure.session_user import current_user
+
+_LOGGER = logging.getLogger(__name__)
 
 
 # ── Windows ────────────────────────────────────────────────────────────
@@ -199,6 +201,8 @@ def _gather_engagement_signals(
     if not item_ids:
         return empty
 
+    # R-005 carve-out: event aggregates across four tables the repository
+    # port can't join.
     slc_table = db.metadata.tables["StockLevelChange"]
     sl_table = db.metadata.tables["StockLevel"]
     line_table = db.metadata.tables["ShoppingListLine"]
@@ -234,11 +238,8 @@ def _gather_engagement_signals(
     for stock_item_id, changed_at, seq in change_rows:
         # SQLite's `DateTime(timezone=True)` round-trips as naive; every
         # write here uses `datetime.now(UTC)`, so re-attaching UTC is the
-        # honest way to compare against the tz-aware cutoffs. Doing it
-        # inline (instead of a helper) keeps the two comparison sites
-        # obviously symmetric.
-        if changed_at.tzinfo is None:
-            changed_at = changed_at.replace(tzinfo=UTC)
+        # honest way to compare against the tz-aware cutoffs.
+        changed_at = as_utc(changed_at)
         change_timestamps_by_item.setdefault(stock_item_id, []).append(changed_at)
         if changed_at >= engagement_cutoff:
             items_with_recent_level_change.add(stock_item_id)
@@ -386,12 +387,8 @@ def resolve_overdue_map(
             # SQLite hands back naive datetimes; `now_` is tz-aware, so a bare
             # `>` raised TypeError → GET /api/stocktake/queue (and the alerts
             # bell, which shares this map) 500'd for as long as any snooze was
-            # active (FU-526). Coerce to aware-UTC before comparing — same
-            # idiom as _gather_engagement_signals above (line ~205).
-            snoozed_until = item.snoozed_until
-            if snoozed_until.tzinfo is None:
-                snoozed_until = snoozed_until.replace(tzinfo=UTC)
-            if snoozed_until > now_:
+            # active (FU-526). Coerce to aware-UTC before comparing.
+            if as_utc(item.snoozed_until) > now_:
                 continue
         if not _is_engaged(item, signals):
             continue
@@ -417,9 +414,41 @@ def resolve_overdue_map(
 
 # ── Queue endpoint ─────────────────────────────────────────────────────
 
+@dataclass(frozen=True, slots=True)
+class RankedOverdue:
+    """The overdue set in check order, shared by `/queue` and `/session`
+    (finalisation 05-R10)."""
+    ranked: list[tuple[StockItem, QueueRank]]
+    band_by_item: dict[UUID, CadenceBand]
+    days_by_item: dict[UUID, int]
+    belief_ranked: bool
+
+
+def ranked_overdue(repo, user, items: list[StockItem], now: datetime) -> RankedOverdue:
+    """D-1 ordering (Chunk 5): belief ranks the queue when the user has stock
+    inference on; cadence is the floor and the fallback. Beliefs are gathered
+    for the **overdue set only** — the items that aren't due can't be
+    reordered, and `/queue` is polled on every overview load."""
+    overdue_map = resolve_overdue_map(items, now)
+    overdue: list[tuple[int, CadenceBand, StockItem]] = [
+        (info.days, info.band, item)
+        for item in items
+        if (info := overdue_map.get(item.id)) is not None
+    ]
+    beliefs: dict[UUID, PantryBelief] = {}
+    belief_ranked = surface_enabled(user, SURFACE_STOCK)
+    if belief_ranked and overdue:
+        beliefs = gather_beliefs_for_items(repo, [item for _, _, item in overdue])
+    return RankedOverdue(
+        ranked=rank_queue([(days, item) for days, _, item in overdue], beliefs),
+        band_by_item={item.id: band for _, band, item in overdue},
+        days_by_item={item.id: days for days, _, item in overdue},
+        belief_ranked=belief_ranked,
+    )
+
+
 @STOCKTAKE_ROUTER.route("/queue", methods=["GET"])
 def get_stocktake_queue():
-    from flask import request
     try:
         limit = int(request.args.get("limit", "50"))
     except ValueError:
@@ -434,37 +463,17 @@ def get_stocktake_queue():
         .include("stock_location")
         .all()
     )
-    now = datetime.now(UTC)
-
-    overdue_map = resolve_overdue_map(items, now)
-    # Materialise as (days, band, item) tuples so the sort key can
-    # tiebreak on baseline + name without re-looking-up per row.
-    overdue: list[tuple[int, CadenceBand, StockItem]] = [
-        (info.days, info.band, item)
-        for item in items
-        if (info := overdue_map.get(item.id)) is not None
-    ]
-
-    # ── D-1 ordering (Chunk 5) ──────────────────────────────────────────
-    # Belief ranks the queue when the user has stock inference on; cadence is
-    # the floor and the fallback. Beliefs are gathered for the **overdue set
-    # only**, not the whole pantry — this endpoint is polled by the overview
-    # on every load, and the items that aren't due can't be reordered.
-    beliefs: dict[UUID, PantryBelief] = {}
-    user = current_user(repo)
-    belief_ranked = surface_enabled(user, SURFACE_STOCK)
-    if belief_ranked and overdue:
-        beliefs = gather_beliefs_for_items(repo, [item for _, _, item in overdue])
-
-    band_by_item = {item.id: band for _, band, item in overdue}
-    ranked = rank_queue([(days, item) for days, _, item in overdue], beliefs)
+    overdue = ranked_overdue(repo, current_user(repo), items, datetime.now(UTC))
+    ranked = overdue.ranked
+    band_by_item = overdue.band_by_item
+    days_by_item = overdue.days_by_item
+    belief_ranked = overdue.belief_ranked
     total = len(ranked)
     # Counted over the WHOLE overdue set, not the page: the caller uses this
     # to decide whether the Stocktake button glows, and a household with more
     # than `limit` overdue items would otherwise stop glowing exactly when it
     # matters most.
-    essential_total = sum(1 for _, _, item in overdue if item.is_essential)
-    days_by_item = {item.id: days for days, _, item in overdue}
+    essential_total = sum(1 for item, _ in ranked if item.is_essential)
     page = ranked[:limit]
 
     dtos: List[StocktakeQueueItemDto] = []
@@ -513,7 +522,6 @@ def mark_stock_item_checked(stock_item_id: UUID):
     AND clears any active Push snooze (a Check is a stronger claim than
     a Push — the user just looked). Does NOT touch stock_level_last_
     updated. Idempotent."""
-    _Logger = logging.getLogger(__name__)
     repo = SqlAlchemyRepository()
     item = repo.get(StockItem).by_id(stock_item_id)
     if item is None:
@@ -521,7 +529,7 @@ def mark_stock_item_checked(stock_item_id: UUID):
     item.last_checked_at = datetime.now(UTC)
     item.snoozed_until = None
     repo.save_changes()
-    _Logger.debug("Stocktake check: %s", stock_item_id)
+    _LOGGER.debug("Stocktake check: %s", stock_item_id)
     return ok({
         "stock_item_id": str(stock_item_id),
         "last_checked_at": item.last_checked_at.isoformat(),
@@ -536,14 +544,13 @@ def snooze_stock_item(stock_item_id: UUID):
     from the queue for the fixed 3-day window. Deliberately does NOT
     bump last_checked_at — Push makes no claim the stock is right, so
     a Push must not corrupt the "when was this last verified" audit."""
-    _Logger = logging.getLogger(__name__)
     repo = SqlAlchemyRepository()
     item = repo.get(StockItem).by_id(stock_item_id)
     if item is None:
         return not_found("StockItem", stock_item_id)
     item.snoozed_until = datetime.now(UTC) + timedelta(days=_SNOOZE_DAYS)
     repo.save_changes()
-    _Logger.debug(
+    _LOGGER.debug(
         "Stocktake snooze: %s until %s", stock_item_id, item.snoozed_until,
     )
     return ok({
@@ -563,14 +570,17 @@ class BulkCheckRequest(BaseModel):
 @has_request_body(BulkCheckRequest)
 def bulk_check():
     body: BulkCheckRequest = get_request_body()
+    repo = SqlAlchemyRepository()
     table = db.metadata.tables["StockItem"]
     now = datetime.now(UTC)
     # Bulk-check also clears any active snoozes, mirroring the
     # single-item /check path — a Check is stronger than a Push.
-    result = db.session.execute(
+    # R-005 carve-out: a set-based UPDATE of two stamp columns that carry no
+    # rule (no level change, no event), committed through the repository.
+    result = repo.session.execute(
         table.update()
         .where(table.c.id.in_(body.ids))
         .values(last_checked_at=now, snoozed_until=None)
     )
-    db.session.commit()
+    repo.save_changes()
     return ok({"checked": int(result.rowcount or 0)})

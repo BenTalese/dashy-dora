@@ -1,5 +1,5 @@
 // Shape of GET /dashboard/summary — the single aggregated payload the
-// dashboard renders from (AboutSettings' "at a glance" block also reads it).
+// dashboard renders from. (AboutSettings reads `/usage-stats` instead.)
 //
 // FU-826 trimmed seven fields that nothing in the app rendered: `products`
 // and `meals` as whole sub-objects, `shopping_lists.total_items`, and

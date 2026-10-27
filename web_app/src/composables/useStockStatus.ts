@@ -12,7 +12,7 @@ import { computed } from 'vue';
 // by the meal planner sidebar and the sequential builder so the rule lives once.
 export function useStockStatus() {
     const { stockItems } = storeToRefs(useStockItemStore());
-    const { stockLevels } = storeToRefs(useStockLevelStore());
+    const stockLevelStore = useStockLevelStore();
 
     const stockItemById = computed(() => {
         const map = new Map<string, typeof stockItems.value[number]>();
@@ -25,13 +25,13 @@ export function useStockStatus() {
         const item = stockItemById.value.get(stockItemId);
         if (!item) return null;
         if (typeof item.stock_level_sequence === 'number') return item.stock_level_sequence;
-        return stockLevels.value.find((l) => l.stock_level_id === item.stock_level_id)?.sequence ?? null;
+        return stockLevelStore.levelById.get(item.stock_level_id ?? '')?.sequence ?? null;
     }
 
     function stockStatusLabel(stockItemId: string): string {
         const item = stockItemById.value.get(stockItemId);
         if (!item) return 'Not tracked';
-        return stockLevels.value.find((l) => l.stock_level_id === item.stock_level_id)?.name ?? 'Not tracked';
+        return stockLevelStore.levelById.get(item.stock_level_id ?? '')?.name ?? 'Not tracked';
     }
 
     function stockStatusColour(stockItemId: string): string | null {

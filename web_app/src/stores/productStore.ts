@@ -1,6 +1,6 @@
 import { acceptHMRUpdate, defineStore } from 'pinia';
 import type { Product } from 'src/models/product';
-import type { CreateProductCommand, UpdateProductCommand } from 'src/services/api/productApiService';
+import type { UpdateProductCommand } from 'src/services/api/productApiService';
 import ProductApiService from 'src/services/api/productApiService';
 import { readonly, ref } from 'vue';
 
@@ -20,8 +20,8 @@ export const useProductStore = defineStore('product', () => {
     let inflight: Promise<void> | null = null;
 
     const getProductsAsync = (): Promise<void> =>
-        productApiService.getAllAsync().then((page) => {
-            products.value = page.items;
+        productApiService.getAllPagesAsync().then((items) => {
+            products.value = items;
             hydrated = true;
         });
 
@@ -32,18 +32,20 @@ export const useProductStore = defineStore('product', () => {
         return inflight;
     };
 
-    const createProductAsync = (command: CreateProductCommand): Promise<void> =>
-        productApiService.createAsync(command).then(() => getProductsAsync());
-
+    // Mutations refresh the product list only (R-074): a link change also
+    // touches stock items, which the caller refreshes in its own store.
     const updateProductAsync = (command: UpdateProductCommand): Promise<void> =>
         productApiService.updateAsync(command).then(() => getProductsAsync());
 
+    const deleteProductAsync = (productId: string): Promise<void> =>
+        productApiService.deleteAsync(productId).then(() => getProductsAsync());
+
     return {
         products: readonly(products),
-        createProductAsync,
         getProductsAsync,
         ensureLoadedAsync,
-        updateProductAsync
+        updateProductAsync,
+        deleteProductAsync,
     };
 });
 

@@ -21,7 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from dora_api.domain.entities.audit_event import (
     SEVERITY_ERROR, SEVERITY_INFO, SEVERITY_WARN, SOURCE_WEB,
 )
-from dora_api.features.auth.register_user import SESSION_USER_ID_KEY
+from dora_api.infrastructure.session_user import SESSION_USER_ID_KEY
 from dora_api.features.routers import CLIENT_LOGS_ROUTER
 from dora_api.infrastructure.api_response import bad_request, no_content
 from dora_api.infrastructure.audit import emit as audit_emit

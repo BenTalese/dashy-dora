@@ -47,7 +47,7 @@ from dora_api.features.tts import voice_provision
 from dora_api.features.tts.voice_catalog import (DEFAULT_VOICE_ID,
                                                  VOICE_CATALOG, VoiceDef,
                                                  get_voice)
-_LOG = logging.getLogger(__name__)
+_LOGGER = logging.getLogger(__name__)
 
 # Piper's per-voice numeric knobs, in the order we forward them as CLI flags.
 _PIPER_PARAM_KEYS = ("length_scale", "noise_scale", "noise_w", "sentence_silence")
@@ -194,7 +194,7 @@ def synthesize():
     except subprocess.TimeoutExpired:
         return jsonify({"error": "Piper timed out"}), 504
     except subprocess.CalledProcessError as exc:
-        _LOG.error("Piper failed: %s", exc.stderr.decode("utf-8", "replace"))
+        _LOGGER.error("Piper failed: %s", exc.stderr.decode("utf-8", "replace"))
         return jsonify({"error": "Piper synthesis failed"}), 500
 
     wav = result.stdout
@@ -248,7 +248,7 @@ def _pitch_shift(wav: bytes, semitones: float) -> bytes | None:
     back to the un-shifted audio."""
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
-        _LOG.warning("ffmpeg not on PATH — pitch_semitones ignored")
+        _LOGGER.warning("ffmpeg not on PATH — pitch_semitones ignored")
         return None
     ratio = 2.0 ** (semitones / 12.0)
     # atempo only accepts 0.5–2.0 per filter; chain when out of range.
@@ -277,5 +277,5 @@ def _pitch_shift(wav: bytes, semitones: float) -> bytes | None:
         return out.stdout
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
         stderr = getattr(exc, "stderr", b"") or b""
-        _LOG.error("ffmpeg pitch shift failed: %s", stderr.decode("utf-8", "replace"))
+        _LOGGER.error("ffmpeg pitch shift failed: %s", stderr.decode("utf-8", "replace"))
         return None

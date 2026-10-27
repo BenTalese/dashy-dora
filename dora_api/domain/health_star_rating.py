@@ -42,23 +42,15 @@ user rather than hidden:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Sequence, Tuple
+from typing import Optional, Tuple
+from dora_api.domain.rating_tables import points_for
 
 
 # The guide's Category 2 — "all foods other than those included in Category 1,
 # 1D, 2D, 3 or 3D". See the module docstring for why it's the only one here.
 CATEGORY_2 = "2"
 
-# 1 kcal = 4.184 kJ, the food-labelling convention.
-#
-# Dora stores energy as kcal (`NutritionFood.kcal_per_100g`) because that is
-# what the whole app reads; HSR's Table 1 is in kilojoules. USDA does publish a
-# separate kJ row, and importing it would avoid this conversion — but it is
-# derived from the same Atwater factors, the two agree to well under a percent,
-# and Table 1's energy bands are **335 kJ wide**. A sub-1% difference can only
-# change the answer for a food sitting exactly on a band edge, which is not
-# worth a second energy column and a second thing to keep in step (R-002).
-KJ_PER_KCAL = 4.184
+# kcal → kJ lives in `rating_tables` (both schemes score kJ).
 
 
 # ── Baseline points ─────────────────────────────────────────────────────
@@ -195,23 +187,6 @@ class HealthStarRating:
     protein_counted: bool
 
 
-def _points_for(value: Optional[float], table: Sequence[Tuple[int, float]]) -> int:
-    """The highest row in *table* whose threshold *value* strictly exceeds.
-
-    `None` → 0. The guide's row 0 is always "≤ the first threshold", so a value
-    at or below it scores nothing and everything above steps up the table.
-    """
-    if value is None:
-        return 0
-    points = 0
-    for row_points, threshold in table:
-        if value > threshold:
-            points = row_points
-        else:
-            break
-    return points
-
-
 def _protein_points(value: Optional[float]) -> int:
     """As `_points_for`, but Table 6's 2-point protein row is `≥`, not `>`."""
     if value is None:
@@ -232,7 +207,7 @@ def _v_points(fvnl_percent: Optional[float]) -> int:
         return 0
     if fvnl_percent >= 100:
         return V_POINTS_MAX
-    return _points_for(fvnl_percent, _V_POINTS_NON_CONCENTRATED)
+    return points_for(fvnl_percent, _V_POINTS_NON_CONCENTRATED)
 
 
 def rate(profile: NutrientProfile) -> HealthStarRating:
@@ -241,14 +216,14 @@ def rate(profile: NutrientProfile) -> HealthStarRating:
     Steps 4–7 of the guide, in order: baseline points, modifying points, the
     protein gate, `score = baseline − V − P − F`, then Table 7.
     """
-    energy = _points_for(profile.energy_kj, _BASELINE_ENERGY_KJ)
-    saturated_fat = _points_for(profile.saturated_fat_g, _BASELINE_SATURATED_FAT_G)
-    total_sugars = _points_for(profile.total_sugars_g, _BASELINE_TOTAL_SUGARS_G)
-    sodium = _points_for(profile.sodium_mg, _BASELINE_SODIUM_MG)
+    energy = points_for(profile.energy_kj, _BASELINE_ENERGY_KJ)
+    saturated_fat = points_for(profile.saturated_fat_g, _BASELINE_SATURATED_FAT_G)
+    total_sugars = points_for(profile.total_sugars_g, _BASELINE_TOTAL_SUGARS_G)
+    sodium = points_for(profile.sodium_mg, _BASELINE_SODIUM_MG)
     baseline = energy + saturated_fat + total_sugars + sodium
 
     v_points = _v_points(profile.fvnl_percent)
-    fibre_points = _points_for(profile.fibre_g, _F_POINTS_FIBRE_G)
+    fibre_points = points_for(profile.fibre_g, _F_POINTS_FIBRE_G)
 
     protein_counted = (
         baseline < PROTEIN_GATE_BASELINE_POINTS
@@ -279,8 +254,3 @@ def stars_for_score(score: int) -> float:
         if score >= minimum:
             return stars
     return _STAR_BEST
-
-
-def kcal_to_kj(kcal: Optional[float]) -> Optional[float]:
-    """The one place the conversion happens (R-003). See `KJ_PER_KCAL`."""
-    return None if kcal is None else kcal * KJ_PER_KCAL

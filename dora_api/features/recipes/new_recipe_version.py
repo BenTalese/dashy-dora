@@ -44,8 +44,11 @@ from dora_api.features.recipes.recipe_tool_access import (
 from dora_api.features.routers import RECIPE_ROUTER
 from dora_api.infrastructure.api_response import created, not_found
 from dora_api.persistence.field import EntityField
+from dora_api.features.recipes.get_recipes import GetRecipesHandler, get_recipes
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -278,15 +281,11 @@ class NewRecipeVersionHandler:
 
 @RECIPE_ROUTER.route("<uuid:recipe_id>/new-version", methods=["POST"])
 def new_recipe_version(recipe_id: UUID):
-    logger = logging.getLogger(__name__)
     handler = NewRecipeVersionHandler(SqlAlchemyRepository())
     response = handler.handle(recipe_id)
     if response.source_not_found:
-        logger.warning(f"New version requested for missing recipe {recipe_id}.")
+        _LOGGER.warning(f"New version requested for missing recipe {recipe_id}.")
         return not_found(Recipe.__name__, recipe_id)
-    from dora_api.features.recipes.get_recipes import (
-        GetRecipesHandler, get_recipes,
-    )
     dto = GetRecipesHandler(SqlAlchemyRepository()).handle_by_id(response.new_recipe_id)
     return created(
         response.new_recipe_id,

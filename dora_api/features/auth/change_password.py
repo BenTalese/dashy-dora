@@ -35,6 +35,8 @@ from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 
+_LOGGER = logging.getLogger(__name__)
+
 
 class ChangePasswordRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -71,7 +73,6 @@ class ChangePasswordHandler:
 @AUTH_ROUTER.route("/me/password", methods=["POST"])
 @has_request_body(ChangePasswordRequest)
 def change_password():
-    _Logger = logging.getLogger(__name__)
     _UserIdRaw = session.get(SESSION_USER_ID_KEY)
     if not _UserIdRaw:
         return unauthorized()
@@ -123,7 +124,7 @@ def change_password():
                 ),
             )
         except Exception as exc:  # noqa: BLE001
-            _Logger.warning("password-changed email send failed: %s", exc)
+            _LOGGER.warning("password-changed email send failed: %s", exc)
 
     audit_emit(
         "auth.password.changed",
@@ -131,5 +132,5 @@ def change_password():
         actor_user_id=_UserId,
         entity_type="User", entity_id=_UserId,
     )
-    _Logger.info(f"Password changed for user {_UserId}")
+    _LOGGER.info(f"Password changed for user {_UserId}")
     return no_content()

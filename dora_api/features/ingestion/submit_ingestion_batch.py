@@ -64,7 +64,7 @@ from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 
 
-_Logger = logging.getLogger(__name__)
+_LOGGER = logging.getLogger(__name__)
 
 # Keys expire so the table stays bounded; long enough that an honest
 # producer retrying a flaky network call still gets the no-op.
@@ -477,7 +477,7 @@ def submit_ingestion_batch():
     handler = SubmitIngestionBatchHandler(SqlAlchemyRepository())
     result = handler.handle(source, idempotency_key, payload)
 
-    _Logger.info(
+    _LOGGER.info(
         "Ingest batch from source %s: %d accepted, %d skipped, %d failed%s",
         source.id, len(result.accepted), len(result.skipped),
         len(result.failed), " (replay)" if result.idempotent_replay else "",

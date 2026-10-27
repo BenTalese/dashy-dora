@@ -34,11 +34,10 @@ def _ingredient(stock_item, *, quantity=1.0, unit="g", is_optional=False,
 
 class _FakeRepository:
     """Answers the one query shape the aggregator makes:
-    `.get(Recipe).include(...).then_include(...).one(...)`."""
+    `.get(Recipe).include(...).then_include(...).all(id.in_(ids))`."""
 
     def __init__(self, recipes_by_id):
         self._recipes = recipes_by_id
-        self._pending = None
 
     def get(self, _entity):
         return self
@@ -49,13 +48,8 @@ class _FakeRepository:
     def then_include(self, _field):
         return self
 
-    def one(self, field_filter):
-        # `EntityField(Recipe, "id").eq(recipe_id)` — reach for the value the
-        # filter was built with rather than re-implementing the query layer.
-        recipe_id = getattr(field_filter, "value", None)
-        if recipe_id is None:
-            recipe_id = getattr(field_filter, "_value", None)
-        return self._recipes.get(recipe_id)
+    def all(self, id_filter):
+        return [self._recipes[i] for i in id_filter.values if i in self._recipes]
 
 
 def _recipe(name, ingredients, *, servings=1):

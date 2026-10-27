@@ -85,10 +85,10 @@
                 v-else
                 variant="icon"
                 :icon="ICONS.snooze"
-                aria-label="Snooze for 7 days"
+                :aria-label="`Snooze for ${DEFAULT_SNOOZE_DAYS} days`"
                 @click="emit('snooze')"
             >
-                <BaseTooltip>Snooze: hide for 7 days.</BaseTooltip>
+                <BaseTooltip>Snooze: hide for {{ DEFAULT_SNOOZE_DAYS }} days.</BaseTooltip>
             </BaseButton>
             <BaseButton
                 variant="icon"
@@ -112,7 +112,7 @@
     import { formatMoney } from 'src/composables/useMoney';
     import { ICONS } from 'src/style/icons';
     import {
-        ALERT_KIND_META, actionsFor, type Alert, type AlertAction,
+        ALERT_KIND_META, DEFAULT_SNOOZE_DAYS, actionsFor, type Alert, type AlertAction,
     } from 'src/models/alert';
     import { useStockItemStore } from 'src/stores/stockItemStore';
     import { computed } from 'vue';

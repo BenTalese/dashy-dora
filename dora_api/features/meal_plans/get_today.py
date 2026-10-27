@@ -12,10 +12,11 @@ from dora_api.features.routers import MEAL_PLAN_ROUTER
 from dora_api.infrastructure.api_response import ok
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 
+_LOGGER = logging.getLogger(__name__)
+
 
 @MEAL_PLAN_ROUTER.route("today")
 def get_today():
-    _Logger = logging.getLogger(__name__)
     _Today = household_today(SqlAlchemyRepository())
-    _Logger.debug("Household today: %s", _Today)
+    _LOGGER.debug("Household today: %s", _Today)
     return ok({"today": _Today.isoformat()})

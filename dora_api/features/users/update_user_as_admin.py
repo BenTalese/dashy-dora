@@ -12,7 +12,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from dora_api.domain.entities.user import User
-from dora_api.features.auth.admin_gate import _require_admin
+from dora_api.features.auth.admin_gate import require_admin
 from dora_api.features.routers import USER_ROUTER
 from dora_api.features.users.admin_guards import other_usable_admins
 from dora_api.infrastructure.api_response import (business_rule_violation,
@@ -24,9 +24,8 @@ from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 
-# `_require_admin` moved to a shared module. Re-exported for
-# feature modules that still import from here — no big-bang rename.
-__all__ = ["AdminUpdateUserRequest", "AdminUpdateUserResponse", "_require_admin"]
+_LOGGER = logging.getLogger(__name__)
+
 
 
 class AdminUpdateUserRequest(BaseModel):
@@ -146,8 +145,7 @@ class AdminUpdateUserHandler:
 @USER_ROUTER.route("<uuid:user_id>", methods=["PATCH"])
 @has_request_body(AdminUpdateUserRequest)
 def admin_update_user(user_id: UUID):
-    _Logger = logging.getLogger(__name__)
-    _CallerId, err = _require_admin()
+    _CallerId, err = require_admin()
     if err is not None:
         return err
 
@@ -181,5 +179,5 @@ def admin_update_user(user_id: UUID):
             "Can't deactivate the last admin. Promote someone else first."
         )
 
-    _Logger.info(f"Admin updated user {user_id}")
+    _LOGGER.info("Admin updated user %s", user_id)
     return no_content()

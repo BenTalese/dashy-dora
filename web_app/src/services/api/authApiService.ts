@@ -5,17 +5,11 @@ import type {
     ThemePreference,
     VoiceEngine
 } from 'src/models/auth';
-import AxiosHttpClient, { NormalisedApiError, resolveBaseURL } from './axiosHttpClient';
+import AxiosHttpClient, { NormalisedApiError } from './axiosHttpClient';
 
 /** Settings rebuild Phase 4 — URL for a user's profile-picture bytes (served
  *  raw; 404 when unset). Pass a `version` (a counter bumped after upload /
  *  clear) to bust the browser cache. */
-export function userImageUrl(userId: string, version?: number | string): string {
-    const base = resolveBaseURL();
-    const suffix = version !== undefined ? `?v=${encodeURIComponent(String(version))}` : '';
-    return `${base}/users/${userId}/image${suffix}`;
-}
-
 export type LoginCommand = { username: string; password: string };
 export type RegisterCommand = {
     username: string;

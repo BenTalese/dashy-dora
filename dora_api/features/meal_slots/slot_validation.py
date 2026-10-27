@@ -28,6 +28,12 @@ def get_valid_slot_names(repository: SqlAlchemyRepository) -> set[str]:
     return {s.name for s in repository.get(MealSlot).all()}
 
 
+def ordered_slot_names(repository: SqlAlchemyRepository) -> list[str]:
+    """The vocabulary in planner display order (sequence, then name)."""
+    slots = sorted(repository.get(MealSlot).all(), key=lambda s: (s.sequence, s.name.lower()))
+    return [s.name for s in slots]
+
+
 def allowed_slot_names(valid: set[str], already_stored: Iterable[str]) -> set[str]:
     """The vocabulary plus whatever labels the record being updated already has.
 

@@ -27,13 +27,15 @@ from uuid import UUID
 from dora_api.app import app
 from dora_api.domain.entities.alert_interaction import AlertInteraction
 from dora_api.domain.entities.push_subscription import PushSubscription
+from dora_api.features.alerts import _ledger as ledger
 from dora_api.features.alerts.alert_kinds import TIER_ACTIONABLE
 from dora_api.features.alerts.get_alerts import (AlertDto, AlertsDto,
                                                  GetAlertsHandler)
 from dora_api.infrastructure.push_sender import (PushGoneError, is_configured,
                                                  send_push)
-from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def send_alerts_push(
@@ -45,7 +47,6 @@ def send_alerts_push(
 
     `_send_push` is the test seam (defaults to the production sender).
     """
-    log = logging.getLogger(__name__)
     now = now or datetime.now(timezone.utc)
     sent = 0
     try:
@@ -58,32 +59,22 @@ def send_alerts_push(
             if not is_configured() and _send_push is send_push:
                 return 0
             repository = SqlAlchemyRepository()
-            subscriptions_by_user = _subscriptions_by_user(repository)
+            subscriptions_by_user = ledger.subscriptions_by_user(repository)
             for user_id, subs in subscriptions_by_user.items():
                 try:
                     sent += _process_user(repository, user_id, subs, now, _send_push)
                 except Exception as exc:  # noqa: BLE001
-                    log.warning(
+                    _LOGGER.warning(
                         "alerts_push: user %s failed: %s", user_id, exc,
                     )
             if sent:
-                log.info(
+                _LOGGER.info(
                     "alerts_push: delivered %d push(es) at %s",
                     sent, now.isoformat(),
                 )
     except Exception as exc:  # noqa: BLE001
-        log.warning("alerts_push: job failed: %s", exc)
+        _LOGGER.warning("alerts_push: job failed: %s", exc)
     return sent
-
-
-def _subscriptions_by_user(
-    repository: SqlAlchemyRepository,
-) -> dict[UUID, list[PushSubscription]]:
-    rows: list[PushSubscription] = repository.get(PushSubscription).all()
-    grouped: dict[UUID, list[PushSubscription]] = {}
-    for row in rows:
-        grouped.setdefault(row.user_id, []).append(row)
-    return grouped
 
 
 def _process_user(
@@ -93,12 +84,12 @@ def _process_user(
     now: datetime,
     sender: Callable,
 ) -> int:
-    alerts: AlertsDto = GetAlertsHandler(SqlAlchemyRepository()).handle(user_id=user_id)
+    alerts: AlertsDto = GetAlertsHandler(repository).handle(user_id=user_id)
     current_keys = {a.alert_id for a in alerts.items} | {
         a.alert_id for a in alerts.snoozed
     }
 
-    interactions_by_key = _interactions_by_key(repository, user_id)
+    interactions_by_key = ledger.interactions_by_key(repository, user_id)
 
     # Stale-flag cleanup: any prior push-stamp for a key the user no
     # longer has resets, so a future re-fire pushes fresh.
@@ -115,7 +106,7 @@ def _process_user(
     to_push: list[AlertDto] = [
         a for a in alerts.items
         if a.tier == TIER_ACTIONABLE
-        and interactions_by_key.get(a.alert_id, _NO_ROW).last_pushed_at is None
+        and _not_yet_pushed(interactions_by_key.get(a.alert_id))
     ]
 
     if not to_push:
@@ -126,7 +117,6 @@ def _process_user(
     # Fan out: one push per (alert × subscription). Dead subscriptions
     # get pruned mid-fan so a 404'd device doesn't waste cycles for
     # every alert in the same tick.
-    log = logging.getLogger(__name__)
     sent_count = 0
     live_subs = list(subscriptions)
     for alert in to_push:
@@ -143,7 +133,7 @@ def _process_user(
                 sub.last_seen_at = now
                 sent_count += 1
             except PushGoneError:
-                log.info(
+                _LOGGER.info(
                     "alerts_push: pruning gone subscription %s (user=%s)",
                     sub.endpoint[:80], user_id,
                 )
@@ -153,7 +143,7 @@ def _process_user(
                 # Transient (5xx, network) — leave the row alone and
                 # retry on the next tick. Don't stamp last_pushed_at
                 # for this device, but don't bail on the whole batch.
-                log.warning(
+                _LOGGER.warning(
                     "alerts_push: send failed for user=%s endpoint=%s: %s",
                     user_id, sub.endpoint[:80], exc,
                 )
@@ -182,6 +172,10 @@ def _process_user(
     return sent_count
 
 
+def _not_yet_pushed(row: AlertInteraction | None) -> bool:
+    return row is None or row.last_pushed_at is None
+
+
 def _payload_for(alert: AlertDto) -> dict[str, object]:
     """Push payload shape consumed by `web_app/public/push-sw.js`. Kept
     small (web-push body is size-constrained ~4KB) and stable — the SW
@@ -199,22 +193,3 @@ def _payload_for(alert: AlertDto) -> dict[str, object]:
         # panel on `?alerts=open`. Hash route: the SPA runs in hash mode.
         "url": "/#/?alerts=open",
     }
-
-
-def _interactions_by_key(
-    repository: SqlAlchemyRepository,
-    user_id: UUID,
-) -> dict[str, AlertInteraction]:
-    rows: list[AlertInteraction] = repository.get(AlertInteraction).all(
-        EntityField(AlertInteraction, AlertInteraction.Fields.USER_ID).eq(user_id)
-    )
-    return {row.alert_key: row for row in rows}
-
-
-# Sentinel mirrors the digest job — lets `.get(key, _NO_ROW).last_pushed_at`
-# read cleanly without an explicit None check at every call site.
-_NO_ROW = AlertInteraction(
-    user_id=UUID(int=0),
-    alert_key="",
-    created_at=datetime.fromtimestamp(0, tz=timezone.utc),
-)

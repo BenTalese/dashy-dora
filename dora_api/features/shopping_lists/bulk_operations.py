@@ -5,10 +5,6 @@ flow stays narrow and these wider-blast-radius operations live together.
 
 Endpoints:
 
-  POST /api/shopping-lists/<id>/lines/bulk-tick
-      Tick (or untick) a set of lines in one round-trip. Used by the
-      multi-select "tick all selected" action on the detail page.
-
   POST /api/shopping-lists/<id>/lines/bulk-add
       Add a set of stock items to one list in one round-trip. Backs the
       stock overview's "Add to list…" bulk action.
@@ -22,7 +18,7 @@ Endpoints:
       desired order; the handler writes the `sequence` column accordingly.
 """
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List
 from uuid import UUID
 
@@ -30,6 +26,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from dora_api.domain.entities.shopping_list import ShoppingListLine
 from dora_api.features.routers import SHOPPING_LIST_ROUTER
+from dora_api.features.shopping_lists.manage_shopping_list_lines import (
+    AddLineHandler, AddLineRequest, RemoveLineByStockItemHandler)
 from dora_api.infrastructure.api_response import (bad_request, no_content,
                                                   not_found, ok)
 from dora_api.infrastructure.decorators import has_request_body
@@ -38,58 +36,7 @@ from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 
-
-# ───── Bulk tick / untick ─────────────────────────────────────────────────
-
-class BulkTickRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    line_ids: List[UUID]
-    # `True` ticks, `False` unticks. We force the caller to be explicit
-    # rather than toggling each line — toggling a mixed selection (some
-    # ticked, some not) has ambiguous semantics.
-    is_ticked: bool
-
-
-@dataclass(slots=True)
-class BulkTickResponse:
-    updated_count: int = 0
-
-
-class BulkTickHandler:
-    def __init__(self, repository: Repository) -> None:
-        self.repository = repository
-
-    def handle(self, request: BulkTickRequest, shopping_list_id: UUID) -> BulkTickResponse:
-        if not request.line_ids:
-            return BulkTickResponse(updated_count=0)
-
-        # Constrain to lines on the named list — protects against a caller
-        # passing line_ids that belong to a different list.
-        lines: List[ShoppingListLine] = self.repository.get(ShoppingListLine).all(
-            EntityField(ShoppingListLine, "shopping_list_id").eq(shopping_list_id)
-            & EntityField(ShoppingListLine, "id").in_([str(lid) for lid in request.line_ids])
-        )
-        updated = 0
-        for line in lines:
-            if line.is_ticked != request.is_ticked:
-                line.is_ticked = request.is_ticked
-                updated += 1
-        if updated:
-            self.repository.save_changes()
-        return BulkTickResponse(updated_count=updated)
-
-
-@SHOPPING_LIST_ROUTER.route("/<uuid:shopping_list_id>/lines/bulk-tick", methods=["POST"])
-@has_request_body(BulkTickRequest)
-def bulk_tick(shopping_list_id: UUID):
-    _Logger = logging.getLogger(__name__)
-    _Request: BulkTickRequest = get_request_body()
-    _Response = BulkTickHandler(SqlAlchemyRepository()).handle(_Request, shopping_list_id)
-    _Logger.info(
-        f"Bulk-{'tick' if _Request.is_ticked else 'untick'} on list {shopping_list_id}: "
-        f"updated {_Response.updated_count} of {len(_Request.line_ids)} requested"
-    )
-    return ok({"updated_count": _Response.updated_count})
+_LOGGER = logging.getLogger(__name__)
 
 
 # ───── Bulk add / bulk remove by stock item ───────────────────────────────
@@ -115,11 +62,7 @@ class BulkAddLinesResponse:
     list_not_found: bool = False
     added: int = 0
     already_on_list: int = 0
-    failed_ids: List[UUID] = None  # type: ignore[assignment]
-
-    def __post_init__(self):
-        if self.failed_ids is None:
-            self.failed_ids = []
+    failed_ids: List[UUID] = field(default_factory=list)
 
 
 class BulkAddLinesHandler:
@@ -127,15 +70,11 @@ class BulkAddLinesHandler:
         self.repository = repository
 
     def handle(self, request: BulkAddLinesRequest, shopping_list_id: UUID) -> BulkAddLinesResponse:
-        from dora_api.features.shopping_lists.manage_shopping_list_lines import (
-            AddLineHandler, AddLineRequest,
-        )
-
         inner = AddLineHandler(self.repository)
         response = BulkAddLinesResponse()
         for stock_item_id in request.stock_item_ids:
             result = inner.handle(
-                AddLineRequest(stock_item_id=stock_item_id), shopping_list_id,
+                AddLineRequest(stock_item_id=stock_item_id), shopping_list_id, commit=False,
             )
             # A missing list is the same answer for the whole set — bail
             # rather than reporting it once per item.
@@ -147,18 +86,18 @@ class BulkAddLinesHandler:
                 response.added += 1
             else:
                 response.failed_ids.append(stock_item_id)
+        self.repository.save_changes()
         return response
 
 
 @SHOPPING_LIST_ROUTER.route("/<uuid:shopping_list_id>/lines/bulk-add", methods=["POST"])
 @has_request_body(BulkAddLinesRequest)
 def bulk_add_lines(shopping_list_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _Request: BulkAddLinesRequest = get_request_body()
     _Response = BulkAddLinesHandler(SqlAlchemyRepository()).handle(_Request, shopping_list_id)
     if _Response.list_not_found:
         return not_found("ShoppingList", shopping_list_id)
-    _Logger.info(
+    _LOGGER.info(
         f"Bulk-add on list {shopping_list_id}: added {_Response.added}, "
         f"already-on {_Response.already_on_list}, "
         f"failed {len(_Response.failed_ids)} of {len(_Request.stock_item_ids)}"
@@ -188,17 +127,15 @@ class BulkRemoveByStockItemHandler:
     def handle(
         self, request: BulkRemoveByStockItemRequest, shopping_list_id: UUID,
     ) -> BulkRemoveByStockItemResponse:
-        from dora_api.features.shopping_lists.manage_shopping_list_lines import \
-            RemoveLineByStockItemHandler
-
         inner = RemoveLineByStockItemHandler(self.repository)
         removed = 0
         for stock_item_id in request.stock_item_ids:
-            result = inner.handle(shopping_list_id, stock_item_id)
+            result = inner.handle(shopping_list_id, stock_item_id, commit=False)
             if result.list_not_found:
                 return BulkRemoveByStockItemResponse(list_not_found=True)
             if result.removed:
                 removed += 1
+        self.repository.save_changes()
         return BulkRemoveByStockItemResponse(removed_count=removed)
 
 
@@ -207,14 +144,13 @@ class BulkRemoveByStockItemHandler:
 )
 @has_request_body(BulkRemoveByStockItemRequest)
 def bulk_remove_lines_by_stock_item(shopping_list_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _Request: BulkRemoveByStockItemRequest = get_request_body()
     _Response = BulkRemoveByStockItemHandler(SqlAlchemyRepository()).handle(
         _Request, shopping_list_id,
     )
     if _Response.list_not_found:
         return not_found("ShoppingList", shopping_list_id)
-    _Logger.info(
+    _LOGGER.info(
         f"Bulk cart-remove on list {shopping_list_id}: removed "
         f"{_Response.removed_count} of {len(_Request.stock_item_ids)} requested"
     )
@@ -234,12 +170,8 @@ class ReorderRequest(BaseModel):
 @dataclass(slots=True)
 class ReorderResponse:
     list_not_found: bool = False
-    mismatched: List[UUID] = None  # type: ignore[assignment]
+    mismatched: List[UUID] = field(default_factory=list)
     reordered_count: int = 0
-
-    def __post_init__(self):
-        if self.mismatched is None:
-            self.mismatched = []
 
 
 class ReorderHandler:
@@ -282,7 +214,6 @@ class ReorderHandler:
 @SHOPPING_LIST_ROUTER.route("/<uuid:shopping_list_id>/lines/reorder", methods=["POST"])
 @has_request_body(ReorderRequest)
 def reorder_lines(shopping_list_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _Request: ReorderRequest = get_request_body()
     _Response = ReorderHandler(SqlAlchemyRepository()).handle(_Request, shopping_list_id)
     if _Response.mismatched:
@@ -290,7 +221,7 @@ def reorder_lines(shopping_list_id: UUID):
             "Some line ids don't belong to this list.",
             detail=", ".join(str(lid) for lid in _Response.mismatched),
         )
-    _Logger.info(
+    _LOGGER.info(
         f"Reordered {_Response.reordered_count} line(s) on list {shopping_list_id}"
     )
     return no_content()

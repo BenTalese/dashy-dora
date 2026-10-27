@@ -51,6 +51,8 @@ from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 
+_LOGGER = logging.getLogger(__name__)
+
 
 # Sheet layouts. New layouts plug in here without touching the route.
 @dataclass(frozen=True)
@@ -132,8 +134,7 @@ def _mark_image():
         with Image.open(_MARK_PATH) as raw:
             return raw.convert("RGBA")
     except OSError:
-        _Logger = logging.getLogger(__name__)
-        _Logger.warning("QR centre mark not readable at %s — rendering unbranded.", _MARK_PATH)
+        _LOGGER.warning("QR centre mark not readable at %s — rendering unbranded.", _MARK_PATH)
         return None
 
 
@@ -486,7 +487,6 @@ class RegisterBarcodeRequest(BaseModel):
 @DATA_ROUTER.route("/barcodes", methods=["POST"])
 @has_request_body(RegisterBarcodeRequest)
 def register_barcode():
-    _Logger = logging.getLogger(__name__)
     _Request: RegisterBarcodeRequest = get_request_body()
     raw = _Request.barcode.strip()
     if not raw:
@@ -526,14 +526,14 @@ def register_barcode():
         # disambiguate; default to the broader "already in use".
         message = str(exc).lower()
         if "uq_barcode_product_id" in message or "product_id" in message:
-            _Logger.warning("Per-product barcode unique conflict: %s", exc)
+            _LOGGER.warning("Per-product barcode unique conflict: %s", exc)
             return _conflict(
                 "That product already has a barcode registered."
             )
-        _Logger.warning("Barcode unique-constraint conflict: %s", exc)
+        _LOGGER.warning("Barcode unique-constraint conflict: %s", exc)
         return _conflict(f"Barcode '{raw}' is already registered.")
 
-    _Logger.info(
+    _LOGGER.info(
         "Registered barcode %s (product_id=%s, stock_item_id=%s)",
         raw, _Request.product_id, _Request.stock_item_id,
     )
@@ -549,12 +549,11 @@ def register_barcode():
 
 @DATA_ROUTER.route("/barcodes/<uuid:barcode_id>", methods=["DELETE"])
 def delete_barcode(barcode_id: UUID):
-    _Logger = logging.getLogger(__name__)
     repo = SqlAlchemyRepository()
     row = repo.get(Barcode).by_id(barcode_id)
     if row is None:
         return not_found("Barcode", barcode_id)
     repo.remove(row)
     repo.save_changes()
-    _Logger.info("Deleted barcode %s (%s)", row.barcode, barcode_id)
+    _LOGGER.info("Deleted barcode %s (%s)", row.barcode, barcode_id)
     return no_content()

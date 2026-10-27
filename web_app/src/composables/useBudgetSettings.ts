@@ -1,5 +1,5 @@
 import { computed, ref } from 'vue';
-import HealthApiService from 'src/services/api/healthApiService';
+import HealthApiService, { invalidateHealthInfo } from 'src/services/api/healthApiService';
 import type { BudgetPeriod } from 'src/models/auth';
 
 // Install-wide household grocery budget, read from /api/health `budget_policy`.
@@ -48,6 +48,7 @@ function load(): Promise<void> {
 export function refreshBudgetPolicy(): Promise<void> {
     loaded.value = false;
     inflight = null;
+    invalidateHealthInfo();
     return load();
 }
 

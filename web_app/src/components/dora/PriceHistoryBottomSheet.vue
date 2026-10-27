@@ -35,8 +35,7 @@
                     <q-chip
                         v-if="history?.above_baseline"
                         dense
-                        color="warning"
-                        text-color="white"
+                        class="dora-chip--tint-warning"
                         :icon="ICONS.trending_up"
                     >
                         above usual

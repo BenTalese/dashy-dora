@@ -127,7 +127,6 @@
     const stockLevelStore = useStockLevelStore();
     const storesStore = useStoresStore();
     const { stockItems } = storeToRefs(stockItemStore);
-    const { stockLevels } = storeToRefs(stockLevelStore);
     const storesList = computed(() => storesStore.stores);
 
     const open = computed({
@@ -144,10 +143,10 @@
     const submitting = ref(false);
 
     function levelSequence(id: string | null): number {
-        return stockLevels.value.find((l) => l.stock_level_id === id)?.sequence ?? -1;
+        return (id ? stockLevelStore.levelById.get(id)?.sequence : undefined) ?? -1;
     }
     function levelLabel(id: string | null): string {
-        return stockLevels.value.find((l) => l.stock_level_id === id)?.name ?? 'No level set';
+        return (id ? stockLevelStore.levelById.get(id)?.name : undefined) ?? 'No level set';
     }
 
     // Cached on each sheet-open: the items you logged a price for most
@@ -187,8 +186,7 @@
         prefill.value = null;
         prefillLoading.value = true;
         try {
-            const detail = await stockItemApi.getDetailAsync(item.stock_item_id);
-            prefill.value = detail.price_entry_prefill ?? null;
+            prefill.value = await stockItemApi.getPriceEntryPrefillAsync(item.stock_item_id);
         } catch {
             // Silent — the form is still usable without prefill.
         } finally {

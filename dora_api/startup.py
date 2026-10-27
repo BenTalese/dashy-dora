@@ -4,6 +4,8 @@ from pathlib import Path
 
 from dotenv import find_dotenv, load_dotenv
 
+_LOGGER = logging.getLogger(__name__)
+
 # Load repo-root .env before any dora_api import — configuration_manager reads
 # os.environ at import time. Real shell/Docker env vars still win (override=False).
 load_dotenv(find_dotenv(), override=False)
@@ -312,7 +314,6 @@ def _warn_on_schema_drift() -> None:
     than block a boot on a spurious mismatch. A genuinely stale DB now
     announces itself at boot instead of failing silently per request.
     """
-    _Logger = logging.getLogger(__name__)
     try:
         with app.app_context():
             from sqlalchemy import inspect as sa_inspect
@@ -329,7 +330,7 @@ def _warn_on_schema_drift() -> None:
                     if column.name not in actual_cols:
                         missing_columns.append(f"{table_name}.{column.name}")
             if missing_tables or missing_columns:
-                _Logger.error(
+                _LOGGER.error(
                     "SCHEMA DRIFT DETECTED — the connected database is behind "
                     "the code's models; requests touching the missing schema "
                     "will 500. Missing tables: %s. Missing columns: %s. Fix: run "
@@ -341,7 +342,7 @@ def _warn_on_schema_drift() -> None:
                 )
     except Exception as exc:  # noqa: BLE001
         # Best-effort diagnostics — never block boot on the guard itself.
-        _Logger.warning("schema-drift check failed: %s", exc)
+        _LOGGER.warning("schema-drift check failed: %s", exc)
 
 
 def register_routers():
@@ -365,7 +366,7 @@ def register_routers():
         try:
             reconcile_consumed_meals()
         except Exception:  # noqa: BLE001
-            logging.getLogger(__name__).exception(
+            _LOGGER.exception(
                 "reconcile_consumed_meals failed; serving stale pool counts"
             )
 

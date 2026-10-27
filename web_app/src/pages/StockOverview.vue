@@ -1,5 +1,5 @@
 <template>
-    <q-page class="q-pa-md stock-overview" :style-fn="pageStyleFn">
+    <q-page class="q-pa-md stock-overview" :style-fn="appShellStyleFn">
         <!-- Header bar — FU-121: New item · Scan · Stocktake · Bulk select
              · Log price · Export.
              2026-08-15 feedback: on phones this row was eating a quarter of
@@ -654,6 +654,7 @@
 </template>
 
 <script lang="ts" setup>
+    import { appShellStyleFn } from 'src/helpers/appShell';
     import BaseTooltip from 'src/components/BaseTooltip.vue';
     import { ICONS } from 'src/style/icons';
     import { storeToRefs } from 'pinia';
@@ -693,7 +694,6 @@
     import { useStockFilters, STOCK_SORT_OPTIONS } from 'src/composables/useStockFilters';
     import { useStockItemActions } from 'src/composables/useStockItemActions';
     import type { Membership } from 'src/models/shoppingList';
-    import type { StockGroup } from 'src/models/stockGroup';
     import type { StockLevel } from 'src/models/stockLevel';
     import { useStockOverviewExport } from 'src/composables/useStockOverviewExport';
     import {
@@ -701,7 +701,7 @@
         STOCK_ROW_HEIGHT_MOBILE,
     } from 'src/helpers/stockRowMetrics';
     import BarcodeApiService from 'src/services/api/barcodeApiService';
-    import StockGroupApiService from 'src/services/api/stockGroupApiService';
+    import { useStockGroupStore } from 'src/stores/stockGroupStore';
     import StockItemApiService from 'src/services/api/stockItemApiService';
     import StocktakeApiService from 'src/services/api/stocktakeApiService';
     import WasteApiService, { type WasteReason } from 'src/services/api/wasteApiService';
@@ -732,7 +732,7 @@
     // this page with the keyboard already up is right on desktop and
     // actively annoying on a phone.
     const compactToolbar = computed(() => $q.screen.lt.sm);
-    const stockGroupApi = new StockGroupApiService();
+    const stockGroupStore = useStockGroupStore();
     const stockItemApi = new StockItemApiService();
     const barcodeApi = new BarcodeApiService();
     const overviewExport = useStockOverviewExport();
@@ -821,7 +821,6 @@
 
     // Stock groups load locally — no store yet, only needed by the filter
     // dropdown on this page.
-    const stockGroups = ref<StockGroup[]>([]);
 
     // virtualisation tuning. Below the
     // threshold we keep the existing ListTransition glide-in so small
@@ -841,24 +840,13 @@
         '--stock-row-height': `${rowHeight.value}px`,
     }));
 
-    // App-shell height (2026-08-04). QPage hands us the layout's real
-    // chrome `offset` (header, plus a QFooter if the layout ever grows
-    // one) and the viewport `height`, both from live layout state — so the
-    // page fills the viewport exactly without a hardcoded pixel guess.
-    // `height` is 0 only before Quasar's first screen measure; fall back to
-    // calc() so the shell is still correct on that first paint.
-    function pageStyleFn(offset: number, height: number) {
-        return {
-            height: height === 0 ? `calc(100vh - ${offset}px)` : `${height - offset}px`,
-        };
-    }
 
     const filters = useStockFilters({
         stockItems: () => stockItems.value,
         stockLevels: () => stockLevels.value,
         locationTree: () => locationStore.tree,
         recipes: () => recipes.value,
-        stockGroups: () => stockGroups.value,
+        stockGroups: () => stockGroupStore.stockGroups,
         membership: () => shoppingListStore.membership as Membership | null,
     }, { persistScope: 'stock-overview' });
 
@@ -920,7 +908,7 @@
     const filterLevelSequence = computed<number | null>(() => {
         const id = filters.levelFilter.value;
         if (!id) return null;
-        const seq = stockLevels.value.find((l) => l.stock_level_id === id)?.sequence;
+        const seq = stockLevelStore.levelById.get(id ?? '')?.sequence;
         return typeof seq === 'number' ? seq : null;
     });
 
@@ -1103,9 +1091,9 @@
 
     async function bulkRestock() {
         if (bulkSelection.value.size === 0) return;
-        // Same "most-stocked level" definition `useStockItemActions.markRestocked`
-        // uses (lowest sequence). Resolved once here rather than per item.
-        const top = stockLevels.value[0];
+        // The one "most-stocked level" (`stockLevelStore.stockedLevel`, by
+        // sequence), resolved once rather than per item.
+        const top = stockLevelStore.stockedLevel;
         if (!top) {
             $q.notify({
                 type: 'negative',
@@ -1122,7 +1110,7 @@
             // The bulk endpoint writes server-side, so the store's rows are
             // stale until refetched — one refresh for the batch.
             await stockItemStore.getStockItemsAsync();
-            ids.forEach((id) => invalidateBuyVerdict(id));
+            ids.forEach((id) => stockItemStore.invalidateLevelOverlays(id));
             // Bypasses `stockItemStore`'s own mutations, so the recipe list's
             // stock-derived facts (cookable, missing counts) have to be marked
             // stale here too — a batch restock changes what's cookable.
@@ -1443,7 +1431,7 @@
     const currentScanActionSequence = computed<number | null>(() => {
         if (scanAction.value.kind !== 'level') return null;
         const id = scanAction.value.levelId;
-        return stockLevels.value.find((l) => l.stock_level_id === id)?.sequence ?? null;
+        return stockLevelStore.levelById.get(id ?? '')?.sequence ?? null;
     });
     const currentScanActionIcon = computed(() =>
         scanAction.value.kind === 'open' ? ICONS.open_in_new : undefined,
@@ -1574,11 +1562,8 @@
     }
 
     async function loadStockGroups() {
-        try {
-            stockGroups.value = await stockGroupApi.getAllAsync();
-        } catch {
-            stockGroups.value = [];
-        }
+        // A failed load leaves the group filter empty rather than failing the page.
+        await stockGroupStore.ensureLoadedAsync().catch(() => undefined);
     }
 
     // Deep-link filter hydration: other screens (e.g. Locations) link here
@@ -1753,7 +1738,7 @@
        a wider hit area so it's easy to grab. */
     .stock-splitter :deep(.dora-splitter__separator) {
         background: transparent;
-        transition: background-color 0.25s ease;
+        transition: background-color var(--motion-normal) var(--motion-ease);
     }
     .stock-splitter--peeking :deep(.dora-splitter__separator) {
         width: 6px;
@@ -1832,10 +1817,11 @@
         }
     }
     /* FU-378 — caption under the in-overlay current-action switcher. Light
-       text on the dark camera surface. */
+       text on the dark camera surface. R-002 carve-out: the camera view is
+       dark in every theme, so these literals don't follow a theme token. */
     .scan-action-caption {
         color: rgba(255, 255, 255, 0.82);
-        font-size: 13px;
+        font-size: calc(var(--font-size-sm) * 1rem);
         text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
     }
 </style>

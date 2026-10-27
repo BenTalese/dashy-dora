@@ -20,7 +20,7 @@
         :icon="ICONS.dora_voice"
         class="dora-chip--neutral rbc"
         :class="[
-            recipe.inference_hint === 'at_risk' ? 'dora-chip--warning' : 'dora-chip--positive',
+            `dora-chip--${inferenceTone(recipe.inference_hint)}`,
             { 'rbc--glyph': !labelled },
         ]"
     >
@@ -34,6 +34,7 @@
 <script lang="ts" setup>
     import BaseTooltip from 'src/components/BaseTooltip.vue';
     import { ICONS } from 'src/style/icons';
+    import { inferenceTone } from 'src/helpers/inferenceHint';
     import type { Recipe } from 'src/models/recipe';
     import { useRecipeDisplay } from 'src/composables/useRecipeDisplay';
 

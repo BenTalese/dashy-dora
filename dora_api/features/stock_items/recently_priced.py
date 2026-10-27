@@ -31,6 +31,8 @@ from dora_api.infrastructure.ports import Repository
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 
+_LOGGER = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True, slots=True)
 class RecentlyPricedDto:
@@ -85,12 +87,11 @@ class GetRecentlyPricedHandler:
 
 @STOCK_ITEM_ROUTER.route("/recently-priced", methods=["GET"])
 def get_recently_priced():
-    _Logger = logging.getLogger(__name__)
     try:
         _Limit = int(request.args.get("limit", "12"))
     except (TypeError, ValueError):
         _Limit = 12
     _Limit = max(1, min(_Limit, 50))
     _Results = GetRecentlyPricedHandler(SqlAlchemyRepository()).handle(_Limit)
-    _Logger.debug("Recently-priced returned %d items (limit %d)", len(_Results), _Limit)
+    _LOGGER.debug("Recently-priced returned %d items (limit %d)", len(_Results), _Limit)
     return ok(_Results)

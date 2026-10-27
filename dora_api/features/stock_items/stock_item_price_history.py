@@ -26,6 +26,8 @@ from dora_api.infrastructure.api_response import not_found, ok
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 
+_LOGGER = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True, slots=True)
 class StockItemPriceHistoryPointDto:
@@ -39,9 +41,10 @@ class StockItemPriceHistoryPointDto:
 class StockItemPriceHistoryDto:
     stock_item_id: UUID
     name: str
-    # The denominator every point + the baseline share ("L" / "kg" / "ea").
-    # None when the item has neither observations nor a sized linked offer.
-    canonical_unit: str | None
+    # The display denominator every point + the baseline share ("100ml",
+    # "kg", "ea", or "oz" on a US install). None when the item has neither
+    # observations nor a sized linked offer.
+    display_unit: str | None
     # Baseline block (server-derived, R-003) for the chart's reference line +
     # above-usual chip. Null baseline below MIN_SAMPLES.
     baseline: float | None
@@ -61,7 +64,7 @@ class StockItemPriceHistoryHandler:
         if item is None:
             return None
 
-        canonical_unit, points = build_stock_item_price_series(self.repository, stock_item_id)
+        display_unit, points = build_stock_item_price_series(self.repository, stock_item_id)
         # Reuse the chunk-4 baseline chokepoint — one definition of median /
         # above-usual / sample_count across the widget + the chart.
         yp = build_your_prices_for_item(self.repository, stock_item_id)
@@ -69,7 +72,7 @@ class StockItemPriceHistoryHandler:
         return StockItemPriceHistoryDto(
             stock_item_id=item.id,
             name=item.name,
-            canonical_unit=canonical_unit,
+            display_unit=display_unit,
             baseline=yp.baseline,
             baseline_unit=yp.baseline_unit,
             current=yp.current,
@@ -92,8 +95,8 @@ def get_stock_item_price_history(stock_item_id: UUID):
     _Result = StockItemPriceHistoryHandler(SqlAlchemyRepository()).handle(stock_item_id)
     if _Result is None:
         return not_found(StockItem.__name__, stock_item_id)
-    logging.getLogger(__name__).debug(
+    _LOGGER.debug(
         "Stock item %s price history: %d points (unit=%s)",
-        stock_item_id, len(_Result.points), _Result.canonical_unit,
+        stock_item_id, len(_Result.points), _Result.display_unit,
     )
     return ok(_Result)

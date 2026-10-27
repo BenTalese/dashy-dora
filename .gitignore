@@ -47,16 +47,9 @@ __pycache__
 /cypress/videos/
 /dist
 /quasar.config.*.temporary.compiled*
-/src-capacitor/node_modules
-/src-capacitor/www
-/src-cordova/node_modules
-/src-cordova/platforms
-/src-cordova/plugins
-/src-cordova/www
-# The six rooted patterns above came from Quasar's template, which assumes the
-# repo root is the Quasar project. Ours is `web_app/`, so they matched nothing
-# and `web_app/src-capacitor/www/index.html` (a build output) got tracked
-# (finalisation 17-R3). `git rm --cached` of that file is still owed.
+# Quasar's template roots these at the repo root; ours is `web_app/`, so the
+# rooted form matched nothing and a Capacitor build output got tracked
+# (finalisation 17-R3).
 web_app/src-capacitor/node_modules/
 web_app/src-capacitor/www/
 web_app/src-capacitor/android/app/build/

@@ -53,13 +53,16 @@ export type Alert = {
 export type Alerts = {
     items: Alert[];          // active (not snoozed, not dismissed)
     snoozed: Alert[];        // snoozed by this user
-    high_count: number;      // active severity counts (caption)
+    high_count: number;      // active severity counts
     medium_count: number;
-    low_count: number;
+    low_count: number;        // also the FYI tier (tier derives from severity)
     actionable_count: number; // active high+medium — the bell badge
-    fyi_count: number;        // active low
     snoozed_count: number;
 };
+
+/** How long the bell's snooze hides an alert. The server's `SnoozeRequest`
+ *  carries the same default for callers that omit `days`. */
+export const DEFAULT_SNOOZE_DAYS = 7;
 
 // Per-user, per-kind preference (C-9.2). Mirrors AlertPrefDto from
 // dora_api/features/alerts/manage_alert_prefs.py.
@@ -70,6 +73,8 @@ export type AlertPref = {
     // server. Only `enabled` is user-settable (Step-0 Q2/Q3).
     severity: AlertSeverity;
     tier: AlertTier;
+    /** False when this install can never raise the kind (server-derived). */
+    available: boolean;
 };
 
 export type AlertPrefs = {
@@ -194,7 +199,7 @@ export function colorFor(severity: AlertSeverity): string {
 
 // Plain-language name for a kind, as the Settings toggles list it.
 export function kindTheme(kind: AlertKind): string {
-    return ALERT_KIND_META[kind]?.theme ?? '';
+    return ALERT_KIND_META[kind]?.theme ?? kind;
 }
 
 // Server-side writes the user can take inline. Nav-only nudges return [].

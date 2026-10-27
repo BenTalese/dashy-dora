@@ -142,7 +142,8 @@
     import ReportsLede from 'src/components/reports/ReportsLede.vue';
     import SpendCard from 'src/components/reports/SpendCard.vue';
     import WasteCard from 'src/components/reports/WasteCard.vue';
-    import { paletteToken } from 'src/composables/useThemePalette';
+    import { categoricalColour } from 'src/composables/useThemePalette';
+    import { useSlotLoader } from 'src/composables/useSlotLoader';
     import { useFeatureFlags } from 'src/composables/useFeatureFlags';
     import { useMoneyEnabled } from 'src/composables/useMoneyEnabled';
     import { formatDate } from 'src/composables/useDateFormat';
@@ -226,36 +227,12 @@
     // state, so a 500 on the waste endpoint rendered "Nothing wasted in this
     // range — nicely played". Same fix, same component and same reasoning as the
     // dashboard's Chunk 4: failure is visible, per-card, and retryable where it
-    // happened.
+    // happened (`useSlotLoader`).
     type SlotId = keyof typeof loading.value;
-    const slotErrors = ref<Set<SlotId>>(new Set());
-    function slotFailed(id: SlotId): boolean {
-        return slotErrors.value.has(id);
-    }
-    /** Run one card's fetch, recording success or failure against its id. Never
-     *  throws — one bad card must not take the page down, which is what the old
-     *  blanket catch was protecting; the difference is that the failure is no
-     *  longer laundered into an empty state. */
-    async function loadSlot(id: SlotId, run: () => Promise<void>): Promise<void> {
-        loading.value[id] = true;
-        try {
-            await run();
-            if (slotErrors.value.has(id)) {
-                const next = new Set(slotErrors.value);
-                next.delete(id);
-                slotErrors.value = next;
-            }
-        } catch (err) {
-            // Logged, not swallowed: the console is how a self-hosting owner
-            // finds out which endpoint is unhappy.
-            console.warn(`reports card "${id}" failed to load`, err);
-            const next = new Set(slotErrors.value);
-            next.add(id);
-            slotErrors.value = next;
-        } finally {
-            loading.value[id] = false;
-        }
-    }
+    const { slotFailed, loadSlot } = useSlotLoader<SlotId>({
+        label: 'reports card',
+        loading: loading.value,
+    });
 
     /** The Spend card draws three endpoints, so it fails as one thing: a card
      *  that renders an axis toggle can't tell the reader "two thirds of me are
@@ -285,17 +262,7 @@
      *  whatever the hash landed on here (FU-814). Stores go through
      *  `storeColour` in the card. Do not put a store back in here. */
     function colourFor(key: string): string {
-        const series = [
-            paletteToken('--chart-1', '#17b073'),
-            paletteToken('--chart-2', '#006a80'),
-            paletteToken('--chart-3', '#fed224'),
-            paletteToken('--chart-4', '#e89a45'),
-            paletteToken('--chart-5', '#5b8db8'),
-            paletteToken('--chart-6', '#a07cc8'),
-        ];
-        let hash = 0;
-        for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) | 0;
-        return series[Math.abs(hash) % series.length]!;
+        return categoricalColour(key);
     }
 
     // ── Loaders ──────────────────────────────────────────────────────────

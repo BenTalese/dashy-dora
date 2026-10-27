@@ -6,8 +6,8 @@ from dora_api.domain.entities.base_entity import BaseEntity
 
 
 # Decision sentinels. Strings (not Enum) so SQLAlchemy stores varchar
-# without the bind dance, matching ADDED_VIA_* on ShoppingListLine and
-# the waste-reason values on StockItemWasteEvent.
+# without the bind dance, matching SHOPPING_LIST_STATUS_* on ShoppingList
+# and the waste-reason values on StockItemWasteEvent.
 SUPPRESSION_DECISION_DISMISSED = "dismissed"
 SUPPRESSION_DECISION_SNOOZED = "snoozed"
 

@@ -648,7 +648,7 @@ def test__delete_shopping_list__after_finish_harvest__observation_survives_with_
     ).status_code == 204
     assert requests.post(f"{SHOPPING_LISTS}/{_ListId}/finish").status_code == 200
     _Obs = requests.get(f"{STOCK_ITEMS}/{_Item['stock_item_id']}/detail").json()["price_observations"]
-    assert len(_Obs) == 1 and _Obs[0]["shopping_list_line_id"] == _LineId
+    assert len(_Obs) == 1 and _Obs[0]["shopping_list_name"] is not None
 
     assert requests.delete(f"{SHOPPING_LISTS}/{_ListId}").status_code == 204
 
@@ -658,7 +658,7 @@ def test__delete_shopping_list__after_finish_harvest__observation_survives_with_
     assert _Detail.status_code == 200, _Detail.text
     _ObsAfter = _Detail.json()["price_observations"]
     assert len(_ObsAfter) == 1
-    assert _ObsAfter[0]["shopping_list_line_id"] is None
+    assert _ObsAfter[0]["shopping_list_name"] is None
     _History = requests.get(f"{STOCK_ITEMS}/{_Item['stock_item_id']}/price-history")
     assert _History.status_code == 200
     assert _History.json()["sample_count"] == 1

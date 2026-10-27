@@ -11,11 +11,13 @@ from dataclasses import dataclass
 from pydantic import BaseModel, ConfigDict, Field
 
 from dora_api.features.routers import APP_SETTINGS_ROUTER
-from dora_api.features.users.update_user_as_admin import _require_admin
+from dora_api.features.auth.admin_gate import require_admin
 from dora_api.infrastructure.api_response import ok
 from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.llm import LlmUnavailable, OllamaClient
 from dora_api.infrastructure.utils import get_request_body
+
+_LOGGER = logging.getLogger(__name__)
 
 # Short timeout — the admin is often typing a URL before the server is up, and
 # a snappy "couldn't reach it" beats a long hang.
@@ -37,8 +39,7 @@ class ProbeResultDto:
 @APP_SETTINGS_ROUTER.route("/probe", methods=["POST"])
 @has_request_body(ProbeRequest)
 def probe_llm():
-    _Logger = logging.getLogger(__name__)
-    _, err = _require_admin()
+    _, err = require_admin()
     if err is not None:
         return err
 
@@ -51,8 +52,8 @@ def probe_llm():
     )
     try:
         models = client.list_models()
-        _Logger.info("LLM probe of %s ok (%d models)", _Request.base_url, len(models))
+        _LOGGER.info("LLM probe of %s ok (%d models)", _Request.base_url, len(models))
         return ok(ProbeResultDto(reachable=True, models=models))
     except LlmUnavailable as exc:
-        _Logger.info("LLM probe of %s failed: %s", _Request.base_url, exc)
+        _LOGGER.info("LLM probe of %s failed: %s", _Request.base_url, exc)
         return ok(ProbeResultDto(reachable=False, models=[], error=str(exc)))

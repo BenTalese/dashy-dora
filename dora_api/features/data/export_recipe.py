@@ -26,6 +26,8 @@ from dora_api.features.routers import RECIPE_ROUTER
 from dora_api.infrastructure.api_response import bad_request, not_found
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 
+_LOGGER = logging.getLogger(__name__)
+
 
 def _build_csv(recipe: RecipeDto) -> str:
     buffer = io.StringIO()
@@ -127,7 +129,7 @@ def export_recipe(recipe_id: UUID):
         return not_found("Recipe", recipe_id)
     body = _build_csv(recipe)
     filename = export_filename("recipe", recipe.name, "csv")
-    logging.getLogger(__name__).info(
+    _LOGGER.info(
         "Exported recipe %s as %s (%d ingredients)",
         recipe_id, fmt, len(recipe.ingredients),
     )

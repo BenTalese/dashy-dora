@@ -54,25 +54,16 @@
                 </BaseButton>
             </div>
 
-            <!-- Same shape and order as the step view's nav row, so muscle
-                 memory carries between the two faces. -->
-            <div class="cook-image-view__nav row q-gutter-sm justify-center q-mt-md">
-                <BaseButton
-                    variant="ghost"
-                    size="lg"
-                    :icon="ICONS.arrow_back"
-                    label="Previous"
-                    :disable="index === 0"
-                    @click="previous"
-                />
-                <BaseButton
-                    variant="primary"
-                    size="lg"
-                    :icon-right="isLast ? ICONS.check : ICONS.arrow_forward"
-                    :label="isLast ? 'Finish' : 'Next'"
-                    @click="next"
-                />
-            </div>
+            <!-- The step view's nav row, so muscle memory carries between the
+                 two faces. -->
+            <CookNavRow
+                class="q-mt-md"
+                :size="navSize"
+                :can-prev="index > 0"
+                :is-last="isLast"
+                @prev="previous"
+                @next="next"
+            />
         </template>
 
         <q-dialog v-model="zoomOpen" maximized>
@@ -118,20 +109,13 @@
                 <!-- Paging stays available while zoomed: comparing two photos
                      of small print means flipping between them at size, not
                      closing the dialog twice. -->
-                <q-card-section class="cook-image-view__zoom-nav row q-gutter-sm justify-center q-pa-sm">
-                    <BaseButton
-                        variant="ghost"
-                        :icon="ICONS.arrow_back"
-                        label="Previous"
-                        :disable="index === 0"
-                        @click="previous"
-                    />
-                    <BaseButton
-                        variant="ghost"
-                        :icon-right="ICONS.arrow_forward"
-                        label="Next"
-                        :disable="isLast"
-                        @click="index += 1"
+                <q-card-section class="cook-image-view__zoom-nav q-pa-sm">
+                    <CookNavRow
+                        :can-prev="index > 0"
+                        :is-last="isLast"
+                        page-only
+                        @prev="previous"
+                        @next="index += 1"
                     />
                 </q-card-section>
             </q-card>
@@ -143,6 +127,7 @@
     import BaseTooltip from 'src/components/BaseTooltip.vue';
     import { computed, reactive, ref, watch } from 'vue';
     import BaseButton from 'src/components/BaseButton.vue';
+    import CookNavRow from 'src/components/recipes/CookNavRow.vue';
     import CookStepProgress from 'src/components/recipes/CookStepProgress.vue';
     import { recipeStepImageUrl } from 'src/services/api/recipeApiService';
     import { ICONS } from 'src/style/icons';
@@ -151,6 +136,8 @@
     const props = defineProps<{
         recipeId: string;
         images: RecipeStepImage[];
+        /** The host's nav button size (it knows the viewport; R-019). */
+        navSize?: 'md' | 'lg' | undefined;
     }>();
 
     /** Image mode had no way to end a cook: the host page renders its
@@ -281,14 +268,5 @@
         max-height: none;
         width: 250%;
         cursor: zoom-out;
-    }
-    @media (max-width: 599px) {
-        /* Full-width tap targets on a phone: two big halves beat two small
-           pills when the cook has one clean finger (D-004). */
-        .cook-image-view__nav {
-            :deep(.dora-btn) {
-                min-height: 48px;
-            }
-        }
     }
 </style>

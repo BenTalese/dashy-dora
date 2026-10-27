@@ -35,6 +35,7 @@ from uuid import UUID
 from sqlalchemy import text
 
 from dora_api.app import db
+from dora_api.persistence.uuid_key import uuid_bind
 
 
 def preview_pool_after(current: int | None, delta: int) -> int:
@@ -54,28 +55,16 @@ def bump_pool(recipe_id: UUID | bytes | str, delta: int,
     Returns the new pool value. Idempotent-friendly: a `delta` of 0 is
     a valid no-op that returns the current value.
 
-    - `recipe_id` may be a `UUID`, a `str`, or the raw `bytes` shape
-      SQLite stores for `UUIDType` columns. The bind shape is
-      backend-dependent: SQLite stores the column as BINARY(16) so a
-      raw-text() bind must be `bytes` (a str form won't match); Postgres
-      stores it as native `uuid`, which rejects a `bytea` bind
-      (`operator does not exist: uuid = bytea`) but accepts the canonical
-      string form. We normalise to a `UUID` first, then bind `.bytes` on
-      SQLite and `str(...)` on Postgres.
+    - `recipe_id` may be a `UUID`, a `str`, or SQLite's raw `bytes`;
+      `uuid_bind` gives the backend's raw-`text()` bind form.
     - `connection` is a SQLAlchemy `Connection` object; when omitted the
       update runs on `db.session` and is committed by the caller's
       `save_changes()`.
     """
-    if isinstance(recipe_id, bytes):
-        _Uuid = UUID(bytes=recipe_id)
-    elif isinstance(recipe_id, UUID):
-        _Uuid = recipe_id
-    else:
-        _Uuid = UUID(str(recipe_id))
     executor = connection if connection is not None else db.session
     _DialectName = connection.dialect.name if connection is not None \
         else db.engine.dialect.name
-    _Bind: bytes | str = _Uuid.bytes if _DialectName == "sqlite" else str(_Uuid)
+    _Bind = uuid_bind(recipe_id, _DialectName)
     stmt = text(
         'UPDATE "Recipe" '
         "SET available_meals = CASE "

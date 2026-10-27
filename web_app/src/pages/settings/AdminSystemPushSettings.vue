@@ -6,11 +6,7 @@
             :icon="ICONS.notifications_active"
         />
 
-        <q-banner v-if="!isAdmin" class="dora-bg-negative-soft text-negative" dense rounded>
-            You don't have admin permissions to view this page.
-        </q-banner>
-
-        <template v-else-if="!loading">
+        <template v-if="ready">
             <!-- The VAPID private key is stored encrypted-at-rest; warn (and
                  offer a key) when DORA_SECRET_ENCRYPTION_KEY is unset so the
                  admin knows the save will be refused until it's configured. -->
@@ -66,14 +62,14 @@
                             <BaseButton
                                 variant="primary"
                                 label="Save"
-                                :disable="saving || privateKeyDraft.length === 0"
+                                :disable="savingKey || privateKeyDraft.length === 0"
                                 @click="() => onSavePrivateKey(privateKeyDraft)"
                             />
                             <BaseButton
                                 v-if="privateKeyConfigured"
                                 variant="danger-ghost"
                                 label="Clear"
-                                :disable="saving"
+                                :disable="savingKey"
                                 @click="() => onSavePrivateKey('')"
                             />
                         </div>
@@ -86,105 +82,40 @@
 
 <script lang="ts" setup>
     import { ICONS } from 'src/style/icons';
-    import BaseButton from 'src/components/BaseButton.vue';
-    import { storeToRefs } from 'pinia';
-    import { useQuasar } from 'quasar';
-    import AppSettingsApiService, { type AppSettings } from 'src/services/api/appSettingsApiService';
-    import { useAuthStore } from 'src/stores/authStore';
-    import { onMounted, reactive, ref } from 'vue';
-    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+    import { useAppSettingDrafts } from 'src/composables/useAppSettingDrafts';
     import SettingsSection from 'src/components/settings/SettingsSection.vue';
     import SettingsRow from 'src/components/settings/SettingsRow.vue';
     import SettingsPageHeader from 'src/components/settings/SettingsPageHeader.vue';
+    import BaseButton from 'src/components/BaseButton.vue';
     import EncryptionKeyBanner from 'src/components/settings/EncryptionKeyBanner.vue';
+    import { useSettingsSave } from 'src/composables/useSettingsSave';
+    import { useAppSettingsStore } from 'src/stores/appSettingsStore';
+    import { computed, ref } from 'vue';
 
     type PushField = 'vapid_public_key' | 'vapid_subject';
 
-    const $q = useQuasar();
-    const { isAdmin } = storeToRefs(useAuthStore());
-    const api = new AppSettingsApiService();
-
-    const loading = ref(true);
-    const saving = ref(false);
-    const saved = reactive({
+    const { draft, ready, save } = useAppSettingDrafts({
         vapid_public_key: '',
         vapid_subject: 'mailto:admin@dora.local',
     });
-    const draft = reactive({ ...saved });
-    const privateKeyConfigured = ref(false);
+
+    function onSaveField(field: PushField) {
+        void save({ [field]: (draft[field] ?? '').trim() }, 'Push settings saved.');
+    }
+
+    // The private key is write-only: the row only says whether one is set.
+    const store = useAppSettingsStore();
+    const { update, saving: savingKey } = useSettingsSave();
+    const privateKeyConfigured = computed(() => store.settings?.vapid_private_key_configured ?? false);
     const privateKeyDraft = ref('');
 
-    function resetDrafts() {
-        Object.assign(draft, saved);
-    }
-
-    async function onSaveField(field: PushField) {
-        const value = (draft[field] ?? '').trim();
-        if (value === saved[field]) return;
-        saving.value = true;
-        try {
-            const result = await api.updateAsync({ [field]: value });
-            saved[field] = result[field];
-            resetDrafts();
-            $q.notify({
-                type: 'positive', 
-                message: 'Push settings saved.',
-            });
-        } catch (err) {
-            resetDrafts();
-            $q.notify({
-                type: 'negative', 
-                message: 'Could not save push settings.',
-                caption: toastCaption(err),
-            });
-        } finally {
-            saving.value = false;
-        }
-    }
-
     async function onSavePrivateKey(nextValue: string) {
-        saving.value = true;
-        try {
-            const result = await api.updateAsync({ vapid_private_key: nextValue });
-            privateKeyConfigured.value = result.vapid_private_key_configured;
-            privateKeyDraft.value = '';
-            $q.notify({
-                type: 'positive', 
-                message: nextValue.length === 0
-                    ? 'VAPID private key cleared.'
-                    : 'VAPID private key saved.',
-            });
-        } catch (err) {
-            $q.notify({
-                type: 'negative', 
-                message: 'Could not save VAPID private key.',
-                caption: toastCaption(err),
-            });
-        } finally {
-            saving.value = false;
-        }
+        const saved = await update(
+            nextValue.length === 0 ? 'VAPID private key cleared.' : 'VAPID private key saved.',
+            () => store.saveAsync({ vapid_private_key: nextValue }),
+        );
+        if (saved) privateKeyDraft.value = '';
     }
-
-    function hydrate(s: AppSettings) {
-        saved.vapid_public_key = s.vapid_public_key;
-        saved.vapid_subject = s.vapid_subject;
-        privateKeyConfigured.value = s.vapid_private_key_configured;
-        resetDrafts();
-    }
-
-    onMounted(async () => {
-        if (!isAdmin.value) {
-            loading.value = false;
-            return;
-        }
-        try {
-            hydrate(await api.getAsync());
-        } catch {
-            // Leave defaults; admin can retry once DB is reachable.
-        } finally {
-            loading.value = false;
-        }
-    });
 </script>
 
 <style scoped lang="scss">

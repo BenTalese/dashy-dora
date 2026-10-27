@@ -29,6 +29,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 
+from dora_api.domain.money import format_money
 from dora_api.domain.product_offer import discount_percent
 
 
@@ -53,10 +54,6 @@ MAX_DEALS_COMPACT = 20
 # rather than a locale library: this is the only server-side money formatting
 # in the app (the SPA owns the rest via Intl.NumberFormat, R-003), and one
 # email's worth of prices does not justify a dependency.
-_CURRENCY_SYMBOLS = {
-    "AUD": "$", "NZD": "$", "USD": "$", "CAD": "$",
-    "GBP": "£", "EUR": "€", "JPY": "¥",
-}
 
 
 @dataclass(frozen=True)
@@ -87,18 +84,6 @@ class DealsDigest:
     @property
     def is_empty(self) -> bool:
         return not self.lines
-
-
-def format_money(amount: float | None, currency: str) -> str:
-    """Two decimal places, prefixed with the install's currency symbol or its
-    ISO code. `None` renders as a dash rather than "0.00" — a missing
-    price is not a free product."""
-    if amount is None:
-        return "–"
-    symbol = _CURRENCY_SYMBOLS.get((currency or "").upper())
-    if symbol:
-        return f"{symbol}{amount:.2f}"
-    return f"{(currency or '').upper()} {amount:.2f}".strip()
 
 
 def is_deals_hour(hour: int, deals_hour: int = WEEKLY_DEALS_HOUR) -> bool:

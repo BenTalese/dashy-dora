@@ -56,6 +56,105 @@ semver — major bumps signal schema or breaking-config changes.
     theme; sorting follows the install's locale; the unit spelling and
     counting rules come from one source.
 
+- **Finalisation sweep, Stage 2 continued (2026-10-24).**
+  - *Dora:* "add X to my list" in AI mode works again (it failed on every
+    request).
+  - *Security:* a recipe name can no longer inject markup into the "Still
+    used by recipes" dialog shown when deleting a stock item; no dialog in
+    the app renders HTML now.
+  - *Price drops:* the "new low" report finds products whose price came in
+    from the companion; it compared each price against a history that
+    already included it.
+  - *Expiry:* "+1 / +7 / +14 days" follows one rule everywhere (from the later
+    of today and the current date, in your timezone), including the bell's
+    "Push 7 days", and every change shows on the item's History tab.
+  - *Products:* My products and price history list every saved product (they
+    stopped at 50); the weekly deals email's button opens My products; one
+    price-watch dialog everywhere; a price you type on a product is kept in
+    its history; Product Search buttons only appear for people who can use
+    them, and members now see the Product Search link.
+  - *Images:* store logos, profile pictures and product photos load through
+    your signed-in session, so they show on split-host and app installs.
+  - *Alerts & suggestions:* the over-budget suggestion has no hard-coded
+    dollar sign and its button opens the budget page; Settings → Notifications
+    only lists alert types this install can raise; the admin "Alert
+    thresholds" page is now "Expiring-soon window".
+  - *Stock items:* the History tab's "restocked / dropped" reads correctly
+    after you rename a stock level; marking an item restocked from any
+    surface refreshes the verdict, belief and planned-demand cards; an
+    unsaved notes edit survives saving another field on the page; the page
+    and the cards around it load faster (the recipe page, cook mode and
+    price dialogs fetch only what they show).
+  - *Dashboard:* the calendar's "today" ring follows the household's day.
+  - *Security:* an uploaded "image" that isn't really an image (say,
+    `text/html`) is no longer served back from the image routes, where it
+    could run script on the app's own address.
+  - *Cookbook:* the recipe page's "per serving" cost is the server's figure;
+    a recipe's tool picker errors say "tool", not "tag"; the CSV export left
+    the recipe page (owner request).
+  - *Cook mode & stocktake:* opening another recipe from cook mode loads it
+    (it kept the first one); cook mode's keys show in the `?` cheatsheet; a
+    stocktake's level changes show on the stock page straight away.
+  - *Operators:* `/health` logs failed checks instead of hiding them, logs
+    each probe at DEBUG, reports the canonical profile name, and the app
+    probes it once per session.
+  - *Meal plans:* "Build my week" opens with every meal slot ticked (it
+    guessed breakfast, lunch and dinner by name), and nowhere falls back to a
+    slot literally called "Dinner"; starting a shopping list from a meal plan
+    names nameless plans "Week of …" instead of "null"; the reconcile runner
+    and meal log's (?) open a new Help guide, "Reconcile past meals", instead
+    of a pop-up; the focused day chip on the phone uses the theme's on-primary
+    colour, so it reads in dark themes; meal-slot usage counts, the week
+    builder and the ingredient preview load faster.
+  - *Shopping lists:* starting a new list from a template keeps the name and
+    shop date you typed (the list was replaced by a fresh one, losing both);
+    merging a template into a list is one step and says how many were already
+    on it; copying a list with a product-only line no longer fails and keeps
+    each line's store and "which one" choices; adding a recipe's or meal
+    plan's items from the New list dialog is one request; bulk add and remove
+    save once; the list page, trim-to-budget and the template list load less.
+  - *Removed (no screen used them):* the bulk-tick and move-selected-lines
+    endpoints, and the per-line "has substitutes" flag.
+  - *Cook mode:* a running timer keeps true time when you switch apps (it
+    counted ticks, which a background tab slows down); the photo view's
+    Previous / Next row fits a phone like the step view's; the "Sub-step" chip
+    uses the theme's on-primary ink.
+  - *Stock & stocktake:* stock groups load once and stay current after a
+    rename in Settings; every location picker shares one searchable path list;
+    the CSV export downloads through your signed-in session; the stocktake
+    queue and session rank items through one shared path; stock rows and the
+    runner use theme tokens (some fixed sizes and hovers had been painting
+    fallbacks that ignored the theme).
+  - *Dora's stock hunches:* the "recorded as missing / in stock" judgement
+    reads each item's level by its id rather than a relationship that could
+    come back empty; the planner's hunch glyph uses the same readable tones as
+    the recipe chip.
+  - *Dashboard:* "Next to cook" and Kitchen health grade only the week's
+    recipes instead of the whole cookbook; the calendar's weekday names follow
+    your locale; the price-drops chip and link use the theme's readable tones;
+    the restock radar's "3 days ago" wording is shared with the rest of the app.
+  - *Small text:* a dozen chips and labels (recipe tint chips, the cost dialog,
+    the nutrition card, add-to-list hints) never applied their small font size
+    because of a token typo; they do now.
+  - *Assistant:* AI mode no longer probes the model's server before every
+    question (the check is remembered for a minute per server); the
+    trim-to-budget action works again (it broke on a change earlier in this
+    sweep) and speaks the install's currency; planning a meal with no slot named
+    uses your first meal slot rather than assuming "Dinner"; Basic mode's
+    "expiring soon" uses your household window, and its substitutions come from
+    the same table the AI uses; a rate-limited connection test answers "too many
+    requests"; the provider placeholders on Settings → Assistant come from the
+    server; the chat's Basic/AI switch is a proper tap target.
+  - *Reports, budget & waste:* the budget card, its history, About's lifetime
+    spend and every Reports spend card now count the same lines (bought, not
+    set aside by trim-to-budget), so their totals agree on a window; the range
+    wording is the same on every card; the categorical colours come from the
+    theme's chart ramp; a card that fails to load says so on both Reports and
+    the dashboard through one shared path; "Help me use these up" only reads
+    the recipes that use an expiring item; the Mark as wasted tiles show a
+    focus ring for keyboard users; the budget settings note uses the type
+    scale.
+
 ### Added
 - **How many in the pack (2026-10-22).** A product can record how many items
   its pack holds: from its menu on My products, or when adding a custom

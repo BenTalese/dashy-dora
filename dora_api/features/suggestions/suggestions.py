@@ -4,7 +4,7 @@
                                           suppressions)
   POST /api/suggestions/dismiss        — body { kind, dedup_key }
   POST /api/suggestions/snooze         — body { kind, dedup_key, hours }
-  DELETE /api/suggestions/suppression  — body { kind, dedup_key }  — undo
+  POST /api/suggestions/unsuppress    — body { kind, dedup_key }  — undo
 
 The endpoint deliberately doesn't expose an "accept" action: accepting
 runs an existing domain endpoint (open the route, add to list, mark Out
@@ -19,9 +19,9 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
 
-from flask import session
 from pydantic import BaseModel, ConfigDict, Field
 
+from dora_api.persistence.aware import as_utc
 from dora_api.domain.entities.dora_suggestion_suppression import (
     DoraSuggestionSuppression, SUPPRESSION_DECISION_DISMISSED,
     SUPPRESSION_DECISION_SNOOZED,
@@ -34,6 +34,9 @@ from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
+from dora_api.infrastructure.session_user import current_user_id
+
+_LOGGER = logging.getLogger(__name__)
 
 
 # Cap the surfaced count — the dashboard card + chat panel are designed
@@ -89,16 +92,6 @@ def _select_for_display(suggestions: list[Suggestion], limit: int) -> list[Sugge
     return selected
 
 
-def _current_user_id() -> UUID | None:
-    raw = session.get("user_id")
-    if not raw:
-        return None
-    try:
-        return UUID(raw)
-    except (ValueError, TypeError):
-        return None
-
-
 def _is_suppressed_now(suppression: DoraSuggestionSuppression, now: datetime) -> bool:
     if suppression.decision == SUPPRESSION_DECISION_DISMISSED:
         return True
@@ -106,12 +99,9 @@ def _is_suppressed_now(suppression: DoraSuggestionSuppression, now: datetime) ->
         until = suppression.snoozed_until
         if until is None:
             return True
-        # SQLite drops tzinfo on read even when the column is
-        # DateTime(timezone=True); treat naive values as UTC so the
-        # comparison against tz-aware `now` doesn't raise.
-        if until.tzinfo is None:
-            until = until.replace(tzinfo=timezone.utc)
-        return until > now
+        # SQLite drops tzinfo on read; `as_utc` so the comparison against
+        # tz-aware `now` doesn't raise.
+        return as_utc(until) > now
     return False
 
 
@@ -180,10 +170,9 @@ class GetSuggestionsHandler:
 
 @SUGGESTIONS_ROUTER.route("", methods=["GET"])
 def get_suggestions():
-    _Logger = logging.getLogger(__name__)
-    user_id = _current_user_id()
+    user_id = current_user_id()
     rows = GetSuggestionsHandler(SqlAlchemyRepository()).handle(user_id)
-    _Logger.debug("Generated %d suggestions for user=%s", len(rows), user_id)
+    _LOGGER.debug("Generated %d suggestions for user=%s", len(rows), user_id)
     return ok({"suggestions": rows, "count": len(rows)})
 
 

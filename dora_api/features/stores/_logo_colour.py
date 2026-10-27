@@ -19,14 +19,14 @@ and unsaturated pixels (white / black / grey) — and takes the mode of what's
 left. A genuinely greyscale logo has no brand colour to find, so it returns
 None and the SPA keeps its deterministic hash swatch.
 """
-import base64
 import logging
-import re
 from collections import Counter
+from dora_api.infrastructure.data_url import decode_data_url
+
+_LOGGER = logging.getLogger(__name__)
 
 # Same data-URL convention as every other image on the app
 # (C-cross §2.8): `data:image/...;base64,...` stored as UTF-8 bytes.
-_DATA_URL_RE = re.compile(r"^data:(?P<mime>[\w/+.-]+);base64,(?P<data>.+)$", re.DOTALL)
 
 # Sampling grid. 64x64 is ~4k pixels — enough for a stable mode on a logo,
 # small enough that the whole extraction is sub-millisecond.
@@ -69,7 +69,7 @@ def dominant_colour(image_blob: bytes | None) -> str | None:
             # deprecated. Four bytes per pixel, in order.
             pixels = image.tobytes()
     except Exception:
-        logging.getLogger(__name__).info(
+        _LOGGER.info(
             "Could not read store logo for colour extraction; "
             "falling back to the hash swatch.",
             exc_info=True,
@@ -115,12 +115,5 @@ def _is_chromatic(red: int, green: int, blue: int) -> bool:
 
 
 def _decode(image_blob: bytes | None) -> bytes | None:
-    if not image_blob:
-        return None
-    match = _DATA_URL_RE.match(image_blob.decode("utf-8", "ignore"))
-    if not match:
-        return None
-    try:
-        return base64.b64decode(match.group("data"), validate=False)
-    except (ValueError, TypeError):
-        return None
+    decoded = decode_data_url(image_blob)
+    return decoded[1] if decoded else None

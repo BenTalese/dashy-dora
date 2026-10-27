@@ -27,6 +27,8 @@ from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 
+_LOGGER = logging.getLogger(__name__)
+
 
 class UpdateSubstituteRequest(BaseModel):
     """Whole-metadata replace — any field omitted is treated as "clear it".
@@ -112,7 +114,6 @@ class UpdateSubstituteHandler:
 )
 @has_request_body(UpdateSubstituteRequest)
 def update_substitute(stock_item_id: UUID, substitute_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _Handler = UpdateSubstituteHandler(SqlAlchemyRepository())
     _Request: UpdateSubstituteRequest = get_request_body()
     _Response = _Handler.handle(stock_item_id, substitute_id, _Request)
@@ -124,7 +125,7 @@ def update_substitute(stock_item_id: UUID, substitute_id: UUID):
     if _Response.invalid_ratio is not None:
         return business_rule_violation(_Response.invalid_ratio)
 
-    _Logger.info(
+    _LOGGER.info(
         "Updated substitute metadata %s ↔ %s", stock_item_id, substitute_id,
     )
     return no_content()

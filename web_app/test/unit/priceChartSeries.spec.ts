@@ -115,7 +115,7 @@ describe('stockItemHistoryToChart', () => {
     const history: StockItemPriceHistory = {
         stock_item_id: 'si1',
         name: 'Rolled Oats',
-        canonical_unit: 'kg',
+        display_unit: 'kg',
         baseline: 3.5,
         baseline_unit: 'kg',
         current: 4,

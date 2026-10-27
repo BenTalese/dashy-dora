@@ -157,6 +157,7 @@
      */
     import { computed } from 'vue';
     import { ICONS } from 'src/style/icons';
+    import { rangeWindowWords } from 'src/helpers/reportRangeWords';
     import AppSkeleton from 'src/components/AppSkeleton.vue';
     import CardEmpty from 'src/components/CardEmpty.vue';
     import CardLoadError from 'src/components/dashboard/CardLoadError.vue';
@@ -192,21 +193,13 @@
         emit('retry-bought');
     }
 
-    const WINDOW_WORDS: Record<ReportRange, string> = {
-        '30d': 'in the last 30 days',
-        '90d': 'in the last 90 days',
-        '1y': 'in the last year',
-        '2y': 'in the last 2 years',
-        '5y': 'in the last 5 years',
-        'all': 'all time',
-    };
 
     const headline = computed(() => {
         const m = props.mealsCooked;
         if (!m || m.cook_count === 0) return 'Nothing cooked in this range yet.';
         const parts = [
             `You cooked ${m.cook_count} time${m.cook_count === 1 ? '' : 's'} `
-            + `${WINDOW_WORDS[props.range]}: ${m.meals_total} meals`,
+            + `${rangeWindowWords(props.range)}: ${m.meals_total} meals`,
         ];
         if (m.distinct_recipes > 0) {
             parts.push(
@@ -311,17 +304,7 @@
         margin-top: var(--space-4);
     }
     @media (max-width: 599px) {
-        .km-skeleton {
-        display: flex;
-        flex-direction: column;
-        gap: var(--space-3);
-    }
-    .km-skeleton__col {
-        display: flex;
-        flex-direction: column;
-        gap: var(--space-2);
-    }
-    .km-lists { grid-template-columns: 1fr; }
+        .km-lists { grid-template-columns: 1fr; }
     }
     .km-heading {
         margin: 0 0 var(--space-2);

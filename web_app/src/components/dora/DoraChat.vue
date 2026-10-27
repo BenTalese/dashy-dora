@@ -29,7 +29,7 @@
                 <BaseButton
                     v-if="voiceOutputAvailable"
                     variant="icon"
-                    :icon="voiceOutputEnabled ? 'volume_up' : 'volume_off'"
+                    :icon="voiceOutputEnabled ? ICONS.volume_up : ICONS.volume_off"
                     :color="voiceOutputEnabled ? 'primary' : undefined"
                     :aria-label="voiceOutputEnabled ? 'Mute Dora\'s voice' : 'Enable Dora\'s voice'"
                     @click="toggleVoiceOutput"
@@ -118,53 +118,14 @@
                     <q-icon :name="ICONS.dora_voice" size="14px" class="q-mr-xs" />
                     Suggestions
                 </div>
-                <div
+                <SuggestionCard
                     v-for="suggestion in suggestionStore.suggestions"
                     :key="`${suggestion.kind}:${suggestion.dedup_key}`"
-                    class="dora-suggestion-card"
-                    :class="`dora-suggestion-${suggestion.severity}`"
-                >
-                    <div class="dora-suggestion-title">
-                        {{ suggestion.title }}
-                    </div>
-                    <div class="dora-suggestion-body">
-                        {{ suggestion.body }}
-                    </div>
-                    <q-expansion-item
-                        dense
-                        label="Why?"
-                        header-class="dora-suggestion-why-header"
-                        class="dora-suggestion-why"
-                    >
-                        <div class="text-caption dora-text-muted q-px-sm q-pb-xs">
-                            {{ suggestion.reason }}
-                        </div>
-                    </q-expansion-item>
-                    <div class="row q-gutter-xs q-mt-xs">
-                        <BaseButton
-                            v-if="suggestion.primary_action"
-                            variant="primary"
-                            dense
-                            size="sm"
-                            :label="suggestion.primary_action.label"
-                            @click="onAcceptSuggestion(suggestion)"
-                        />
-                        <BaseButton
-                            variant="ghost"
-                            dense
-                            size="sm"
-                            label="Snooze 1d"
-                            @click="onSnoozeSuggestion(suggestion)"
-                        />
-                        <BaseButton
-                            variant="ghost"
-                            dense
-                            size="sm"
-                            label="Dismiss"
-                            @click="onDismissSuggestion(suggestion)"
-                        />
-                    </div>
-                </div>
+                    :suggestion="suggestion"
+                    @accept="onAcceptSuggestion(suggestion)"
+                    @snooze="onSnoozeSuggestion(suggestion)"
+                    @dismiss="onDismissSuggestion(suggestion)"
+                />
             </div>
             <div
                 v-for="(message, idx) in messages"
@@ -404,6 +365,7 @@
     import BaseTooltip from 'src/components/BaseTooltip.vue';
     import BaseButton from 'src/components/BaseButton.vue';
     import DoraModeSlider from 'src/components/dora/DoraModeSlider.vue';
+    import SuggestionCard from 'src/components/dora/SuggestionCard.vue';
     import { ICONS } from 'src/style/icons';
     import { storeToRefs } from 'pinia';
     import type { DoraMood } from 'src/components/dora/doraTypes';
@@ -418,6 +380,7 @@
         type ConfirmAction,
         type PendingAction,
     } from 'src/services/api/assistantApiService';
+    import HealthApiService from 'src/services/api/healthApiService';
     import HelpApiService from 'src/services/api/helpApiService';
     import {
         contextualActionsFor,
@@ -500,6 +463,12 @@
     const route = useRoute();
     const router = useRouter();
     const helpApi = new HelpApiService();
+    // The household's expiring-soon window for Basic mode (11-R34); `/health`
+    // is probed once per session and shared.
+    const expiringSoonWindowDays = ref<number | undefined>(undefined);
+    void new HealthApiService().getInfoAsync()
+        .then((info) => { expiringSoonWindowDays.value = info.alerts_policy?.expiring_soon_window_days; })
+        .catch(() => undefined);
     const alertApi = new AlertApiService();
     const assistantApi = new AssistantApiService();
     // suggestion panel reads from the same store as the
@@ -969,6 +938,7 @@
         return {
             currentPath: route.path,
             username: props.currentUser?.username,
+            expiringSoonWindowDays: expiringSoonWindowDays.value,
             fetchFoodFact: async () => (await helpApi.getFoodFactAsync()).fact,
             fetchVersion: async () => {
                 const v = await helpApi.getVersionAsync();
@@ -1789,44 +1759,11 @@
         50%      { transform: scale(1.12); }
     }
 
-    /* P2-04 — suggestion panel that prepends the chat scroll area.
-       Each card carries a severity-tinted left border so high vs low
-       priority is readable at a glance without needing colour to
-       carry meaning alone (the title + button text reinforce it). */
+    /* P2-04 — suggestion panel that prepends the chat scroll area. */
     .dora-suggestion-panel {
         padding: 8px 4px 12px;
         border-bottom: 1px dashed var(--overlay-active);
         margin-bottom: 8px;
-    }
-    .dora-suggestion-card {
-        background: var(--surface-elevated);
-        border-radius: 10px;
-        padding: 8px 10px;
-        margin-top: 6px;
-        border-left: 3px solid var(--brand-primary);
-    }
-    .dora-suggestion-card.dora-suggestion-high {
-        border-left-color: var(--q-negative);
-    }
-    .dora-suggestion-card.dora-suggestion-medium {
-        border-left-color: var(--q-warning);
-    }
-    .dora-suggestion-card.dora-suggestion-low {
-        border-left-color: var(--q-primary);
-    }
-    .dora-suggestion-title {
-        font-weight: 600;
-        font-size: 0.9rem;
-    }
-    .dora-suggestion-body {
-        font-size: 0.85rem;
-        color: var(--text-muted);
-        margin-top: 2px;
-    }
-    .dora-suggestion-why :deep(.dora-suggestion-why-header) {
-        min-height: 24px;
-        padding: 0;
-        font-size: 0.75rem;
     }
     /* P14: contextual "on this page" chip row — a slightly warmer band so
        the eye picks the page-specific actions out of the generic ones. */

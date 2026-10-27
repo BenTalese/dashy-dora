@@ -6,11 +6,7 @@
             :icon="ICONS.language"
         />
 
-        <q-banner v-if="!isAdmin" class="dora-bg-negative-soft text-negative" dense rounded>
-            You don't have admin permissions to view this page.
-        </q-banner>
-
-        <template v-else-if="!loading">
+        <template v-if="!loading">
             <!-- Preview first. The three fields below are abstractions
                  (ISO code, BCP-47 tag, IANA zone) whose only observable effect
                  is this line — so it leads, and it updates as you pick rather
@@ -166,12 +162,9 @@
     // options (free text still accepted, for anything not on the list), and
     // the two scattered "Use this device" buttons collapsed into one.
     import { ICONS } from 'src/style/icons';
-    import { storeToRefs } from 'pinia';
     import { useQuasar } from 'quasar';
-    import AppSettingsApiService, { type AppSettings }
-        from 'src/services/api/appSettingsApiService';
     import BaseButton from 'src/components/BaseButton.vue';
-    import { useAuthStore } from 'src/stores/authStore';
+    import { useAppSettingsStore } from 'src/stores/appSettingsStore';
     import { computed, onMounted, ref } from 'vue';
     import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import SettingsSection from 'src/components/settings/SettingsSection.vue';
@@ -187,8 +180,10 @@
     import { useRecipeStore } from 'src/stores/recipeStore';
 
     const $q = useQuasar();
-    const { isAdmin } = storeToRefs(useAuthStore());
-    const api = new AppSettingsApiService();
+    // Reads and writes go through the shared settings row (13-R9). The page
+    // keeps its own save handlers: picks save silently, with inline errors
+    // and double-submit guards the generic draft loop doesn't have.
+    const settingsStore = useAppSettingsStore();
     // The Health Star Rating nudge flips an install-wide flag that /api/health
     // publishes, so the cached map has to be re-read or the cookbook and recipe
     // page keep running on the stale answer until a reload.
@@ -359,7 +354,7 @@
         timezoneDraft.value = value;   // preview follows the pick immediately
         saving.value = true;
         try {
-            const result = await api.updateAsync({ timezone: value });
+            const result = await settingsStore.saveAsync({ timezone: value });
             timezoneDraft.value = result.timezone;
         } catch (err) {
             timezoneDraft.value = previous;
@@ -392,7 +387,7 @@
         currencyError.value = null;
         saving.value = true;
         try {
-            const result = await api.updateAsync({ currency: value });
+            const result = await settingsStore.saveAsync({ currency: value });
             currencyDraft.value = result.currency;
             lastSavedCurrency = result.currency;
             await refreshMoneyPolicy();
@@ -426,7 +421,7 @@
         localeError.value = null;
         saving.value = true;
         try {
-            const result = await api.updateAsync({ locale: value });
+            const result = await settingsStore.saveAsync({ locale: value });
             localeDraft.value = result.locale;
             lastSavedLocale = result.locale;
             await refreshMoneyPolicy();
@@ -449,7 +444,7 @@
         systemDraft.value = value;   // preview follows the pick immediately
         saving.value = true;
         try {
-            const result = await api.updateAsync({ measurement_system: value });
+            const result = await settingsStore.saveAsync({ measurement_system: value });
             systemDraft.value = result.measurement_system;
             lastSavedSystem = result.measurement_system;
             // Same reason the currency save calls `refreshMoneyPolicy`: the
@@ -480,7 +475,7 @@
             type: 'positive', 
             message: 'Matched to this device. Currency is unchanged.',
         });
-        await offerRatingScheme(language, zone);
+        offerRatingScheme(language, zone);
     }
 
     /** The measurement system implied by a device's BCP-47 region subtag, or
@@ -533,20 +528,13 @@
      *  Offered, never applied: this asks, and a "No thanks" is remembered by
      *  simply leaving the setting at `none`. Nothing here nags again — the
      *  prompt is attached to an explicit button press, not to page load. */
-    async function offerRatingScheme(language: string, zone: string) {
+    function offerRatingScheme(language: string, zone: string) {
         const scheme = localRatingScheme(language, zone);
         if (scheme === null) return;
-        let settings: AppSettings;
-        try {
-            settings = await api.getAsync();
-        } catch {
-            // The nudge is a convenience; a failed read is not worth a second
-            // error toast on top of the save that just succeeded.
-            return;
-        }
-        // Already chosen something — including deliberately choosing one
-        // scheme in the other's region. Not our place to second-guess it.
-        if (settings.nutrition_rating_scheme !== 'none') return;
+        // The row is current: every save on this page wrote through the store.
+        // Already chosen something, including deliberately choosing one
+        // scheme in the other's region: not our place to second-guess it.
+        if (settingsStore.settings?.nutrition_rating_scheme !== 'none') return;
 
         const copy = scheme === 'health_star'
             ? {
@@ -564,9 +552,8 @@
             title: copy.title,
             message:
                 `This device looks like it's ${copy.where}. Dora `
-                + 'can work one out for your recipes.<br><br>'
+                + 'can work one out for your recipes. '
                 + 'It needs nutrition set to complex, and ratings are estimates.',
-            html: true,
             ok: { label: 'Turn it on', color: 'primary', noCaps: true },
             cancel: { label: 'No thanks', flat: true, noCaps: true },
         }).onOk(() => { void enableRatingScheme(scheme); });
@@ -652,7 +639,7 @@
 
     async function enableRatingScheme(scheme: 'health_star' | 'nutri_score') {
         try {
-            await api.updateAsync({ nutrition_rating_scheme: scheme });
+            await settingsStore.saveAsync({ nutrition_rating_scheme: scheme });
             await refreshFlags();
             // Same reason as the Nutrition settings page: the rating is
             // computed per request and is absent from every recipe DTO fetched
@@ -676,12 +663,10 @@
     }
 
     onMounted(async () => {
-        if (!isAdmin.value) {
-            loading.value = false;
-            return;
-        }
         try {
-            const s = await api.getAsync();
+            await settingsStore.ensureLoadedAsync();
+            const s = settingsStore.settings;
+            if (!s) return;
             if (s.timezone) timezoneDraft.value = s.timezone;
             if (s.currency) {
                 currencyDraft.value = s.currency;

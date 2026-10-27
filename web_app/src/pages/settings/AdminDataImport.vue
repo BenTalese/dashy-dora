@@ -552,8 +552,8 @@
         const confirmed = await new Promise<boolean>((resolve) => {
             $q.dialog({
                 title: 'Confirm import',
-                message: `Import rows from <strong>${selectedSheet.value}</strong>?<br><br>This can't be undone.`,
-                html: true,
+                // Plain text: the sheet name comes from the uploaded file.
+                message: `Import rows from "${selectedSheet.value}"? This can't be undone.`,
                 ok: { label: 'Import', color: 'primary' },
                 cancel: { label: 'Cancel', flat: true },
             }).onOk(() => resolve(true)).onCancel(() => resolve(false));
@@ -673,12 +673,6 @@
     .settings-page {
         display: flex;
         flex-direction: column;
-    }
-    .settings-divider {
-        border: 0;
-        height: 1px;
-        background: color-mix(in srgb, var(--text-primary) 8%, transparent);
-        margin: 0;
     }
     .settings-actions {
         display: flex;

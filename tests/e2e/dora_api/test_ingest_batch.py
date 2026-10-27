@@ -501,3 +501,25 @@ def test__ingest__product_image_round_trips_and_serves(api):
         f"{BASE}/products", params={"filter": f"product_id:eq:{product_id}"},
     ).json()["items"]
     assert len(listed) == 1 and listed[0]["has_image"] is True, listed
+
+
+def test__ingest__a_cheaper_second_offer_reads_as_a_new_low(api):
+    """The history holds every pushed price, the current one included, so the
+    price-drops report has to compare against points *before* the current
+    offer; taking the low over all of it meant no ingested product could ever
+    be a new low."""
+    sid, key = _mint_key()
+    _map_store(sid, "DropStore", _seeded_store_id())
+    stockcode = uuid.uuid4().hex[:10]
+    product = {"ref": "p1", "name": f"Drop test {stockcode}", "store": "DropStore",
+               "merchant_stockcode": stockcode}
+    for price, when in ((10.0, "2026-06-01T10:00:00+00:00"), (8.0, "2026-06-08T10:00:00+00:00")):
+        resp = _post_ingest(key, {"products": [product], "offers": [{
+            "product_ref": "p1", "price_now": price, "price_was": 12.0, "observed_at": when,
+        }]})
+        assert resp.status_code == 200, resp.text
+
+    rows = requests.get(f"{BASE}/reports/price-drops", params={"limit": 20}).json()["rows"]
+    row = next(r for r in rows if r["name"] == product["name"])
+    assert row["price_now"] == 8.0
+    assert row["previous_low"] == 10.0

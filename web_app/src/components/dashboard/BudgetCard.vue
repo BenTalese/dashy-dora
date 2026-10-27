@@ -111,6 +111,7 @@
     import DashboardCard from 'src/components/dashboard/DashboardCard.vue';
     import CardLoadError from 'src/components/dashboard/CardLoadError.vue';
     import type { BudgetStatus } from 'src/services/api/budgetApiService';
+    import type { BudgetPeriod } from 'src/models/auth';
 
     const props = withDefaults(
         defineProps<{
@@ -123,7 +124,8 @@
     const emit = defineEmits<{ (e: 'retry-budget'): void }>();
 
     /** "weekly" → "week", "monthly" → "month" — the period read as a noun. */
-    const periodWord = computed(() => props.budget?.period.replace('ly', '') ?? '');
+    const PERIOD_WORD: Record<BudgetPeriod, string> = { weekly: 'week', monthly: 'month' };
+    const periodWord = computed(() => (props.budget ? PERIOD_WORD[props.budget.period] : ''));
 </script>
 
 <style scoped lang="scss">

@@ -196,7 +196,6 @@ KNOWN_FU528_UUID_500_RULES: frozenset[tuple[str, str]] = frozenset({
     ("DELETE", "/api/meal-slots/<meal_slot_id>"),
     ("PATCH", "/api/products/<product_id>"),
     ("GET", "/api/products/<product_id>/image"),
-    ("GET", "/api/products/<product_id>/price-history"),
     ("DELETE", "/api/recipe-collections/<recipe_collection_id>"),
     ("DELETE", "/api/recipes/<recipe_id>"),
     ("GET", "/api/recipes/<recipe_id>"),

@@ -14,6 +14,8 @@ from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 
+_LOGGER = logging.getLogger(__name__)
+
 
 class UpdateLocationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -79,7 +81,6 @@ class UpdateLocationHandler:
 @LOCATION_ROUTER.route("/<uuid:location_id>", methods=["PATCH"])
 @has_request_body(UpdateLocationRequest)
 def update_location(location_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _Handler = UpdateLocationHandler(SqlAlchemyRepository())
     _Request: UpdateLocationRequest = get_request_body()
     _Response = _Handler.handle(_Request, location_id)
@@ -97,5 +98,5 @@ def update_location(location_id: UUID):
             "Reparenting would put this location under an invalid parent kind."
         )
 
-    _Logger.info(f"Updated location {location_id}")
+    _LOGGER.info(f"Updated location {location_id}")
     return no_content()

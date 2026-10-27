@@ -76,3 +76,14 @@ describe('relativeTime — shared "N ago" formatter', () => {
         expect(relativeTime(daysAgo(13))).toBe('1w ago');
     });
 });
+
+describe('relativeTime coarse style', () => {
+    it('reads in whole days, as prose', () => {
+        const ago = (days: number) => new Date(Date.now() - days * 86_400_000 - 1000).toISOString();
+        expect(relativeTime(ago(0), { style: 'coarse' })).toBe('today');
+        expect(relativeTime(ago(1), { style: 'coarse' })).toBe('yesterday');
+        expect(relativeTime(ago(3), { style: 'coarse' })).toBe('3 days ago');
+        expect(relativeTime(ago(9), { style: 'coarse' })).toBe('last week');
+        expect(relativeTime(ago(21), { style: 'coarse' })).toBe('3 weeks ago');
+    });
+});

@@ -50,7 +50,7 @@ from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 
 
-_Logger = logging.getLogger(__name__)
+_LOGGER = logging.getLogger(__name__)
 
 # Caps the per-call fan-out. A companion decorating a search-results page
 # rarely wants more than a few dozen; the ceiling keeps a bad caller from
@@ -230,7 +230,7 @@ def ingest_link_status():
     stamp_used(source)
     repository.save_changes()
 
-    _Logger.info(
+    _LOGGER.info(
         "Link-status lookup from source %s: %d items, %d matched",
         source.id, len(results),
         sum(1 for r in results if r.product_id is not None),

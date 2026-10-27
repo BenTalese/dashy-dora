@@ -76,8 +76,7 @@
         busy.value = true;
         try {
             void storesStore.ensureLoadedAsync();
-            const detail = await stockItemApi.getDetailAsync(props.stockItemId);
-            prefill.value = detail.price_entry_prefill ?? null;
+            prefill.value = await stockItemApi.getPriceEntryPrefillAsync(props.stockItemId);
         } catch {
             // Silent — form still works without prefill.
         } finally {

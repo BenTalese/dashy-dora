@@ -223,13 +223,24 @@ USDA_NUTRIENT_ATTRS: Dict[Tuple[str, str], str] = {
 }
 
 
-def off_values(nutriments: dict, to_float) -> Dict[str, float]:  # noqa: ANN001
-    """Pull our nutrient set out of an OFF `nutriments` blob.
+def to_float(raw) -> Optional[float]:  # noqa: ANN001
+    """A number read from a dataset file or a source API: a number, a numeric
+    string (whitespace allowed), or nothing. Blank and junk read as None."""
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        raw = raw.strip()
+        if not raw:
+            return None
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return None
 
-    `to_float` is injected rather than imported so this module stays free of
-    the lookup module's parsing helpers (and the import cycle that would come
-    with it). Missing keys are omitted, not zeroed.
-    """
+
+def off_values(nutriments: dict) -> Dict[str, float]:
+    """Pull our nutrient set out of an OFF `nutriments` blob. Missing keys are
+    omitted, not zeroed."""
     values: Dict[str, float] = {}
     for nutrient in NUTRIENTS:
         if not nutrient.off_key:

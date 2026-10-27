@@ -402,7 +402,7 @@
 
 <style scoped>
     /* The grid shell, the divider and the name/money type scale live in
-       `src/css/shoppingRow.scss` — the receipt face is built on the same
+       `src/css/shoppingList.scss` — the receipt face is built on the same
        skeleton (v4 chunk 3). What this block owns is the plan face's own
        track list and its controls.
 

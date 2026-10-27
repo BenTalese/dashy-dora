@@ -22,6 +22,8 @@ from dora_api.infrastructure.api_response import ok
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 
+_LOGGER = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True, slots=True)
 class ShoppingListSummaryDto:
@@ -141,7 +143,6 @@ def _next_up_list_id(lists: List[ShoppingList]) -> UUID | None:
 
 @SHOPPING_LIST_ROUTER.route("", methods=["GET"])
 def get_shopping_lists():
-    _Logger = logging.getLogger(__name__)
     _Summaries = GetShoppingListsHandler(SqlAlchemyRepository()).handle()
-    _Logger.debug("Returned %d shopping list summaries", len(_Summaries))
+    _LOGGER.debug("Returned %d shopping list summaries", len(_Summaries))
     return ok(_Summaries)

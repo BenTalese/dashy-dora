@@ -114,7 +114,7 @@
                     :aria-label="`Download ${voice.label}`"
                     @click.stop="emit('download', voice.id)"
                 >
-                    <q-icon name="download" size="16px" />
+                    <q-icon :name="ICONS.download" size="16px" />
                     <span>Download · {{ sizeMb(voice.size_bytes) }}</span>
                 </button>
             </div>
@@ -480,8 +480,8 @@
         background: color-mix(in srgb, var(--text-primary) 6%, transparent);
     }
     .voice-card__btn--error {
-        color: var(--negative, #c10015);
-        background: color-mix(in srgb, var(--negative, #c10015) 10%, transparent);
+        color: var(--semantic-negative);
+        background: color-mix(in srgb, var(--semantic-negative) 10%, transparent);
     }
     .voice-card__error {
         font-size: 0.75rem;

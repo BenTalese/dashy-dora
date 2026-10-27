@@ -1,4 +1,4 @@
-"""FU-519 item 2 — reports router e2e (`dora_api/features/reports/reports.py`).
+"""FU-519 item 2 — reports router e2e (`dora_api/features/reports/`).
 
 One test per report pinning the response shape plus at least one computed
 value against data seeded through the API:

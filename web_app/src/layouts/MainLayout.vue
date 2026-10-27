@@ -259,7 +259,7 @@
         if ($q.screen.lt.md) {
             base.push({ label: 'Dashboard', icon: ICONS.dashboard, link: '/' });
         }
-        base.push({ label: 'Stock', icon: 'inventory_2', link: '/stock' });
+        base.push({ label: 'Stock', icon: ICONS.inventory_2, link: '/stock' });
         if (productSearchEntry.value) {
             base.push(productSearchEntry.value);
         }

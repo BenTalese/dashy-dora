@@ -367,6 +367,7 @@
     import RecipeStepLinksDialog from 'src/components/recipes/RecipeStepLinksDialog.vue';
     import { ICONS } from 'src/style/icons';
     import { useDragDropList } from 'src/composables/useDragDropList';
+    import { newClientId } from 'src/helpers/clientId';
     import type {
         EditableStep,
         IngredientOption,
@@ -397,13 +398,6 @@
         (e: 'update:steps', value: EditableStep[]): void;
         (e: 'update:selectedStepId', value: string | null): void;
     }>();
-
-    function newClientId(): string {
-        if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-            return crypto.randomUUID();
-        }
-        return `s${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
-    }
 
     const topLevelSteps = computed(() =>
         props.steps.filter((s) => s.parent_client_id === null).sort((a, b) => a.sequence - b.sequence));

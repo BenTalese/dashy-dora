@@ -32,13 +32,11 @@
         </div>
 
         <div class="row q-gutter-sm items-start">
-            <q-input
-                v-model.number="totalPrice"
-                dense outlined type="number"
-                :prefix="currencySymbolRef"
+            <MoneyInput
+                v-model="totalPrice"
                 class="col"
                 :label="mode === 'harvest' ? 'Total paid' : 'Price'"
-                :rules="[(v) => (v != null && v > 0) || 'Required']"
+                :rules="[(v: number | null) => (v != null && v > 0) || 'Required']"
                 hide-bottom-space
             />
             <q-input
@@ -125,7 +123,8 @@
 <script setup lang="ts">
     import { computed, ref, watch } from 'vue';
     import BaseButton from 'src/components/BaseButton.vue';
-    import { useMoney, formatMoney } from 'src/composables/useMoney';
+    import MoneyInput from 'src/components/MoneyInput.vue';
+    import { formatMoney } from 'src/composables/useMoney';
     import { ICONS } from 'src/style/icons';
     import { SUPPORTED_PRICE_UNITS } from 'src/generated/units_table';
     import { useMeasurementSystem } from 'src/composables/useMeasurementSystem';
@@ -133,11 +132,6 @@
     import { formatRelativeDay } from 'src/composables/useDateFormat';
     import type { PriceEntryPrefill } from 'src/models/stockItemDetail';
     import type { Store } from 'src/models/store';
-
-    // currency symbol + money formatter come from the shared
-    // install-wide money policy (see composables/useMoney.ts). Never
-    // hardcode `$` in this component; a non-AUD install renders wrong.
-    const { currencySymbol: currencySymbolRef } = useMoney();
 
     type Mode = 'shelf' | 'harvest';
 

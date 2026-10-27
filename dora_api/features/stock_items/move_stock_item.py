@@ -20,6 +20,8 @@ from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 
+_LOGGER = logging.getLogger(__name__)
+
 
 class MoveStockItemRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -62,7 +64,6 @@ class MoveStockItemHandler:
 @STOCK_ITEM_ROUTER.route("/<uuid:stock_item_id>/move", methods=["PATCH"])
 @has_request_body(MoveStockItemRequest)
 def move_stock_item(stock_item_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _Handler = MoveStockItemHandler(SqlAlchemyRepository())
     _Request: MoveStockItemRequest = get_request_body()
     _Response = _Handler.handle(_Request, stock_item_id)
@@ -72,7 +73,7 @@ def move_stock_item(stock_item_id: UUID):
     if _Response.destination_not_found:
         return business_rule_violation("Destination location was not found.")
 
-    _Logger.info(
+    _LOGGER.info(
         f"Moved stock item {stock_item_id} -> {_Request.destination_location_id}"
     )
     return no_content()

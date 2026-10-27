@@ -16,7 +16,7 @@
         :class="{
             'product-row--selected': selected,
             'product-row--inactive': !product.is_active,
-            'cursor-pointer': bulkMode || !!product.web_url,
+            'cursor-pointer': bulkMode,
         }"
         @click="onRowClick"
     >
@@ -30,7 +30,11 @@
                 @update:model-value="emit('toggle-select')"
             />
 
-            <div class="col product-row__identity">
+            <component
+                :is="linkTag"
+                class="col product-row__identity"
+                v-bind="linkAttrs"
+            >
                 <div class="product-row__name ellipsis">{{ product.name }}</div>
                 <div class="text-caption dora-text-muted ellipsis">
                     <span v-if="product.brand">{{ product.brand }}</span>
@@ -45,7 +49,7 @@
                         · Custom
                     </span>
                 </div>
-            </div>
+            </component>
 
             <DiscountChip
                 class="q-ml-sm"
@@ -64,7 +68,7 @@
             />
 
             <span class="product-row__price q-ml-sm">
-                {{ formatMoney(product.price_now ?? 0) }}
+                {{ formatMoney(product.price_now) }}
             </span>
 
             <!-- OD-1: the row carries the two *safe* everyday actions only.
@@ -110,6 +114,7 @@
     import StoreLogo from 'src/components/StoreLogo.vue';
     import { formatMoney } from 'src/composables/useMoney';
     import type { Product } from 'src/models/product';
+    import { useProductStoreLink } from 'src/composables/useProductStoreLink';
 
     const props = defineProps<{
         product: Product;
@@ -123,21 +128,20 @@
         (e: 'unlink'): void;
     }>();
 
+    // The identity block is the store link; in bulk mode a tap anywhere selects.
+    const { tag: linkTag, attrs: linkAttrs } = useProductStoreLink(
+        () => props.product, () => props.bulkMode,
+    );
+
     function onRowClick(): void {
-        if (props.bulkMode) {
-            emit('toggle-select');
-            return;
-        }
-        if (props.product.web_url) {
-            window.open(props.product.web_url, '_blank', 'noopener');
-        }
+        if (props.bulkMode) emit('toggle-select');
     }
 </script>
 
 <style scoped>
     .product-row {
-        border-radius: var(--radius-sm, 8px);
-        transition: background-color 120ms ease, outline-color 120ms ease;
+        border-radius: var(--radius-sm);
+        transition: background-color var(--motion-fast) var(--motion-ease), outline-color var(--motion-fast) var(--motion-ease);
         outline: 2px solid transparent;
         outline-offset: -2px;
     }
@@ -162,6 +166,8 @@
     }
     .product-row__identity {
         min-width: 0;
+        color: inherit;
+        text-decoration: none;
     }
     .product-row__price {
         font-weight: 600;

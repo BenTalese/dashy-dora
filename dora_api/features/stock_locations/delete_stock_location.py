@@ -8,6 +8,8 @@ from dora_api.infrastructure.api_response import no_content, not_found
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 
+_LOGGER = logging.getLogger(__name__)
+
 
 @dataclass(slots=True)
 class DeleteStockLocationResponse:
@@ -32,14 +34,13 @@ class DeleteStockLocationHandler:
 
 @STOCK_LOCATION_ROUTER.route("<uuid:stock_location_id>", methods=["DELETE"])
 def delete_stock_location(stock_location_id: UUID):
-    _Logger = logging.getLogger(__name__)
-    _Logger.info("Received request to delete stock location.")
+    _LOGGER.info("Received request to delete stock location.")
     _Handler: DeleteStockLocationHandler = DeleteStockLocationHandler(SqlAlchemyRepository())
     _Response = _Handler.handle(stock_location_id)
 
     if _Response.stock_location_not_found:
-        _Logger.warning(f"Stock location not found with ID: {stock_location_id}")
+        _LOGGER.warning(f"Stock location not found with ID: {stock_location_id}")
         return not_found(StockLocation.__name__, stock_location_id)
 
-    _Logger.info(f"Successfully deleted stock location with ID {stock_location_id}.")
+    _LOGGER.info(f"Successfully deleted stock location with ID {stock_location_id}.")
     return no_content()

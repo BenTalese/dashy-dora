@@ -82,14 +82,7 @@
                         :shortfall="entry.needs_cooking"
                         :highlight="hoveredRecipeIds.has(entry.recipe_id)"
                         @click.stop
-                        @view="emit('entryView', entry.recipe_id)"
-                        @cook="emit('entryCook', entry)"
-                        @remove="emit('entryRemove', entry)"
-                        @adjust="(d: number) => emit('entryAdjust', entry, d)"
-                        @lighter="emit('entryLighter', entry)"
-                        @link="emit('entryLink', entry)"
-                        @unlink="emit('entryUnlink', entry)"
-                        @fresh="emit('entryFresh', entry)"
+                        v-on="entryListeners(entry)"
                     />
                     <span
                         v-if="!slotEntries(slot).length && !isPast"
@@ -112,14 +105,7 @@
                         :shortfall="entry.needs_cooking"
                         :highlight="hoveredRecipeIds.has(entry.recipe_id)"
                         @click.stop
-                        @view="emit('entryView', entry.recipe_id)"
-                        @cook="emit('entryCook', entry)"
-                        @remove="emit('entryRemove', entry)"
-                        @adjust="(d: number) => emit('entryAdjust', entry, d)"
-                        @lighter="emit('entryLighter', entry)"
-                        @link="emit('entryLink', entry)"
-                        @unlink="emit('entryUnlink', entry)"
-                        @fresh="emit('entryFresh', entry)"
+                        v-on="entryListeners(entry)"
                     />
                 </div>
             </div>
@@ -266,6 +252,20 @@
         (e: 'entryFresh', entry: MealPlanEntry): void;
     }>();
 
+    /** The chip's menu, re-raised with the entry it belongs to. */
+    function entryListeners(entry: MealPlanEntry) {
+        return {
+            view: () => emit('entryView', entry.recipe_id),
+            cook: () => emit('entryCook', entry),
+            remove: () => emit('entryRemove', entry),
+            adjust: (delta: number) => emit('entryAdjust', entry, delta),
+            lighter: () => emit('entryLighter', entry),
+            link: () => emit('entryLink', entry),
+            unlink: () => emit('entryUnlink', entry),
+            fresh: () => emit('entryFresh', entry),
+        };
+    }
+
     // Q2 — used slots default. When showAllSlots is on, every household slot
     // renders (legacy behaviour, "tap to add" hint per slot). When off, only
     // slots with entries render; an explicit "+ add a meal" button opens a
@@ -343,10 +343,10 @@
     .slot-row {
         display: flex;
         align-items: flex-start;
-        gap: 8px;
+        gap: var(--space-2);
         padding: 4px 6px;
-        border-radius: 6px;
-        transition: background 0.12s ease, outline 0.12s ease;
+        border-radius: var(--radius-md);
+        transition: background var(--motion-fast) var(--motion-ease), outline var(--motion-fast) var(--motion-ease);
         background: transparent;
         border: 0;
         text-align: left;
@@ -364,7 +364,7 @@
         outline: none;
     }
     .slot-row--clickable:focus-visible {
-        outline: 2px solid var(--q-primary);
+        outline: 2px solid var(--brand-primary);
         outline-offset: 2px;
     }
     /* §4.6 — the armed slot is a FILLED accent surface with an inset accent
@@ -373,11 +373,11 @@
        idiom is not merely dated, it is actively misleading: there is nothing to
        drop any more. This says "this is the destination", not "drop here". */
     .slot-row--target {
-        background: color-mix(in srgb, var(--q-primary) 14%, var(--surface-component));
-        box-shadow: inset 2px 0 0 0 var(--q-primary);
+        background: color-mix(in srgb, var(--brand-primary) 14%, var(--surface-component));
+        box-shadow: inset 2px 0 0 0 var(--brand-primary);
     }
     .day-card--has-target {
-        border-color: var(--q-primary);
+        border-color: var(--brand-primary);
     }
     /* Owner 2026-09-12 — part of the middle pane's type bump; 0.78rem beside a
        1rem meal name read as a different app. */
@@ -393,7 +393,7 @@
         min-width: 0;
         display: flex;
         flex-direction: column;
-        gap: 4px;
+        gap: var(--space-1);
     }
     .slot-row__hint {
         font-size: 0.72rem;
@@ -404,22 +404,22 @@
         display: inline-flex;
         align-items: center;
         align-self: flex-start;
-        margin-top: 4px;
+        margin-top: var(--space-1);
         padding: 4px 10px;
         font-size: 0.78rem;
         font-weight: 500;
         color: var(--text-secondary);
         background: transparent;
         border: 1px dashed var(--border-default);
-        border-radius: 999px;
+        border-radius: var(--radius-pill);
         cursor: pointer;
-        transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+        transition: background var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease);
         min-height: 28px;
     }
     .add-meal-button:hover,
     .add-meal-button:focus-visible {
-        color: var(--q-primary);
-        border-color: var(--q-primary);
+        color: var(--brand-primary);
+        border-color: var(--brand-primary);
         background: var(--surface-sunken);
         outline: none;
     }

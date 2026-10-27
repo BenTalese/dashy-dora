@@ -15,15 +15,19 @@
         @keydown.space.prevent="onToggle"
         @keydown.enter.prevent="onToggle"
     >
-        <span class="dora-mode-slider__label dora-mode-slider__label--basic">
-            <q-icon :name="ICONS.chat_bubble_outline" size="12px" />
-            Basic
+        <!-- FU-663 / D-004: the root is the 44px hit area; the visible pill
+             is the 32px track inside it. -->
+        <span class="dora-mode-slider__track">
+            <span class="dora-mode-slider__label dora-mode-slider__label--basic">
+                <q-icon :name="ICONS.chat_bubble_outline" size="14px" />
+                Basic
+            </span>
+            <span class="dora-mode-slider__label dora-mode-slider__label--ai">
+                <q-icon :name="ICONS.auto_awesome" size="14px" />
+                AI
+            </span>
+            <span class="dora-mode-slider__knob" aria-hidden="true"></span>
         </span>
-        <span class="dora-mode-slider__label dora-mode-slider__label--ai">
-            <q-icon :name="ICONS.auto_awesome" size="12px" />
-            AI
-        </span>
-        <span class="dora-mode-slider__knob" aria-hidden="true"></span>
         <BaseTooltip v-if="tooltip">{{ tooltip }}</BaseTooltip>
     </div>
 </template>
@@ -92,25 +96,35 @@
 <style lang="scss" scoped>
     // Two-position pill. The knob is a skewed thick block that slides
     // between the Basic and AI halves; the active side glows.
+    // The hit area (D-004: 44px), transparent; the pill is the track.
     .dora-mode-slider {
+        display: inline-flex;
+        align-items: center;
+        min-height: 44px;
+        cursor: pointer;
+        user-select: none;
+        border-radius: var(--radius-pill);
+    }
+    .dora-mode-slider__track {
         position: relative;
         display: inline-flex;
         align-items: stretch;
-        height: 24px;
-        min-width: 96px;
-        border-radius: 999px;
-        background: var(--surface-sunken, rgba(0, 0, 0, 0.06));
+        height: 32px;
+        min-width: 112px;
+        border-radius: var(--radius-pill);
+        background: var(--surface-sunken);
         border: 1px solid color-mix(in srgb, var(--brand-primary) 20%, transparent);
-        cursor: pointer;
-        user-select: none;
         overflow: hidden;
         font-size: calc(var(--font-size-sm) * 1rem);
         font-weight: 600;
         letter-spacing: 0.02em;
-        transition: border-color 200ms ease, box-shadow 200ms ease;
+        transition: border-color var(--motion-normal) var(--motion-ease), box-shadow var(--motion-normal) var(--motion-ease);
     }
     .dora-mode-slider:focus-visible {
-        outline: 2px solid var(--brand-accent);
+        outline: none;
+    }
+    .dora-mode-slider:focus-visible .dora-mode-slider__track {
+        outline: 2px solid var(--focus-ring);
         outline-offset: 2px;
     }
     .dora-mode-slider--disabled {
@@ -122,6 +136,8 @@
     .dora-mode-slider--disabled.dora-mode-slider--actionable {
         cursor: pointer;
         opacity: 0.7;
+    }
+    .dora-mode-slider--actionable .dora-mode-slider__track {
         border-style: dashed;
     }
 
@@ -132,14 +148,14 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        gap: 4px;
-        padding: 0 10px;
+        gap: var(--space-1);
+        padding: 0 var(--space-3);
         color: var(--text-secondary);
-        transition: color 220ms ease;
+        transition: color var(--motion-normal) var(--motion-ease);
     }
     .dora-mode-slider--basic .dora-mode-slider__label--basic,
     .dora-mode-slider--ai .dora-mode-slider__label--ai {
-        color: var(--text-on-primary, #fff);
+        color: var(--text-on-primary);
     }
 
     // Sliding knob. Skewed for the "slanted thick" feel, glow on the
@@ -150,7 +166,7 @@
         bottom: 2px;
         left: 2px;
         width: calc(50% - 2px);
-        border-radius: 999px;
+        border-radius: var(--radius-pill);
         background: linear-gradient(
             120deg,
             var(--brand-primary),

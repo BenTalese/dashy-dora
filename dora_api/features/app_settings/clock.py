@@ -2,8 +2,8 @@
 
 The household timezone (`AppSetting.timezone`, IANA) decides the date boundary
 so a household is correct regardless of where the server is hosted. Used by the
-meal-plan past-day rules, the reconcile sweep, and `GET /meal-plans/today`.
-App-wide adoption of this boundary is FU-174.
+meal-plan past-day rules, the reconcile sweep, `GET /meal-plans/today` and
+every household-date window (R-021).
 """
 from datetime import date, datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError

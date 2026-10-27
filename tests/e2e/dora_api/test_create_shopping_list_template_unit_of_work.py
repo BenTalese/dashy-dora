@@ -50,3 +50,21 @@ def test__create_shopping_list_template__empty_lines__commits_the_template(api):
     finally:
         if template_id:
             requests.delete(f"{SL_TEMPLATES}/{template_id}")
+
+
+def test__list_templates__line_count_matches_the_lines(api):
+    """03-R17 — the summary's `line_count` is a grouped count."""
+    items = requests.get(f"{BASE}/stock-items?limit=2").json()["items"]
+    template_id = None
+    try:
+        resp = requests.post(SL_TEMPLATES, json={
+            "name": f"03-R17 tpl {uuid4()}",
+            "lines": [{"stock_item_id": i["stock_item_id"], "quantity": 1} for i in items],
+        })
+        assert resp.status_code == 201, resp.text
+        template_id = resp.json()["template_id"]
+        summary = next(t for t in requests.get(SL_TEMPLATES).json() if t["template_id"] == template_id)
+        assert summary["line_count"] == len(items) == 2
+    finally:
+        if template_id:
+            requests.delete(f"{SL_TEMPLATES}/{template_id}")

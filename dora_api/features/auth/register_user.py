@@ -44,9 +44,12 @@ from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
+from dora_api.infrastructure.session_user import SESSION_USER_ID_KEY
+from dora_api.infrastructure.api_response import too_many_requests
+
+_LOGGER = logging.getLogger(__name__)
 
 
-SESSION_USER_ID_KEY = "user_id"
 SESSION_PWD_V_KEY = "pwd_v"  # session-staleness check (see get_me)
 
 
@@ -242,10 +245,9 @@ class RegisterUserHandler:
 @AUTH_ROUTER.route("/register", methods=["POST"])
 @has_request_body(RegisterUserRequest)
 def register_user():
-    _Logger = logging.getLogger(__name__)
 
     if not rate_limit("auth.register", max_per_minute=10):
-        return _too_many_requests(
+        return too_many_requests(
             rate_limit_remaining_seconds("auth.register", 10),
         )
 
@@ -275,7 +277,7 @@ def register_user():
         # in a state that disallows this request"; the SPA's router guard
         # already redirects to /setup, so this branch is only reachable
         # via direct API calls.
-        _Logger.warning(
+        _LOGGER.warning(
             "Registration rejected — no admin exists yet; "
             "/bootstrap-admin is the correct endpoint"
         )
@@ -295,10 +297,10 @@ def register_user():
         body.status_code = CONFLICT
         return body
     if response.username_taken:
-        _Logger.warning(f"Registration rejected — username taken: {request_body.username}")
+        _LOGGER.warning(f"Registration rejected — username taken: {request_body.username}")
         return business_rule_violation(f"Username '{request_body.username}' is already taken.")
     if response.email_taken:
-        _Logger.warning(f"Registration rejected — email taken: {request_body.email}")
+        _LOGGER.warning(f"Registration rejected — email taken: {request_body.email}")
         return business_rule_violation("That email address is already registered.")
 
     # Auto-login the freshly registered user.
@@ -334,7 +336,7 @@ def register_user():
         payload={"username": request_body.username},
     )
 
-    _Logger.info(f"Registered user {request_body.username} ({response.new_user_id})")
+    _LOGGER.info(f"Registered user {request_body.username} ({response.new_user_id})")
     # return the full AuthenticatedUserDto so the SPA can hydrate
     # the auth store from a single call (parity with /login and /me). The
     # old ad-hoc dict had drifted: `has_image` and `dashboard_layout` were
@@ -346,17 +348,3 @@ def register_user():
     body["user_id"] = str(body["user_id"])
     body["verification_sent"] = bool(response.verify_token)
     return ok(body)
-
-
-def _too_many_requests(retry_after: int):
-    from flask import jsonify
-    from http.client import TOO_MANY_REQUESTS
-    response = jsonify(ProblemDetails(
-        detail=f"Too many requests. Try again in {retry_after}s.",
-        errors={}, status=TOO_MANY_REQUESTS, title="Rate limit exceeded.",
-        type="https://datatracker.ietf.org/doc/html/rfc6585#section-4",
-    ))
-    response.content_type = "application/problem+json"
-    response.status_code = TOO_MANY_REQUESTS
-    response.headers["Retry-After"] = str(max(retry_after, 1))
-    return response

@@ -320,7 +320,6 @@
 <script setup lang="ts">
     import BaseTooltip from 'src/components/BaseTooltip.vue';
     import { ICONS } from 'src/style/icons';
-    import { storeToRefs } from 'pinia';
     import { useQuasar } from 'quasar';
     import AddToListButton from 'src/components/AddToListButton.vue';
     import BaseButton from 'src/components/BaseButton.vue';
@@ -340,7 +339,6 @@
     import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { useStockItemStore } from 'src/stores/stockItemStore';
     import { useStockLevelStore } from 'src/stores/stockLevelStore';
-    import { useStockLocationStore } from 'src/stores/stockLocationStore';
     import { useLocationStore } from 'src/stores/locationStore';
     import { formatLocation, locationHasDetail } from 'src/helpers/locationDisplay';
     import { computed, ref } from 'vue';
@@ -409,16 +407,7 @@
             && belief.value.is_inferred
             && belief.value.differs_from_recorded,
     );
-    const BELIEF_BAND_WORD: Record<string, string> = {
-        out: 'out',
-        low: 'low',
-        stocked: 'stocked',
-    };
-    const beliefBandWord = computed(() => {
-        const band = belief.value?.believed_band;
-        if (!band) return '';
-        return BELIEF_BAND_WORD[band] ?? band;
-    });
+    const beliefBandWord = computed(() => belief.value?.believed_band ?? '');
 
     // ── One uncertainty marker (D-5) ────────────────────────────────────────
     // The level box used to carry TWO decorations meaning the same thing to a
@@ -454,23 +443,19 @@
     });
     const stockItemStore = useStockItemStore();
     const stockLevelStore = useStockLevelStore();
-    const stockLocationStore = useStockLocationStore();
     const locationStore = useLocationStore();
 
-    const { stockLevels } = storeToRefs(stockLevelStore);
-    const { stockLocations } = storeToRefs(stockLocationStore);
 
     // ── Level / location names ──────────────────────────────────────────
     const levelName = computed(() => {
         const id = props.item.stock_level_id;
-        if (!id) return '';
-        return stockLevels.value.find((l) => l.stock_level_id === id)?.name ?? '';
+        return id ? stockLevelStore.levelById.get(id)?.name ?? '' : '';
     });
     const levelSequence = computed<number | null>(() => {
         const seq = props.item.stock_level_sequence;
         if (typeof seq === 'number') return seq;
         const id = props.item.stock_level_id;
-        return stockLevels.value.find((l) => l.stock_level_id === id)?.sequence ?? null;
+        return (id ? stockLevelStore.levelById.get(id)?.sequence : undefined) ?? null;
     });
     // (the level button's colour + unset-state styling moved into
     //  `StockLevelPicker.vue` with the control itself.)
@@ -480,11 +465,7 @@
     // remains in the tooltip + detail page.
     const locationBreadcrumb = computed<readonly string[]>(() => {
         const id = props.item.stock_location_id;
-        if (!id) return [];
-        const path = locationStore.breadcrumb(id);
-        if (path.length > 0) return path;
-        const flat = stockLocations.value.find((l) => l.stock_location_id === id)?.name;
-        return flat ? [flat] : [];
+        return id ? locationStore.breadcrumb(id) : [];
     });
     const locationName = computed(() => formatLocation(locationBreadcrumb.value, 'zone'));
     const locationFull = computed(() => formatLocation(locationBreadcrumb.value, 'full'));
@@ -707,7 +688,7 @@
            gutters), so once a pantry crosses the virtualisation threshold
            the rows go flush. Owning the gap on the row itself keeps the
            spacing consistent in both the ListTransition and virtual paths. */
-        margin-bottom: 8px;
+        margin-bottom: var(--space-2);
         position: relative;
         border-radius: 8px;
         overflow: hidden; /* clip the essential stripe to the rounded border */
@@ -723,8 +704,8 @@
        brightens + accent-tinted shadow + 1px border accent. Reads as a
        polished card hover without the layout jitter. */
     .stock-row:hover {
-        background: color-mix(in srgb, var(--q-accent) 4%, var(--surface-component));
-        border-color: color-mix(in srgb, var(--q-accent) 38%, transparent);
+        background: color-mix(in srgb, var(--brand-accent) 4%, var(--surface-component));
+        border-color: color-mix(in srgb, var(--brand-accent) 38%, transparent);
         box-shadow: 0 1px 6px color-mix(in srgb, var(--text-primary) 8%, transparent);
     }
     .stock-row__body {
@@ -744,7 +725,7 @@
        a new one. */
     @media (max-width: 599px) {
         .stock-row__body {
-            padding: 4px 8px 4px 12px;
+            padding: var(--space-1) var(--space-2) var(--space-1) var(--space-3);
             /* 8px → 6px pays for most of the width the buttons below take
                back. See the button rule for why that trade is the right way
                round this time. */
@@ -826,17 +807,17 @@
        square. An outline firing on 5% of rows works; one firing on 40% is
        wallpaper, which is what two tiers produced. */
     .stock-row--attention {
-        border-color: var(--q-negative);
-        box-shadow: inset 0 0 0 1px var(--q-negative);
+        border-color: var(--semantic-negative);
+        box-shadow: inset 0 0 0 1px var(--semantic-negative);
     }
 
     /* Selection fills the row (L91). Peek + focused keep their own
        outline treatments so the three states are visually distinct. */
     .stock-row--selected {
-        background: color-mix(in srgb, var(--q-primary) 14%, var(--surface-component));
+        background: color-mix(in srgb, var(--brand-primary) 14%, var(--surface-component));
     }
     .stock-row--peeking {
-        outline: 2px solid var(--q-primary);
+        outline: 2px solid var(--brand-primary);
         outline-offset: -2px;
     }
     .stock-row--focused {
@@ -902,7 +883,7 @@
     }
     .stock-row__name {
         font-weight: 600;
-        font-size: 1.05rem;
+        font-size: calc(var(--font-size-md) * 1rem);
         line-height: 1.25;
         white-space: nowrap;
         overflow: hidden;
@@ -927,11 +908,11 @@
         cursor: pointer;
         display: inline-flex;
         align-items: center;
-        font-size: 0.8rem;
-        color: var(--text-secondary, color-mix(in srgb, var(--text-primary) 64%, transparent));
+        font-size: calc(var(--font-size-xs) * 1rem);
+        color: var(--text-secondary);
         padding: 2px 4px;
         margin-left: -4px;
-        border-radius: 4px;
+        border-radius: var(--radius-sm);
         transition: background-color var(--motion-fast) var(--motion-ease);
     }
     .stock-row__zone:hover {

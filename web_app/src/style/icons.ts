@@ -175,6 +175,8 @@ export const ICONS = {
     visibility: 'mdi-eye',
     wifi_tethering: 'mdi-broadcast',
     warning: 'mdi-alert',
+    volume_up: 'mdi-volume-high',
+    volume_off: 'mdi-volume-off',
 
     // Nav / Layout (added during the sweep — these never appeared as
     // bare `icon="x"` strings but live in command-palette + drawer

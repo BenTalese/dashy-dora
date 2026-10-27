@@ -55,7 +55,6 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Optional
 from uuid import UUID
 
-from flask import session
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import text
 
@@ -64,7 +63,6 @@ from dora_api.domain.entities.meal_plan_reconcile_receipt import (
     STATE_RESOLVED_ADJUSTED, STATE_RESOLVED_CONFIRMED, STATE_RESOLVED_DEFERRED,
     STATE_RESOLVED_NOT_COOKED, STATE_UNRESOLVED_AUTO, STATE_UNRESOLVED_MANUAL)
 from dora_api.features.app_settings.clock import household_today
-from dora_api.features.auth.register_user import SESSION_USER_ID_KEY
 from dora_api.features.recipes.pool import bump_pool
 from dora_api.features.routers import MEAL_PLAN_ROUTER
 from dora_api.infrastructure.api_response import (bad_request, not_found, ok,
@@ -74,6 +72,10 @@ from dora_api.infrastructure.auth_helpers import (rate_limit,
 from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
+from dora_api.persistence.aware import as_utc
+from dora_api.persistence.uuid_key import uuid_bind, uuid_key
+from dora_api.infrastructure.session_user import current_user_id
+from dora_api.infrastructure.api_response import too_many_requests
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -141,36 +143,10 @@ def _pending_states(auto_drain: bool) -> tuple[str, ...]:
 
 # ── Session helpers ─────────────────────────────────────────────────────
 
-def _current_user_id() -> Optional[UUID]:
-    raw = session.get(SESSION_USER_ID_KEY)
-    if not raw:
-        return None
-    try:
-        return UUID(raw)
-    except (ValueError, TypeError):
-        return None
-
 
 def _rate_limit_subject() -> Optional[str]:
-    uid = _current_user_id()
+    uid = current_user_id()
     return str(uid) if uid is not None else None
-
-
-def _too_many_requests(retry_after: int):
-    """RFC 6585 §4 shaped 429 — same shape as the assistant endpoints."""
-    from http.client import TOO_MANY_REQUESTS
-    from flask import jsonify
-
-    from dora_api.infrastructure.api_response import ProblemDetails
-    response = jsonify(ProblemDetails(
-        detail=f"Too many requests. Try again in {retry_after}s.",
-        errors={}, status=TOO_MANY_REQUESTS, title="Rate limit exceeded.",
-        type="https://datatracker.ietf.org/doc/html/rfc6585#section-4",
-    ))
-    response.content_type = "application/problem+json"
-    response.status_code = TOO_MANY_REQUESTS
-    response.headers["Retry-After"] = str(max(retry_after, 1))
-    return response
 
 
 # ── Queue endpoint ──────────────────────────────────────────────────────
@@ -234,22 +210,11 @@ def reconcile_overdue_signal(today: date) -> ReconcileOverdueSignal:
     pending (Dora handled it), so it's excluded from the count here too — which
     is what stops the overdue alert + suggestion firing in auto mode.
     """
-    states_in = ", ".join(f"'{s}'" for s in _pending_states(_auto_drain_enabled()))
     row = db.session.execute(
         text(
             'SELECT COUNT(*) AS n, MIN(mpe.scheduled_for) AS oldest '
-            'FROM "MealPlanEntry" mpe '
-            'JOIN "MealPlanReconcileReceipt" r ON r.meal_plan_entry_id = mpe.id '
-            f'WHERE r.state IN ({states_in}) '
-            '  AND NOT EXISTS ('
-            '    SELECT 1 FROM "MealPlanReconcileReceipt" r2 '
-            '    WHERE r2.meal_plan_entry_id = mpe.id '
-            # FU-529: "newer" uses the same (created_at, id) order as
-            # _latest_receipt so the latest-per-entry pick is deterministic.
-            '      AND (r2.created_at > r.created_at '
-            '           OR (r2.created_at = r.created_at AND r2.id > r.id))'
-            '  ) '
-            '  AND mpe.scheduled_for < :today'
+            + _ENTRY_RECEIPTS
+            + _latest_receipt_where(_pending_states(_auto_drain_enabled()))
         ),
         {"today": today},
     ).first()
@@ -282,7 +247,7 @@ def _encode_cursor(scheduled_for) -> str:
     `date` on Postgres but a `str` ("YYYY-MM-DD") on SQLite. Without this
     coercion `.isoformat()` raised AttributeError on SQLite → 500 the
     moment the queue paginated (>limit unresolved entries). Same divergence
-    `_stringify_entry_id` handles for UUIDs below."""
+    `uuid_key` handles for UUIDs."""
     if isinstance(scheduled_for, str):
         scheduled_for = date.fromisoformat(scheduled_for[:10])
     return base64.urlsafe_b64encode(scheduled_for.isoformat().encode()).decode()
@@ -297,152 +262,90 @@ def _decode_cursor(cursor: str) -> Optional[date]:
         return None
 
 
-def _stringify_entry_id(row_id) -> str:
-    """SQLite returns UUIDs as bytes for BINARY(16); Postgres returns UUIDs.
-    Normalise both to canonical hyphenated hex for the DTO."""
-    if isinstance(row_id, bytes):
-        return str(UUID(bytes=row_id))
-    return str(row_id)
+# ── Latest-receipt queries ──────────────────────────────────────────────
+# Every reconcile read is "past-day entries, judged by their latest receipt".
+# The latest-per-entry pick is a `NOT EXISTS` subquery rather than a window
+# function, which SQLite before 3.25 lacks (Postgres accepts the same shape).
+# FU-529: "newer" uses the same (created_at, id) order as `_latest_receipt`,
+# so the pick is deterministic when two receipts share a created_at.
+
+_ENTRY_RECEIPTS = (
+    'FROM "MealPlanEntry" mpe '
+    'JOIN "MealPlanReconcileReceipt" r ON r.meal_plan_entry_id = mpe.id '
+)
+
+_IS_LATEST_RECEIPT = (
+    'NOT EXISTS ('
+    '    SELECT 1 FROM "MealPlanReconcileReceipt" r2 '
+    '    WHERE r2.meal_plan_entry_id = mpe.id '
+    '      AND (r2.created_at > r.created_at '
+    '           OR (r2.created_at = r.created_at AND r2.id > r.id))'
+    ') '
+)
+
+_ROW_COLUMNS = (
+    'SELECT mpe.id AS entry_id, mpe.scheduled_for, mpe.slot, mpe.servings, '
+    '       mpe.recipe_id, rec.name AS recipe_name, '
+    '       r.state, r.original_servings, r.actual_servings, r.cooked_on, '
+    '       r.created_at '
+)
 
 
-def _fetch_queue(today: date, cursor: Optional[str], limit: int,
-                 pending_states: tuple[str, ...]) -> tuple[list[dict], Optional[str]]:
-    """Cursor-paged fetch of pending-latest-receipt past-day entries.
-    The latest-per-entry filter is a `NOT EXISTS` subquery keyed on
-    `created_at`, which sidesteps SQLite's older-version lack of window
-    functions (Postgres accepts the same shape). One row per entry.
-    `pending_states` is mode-aware (see `_pending_states`).
-    """
+def _latest_receipt_where(pending_states: tuple[str, ...] | None) -> str:
+    """Past-day entries by their latest receipt; `pending_states` narrows to the
+    queue (mode-aware, see `_pending_states`), None keeps every outcome (the log).
+    The states are module constants, never request input."""
+    clauses = [_IS_LATEST_RECEIPT, 'mpe.scheduled_for < :today ']
+    if pending_states is not None:
+        states_in = ", ".join(f"'{state}'" for state in pending_states)
+        clauses.insert(0, f'r.state IN ({states_in}) ')
+    return 'WHERE ' + ' AND '.join(clauses)
+
+
+def _receipt_rows(
+    today: date,
+    cursor: Optional[str],
+    limit: int,
+    *,
+    pending_states: tuple[str, ...] | None,
+    newest_first: bool,
+) -> tuple[list[dict], Optional[str]]:
+    """Cursor-paged rows, one per entry. The queue reads oldest-first and its
+    cursor is the last page's max `scheduled_for`; the read-only log (owner
+    2026-08-13) reads newest-first and its cursor is the last page's min."""
     params: dict = {"today": today, "limit": limit + 1}
     cursor_clause = ""
     if cursor:
         cursor_date = _decode_cursor(cursor)
         if cursor_date is not None:
             params["cursor_date"] = cursor_date
-            cursor_clause = "AND mpe.scheduled_for > :cursor_date "
-
-    states_in = ", ".join(f"'{s}'" for s in pending_states)
+            cursor_clause = (
+                "AND mpe.scheduled_for < :cursor_date " if newest_first
+                else "AND mpe.scheduled_for > :cursor_date "
+            )
+    direction = "DESC" if newest_first else "ASC"
     query = text(
-        'SELECT mpe.id AS entry_id, mpe.scheduled_for, mpe.slot, mpe.servings, '
-        '       mpe.recipe_id, rec.name AS recipe_name, '
-        '       r.state, r.original_servings, r.actual_servings, r.cooked_on, '
-        '       r.created_at '
-        'FROM "MealPlanEntry" mpe '
-        'JOIN "MealPlanReconcileReceipt" r ON r.meal_plan_entry_id = mpe.id '
-        'JOIN "Recipe" rec ON rec.id = mpe.recipe_id '
-        f'WHERE r.state IN ({states_in}) '
-        '  AND NOT EXISTS ('
-        '    SELECT 1 FROM "MealPlanReconcileReceipt" r2 '
-        '    WHERE r2.meal_plan_entry_id = mpe.id '
-        # FU-529: deterministic (created_at, id) "newer" — matches _latest_receipt.
-        '      AND (r2.created_at > r.created_at '
-        '           OR (r2.created_at = r.created_at AND r2.id > r.id))'
-        '  ) '
-        '  AND mpe.scheduled_for < :today '
-        f'  {cursor_clause}'
-        'ORDER BY mpe.scheduled_for ASC, mpe.id ASC '
-        'LIMIT :limit'
+        _ROW_COLUMNS
+        + _ENTRY_RECEIPTS
+        + 'JOIN "Recipe" rec ON rec.id = mpe.recipe_id '
+        + _latest_receipt_where(pending_states)
+        + cursor_clause
+        + f'ORDER BY mpe.scheduled_for {direction}, mpe.id {direction} '
+        + 'LIMIT :limit'
     )
-
-    rows = db.session.execute(query, params).mappings().all()
-
-    rows_list = list(rows)
+    rows_list = list(db.session.execute(query, params).mappings().all())
     next_cursor: Optional[str] = None
     if len(rows_list) > limit:
-        last = rows_list[limit - 1]
-        next_cursor = _encode_cursor(last["scheduled_for"])
+        next_cursor = _encode_cursor(rows_list[limit - 1]["scheduled_for"])
         rows_list = rows_list[:limit]
     return rows_list, next_cursor
 
 
-def _count_queue(today: date, pending_states: tuple[str, ...]) -> int:
-    """Exact count of pending-latest-receipt past-day entries.
-    Cheaper than a page walk for the dashboard chip + meal-plans header
-    nudge (Chunk 5) — one aggregate query hits the same JOIN + NOT EXISTS
-    the paged query does. `pending_states` is mode-aware (see `_pending_states`),
-    so this is 0 in auto mode once the auto-drained entries are excluded — which
-    hides the dashboard chip without any client-side change."""
-    states_in = ", ".join(f"'{s}'" for s in pending_states)
-    query = text(
-        'SELECT COUNT(*) '
-        'FROM "MealPlanEntry" mpe '
-        'JOIN "MealPlanReconcileReceipt" r ON r.meal_plan_entry_id = mpe.id '
-        f'WHERE r.state IN ({states_in}) '
-        '  AND NOT EXISTS ('
-        '    SELECT 1 FROM "MealPlanReconcileReceipt" r2 '
-        '    WHERE r2.meal_plan_entry_id = mpe.id '
-        # FU-529: deterministic (created_at, id) "newer" — matches _latest_receipt.
-        '      AND (r2.created_at > r.created_at '
-        '           OR (r2.created_at = r.created_at AND r2.id > r.id))'
-        '  ) '
-        '  AND mpe.scheduled_for < :today'
-    )
-    return int(db.session.execute(query, {"today": today}).scalar_one())
-
-
-def _fetch_log(today: date, cursor: Optional[str], limit: int) -> tuple[list[dict], Optional[str]]:
-    """Cursor-paged fetch for the read-only **reconcile log** (owner 2026-08-13):
-    every past-day entry that has a receipt, *whatever* its latest state
-    (auto-logged, confirmed, adjusted, not-cooked, deferred), **newest-first** —
-    the "what happened to my meals" view auto mode shows instead of the runner.
-    Same latest-per-entry `NOT EXISTS` shape as the queue, minus the pending-state
-    filter and with the order reversed. Cursor is the last page's *min*
-    scheduled_for; the next page filters `scheduled_for < cursor` (descending).
-    Same-day-tie caveat as the queue cursor (negligible at household scale)."""
-    params: dict = {"today": today, "limit": limit + 1}
-    cursor_clause = ""
-    if cursor:
-        cursor_date = _decode_cursor(cursor)
-        if cursor_date is not None:
-            params["cursor_date"] = cursor_date
-            cursor_clause = "AND mpe.scheduled_for < :cursor_date "
-
-    query = text(
-        'SELECT mpe.id AS entry_id, mpe.scheduled_for, mpe.slot, mpe.servings, '
-        '       mpe.recipe_id, rec.name AS recipe_name, '
-        '       r.state, r.original_servings, r.actual_servings, r.cooked_on, '
-        '       r.created_at '
-        'FROM "MealPlanEntry" mpe '
-        'JOIN "MealPlanReconcileReceipt" r ON r.meal_plan_entry_id = mpe.id '
-        'JOIN "Recipe" rec ON rec.id = mpe.recipe_id '
-        'WHERE NOT EXISTS ('
-        '    SELECT 1 FROM "MealPlanReconcileReceipt" r2 '
-        '    WHERE r2.meal_plan_entry_id = mpe.id '
-        '      AND (r2.created_at > r.created_at '
-        '           OR (r2.created_at = r.created_at AND r2.id > r.id))'
-        '  ) '
-        '  AND mpe.scheduled_for < :today '
-        f'  {cursor_clause}'
-        'ORDER BY mpe.scheduled_for DESC, mpe.id DESC '
-        'LIMIT :limit'
-    )
-
-    rows = db.session.execute(query, params).mappings().all()
-    rows_list = list(rows)
-    next_cursor: Optional[str] = None
-    if len(rows_list) > limit:
-        last = rows_list[limit - 1]
-        next_cursor = _encode_cursor(last["scheduled_for"])
-        rows_list = rows_list[:limit]
-    return rows_list, next_cursor
-
-
-def _count_log(today: date) -> int:
-    """Exact count of past-day entries that have a receipt (any latest state) —
-    the log's total. Same JOIN + latest-per-entry NOT EXISTS as `_count_queue`,
-    without the pending-state filter."""
-    query = text(
-        'SELECT COUNT(*) '
-        'FROM "MealPlanEntry" mpe '
-        'JOIN "MealPlanReconcileReceipt" r ON r.meal_plan_entry_id = mpe.id '
-        'WHERE NOT EXISTS ('
-        '    SELECT 1 FROM "MealPlanReconcileReceipt" r2 '
-        '    WHERE r2.meal_plan_entry_id = mpe.id '
-        '      AND (r2.created_at > r.created_at '
-        '           OR (r2.created_at = r.created_at AND r2.id > r.id))'
-        '  ) '
-        '  AND mpe.scheduled_for < :today'
-    )
+def _receipt_count(today: date, pending_states: tuple[str, ...] | None) -> int:
+    """Exact total for the same filter: the dashboard chip, the meal-plans header
+    nudge and the log's total. In auto mode the pending count drops to 0 once the
+    auto-drained entries are excluded, which hides the chip with no client change."""
+    query = text('SELECT COUNT(*) ' + _ENTRY_RECEIPTS + _latest_receipt_where(pending_states))
     return int(db.session.execute(query, {"today": today}).scalar_one())
 
 
@@ -451,12 +354,12 @@ def _row_to_dict(row) -> dict:
     cooked_on = row["cooked_on"]
     created_at = row["created_at"]
     return {
-        "entry_id": _stringify_entry_id(row["entry_id"]),
+        "entry_id": uuid_key(row["entry_id"]),
         "scheduled_for": scheduled.isoformat() if isinstance(scheduled, date) else str(scheduled),
         "slot": row["slot"],
         "planned_servings": int(row["servings"] or 0),
         "recipe": {
-            "id": _stringify_entry_id(row["recipe_id"]),
+            "id": uuid_key(row["recipe_id"]),
             "name": row["recipe_name"],
         },
         "receipt": {
@@ -472,7 +375,7 @@ def _row_to_dict(row) -> dict:
 @MEAL_PLAN_ROUTER.route("/reconcile-queue", methods=["GET"])
 def get_reconcile_queue():
     from flask import request as _flask_request
-    user_id = _current_user_id()
+    user_id = current_user_id()
     if user_id is None:
         return unauthorized()
 
@@ -491,12 +394,14 @@ def get_reconcile_queue():
     # finishes the deferred FU-317 Chunk 5 history seam). Without it → the
     # pending **queue** (mode-aware: `unresolved_auto` isn't pending in auto mode).
     if _flask_request.args.get("include_resolved") == "true":
-        rows, next_cursor = _fetch_log(today, cursor, limit)
-        total = _count_log(today)
+        rows, next_cursor = _receipt_rows(today, cursor, limit, pending_states=None, newest_first=True)
+        total = _receipt_count(today, None)
     else:
         pending_states = _pending_states(_auto_drain_enabled())
-        rows, next_cursor = _fetch_queue(today, cursor, limit, pending_states)
-        total = _count_queue(today, pending_states)
+        rows, next_cursor = _receipt_rows(
+            today, cursor, limit, pending_states=pending_states, newest_first=False,
+        )
+        total = _receipt_count(today, pending_states)
 
     return ok({
         "entries": [_row_to_dict(r) for r in rows],
@@ -520,20 +425,8 @@ class ReconcileVerbRequest(BaseModel):
     note: str | None = Field(default=None, max_length=500)
 
 
-def _id_bytes(value) -> bytes | str:
-    """Normalise a UUID (in any shape) to the raw-`text()` bind form the
-    active backend needs: `bytes` for SQLite's BINARY(16) UUIDType
-    columns, the canonical string for Postgres native `uuid` (which
-    rejects a `bytea` bind — `operator does not exist: uuid = bytea`).
-    See `recipes/pool.py:bump_pool` for the same normalisation; both live
-    in raw-SQL corners of the reconcile feature."""
-    if isinstance(value, bytes):
-        _Uuid = UUID(bytes=value)
-    elif isinstance(value, UUID):
-        _Uuid = value
-    else:
-        _Uuid = UUID(str(value))
-    return _Uuid.bytes if db.engine.dialect.name == "sqlite" else str(_Uuid)
+def _bind(value) -> bytes | str:
+    return uuid_bind(value, db.engine.dialect.name)
 
 
 def _latest_receipt(entry_id) -> Optional[dict]:
@@ -548,7 +441,7 @@ def _latest_receipt(entry_id) -> Optional[dict]:
             # `submit_verb` keeps created_at itself causally ordered.
             'ORDER BY created_at DESC, id DESC LIMIT 1'
         ),
-        {"eid": _id_bytes(entry_id)},
+        {"eid": _bind(entry_id)},
     ).mappings().first()
     return dict(row) if row else None
 
@@ -560,7 +453,7 @@ def _load_entry(entry_id: UUID) -> Optional[dict]:
             'SELECT id, recipe_id, servings, consumed_at, cook_fresh '
             'FROM "MealPlanEntry" WHERE id = :eid'
         ),
-        {"eid": _id_bytes(entry_id)},
+        {"eid": _bind(entry_id)},
     ).mappings().first()
     return dict(row) if row else None
 
@@ -629,13 +522,13 @@ def _is_idempotent(latest: Optional[dict], target_state: str,
 @MEAL_PLAN_ROUTER.route("/reconcile/<uuid:entry_id>", methods=["POST"])
 @has_request_body(ReconcileVerbRequest)
 def submit_verb(entry_id: UUID):
-    user_id = _current_user_id()
+    user_id = current_user_id()
     if user_id is None:
         return unauthorized()
 
     subject = _rate_limit_subject()
     if not rate_limit(_RATE_SCOPE_RECONCILE, _RECONCILE_PER_MINUTE, subject=subject):
-        return _too_many_requests(rate_limit_remaining_seconds(
+        return too_many_requests(rate_limit_remaining_seconds(
             _RATE_SCOPE_RECONCILE, _RECONCILE_PER_MINUTE, subject=subject,
         ))
 
@@ -687,8 +580,7 @@ def submit_verb(entry_id: UUID):
         except ValueError:
             prev_created = None
     if isinstance(prev_created, datetime):
-        if prev_created.tzinfo is None:
-            prev_created = prev_created.replace(tzinfo=UTC)
+        prev_created = as_utc(prev_created)
         if prev_created >= now:
             now = prev_created + timedelta(microseconds=1)
 
@@ -723,12 +615,12 @@ def submit_verb(entry_id: UUID):
     if verb in _COOKED_VERBS and entry["consumed_at"] is None:
         db.session.execute(
             text('UPDATE "MealPlanEntry" SET consumed_at = :now WHERE id = :eid'),
-            {"now": now, "eid": _id_bytes(entry["id"])},
+            {"now": now, "eid": _bind(entry["id"])},
         )
     elif verb == VERB_NOT_COOKED and entry["consumed_at"] is not None:
         db.session.execute(
             text('UPDATE "MealPlanEntry" SET consumed_at = NULL WHERE id = :eid'),
-            {"eid": _id_bytes(entry["id"])},
+            {"eid": _bind(entry["id"])},
         )
 
     # Write the corrective receipt (append-only — never mutates the past).
@@ -745,13 +637,13 @@ def submit_verb(entry_id: UUID):
             'VALUES (:id, :eid, :state, :orig, :actual, :cooked_on, :uid, :now, :note, :now)'
         ),
         {
-            "id": _id_bytes(new_receipt_id),
-            "eid": _id_bytes(entry["id"]),
+            "id": _bind(new_receipt_id),
+            "eid": _bind(entry["id"]),
             "state": target_state,
             "orig": int(entry["servings"] or 0),
             "actual": actual_for_row,
             "cooked_on": cooked_on_for_row,
-            "uid": _id_bytes(user_id),
+            "uid": _bind(user_id),
             "now": now,
             "note": req.note,
         },
@@ -781,7 +673,7 @@ def submit_verb(entry_id: UUID):
 def _read_pool(recipe_id) -> int:
     row = db.session.execute(
         text('SELECT available_meals FROM "Recipe" WHERE id = :rid'),
-        {"rid": _id_bytes(recipe_id)},
+        {"rid": _bind(recipe_id)},
     ).first()
     return int(row[0]) if row and row[0] is not None else 0
 
@@ -793,7 +685,7 @@ def _verb_payload(*, entry_id, receipt, new_pool: int, idempotent: bool) -> dict
     r_cooked_on = receipt.get("cooked_on")
     r_created = receipt.get("created_at")
     return {
-        "entry_id": _stringify_entry_id(entry_id),
+        "entry_id": uuid_key(entry_id),
         "new_pool": new_pool,
         "idempotent": idempotent,
         "receipt": {

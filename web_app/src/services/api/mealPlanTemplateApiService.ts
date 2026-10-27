@@ -51,9 +51,6 @@ export default class MealPlanTemplateApiService {
     deleteAsync = async (id: string): Promise<void> =>
         await this.httpClient.delete(`/meal-plan-templates/${id}`);
 
-    cloneAsync = async (id: string): Promise<CreatedResponse> =>
-        await this.httpClient.post<CreatedResponse>(`/meal-plan-templates/${id}/clone`, {});
-
     /** Fork a week from a template (skips past days server-side). */
     applyAsync = async (command: ApplyTemplateCommand): Promise<ApplyTemplateResult> =>
         await this.httpClient.post<ApplyTemplateResult>('/meal-plans/from-template', command);

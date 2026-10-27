@@ -151,7 +151,7 @@ export function useLineSections(
     mode: Ref<SectionMode> | ComputedRef<SectionMode>,
     options: UseLineSectionsOptions = {},
 ) {
-    /** Which modes have any data to section by. `manual` is always in. A mode
+    /** Which modes have any data to section by. `none` is always in. A mode
      *  this caller doesn't offer is reported unavailable, so it can neither be
      *  rendered nor inherited from a stored preference. */
     const availableModes = computed<Record<SectionMode, boolean>>(() => {

@@ -33,7 +33,6 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 from typing import Callable, List
-from uuid import UUID
 
 from dora_api.app import app
 from dora_api.domain.entities.alert_interaction import AlertInteraction
@@ -50,6 +49,9 @@ from dora_api.infrastructure.email_sender import (email_sender_configured,
                                                   render_template, send_email)
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
+from dora_api.features.alerts import _ledger as ledger
+
+_LOGGER = logging.getLogger(__name__)
 
 
 # The ranked pool the two formats draw from. Deliberately larger than either
@@ -59,6 +61,11 @@ from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 # own max of 20 is a URL-parameter guard, not a domain limit, so it does not
 # apply here.
 DEAL_POOL_SIZE = 40
+
+
+# SPA routes the mail links to; pinned against `routes.ts` by the deals tests.
+DEALS_ROUTE = "/my-products"
+UNSUBSCRIBE_ROUTE = "/settings/notifications"
 
 
 def send_deals_email(
@@ -71,7 +78,6 @@ def send_deals_email(
     household timezone so a test can drive the hour and weekday gates without
     touching the system clock.
     """
-    log = logging.getLogger(__name__)
     now = now or datetime.now(timezone.utc)
     sent = 0
     try:
@@ -103,8 +109,8 @@ def send_deals_email(
             currency = getattr(setting, "currency", None) or "AUD"
             product_dtos = GetBestDealsHandler(repository).handle(DEAL_POOL_SIZE)
 
-            deals_url = spa_deep_link("/products")
-            unsubscribe_url = spa_deep_link("/settings/notifications")
+            deals_url = spa_deep_link(DEALS_ROUTE)
+            unsubscribe_url = spa_deep_link(UNSUBSCRIBE_ROUTE)
 
             for user in recipients:
                 try:
@@ -113,14 +119,14 @@ def send_deals_email(
                         deals_url, unsubscribe_url, _send_email,
                     )
                 except Exception as exc:  # noqa: BLE001
-                    log.warning("deals_email: user %s failed: %s", user.id, exc)
+                    _LOGGER.warning("deals_email: user %s failed: %s", user.id, exc)
             if sent:
-                log.info(
+                _LOGGER.info(
                     "deals_email: delivered %d email(s) at %s",
                     sent, local_now.isoformat(),
                 )
     except Exception as exc:  # noqa: BLE001
-        log.warning("deals_email: job failed: %s", exc)
+        _LOGGER.warning("deals_email: job failed: %s", exc)
     return sent
 
 
@@ -145,7 +151,7 @@ def _opted_in_users(repository: SqlAlchemyRepository) -> List[User]:
         if not (user.email or "").strip():
             continue
         if not user.email_verified:
-            logging.getLogger(__name__).info(
+            _LOGGER.info(
                 "deals_email: skipping user %s — address not verified", user.id,
             )
             continue
@@ -165,7 +171,7 @@ def _process_user(
     sender: Callable,
 ) -> int:
     key = deals_ledger_key(today)
-    existing = _ledger_row(repository, user.id, key)
+    existing = ledger.interaction_for(repository, user.id, key)
     if existing is not None and existing.last_pushed_at is not None:
         return 0
 
@@ -221,15 +227,3 @@ def _text_body(digest: DealsDigest, unsubscribe_url: str) -> str:
         + "\n".join(rows)
         + f"\n\nTurn this email off: {unsubscribe_url}\n"
     )
-
-
-def _ledger_row(
-    repository: SqlAlchemyRepository,
-    user_id: UUID,
-    key: str,
-) -> AlertInteraction | None:
-    rows: List[AlertInteraction] = list(repository.get(AlertInteraction).all(
-        EntityField(AlertInteraction, AlertInteraction.Fields.USER_ID).eq(user_id)
-        & EntityField(AlertInteraction, AlertInteraction.Fields.ALERT_KEY).eq(key)
-    ))
-    return rows[0] if rows else None

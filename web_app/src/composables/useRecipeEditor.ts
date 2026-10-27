@@ -85,13 +85,6 @@ export type RecipeForm = {
     sections: SectionForm[];
 };
 
-export function newClientId(): string {
-    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-        return crypto.randomUUID();
-    }
-    return `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
-}
-
 /** `v-model.number` leaves an empty field as `''` and a non-numeric clear as
  *  `NaN`. The server expects `int | None`, so coerce at the wire boundary. */
 export function toIntOrNull(value: unknown): number | null {

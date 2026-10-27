@@ -16,9 +16,7 @@ There is no `cookable_with_optional` half-state.
 IMPL_PLAN_RECIPE_IMPORTER §Chunk 4 — cookability is now **tri-state**: True /
 False / None. ``None`` fires when any required ingredient is *unlinked*
 (``stock_item_id IS NULL``) — the app admits "I don't know" instead of
-fabricating True or False. Charter P3 Honest. R-010 closed-set. The plain
-:func:`is_cookable` predicate that pre-dates this chunk still returns bool;
-new code should call :func:`cookability_state` for the tri-state answer.
+fabricating True or False. Charter P3 Honest. R-010 closed-set.
 """
 from __future__ import annotations
 
@@ -75,19 +73,6 @@ def missing_count_for(ingredients, levels_by_item=None) -> int:
     })
 
 
-def is_cookable(ingredients) -> bool:
-    """True when nothing required is missing. An empty (or all-optional)
-    ingredient list is cookable.
-
-    NOTE: this is the pre-Chunk-4 boolean predicate — it treats unlinked
-    required ingredients as "not missing" (no stock_item ⇒ no stock level
-    ⇒ can't be missing). New code should call :func:`cookability_state`
-    which returns ``None`` when any required ingredient is unlinked, so
-    the honest "unknown" state propagates through the DTO / filter chain.
-    """
-    return missing_count_for(ingredients) == 0
-
-
 def cookability_state(ingredients) -> bool | None:
     """Tri-state cookability: True / False / None.
 
@@ -96,7 +81,7 @@ def cookability_state(ingredients) -> bool | None:
       without knowing what item to check the stock level of. P3 Honest.
     * ``True`` — every required ingredient links to a StockItem, none of
       which are missing. An empty (or all-optional) ingredient list is
-      cookable (same as :func:`is_cookable`).
+      cookable.
     * ``False`` — every required ingredient links to a StockItem, and at
       least one is missing.
     """

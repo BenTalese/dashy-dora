@@ -520,10 +520,8 @@
     import { storeToRefs } from 'pinia';
     import { fontFamilyOptions, coalesceFontFamily } from 'src/services/themeService';
     import type { ProcessedImage } from 'src/services/files/imageService';
-    import AppSettingsApiService, {
-        type AppSettings,
-        type UpdateAppSettingsCommand,
-    } from 'src/services/api/appSettingsApiService';
+    import type { AppSettings, UpdateAppSettingsCommand } from 'src/services/api/appSettingsApiService';
+    import { useAppSettingsStore } from 'src/stores/appSettingsStore';
     import { useFeatureFlags } from 'src/composables/useFeatureFlags';
     import { refreshCookingPolicy } from 'src/composables/useCookingPolicy';
     import { useMeasurementSystem } from 'src/composables/useMeasurementSystem';
@@ -537,9 +535,8 @@
         StarterPackItem,
     } from 'src/models/onboarding';
     import { NARRATIVE_SCENES } from 'src/pages/onboarding/onboardingContent';
-    import type { StockGroup } from 'src/models/stockGroup';
     import OnboardingApiService from 'src/services/api/onboardingApiService';
-    import StockGroupApiService from 'src/services/api/stockGroupApiService';
+    import { useStockGroupStore } from 'src/stores/stockGroupStore';
     import { extractFieldErrors } from 'src/services/errorHandling/apiErrorHandler';
     import { useAuthStore } from 'src/stores/authStore';
     import { useStockLocationStore } from 'src/stores/stockLocationStore';
@@ -548,8 +545,8 @@
 
     const router = useRouter();
     const onboardingApi = new OnboardingApiService();
-    const stockGroupApi = new StockGroupApiService();
-    const appSettingsApi = new AppSettingsApiService();
+    const stockGroupStore = useStockGroupStore();
+    const appSettingsStore = useAppSettingsStore();
     const { refresh: refreshFeatureFlags, money: moneyFlag } = useFeatureFlags();
     const { reload: reloadMeasurementSystem } = useMeasurementSystem();
     const authStore = useAuthStore();
@@ -557,14 +554,10 @@
 
     const { currentUser } = storeToRefs(authStore);
 
-    // Stock groups don't have a store of their own; load them locally.
-    const stockGroups = ref<StockGroup[]>([]);
+    // Refetched, not ensure-loaded: onboarding seeds groups mid-flow.
+    const stockGroups = computed(() => stockGroupStore.stockGroups);
     async function loadStockGroups() {
-        try {
-            stockGroups.value = await stockGroupApi.getAllAsync();
-        } catch {
-            stockGroups.value = [];
-        }
+        await stockGroupStore.refreshAsync().catch(() => undefined);
     }
 
     // ── Static option lists ──────────────────────────────────────────
@@ -885,7 +878,7 @@
     async function loadFeatureBaseline() {
         if (!state.value?.first_user || !currentUser.value?.is_admin) return;
         try {
-            const settings = await appSettingsApi.getAsync();
+            const settings = await appSettingsStore.loadAsync();
             const baseline = {} as Record<FeatureKey, boolean>;
             for (const card of FEATURE_CARDS) baseline[card.key] = card.read(settings);
             featureBaseline.value = baseline;
@@ -1332,7 +1325,7 @@
         const featureUpdates = changedFeatureSettings.value;
         const householdUpdates = changedHouseholdSettings.value;
         if (Object.keys(featureUpdates).length > 0 || Object.keys(householdUpdates).length > 0) {
-            const saved = await appSettingsApi.updateAsync({ ...featureUpdates, ...householdUpdates });
+            const saved = await appSettingsStore.saveAsync({ ...featureUpdates, ...householdUpdates });
             featureBaseline.value = { ...featurePicks };
             householdBaseline.value = {
                 headcount: saved.household_headcount,
@@ -1398,7 +1391,7 @@
             await loadStockGroups();
             const existing = stockGroups.value.map((g) => g.name);
             for (const name of customGroups.value) {
-                if (!hasName(existing, name)) await stockGroupApi.createAsync({ name });
+                if (!hasName(existing, name)) await stockGroupStore.createAsync(name);
             }
         }
         if (customLocations.value.length > 0) {

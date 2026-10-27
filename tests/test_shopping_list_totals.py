@@ -10,7 +10,6 @@ below applies it when building a line — the same way the handler does — and
 these tests stay about the aggregation. The ladder's own rules are covered in
 `test_shopping_list_store_breakdown.py` and by the store-card e2e path.
 """
-from datetime import datetime
 from uuid import uuid4
 
 from dora_api.features.shopping_lists.get_shopping_list_detail import (
@@ -31,7 +30,7 @@ def _line(*, quantity=1, is_ticked=False, actual_unit_price=None,
     # would actually emit. No historic rung here — these fixtures have no prior
     # purchase — so it reduces to actual→offer, which is what these cases mean.
     _offers = list(offers)
-    # Same rule as `_chosen_offer`: the flagged offer wins, else the first
+    # Same rule as `_first_or_selected`: the flagged offer wins, else the first
     # (the API pre-sorts them cheapest-first).
     _chosen = next(
         (o for o in _offers if o.is_selected), _offers[0] if _offers else None,
@@ -49,9 +48,9 @@ def _line(*, quantity=1, is_ticked=False, actual_unit_price=None,
         # pass None and keep the test stub current.
         line_id=uuid4(), stock_item_id=uuid4(), product_id=None,
         stock_item_name="i",
-        stock_level_name=None, stock_location_id=None, stock_location_breadcrumb=[],
+        stock_location_id=None, stock_location_breadcrumb=[],
         quantity=quantity, is_ticked=is_ticked, selected_product_id=selected_product_id,
-        sequence=0, is_auto_added=False, added_at=datetime(2026, 1, 1),
+        sequence=0, is_auto_added=False,
         actual_unit_price=actual_unit_price, purchased_store_id=None,
         purchased_store_name=None, offers=_offers,
         estimated_unit_price=_estimate, estimate_source=_source,

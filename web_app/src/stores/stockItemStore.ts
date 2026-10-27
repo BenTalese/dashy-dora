@@ -1,5 +1,8 @@
 import { acceptHMRUpdate, defineStore } from 'pinia';
+import { invalidateBuyVerdict } from 'src/composables/useBuyVerdict';
 import { nameCollator } from 'src/composables/useMoney';
+import { usePantryBeliefs } from 'src/composables/usePantryBeliefs';
+import { usePlannedDemand } from 'src/composables/usePlannedDemand';
 import { Notify } from 'quasar';
 import type { StockItem } from 'src/models/stockItem';
 import type {
@@ -12,9 +15,12 @@ import { clearRollbacks, registerRollback } from 'src/services/errorHandling/rol
 import { useRecipeStore } from 'src/stores/recipeStore';
 import { useShoppingListStore } from 'src/stores/shoppingListStore';
 import type { Ref } from 'vue';
-import { readonly, ref } from 'vue';
+import { computed, readonly, ref } from 'vue';
 
 const stockItemApiService = new StockItemApiService();
+
+/** How long a burst of level writes settles before loaded overlays refetch. */
+const OVERLAY_REFRESH_DELAY_MS = 300;
 
 export const useStockItemStore = defineStore('stockItem', () => {
     const stockItems: Ref<StockItem[]> = ref([]);
@@ -71,8 +77,35 @@ export const useStockItemStore = defineStore('stockItem', () => {
         useRecipeStore().invalidateRecipes();
     }
 
+    /** A level change moves three per-item overlays: the buy verdict (its
+     *  need axis), the pantry belief ("override wins") and the planned-demand
+     *  grade (Out outranks Low). They are marked stale here, on the one level
+     *  write path (R-074), so every caller (the row, the detail page, the
+     *  verdict card, the stocktake runner) leaves the same surfaces fresh.
+     *  Overlays a surface has already loaded refetch once after a burst of
+     *  writes settles, so a stocktake run doesn't fire a request per item. */
+    let overlayRefresh: ReturnType<typeof setTimeout> | null = null;
+    function invalidateLevelOverlays(stockItemId: string): void {
+        invalidateBuyVerdict(stockItemId);
+        const beliefs = usePantryBeliefs();
+        const demand = usePlannedDemand();
+        const reloadBeliefs = beliefs.loaded.value;
+        const reloadDemand = demand.loaded.value;
+        beliefs.invalidate();
+        demand.invalidate();
+        if (overlayRefresh) clearTimeout(overlayRefresh);
+        overlayRefresh = setTimeout(() => {
+            overlayRefresh = null;
+            if (reloadBeliefs) void beliefs.loadAsync(true);
+            if (reloadDemand) void demand.loadAsync(true);
+        }, OVERLAY_REFRESH_DELAY_MS);
+    }
+
     let hydrated = false;
     let inflight: Promise<void> | null = null;
+
+    /** Item by id, for per-row lookups (a page renders one per row). */
+    const byId = computed(() => new Map(stockItems.value.map((si) => [si.stock_item_id, si])));
 
     /** C-1 Stock Overview Chunk 1 — page until exhausted so a pantry of
      *  >50 items doesn't silently get truncated to the first page
@@ -126,6 +159,7 @@ export const useStockItemStore = defineStore('stockItem', () => {
             // move optimistically (finalisation 05-R5).
             const result = await stockItemApiService.updateAsync(stockItemToUpdate);
             invalidateDerivedRecipeFacts();
+            invalidateLevelOverlays(stockItemToUpdate.stock_item_id);
             await handleAutoAddedResponse(stockItemToUpdate.stock_item_id, result);
             return;
         }
@@ -145,6 +179,7 @@ export const useStockItemStore = defineStore('stockItem', () => {
         stockItems.value[stockItemIndex] = await stockItemApiService.getAsync(stock_item_id);
         clearRollbacks();
         invalidateDerivedRecipeFacts();
+        invalidateLevelOverlays(stock_item_id);
         // level transition may have triggered the auto-add hook.
         await handleAutoAddedResponse(stock_item_id, result);
     }
@@ -168,6 +203,17 @@ export const useStockItemStore = defineStore('stockItem', () => {
         await handleAutoAddedResponse(stock_item_id, result);
     };
 
+    /** Push the expiry "+N days" (server rule) and refresh the row. Returns
+     *  the new ISO expiry date. */
+    const pushExpiryAsync = async (stockItemId: string, days: number): Promise<string> => {
+        const { expiry_date } = await stockItemApiService.pushExpiryAsync(stockItemId, days);
+        const refreshed = await stockItemApiService.getAsync(stockItemId);
+        const idx = stockItems.value.findIndex((si) => si.stock_item_id === stockItemId);
+        if (idx >= 0) stockItems.value[idx] = refreshed;
+        invalidateDerivedRecipeFacts();
+        return expiry_date;
+    };
+
     const deleteStockItemAsync = async (stockItemID: string) => {
         await stockItemApiService.deleteAsync(stockItemID);
         stockItems.value = stockItems.value.filter((si) => si.stock_item_id !== stockItemID);
@@ -175,12 +221,15 @@ export const useStockItemStore = defineStore('stockItem', () => {
     };
 
     return {
+        byId,
         stockItems: readonly(stockItems),
         getStockItemsAsync,
         ensureLoadedAsync,
         createStockItemAsync,
         updateStockLevelAsync,
+        invalidateLevelOverlays,
         updateStockItemAsync,
+        pushExpiryAsync,
         deleteStockItemAsync,
     };
 });

@@ -65,6 +65,7 @@
 </template>
 
 <script lang="ts" setup>
+    import { useSettingsSave } from 'src/composables/useSettingsSave';
     import BaseTooltip from 'src/components/BaseTooltip.vue';
     import AppSpinner from 'src/components/AppSpinner.vue';
     import BaseButton from 'src/components/BaseButton.vue';
@@ -73,7 +74,6 @@
     import DietaryTagFormDialog from 'src/components/settings/DietaryTagFormDialog.vue';
     import type { DietaryTag } from 'src/models/recipeVocab';
     import DietaryTagApiService from 'src/services/api/dietaryTagApiService';
-    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { onMounted, ref } from 'vue';
     import SettingsPageHeader from 'src/components/settings/SettingsPageHeader.vue';
 
@@ -88,13 +88,7 @@
     const dialogOpen = ref(false);
     const editingTag = ref<DietaryTag | null>(null);
 
-    function notifyError(message: string, err: unknown) {
-        $q.notify({
-            type: 'negative',
-            message,
-            caption: toastCaption(err),
-        });
-    }
+    const { notifyError } = useSettingsSave();
 
     async function load() {
         loading.value = true;

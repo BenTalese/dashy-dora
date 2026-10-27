@@ -38,16 +38,16 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from dora_api.domain.entities.app_setting import AppSetting
 from dora_api.domain.entities.meal_plan_entry import MealPlanEntry
+from dora_api.features.app_settings.access import money_features_enabled
 from dora_api.features.app_settings.clock import household_today
-from dora_api.features.budget.budget import period_bounds, period_spent
-from dora_api.features.meal_slots.manage_meal_slots import GetMealSlotsHandler
-from dora_api.features.recipes.get_recipes import (
-    GetRecipesHandler, count_expiring_ingredients_per_recipe)
+from dora_api.features.budget.budget import budget_remaining, household_budget
+from dora_api.features.meal_slots.slot_validation import ordered_slot_names
+from dora_api.features.recipes.all_recipes import load_all_recipe_dtos
+from dora_api.features.recipes.get_recipes import count_expiring_ingredients_per_recipe
 from dora_api.features.recipes.recipe_cost import estimate_costs_for
 from dora_api.features.routers import MEAL_PLAN_ROUTER
 from dora_api.infrastructure.api_response import bad_request, ok
 from dora_api.infrastructure.decorators import has_request_body
-from dora_api.infrastructure.query_options import QueryOptions
 from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
@@ -348,9 +348,9 @@ def place_entries(
     each day gets its own distinct recipes. Returns `(candidate, day, slot)`
     triples in day-major order.
     """
-    if not days:
+    if not days or not allowed_slots:
         return []
-    slots = allowed_slots or ["Dinner"]
+    slots = allowed_slots
     if repeat_same_day:
         pattern = _fill_one_day(list(selected), slots)
         return [(c, day, slot) for day in days for (c, slot) in pattern]
@@ -375,7 +375,7 @@ def place_entries_batched(
     A recipe whose `time_of_day` names the slot is preferred, mirroring
     `_fill_one_day`. Consumes `pool` so each cook uses a distinct recipe.
     """
-    slots = allowed_slots or ["Dinner"]
+    slots = allowed_slots
     pool = list(selected)
     placements: List[tuple] = []
     seq = 0
@@ -435,44 +435,6 @@ class AutoBuildRequest(BaseModel):
 
 
 
-def _money_enabled(repository: SqlAlchemyRepository) -> bool:
-    """The install-wide money gate (R-058). Read once per build and applied to
-    every figure that leaves this endpoint."""
-    settings = repository.get(AppSetting).all()
-    return bool(settings and settings[0].money_enabled)
-
-
-def _household_budget_amount(repository: SqlAlchemyRepository) -> Optional[float]:
-    """The household's positive grocery budget, or None when money is off
-    install-wide or no budget is set. Single household value (moved off User):
-    both the cap gate and the response's display figure read this so they
-    can't disagree."""
-    settings = repository.get(AppSetting).all()
-    setting = settings[0] if settings else None
-    if setting is None or not setting.money_enabled:
-        return None
-    if setting.budget_amount is None or setting.budget_amount <= 0:
-        return None
-    return float(setting.budget_amount)
-
-
-def _budget_remaining(repository: SqlAlchemyRepository) -> Optional[float]:
-    """What's left of this period's household grocery budget, or None when
-    money features are off install-wide / no budget is set (so the budget cap
-    is a no-op). Mirrors the money gate + period math in
-    `swap_suggestions.compute_suggestions` (R-003 — same budget engine,
-    `budget.period_bounds` / `period_spent`)."""
-    amount = _household_budget_amount(repository)
-    if amount is None:
-        return None
-    settings = repository.get(AppSetting).all()
-    period = (settings[0].budget_period if settings else None) or "weekly"
-    today = household_today(repository)
-    p_start, p_end = period_bounds(today, period)
-    spent = period_spent(p_start, p_end, repository)
-    return amount - spent
-
-
 def _buildable_days(requested: List[date], today: date) -> List[date]:
     """The requested days, de-duplicated and ordered, with past days dropped so
     we never schedule into yesterday (create_meal_plan rejects past entries
@@ -509,15 +471,6 @@ def _planned_recipe_ids_in_range(repository, days: List[date]) -> set:
     return {e.recipe.id for e in entries if e.recipe}
 
 
-def _all_recipe_dtos(repository: SqlAlchemyRepository) -> list:
-    # Bounded household cookbook — one large page (mirrors swap_suggestions).
-    return list(
-        GetRecipesHandler(repository)
-        .handle(QueryOptions(page=1, limit=10_000))
-        .items
-    )
-
-
 def _batch_cook_span(repository: SqlAlchemyRepository) -> int:
     """`BATCH_COOK_SPAN_DAYS` for a Batch-cook-style household, else 1 (a distinct
     recipe per day — the Fresh default). Reads the install-wide cook-style flag
@@ -538,7 +491,7 @@ def build_candidates(repository: SqlAlchemyRepository) -> List[RecipeCandidate]:
     on different evidence than the week builder — which is the drift R-003
     exists to prevent. This is the one place that assembles them.
     """
-    recipes = _all_recipe_dtos(repository)
+    recipes = load_all_recipe_dtos(repository)
     # The soonest-expiry map is the cookbook's urgency ranking input; the
     # week builder only needs "how much would this rescue", so it ignores it.
     _, expiring_counts, _ = count_expiring_ingredients_per_recipe(
@@ -574,8 +527,7 @@ def compute_auto_build(
     today = household_today(repository)
     days = _buildable_days(request.days, today)
 
-    slot_dtos = GetMealSlotsHandler(repository).handle()
-    household_slots = [s.name for s in slot_dtos]
+    household_slots = ordered_slot_names(repository)
     allowed_slots = _resolve_allowed_slots(request.slot_names, household_slots)
 
     candidates = build_candidates(repository)
@@ -599,9 +551,10 @@ def compute_auto_build(
     selected = select_recipes(candidates, emphasis, count, excluded, rng)
 
     swapped: set = set()
-    money_on = _money_enabled(repository)
-    budget_remaining = _budget_remaining(repository)
-    if request.budget_cap and budget_remaining is not None:
+    money_on = money_features_enabled(repository)
+    budget = household_budget(repository)
+    remaining = budget_remaining(repository, today)
+    if request.budget_cap and remaining is not None:
         selected_ids = {c.recipe_id for c in selected}
         pool = [c for c in candidates if c.recipe_id not in selected_ids and c.recipe_id not in excluded]
         # How many meals one pick fills: every selected day when the line-up is
@@ -612,7 +565,7 @@ def compute_auto_build(
         else:
             meals_per_pick = span
         selected, swapped = apply_budget_cap(
-            selected, pool, budget_remaining,
+            selected, pool, remaining,
             servings_per_meal=request.default_servings,
             meals_per_pick=meals_per_pick,
         )
@@ -661,9 +614,9 @@ def compute_auto_build(
     priced = [e.estimated_cost for e in entries if e.estimated_cost is not None]
     cost_total = round(sum(priced), 2) if priced else None
     projected_over = (
-        budget_remaining is not None
+        remaining is not None
         and cost_total is not None
-        and cost_total > budget_remaining
+        and cost_total > remaining
     )
 
     return AutoBuildResponse(
@@ -671,7 +624,7 @@ def compute_auto_build(
         days_used=days,
         slots_used=allowed_slots,
         cost_total=cost_total,
-        budget_amount=_household_budget_amount(repository),
+        budget_amount=budget.amount if budget is not None else None,
         projected_over=projected_over,
     )
 

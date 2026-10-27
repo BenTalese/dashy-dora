@@ -110,7 +110,7 @@ exceptions, which still must be commented) · **Source** (where it was establish
 - **Apply:** A client computing a cross-entity rule, summing across a fetched
   collection, or hardcoding a domain constant is a smell → push it to the server
   and expose it on the DTO; don't copy it a fourth time. Reuse the one existing
-  helper (e.g. `scrapedProductOfferLogic.ts`) rather than re-deriving.
+  helper (e.g. `helpers/offerLogic.ts`) rather than re-deriving.
 - **Violation signal:** the same constant string/number on both sides of the wire;
   a `.find(l => l.name === '…')` domain match in a component; a client re-sum of a
   total the server already computes.
@@ -3394,6 +3394,61 @@ one-off, or purely product/UX decisions (those go to the Charter check + worklog
 - **Established:** 2026-10-22 (FU-794, from the 2026-08-31 recipe-view batch).
   See ADR-093.
 
+### R-097: A create and update pair shares one write module
+- **Rule:** when a feature has a create handler and an update handler over the
+  same child rows, the parts they share live in one private module beside them
+  (`_entry_writes.py`, `_recipe_errors.py` + `recipe_requests.py`): the child
+  request model (the update one subclasses it), the pre-write checks, the
+  resolve/build helpers, an outcome dataclass the two response types extend,
+  and one function mapping an outcome to its HTTP response. Each handler keeps
+  only its own orchestration.
+- **Why:** the recipe and meal-plan writers each carried two copies of the same
+  validation, the same entity construction and the same error-to-HTTP chain,
+  and the copies drifted (finalisation 01-R12/R13: the recipe update reported a
+  bad tool as a bad tag; 02-R7: the meal-plan pair repeated slot, cook-batch,
+  past-date and recipe checks line for line).
+- **How to comply:** add the new check or field once, in the shared module;
+  routes call `<feature>_write_error_response(outcome, …)` and handle only
+  what is theirs (not-found, a confirmation guard) before it.
+- **Violation signal:** the same `if _Response.<flag>: return bad_request(…)`
+  ladder in two routes; two request models that differ by one id field.
+- **Established:** 2026-10-24 (finalisation 01-R12/R13, 02-R7/R8). See ADR-094.
+
+### R-098: A stored instant read back is made aware through `as_utc`, never inline
+- **Rule:** comparing a `DateTime(timezone=True)` value read from the database
+  against an aware bound goes through `persistence/aware.as_utc(dt)`. No module
+  writes its own `dt.replace(tzinfo=UTC) if dt.tzinfo is None else dt`.
+- **Why:** SQLite drops tzinfo on read, so every comparison against
+  `datetime.now(UTC)` needs the coercion, and the finalisation review found
+  eight hand-written copies (stocktake ×2, the sweep, reconcile, buy verdict,
+  reports, deal quality, suggestions), each with its own comment explaining the
+  same SQLite fact (05-R9). A missed one is a 500 (FU-526 was exactly that).
+- **How to comply:** `as_utc(item.snoozed_until) > now`. Converting to a
+  household *date* is a different job (`household_timezone`), not this one.
+- **Violation signal:** `tzinfo is None` next to `replace(tzinfo=` in a feature
+  module.
+- **Established:** 2026-10-24 (finalisation 05-R9). See ADR-095.
+
+### R-099: A spend figure is built from `spend_lines`, never its own list-and-line query
+- **Rule:** any total of what the household spent over finished shopping lists
+  (budget period, budget history, every Reports spend card, a count of bought
+  items) reads `shopping_lists/_line_price.spend_lines(session, since, until)`
+  and sums `SpendLine.spent`. The lifetime single-number aggregate is
+  `lifetime_spend`, which applies the same rule in SQL. No module writes its
+  own "done lists in the window, ticked lines, actual-then-picked price" query.
+- **Why:** the rule was written seven times (five Core SQL, two through the
+  repository) and had already drifted: only the budget skipped lines deferred
+  by trim-to-budget, quantity 0 counted as 1 in two reports and as nothing in
+  two others, so the budget card and Reports could disagree on one week
+  (finalisation 12-R10).
+- **How to comply:** `sum(line.spent for line in spend_lines(repo.session, start, end))`;
+  bucket by `line.completed_at` for a series. A new filter (a new kind of
+  not-really-bought line) goes into `spend_lines` once. The parity test
+  `test__spend_totals_agree_across_budget_and_reports` pins the agreement.
+- **Violation signal:** `SHOPPING_LIST_STATUS_DONE` beside `is_ticked == True`
+  in a feature module other than `_line_price.py`.
+- **Established:** 2026-10-27 (finalisation 12-R10). See ADR-096.
+
 
 ### ADR-001 — Adopt engineering standards + mandatory explain-or-flag gate
 - **Date / task:** 2026-06-06 (user request after repeated theme/component regressions)
@@ -6238,3 +6293,46 @@ A non-binding cookbook of solutions to recurring problems. Not rules — just a
   showed on a surface nobody was working on, so review of the change that
   caused it could not have seen it.
 - **Consequences:** one extra class per variant-specific fix. No visual change.
+
+### ADR-094: Create and update share one write module (promotes R-097)
+- **Date / task:** 2026-10-24 (finalisation Stage 2, chunks 1 and 2)
+- **Status:** accepted
+- **Context:** two features had duplicated create/update write paths whose
+  copies had already drifted; both were consolidated the same way in one day.
+- **Decision:** a create/update pair keeps its shared request shape, checks,
+  builders, outcome and outcome-to-HTTP mapping in one private module (R-097).
+- **Alternatives considered:** a generic write base class. Rejected: the two
+  features share the shape, not the logic, and the codebase prefers explicit
+  per-feature modules over inheritance machinery (R-019).
+- **Consequences:** two small modules exist; other create/update pairs adopt
+  it when next touched, not as a sweep.
+
+### ADR-095: One helper makes stored instants aware (promotes R-098)
+- **Date / task:** 2026-10-24 (finalisation Stage 2, chunk 5)
+- **Status:** accepted
+- **Context:** SQLite returns naive datetimes for timezone-aware columns; eight
+  modules had their own coercion.
+- **Decision:** `persistence/aware.as_utc` is the one coercion (R-098); the
+  eight copies were replaced. The Postgres move (FU-045) makes it a no-op, not
+  a removal: values stay aware either way.
+- **Alternatives considered:** a SQLAlchemy `TypeDecorator` that re-attaches UTC
+  on read. Deferred: it changes every timezone-aware column at once and wants
+  the Postgres work alongside it.
+- **Consequences:** one import per comparing module.
+
+### ADR-096: One read defines "spent" (promotes R-099)
+- **Date / task:** 2026-10-27 (finalisation Stage 2, chunk 12)
+- **Status:** accepted
+- **Context:** seven spend readers had drifted on deferred lines and zero
+  quantities, so the budget and Reports could report different totals for one
+  window.
+- **Decision:** `_line_price.spend_lines` returns the bought lines of a window
+  as `SpendLine` rows (paid price on the actual-then-picked ladder, store
+  rungs, list price at pick); every windowed spend figure sums it, and
+  `lifetime_spend` mirrors its filter in SQL (R-099).
+- **Alternatives considered:** one SQL `SUM` per report. Rejected: the store
+  ladder and the category lookup need the rows, and seven SQL sums is the
+  shape that drifted.
+- **Consequences:** a report reads rows and aggregates in Python, which is
+  O(lines in the window): fine at household scale, revisit if a report ever
+  spans many households (Path A).

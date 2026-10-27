@@ -7,8 +7,8 @@ the single home for the grouping + structural validation of those groups (R-003)
 so the two handlers can't drift.
 
 The functions work structurally over any object exposing `.recipe_id`,
-`.scheduled_for`, `.slot` and `.cook_key` — i.e. both `CreateMealPlanEntryRequest`
-and `UpdateMealPlanEntryRequest`.
+`.scheduled_for`, `.slot` and `.cook_key` — i.e. `_entry_writes.MealPlanEntryRequest`
+and its update subclass.
 """
 from collections import defaultdict
 from typing import Optional

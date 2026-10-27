@@ -1,5 +1,5 @@
 import { onBeforeUnmount, ref } from 'vue';
-import { currentMoneyPolicy } from 'src/composables/useMoney';
+import { currentLocale } from 'src/composables/useMoney';
 
 /**
  * P2-13 — Web Speech API wrapper for speech-to-text.
@@ -93,7 +93,7 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
     // to en-AU as the ultimate safety net. Never a hardcoded `en-AU` when
     // the admin has chosen otherwise.
     const lang = options.lang
-        ?? currentMoneyPolicy().locale
+        ?? currentLocale()
         ?? (typeof navigator !== 'undefined' ? navigator.language : null)
         ?? 'en-AU';
 

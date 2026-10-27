@@ -6,11 +6,7 @@
             :icon="ICONS.restaurant"
         />
 
-        <q-banner v-if="!isAdmin" class="dora-bg-negative-soft text-negative" dense rounded>
-            You don't have admin permissions to view this page.
-        </q-banner>
-
-        <template v-else-if="!loading">
+        <template v-if="ready">
             <SettingsSection>
                 <template #title>Household headcount</template>
                 <template #description>
@@ -21,7 +17,7 @@
 
                 <SettingsRow label="People">
                     <q-input
-                        v-model.number="headcountDraft"
+                        v-model.number="draft.household_headcount"
                         outlined
                         dense
                         type="number"
@@ -36,7 +32,7 @@
                 </SettingsRow>
             </SettingsSection>
 
-            <hr class="settings-divider" />
+            <hr class="settings-divider settings-divider--spaced" />
 
             <SettingsSection>
                 <template #title>Cooking style</template>
@@ -54,7 +50,7 @@
 
                 <SettingsRow label="Cooking style">
                     <DoraSegmented
-                        :model-value="batchDraft ? 'batch' : 'fresh'"
+                        :model-value="draft.batch_features_enabled ? 'batch' : 'fresh'"
                         :options="cookingStyleOptions"
                         @update:model-value="onCookingStyleChange"
                     />
@@ -66,37 +62,21 @@
 
 <script lang="ts" setup>
     import { ICONS } from 'src/style/icons';
-    import { storeToRefs } from 'pinia';
-    import { useQuasar } from 'quasar';
-    import AppSettingsApiService from 'src/services/api/appSettingsApiService';
-    import { useAuthStore } from 'src/stores/authStore';
-    import { refreshCookingPolicy } from 'src/composables/useCookingPolicy';
-    import { onMounted, ref } from 'vue';
-    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+    import { useAppSettingDrafts } from 'src/composables/useAppSettingDrafts';
     import SettingsSection from 'src/components/settings/SettingsSection.vue';
     import SettingsRow from 'src/components/settings/SettingsRow.vue';
     import SettingsPageHeader from 'src/components/settings/SettingsPageHeader.vue';
     import DoraSegmented, { type DoraSegmentedOption } from 'src/components/settings/DoraSegmented.vue';
+    import { refreshCookingPolicy } from 'src/composables/useCookingPolicy';
 
-    // FU-615 — the two install-wide household cooking settings (headcount +
-    // cook-style), moved off the per-user record onto AppSetting. Same
-    // eager-save shape as the neighbouring System settings pages; each save
-    // refreshes the shared cooking policy so cook mode + the meal planner pick
-    // it up without a reload.
-
-    const $q = useQuasar();
-    const { isAdmin } = storeToRefs(useAuthStore());
-    const api = new AppSettingsApiService();
-
-    const loading = ref(true);
-
-    // Headcount — nullable; null/blank means "use each recipe's servings".
-    const headcountDraft = ref<number | null>(null);
-    let savedHeadcount: number | null = null;
-
-    // Cook-style toggle.
-    const batchDraft = ref<boolean>(false);
-    let savedBatch = false;
+    // FU-615: the two install-wide household cooking settings (headcount +
+    // cook-style), moved off the per-user record onto AppSetting. Each save
+    // refreshes the shared cooking policy so cook mode and the meal planner
+    // pick it up without a reload.
+    const { draft, ready, save } = useAppSettingDrafts({
+        household_headcount: null as number | null,
+        batch_features_enabled: false,
+    });
 
     type CookingStyle = 'fresh' | 'batch';
     const cookingStyleOptions: DoraSegmentedOption<CookingStyle>[] = [
@@ -104,8 +84,8 @@
         { label: 'Batch', value: 'batch' },
     ];
 
-    // Clamp the draft to null / 1–99 (matches the server bounds), returning
-    // the normalised value the field should show.
+    // Clamp to null / 1-99 (the server bounds); null means "use each recipe's
+    // servings".
     function normaliseHeadcount(value: number | null): number | null {
         if (value === null || value === undefined || !Number.isFinite(value) || value < 1) {
             return null;
@@ -113,80 +93,30 @@
         return Math.min(99, Math.floor(value));
     }
 
-    async function onHeadcountCommit() {
-        const next = normaliseHeadcount(headcountDraft.value);
-        headcountDraft.value = next;
-        if (next === savedHeadcount) return;
-        try {
-            const result = await api.updateAsync({ household_headcount: next });
-            savedHeadcount = result.household_headcount;
-            headcountDraft.value = savedHeadcount;
-            await refreshCookingPolicy();
-            $q.notify({
-                type: 'positive', 
-                message: savedHeadcount === null
-                    ? 'Cook mode will use each recipe\'s serving size.'
-                    : `Cook mode will scale recipes for ${savedHeadcount}.`,
-            });
-        } catch (err) {
-            headcountDraft.value = savedHeadcount;
-            $q.notify({
-                type: 'negative', 
-                message: 'Could not save household headcount.',
-                caption: toastCaption(err),
-            });
-        }
+    function onHeadcountCommit() {
+        const next = normaliseHeadcount(draft.household_headcount);
+        draft.household_headcount = next;
+        void save(
+            { household_headcount: next },
+            next === null
+                ? 'Cook mode will use each recipe\'s serving size.'
+                : `Cook mode will scale recipes for ${next}.`,
+            refreshCookingPolicy,
+        );
     }
 
-    async function onCookingStyleChange(next: CookingStyle) {
+    function onCookingStyleChange(next: CookingStyle) {
         const wantBatch = next === 'batch';
-        if (wantBatch === savedBatch) return;
-        try {
-            const result = await api.updateAsync({ batch_features_enabled: wantBatch });
-            savedBatch = result.batch_features_enabled;
-            batchDraft.value = savedBatch;
-            await refreshCookingPolicy();
-            $q.notify({
-                type: 'positive', 
-                message: savedBatch
-                    ? 'Batch tools are on in the meal planner.'
-                    : 'Meal planner is back to pure scheduling.',
-            });
-        } catch (err) {
-            batchDraft.value = savedBatch;
-            $q.notify({
-                type: 'negative', 
-                message: 'Could not change cooking style.',
-                caption: toastCaption(err),
-            });
-        }
+        void save(
+            { batch_features_enabled: wantBatch },
+            wantBatch
+                ? 'Batch tools are on in the meal planner.'
+                : 'Meal planner is back to pure scheduling.',
+            refreshCookingPolicy,
+        );
     }
-
-    onMounted(async () => {
-        if (!isAdmin.value) {
-            loading.value = false;
-            return;
-        }
-        try {
-            const s = await api.getAsync();
-            savedHeadcount = s.household_headcount ?? null;
-            headcountDraft.value = savedHeadcount;
-            savedBatch = !!s.batch_features_enabled;
-            batchDraft.value = savedBatch;
-        } catch {
-            // Leave defaults; the eager-save handlers guard against a stale read.
-        } finally {
-            loading.value = false;
-        }
-    });
 </script>
 
 <style scoped lang="scss">
     .settings-page { display: flex; flex-direction: column; }
-    .settings-divider {
-        border: 0;
-        height: 1px;
-        background: color-mix(in srgb, var(--text-primary) 8%, transparent);
-        margin: 8px 0;
-    }
 </style>

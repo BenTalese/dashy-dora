@@ -23,13 +23,14 @@ from dora_api.app import app, db
 from dora_api.domain.entities.dora_suggestion_suppression import \
     SUPPRESSION_DECISION_SNOOZED
 
+_LOGGER = logging.getLogger(__name__)
+
 
 def prune_expired_snoozes() -> int:
     """Delete snoozed suppressions whose `snoozed_until` is in the past.
     Returns the count deleted. Wrapped in `app.app_context` so it can
     run from APScheduler threads outside an HTTP request. Never raises
     — a failure here must not take the API down."""
-    log = logging.getLogger(__name__)
     now = datetime.now(timezone.utc)
     try:
         with app.app_context():
@@ -44,11 +45,11 @@ def prune_expired_snoozes() -> int:
             db.session.commit()
             deleted = result.rowcount or 0
             if deleted:
-                log.info(
+                _LOGGER.info(
                     "Pruned %d expired suggestion snooze(s) (cutoff=%s)",
                     deleted, now.isoformat(),
                 )
             return deleted
     except Exception as exc:  # noqa: BLE001
-        log.warning("Snooze prune failed: %s", exc)
+        _LOGGER.warning("Snooze prune failed: %s", exc)
         return 0

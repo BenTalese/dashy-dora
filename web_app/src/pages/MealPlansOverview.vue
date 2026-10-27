@@ -13,7 +13,7 @@
          `:style-fn` takes the *live* offset instead, which is exactly what
          R-036's "never hardcode the offset" clause exists for. Do not
          reintroduce a `calc(100vh - Npx)` here. -->
-    <q-page class="q-pa-md meal-plans" :style-fn="pageStyleFn">
+    <q-page class="q-pa-md meal-plans" :style-fn="appShellStyleFn">
         <!-- R-Phase 6 §9-I — skeleton during the initial parallel mount load
             so the planner shape arrives instantly instead of popcorning in. -->
         <MealPlanSkeleton
@@ -53,14 +53,7 @@
                     :week-relative-label="planner.weekRelativeLabel.value"
                     :planned-count="plannedCount"
                     :can-save-current-week="canSaveCurrentWeek"
-                    @entry-view="planner.goToRecipe"
-                    @entry-cook="onEntryCook"
-                    @entry-remove="planner.removeEntry"
-                    @entry-adjust="planner.adjustEntryServings"
-                    @entry-link="onEntryLink"
-                    @entry-unlink="onEntryUnlink"
-                    @entry-lighter="onEntryLighter"
-                    @entry-fresh="planner.toggleCookFresh"
+                    v-on="entryHandlers"
                     @add-to-slot="onMobileAddToSlot"
                     @open-builder="builderOpen = true"
                     @go-prev-week="planner.goPrevWeek"
@@ -105,17 +98,7 @@
                          scroller, and the week's cost into its own small card
                          under the rail's lists. -->
                     <MealPlanShoppingSummary
-                        :focused-plan="planner.focusedPlan.value"
-                        :ingredients-loading="planner.ingredientsLoading.value"
-                        :ingredients="planner.ingredients.value"
-                        :need-to-buy="planner.needToBuy.value"
-                        :outstanding="planner.needToBuyOutstanding.value"
-                        :unlinked="planner.unlinkedIngredients.value"
-                        :estimated-cost="planner.focusedPlan.value?.estimated_cost ?? null"
-                        :cost-counted-meals="planner.focusedPlan.value?.cost_counted_meals ?? 0"
-                        :cost-total-meals="planner.focusedPlan.value?.cost_total_meals ?? 0"
-                        :budget-status="planner.budgetStatus.value"
-                        :generating="planner.generating.value"
+                        v-bind="shoppingSummaryProps"
                         @add-to-list="planner.openAddToList"
                     />
                 </div>
@@ -496,14 +479,7 @@
                                     :format-date="planner.formatDate"
                                     :show-all-slots="showAllSlots"
                                     @select-slot="(slot: string) => planner.selectSlot(day.iso, slot)"
-                                    @entry-view="planner.goToRecipe"
-                                    @entry-cook="onEntryCook"
-                                    @entry-remove="planner.removeEntry"
-                                    @entry-adjust="planner.adjustEntryServings"
-                                    @entry-link="onEntryLink"
-                                    @entry-unlink="onEntryUnlink"
-                                    @entry-lighter="onEntryLighter"
-                                    @entry-fresh="planner.toggleCookFresh"
+                                    v-on="entryHandlers"
                                 />
                             </div>
                         </transition>
@@ -539,17 +515,7 @@
                             @day-selected="scrollWeekToDay"
                         />
                         <MealPlanShoppingSummary
-                            :focused-plan="planner.focusedPlan.value"
-                            :ingredients-loading="planner.ingredientsLoading.value"
-                            :ingredients="planner.ingredients.value"
-                            :need-to-buy="planner.needToBuy.value"
-                            :outstanding="planner.needToBuyOutstanding.value"
-                            :unlinked="planner.unlinkedIngredients.value"
-                            :estimated-cost="planner.focusedPlan.value?.estimated_cost ?? null"
-                            :cost-counted-meals="planner.focusedPlan.value?.cost_counted_meals ?? 0"
-                            :cost-total-meals="planner.focusedPlan.value?.cost_total_meals ?? 0"
-                            :budget-status="planner.budgetStatus.value"
-                            :generating="planner.generating.value"
+                            v-bind="shoppingSummaryProps"
                             @add-to-list="planner.openAddToList"
                             @hover-ingredient="planner.hoverIngredient"
                             @clear-hover="planner.clearHover"
@@ -679,6 +645,7 @@
 </template>
 
 <script lang="ts" setup>
+    import { appShellStyleFn } from 'src/helpers/appShell';
     import BaseTooltip from 'src/components/BaseTooltip.vue';
     import { ICONS } from 'src/style/icons';
     import BaseButton from 'src/components/BaseButton.vue';
@@ -802,16 +769,6 @@
         () => (planner.focusedPlan.value?.entries ?? []).filter((e) => !e.consumed_at).length,
     );
 
-    // R-036 / ADR-032 — the fixed-height app-shell contract, copied verbatim
-    // from `StockOverview.vue` (the canonical implementation) rather than
-    // reinvented. `offset` is the live chrome height Quasar measures, so the
-    // header and a rendered OfflineBanner are both accounted for; the
-    // `height === 0` branch is Quasar's pre-measurement first paint.
-    function pageStyleFn(offset: number, height: number) {
-        return {
-            height: height === 0 ? `calc(100vh - ${offset}px)` : `${height - offset}px`,
-        };
-    }
 
     // ── The rail's open state (§4.2, D3 as answered) ───────────────────────
     //
@@ -1001,6 +958,37 @@
         void planner.separateCook(entry);
     }
 
+    // One wiring for the entry menu, shared by the phone focus view and the
+    // desktop day cards (02-R18).
+    const entryHandlers = {
+        entryView: planner.goToRecipe,
+        entryCook: onEntryCook,
+        entryRemove: planner.removeEntry,
+        entryAdjust: planner.adjustEntryServings,
+        entryLink: onEntryLink,
+        entryUnlink: onEntryUnlink,
+        entryLighter: onEntryLighter,
+        entryFresh: planner.toggleCookFresh,
+    };
+
+    // Both breakpoints render the same summary (02-R17).
+    const shoppingSummaryProps = computed(() => {
+        const plan = planner.focusedPlan.value;
+        return {
+            focusedPlan: plan,
+            ingredientsLoading: planner.ingredientsLoading.value,
+            ingredients: planner.ingredients.value,
+            needToBuy: planner.needToBuy.value,
+            outstanding: planner.needToBuyOutstanding.value,
+            unlinked: planner.unlinkedIngredients.value,
+            estimatedCost: plan?.estimated_cost ?? null,
+            costCountedMeals: plan?.cost_counted_meals ?? 0,
+            costTotalMeals: plan?.cost_total_meals ?? 0,
+            budgetStatus: planner.budgetStatus.value,
+            generating: planner.generating.value,
+        };
+    });
+
     // ── Apply a template (owner redesign, 2026-09-13) ──────────────────────
     const applyTemplateOpen = ref(false);
     const applyingTemplate = ref(false);
@@ -1091,7 +1079,7 @@
     }
 
     @media (min-width: 1024px) {
-        /* The q-page root is sized by `pageStyleFn`; this makes it the flex
+        /* The q-page root is sized by `appShellStyleFn`; this makes it the flex
            column that hands the remaining height down to the pane row. */
         .meal-plans {
             display: flex;
@@ -1292,19 +1280,6 @@
         letter-spacing: 0.06em;
         text-transform: uppercase;
     }
-    .planner-toolbar__statusrow {
-        display: flex;
-        align-items: center;
-        gap: var(--space-2);
-        margin-top: var(--space-2);
-    }
-    .planner-toolbar__status {
-        flex: 1 1 auto;
-        min-width: 0;
-        /* The strip owns its own bottom margin; inside the row the two
-           siblings have to share one baseline. */
-        margin-bottom: 0;
-    }
     .planner-toolbar__allslots {
         flex: 0 0 auto;
         white-space: nowrap;
@@ -1329,7 +1304,7 @@
         font-size: calc(var(--font-size-sm) * 1rem);
         font-weight: 500;
         border-radius: var(--radius-sm);
-        transition: background 120ms ease;
+        transition: background var(--motion-fast) var(--motion-ease);
     }
     .meal-plans-reconcile-nudge:hover,
     .meal-plans-reconcile-nudge:focus-visible {

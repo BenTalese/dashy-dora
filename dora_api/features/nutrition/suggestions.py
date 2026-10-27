@@ -39,7 +39,7 @@ from dora_api.infrastructure.ports import Repository
 from dora_api.persistence.bool_operation import Or
 from dora_api.persistence.field import EntityField as Field
 
-_LOG = logging.getLogger(__name__)
+_LOGGER = logging.getLogger(__name__)
 
 # Below this, no suggestion is offered at all. A wrong calorie figure the user
 # accepted because it was the only thing on screen is worse than an empty row —
@@ -250,7 +250,7 @@ def unmatched_items(repository: Repository) -> List[UnmatchedStockItem]:
         -(r.suggestion.confidence if r.suggestion else 0.0),
         r.name.lower(),
     ))
-    _LOG.info(
+    _LOGGER.info(
         "Nutrition matching: %d unlinked stock items, %d with a suggestion.",
         len(results), sum(1 for r in results if r.suggestion is not None),
     )
@@ -260,9 +260,9 @@ def unmatched_items(repository: Repository) -> List[UnmatchedStockItem]:
 def ignored_item_count(repository: Repository) -> int:
     """How many items the user has waved off — the page offers to show them
     again, so it has to know whether that offer is worth rendering."""
-    return len(repository.get(StockItem).where(
+    return repository.get(StockItem).count(
         Field(StockItem, StockItem.Fields.NUTRITION_IGNORED).eq(True)
-    ).all())
+    )
 
 
 def ignored_items(repository: Repository) -> List[UnmatchedStockItem]:

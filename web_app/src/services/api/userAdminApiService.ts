@@ -1,5 +1,5 @@
 import AxiosHttpClient from './axiosHttpClient';
-import type { Page } from './queryStringBuilder';
+import { createQueryString, fetchAllPages, type Page } from './queryStringBuilder';
 
 export type AdminUser = {
     user_id: string;
@@ -44,8 +44,12 @@ export type SetPasswordResult = { new_password: string | null };
 export default class UserAdminApiService {
     private httpClient = new AxiosHttpClient();
 
-    getAllAsync = async (): Promise<Page<AdminUser>> =>
-        await this.httpClient.get<Page<AdminUser>>('/users');
+    /** Every account, paged, so the admin list never stops at the default
+     *  page of 50 (finalisation 13-R5). */
+    getAllPagesAsync = async (): Promise<AdminUser[]> =>
+        await fetchAllPages((page, limit) =>
+            this.httpClient.get<Page<AdminUser>>(`/users${createQueryString([], undefined, { page, limit })}`),
+        );
 
     createAsync = async (
         command: AdminCreateUserCommand,

@@ -2,8 +2,9 @@
 
 `period_spent` used to sum *every* line on an archived list. That looks safe —
 surely an unbought line has no price? — but it isn't, because
-`picked_offer_price` is snapshotted when a line is **added** (State-ownership
-Chunk 6, `snapshot_offer_price`), not when it's ticked. So any line with a
+`picked_offer_price` was snapshotted when a line was **added** (State-ownership
+Chunk 6; that writer is gone since 2026-09-17, but old lines still carry it), not
+when it was ticked. So any line with a
 selected product carries a price from the moment it lands on the list, and
 finishing a shop with leftovers billed all of them to the household budget.
 
@@ -48,6 +49,8 @@ from dora_api.domain.entities.shopping_list import (  # noqa: E402
     SHOPPING_LIST_STATUS_DONE, ShoppingList, ShoppingListLine)
 from dora_api.domain.entities.stock_item import StockItem  # noqa: E402
 from dora_api.features.budget.budget import period_spent  # noqa: E402
+from dora_api.features.reports.spend import (  # noqa: E402
+    SavingsCapturedHandler, SpendByCategoryHandler, SpendByStoreHandler)
 from dora_api.persistence.sqlalchemy_repository import \
     SqlAlchemyRepository  # noqa: E402
 
@@ -166,3 +169,34 @@ def test__period_spent__ignores_shops_completed_outside_the_window(repo):
     """The window is half-open: a shop completed on the period's end date
     belongs to the *next* period, not this one."""
     assert period_spent(date(2026, 8, 31), date(2026, 9, 7), repo) == 0.0
+
+
+def test__spend_totals_agree_across_budget_and_reports(repo, engine):
+    """Finalisation 12-R10: the budget and every Reports spend card read one
+    definition of "bought" (`_line_price.spend_lines`), so on one window they
+    report one total. A ticked line the trim optimiser deferred is not spend
+    on any of them."""
+    deferred = ShoppingListLine(
+        id=_uid(6), shopping_list_id=_LIST_ID, stock_item_id=_uid(505),
+        quantity=1, is_ticked=True, actual_unit_price=7.0, deferred_by_budget=True,
+    )
+    with Session(engine) as extra:
+        extra.add(deferred)
+        extra.commit()
+    try:
+        since = datetime(2026, 8, 24, tzinfo=timezone.utc)
+        budget_total = period_spent(_PERIOD_START, _PERIOD_END, repo)
+        by_store = SpendByStoreHandler(repo).handle(since)
+        _rows, by_category = SpendByCategoryHandler(repo).handle(since)
+        savings = SavingsCapturedHandler(repo).handle(since)
+
+        assert budget_total == pytest.approx(30.0)
+        assert sum(r.spend for r in by_store.rows) == pytest.approx(budget_total)
+        assert by_category == pytest.approx(budget_total)
+        assert savings["total_spent"] == pytest.approx(budget_total)
+    finally:
+        with Session(engine) as cleanup:
+            cleanup.query(ShoppingListLine).filter(
+                ShoppingListLine.id == _uid(6)
+            ).delete()
+            cleanup.commit()

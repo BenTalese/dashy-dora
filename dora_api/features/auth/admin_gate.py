@@ -14,16 +14,13 @@ Returns a `(user_id, error_response)` tuple. `error_response` is
     _, err = require_admin()
     if err is not None:
         return err
-
-Historic name `_require_admin` re-exported as an alias so a big-bang
-rename isn't required alongside the FU-341 relocate.
 """
 from uuid import UUID
 
 from flask import session
 
 from dora_api.domain.entities.user import User
-from dora_api.features.auth.register_user import SESSION_USER_ID_KEY
+from dora_api.infrastructure.session_user import SESSION_USER_ID_KEY
 from dora_api.infrastructure.api_response import forbidden, unauthorized
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 
@@ -56,5 +53,3 @@ def require_admin() -> tuple[UUID | None, object]:
         return None, forbidden("Admin role required.")
     return _UserId, None
 
-
-_require_admin = require_admin

@@ -21,14 +21,12 @@ Endpoints:
                                      must be detached first)
   GET    /api/stores/<id>/image    — raw image bytes
 """
-import base64
 import logging
-import re
 from dataclasses import dataclass
 from typing import List
 from uuid import UUID
 
-from flask import Response, request
+from flask import request
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 
@@ -39,6 +37,7 @@ from dora_api.domain.entities.stock_item import StockItem
 from dora_api.domain.entities.store import Store
 from dora_api.features.routers import STORE_ROUTER
 from dora_api.features.stores._logo_colour import dominant_colour
+from dora_api.infrastructure.data_url import data_url_response, decode_data_url
 from dora_api.infrastructure.api_response import (bad_request,
                                                   business_rule_violation,
                                                   created, no_content,
@@ -51,6 +50,9 @@ from dora_api.persistence.field import EntityField
 from dora_api.persistence.page import Page
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
+from dora_api.features.stores.find_store import find_store_by_name
+
+_LOGGER = logging.getLogger(__name__)
 
 
 # ───── DTOs ─────────────────────────────────────────────────────────────
@@ -115,13 +117,12 @@ class GetStoresHandler:
 
 @STORE_ROUTER.route("", methods=["GET"])
 def get_stores():
-    _Logger = logging.getLogger(__name__)
     try:
         _Options = parse_query_options(request.args)
         _Page = GetStoresHandler(SqlAlchemyRepository()).handle(_Options)
     except InvalidQueryParameter as exc:
         return bad_request(str(exc))
-    _Logger.info("Retrieved %d of %d stores.", len(_Page.items), _Page.total)
+    _LOGGER.info("Retrieved %d of %d stores.", len(_Page.items), _Page.total)
     return paginated(_Page.items, _Page.total, _Page.page, _Page.limit)
 
 
@@ -146,9 +147,7 @@ class CreateStoreHandler:
         self.repository = repository
 
     def handle(self, req: CreateStoreRequest) -> CreateStoreResponse:
-        existing = self.repository.get(Store).all()
-        normalised = req.name.strip().lower()
-        if any(s.name.strip().lower() == normalised for s in existing):
+        if find_store_by_name(self.repository, req.name) is not None:
             return CreateStoreResponse(duplicate=True)
         image = req.image.encode("utf-8") if req.image else None
         store = Store(
@@ -164,14 +163,13 @@ class CreateStoreHandler:
 @STORE_ROUTER.route("", methods=["POST"])
 @has_request_body(CreateStoreRequest)
 def create_store():
-    _Logger = logging.getLogger(__name__)
     _Request: CreateStoreRequest = get_request_body()
     _Response = CreateStoreHandler(SqlAlchemyRepository()).handle(_Request)
     if _Response.duplicate:
         return business_rule_violation(
             f"A store named '{_Request.name}' already exists."
         )
-    _Logger.info("Created store %s '%s'", _Response.store_id, _Request.name)
+    _LOGGER.info("Created store %s '%s'", _Response.store_id, _Request.name)
     return created(
         _Response.store_id,
         f"{STORE_ROUTER.name}.{get_stores.__name__}",
@@ -211,12 +209,11 @@ class UpdateStoreHandler:
         set_fields = req.model_fields_set
         if "name" in set_fields and req.name is not None:
             target = req.name.strip()
-            normalised = target.lower()
-            for s in self.repository.get(Store).all():
-                # str(...) both sides — raw str path param vs UUID id (FU-528
-                # family): a bare `!=` made renaming a store to its own name 422.
-                if str(s.id) != str(store_id) and s.name.strip().lower() == normalised:
-                    return UpdateStoreResponse(duplicate=True)
+            clash = find_store_by_name(self.repository, target)
+            # str(...) both sides — raw str path param vs UUID id (FU-528
+            # family): a bare `!=` made renaming a store to its own name 422.
+            if clash is not None and str(clash.id) != str(store_id):
+                return UpdateStoreResponse(duplicate=True)
             store.name = target
         # The colour is derived from the image, so it moves with it — clearing
         # the logo clears the colour, replacing the logo re-derives it. Leaving
@@ -236,7 +233,6 @@ class UpdateStoreHandler:
 @STORE_ROUTER.route("/<uuid:store_id>", methods=["PATCH"])
 @has_request_body(UpdateStoreRequest)
 def update_store(store_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _Request: UpdateStoreRequest = get_request_body()
     _Response = UpdateStoreHandler(SqlAlchemyRepository()).handle(_Request, store_id)
     if _Response.not_found:
@@ -245,7 +241,7 @@ def update_store(store_id: UUID):
         return business_rule_violation(
             f"A store named '{_Request.name}' already exists."
         )
-    _Logger.info("Updated store %s", store_id)
+    _LOGGER.info("Updated store %s", store_id)
     return no_content()
 
 
@@ -299,7 +295,6 @@ class DeleteStoreHandler:
 
 @STORE_ROUTER.route("/<uuid:store_id>", methods=["DELETE"])
 def delete_store(store_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _Response = DeleteStoreHandler(SqlAlchemyRepository()).handle(store_id)
     if _Response.not_found:
         return not_found("Store", store_id)
@@ -308,7 +303,7 @@ def delete_store(store_id: UUID):
             f"Can't delete a store with {_Response.product_count} linked "
             f"product(s). Detach or delete those first."
         )
-    _Logger.info(
+    _LOGGER.info(
         "Deleted store %s; %d stock item(s) and %d shopping-line(s) had their "
         "store reference nulled",
         store_id, _Response.items_affected, _Response.lines_affected,
@@ -321,27 +316,10 @@ def delete_store(store_id: UUID):
 
 # ───── Image route ───────────────────────────────────────────────────────
 
-_DATA_URL_RE = re.compile(r"^data:(?P<mime>[\w/+.-]+);base64,(?P<data>.+)$", re.DOTALL)
-
-
-def _decode_data_url(blob: bytes | None) -> tuple[str, bytes] | None:
-    if not blob:
-        return None
-    data_url = blob.decode("utf-8", "ignore")
-    match = _DATA_URL_RE.match(data_url)
-    if not match:
-        return None
-    try:
-        raw = base64.b64decode(match.group("data"), validate=False)
-    except (ValueError, TypeError):
-        return None
-    return match.group("mime"), raw
-
-
 def decode_store_image(store: Store) -> tuple[str, bytes] | None:
     """(mime, bytes) for a store's logo, or None. Shared by this route and
     the bearer-authed `/api/ingest/stores/<id>/image` (one decoder, R-003)."""
-    return _decode_data_url(getattr(store, "image", None))
+    return decode_data_url(store.image)
 
 
 @STORE_ROUTER.route("/<uuid:store_id>/image", methods=["GET"])
@@ -350,12 +328,4 @@ def get_store_image(store_id):
     store = repository.get(Store).by_id(store_id)
     if store is None:
         return not_found(Store.__name__, store_id)
-    decoded = decode_store_image(store)
-    if decoded is None:
-        return not_found(Store.__name__, store_id)
-    mime, raw = decoded
-    return Response(
-        raw,
-        mimetype=mime,
-        headers={"Cache-Control": "no-cache"},
-    )
+    return data_url_response(store.image, lambda: not_found(Store.__name__, store_id))

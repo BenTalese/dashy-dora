@@ -144,6 +144,8 @@
     import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { useQuasar } from 'quasar';
     import { computed, reactive, ref, watch } from 'vue';
+    import { PACK_COUNT_RULE, parsePackCount } from 'src/helpers/packCount';
+    import { UNIT_TABLE } from 'src/generated/units_table';
 
     const open = defineModel<boolean>({ required: true });
     const emit = defineEmits<{ (e: 'created'): void }>();
@@ -212,16 +214,15 @@
         if (!match) return { value: null, unit: null };
         const value = Number.parseFloat(match[1]!);
         if (!Number.isFinite(value) || value <= 0) return { value: null, unit: null };
-        return { value, unit: match[2]!.toUpperCase() };
+        // Stored as the unit table's key (`kg`, `ml`, `l`), the casing every
+        // ingested row carries; a unit Dora can't cost is rejected here.
+        const unit = match[2]!.toLowerCase();
+        if (!(unit in UNIT_TABLE)) return { value: null, unit: null };
+        return { value, unit };
     }
 
     /** Blank is fine (most products are one item or free weight). */
-    function packCountValue(): number | null | undefined {
-        const raw = form.packCount;
-        if (raw === null || raw === '') return null;
-        const n = Number(raw);
-        return Number.isInteger(n) && n >= 1 ? n : undefined;
-    }
+    const packCountValue = (): number | null | undefined => parsePackCount(form.packCount);
 
     function validate(): { value: number; unit: string } | null {
         Object.keys(errors).forEach((k) => { errors[k as keyof typeof errors] = ''; });
@@ -235,13 +236,13 @@
         }
 
         if (packCountValue() === undefined) {
-            errors.packCount = 'Use a whole number, 1 or more, or leave it blank.';
+            errors.packCount = `Use ${PACK_COUNT_RULE}, or leave it blank.`;
             ok = false;
         }
 
         const size = splitSize(form.size);
         if (size.value === null || size.unit === null) {
-            errors.size = 'Use a number and a unit, like 1kg or 500ml.';
+            errors.size = 'Use a number and a unit Dora knows, like 1kg or 500ml.';
             ok = false;
         }
 

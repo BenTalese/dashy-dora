@@ -22,6 +22,90 @@ top-to-bottom.
 
 ---
 
+## Finalisation Stage 2 — unit 23 (reports, budget, waste), browser-verify owed (2026-10-27) — origin FU-929
+- [ ] Reports (30 days): spend-by-store total, spend-by-category total and the budget card's spend agree for a week with one finished shop.
+- [ ] Reports: every card that names the window reads the same words ("in the last 90 days"); Price changes says "since you started logging prices" on All.
+- [ ] Spend by category bars keep their colours after a theme switch.
+- [ ] Mark as wasted: tabbing through the reason tiles shows a focus ring.
+- [ ] Reports and dashboard with the API stopped: each card shows "couldn't load", and Retry recovers it.
+
+## Finalisation Stage 2 — unit 22 (assistant), browser-verify owed (2026-10-27) — origin FU-929
+- [ ] Chat header Basic/AI slider on a phone: easy to hit, flips, focus ring shows on keyboard focus.
+- [ ] AI mode: two questions in a row answer without a pause before each (no network probe per question).
+- [ ] AI mode, over budget: "trim my list to budget" proposes with the install's currency symbol, and confirming trims.
+- [ ] AI mode: "plan pasta for tomorrow" with no slot named lands in the household's first slot.
+- [ ] Basic mode: "what's expiring" uses the household's expiring-soon window; "substitute for buttermilk" answers.
+- [ ] Settings → Assistant: base URL and model placeholders show for each provider.
+
+## Finalisation Stage 2 — unit 21 (dashboard), browser-verify owed (2026-10-27) — origin FU-929
+- [ ] Dashboard Cards menu: hide / show, move up / down and drag reorder all stick after a reload.
+- [ ] "What's coming": today is the first cell and ringed; weekday names follow the household locale.
+- [ ] "Next to cook" shows ready / missing-N as before; Kitchen health's plan coverage looks right.
+- [ ] Price drops: the "% off" chip and the linked-item link are readable in light and dark.
+- [ ] Small chips: recipe "Use soon" / missing chips, the recipe cost dialog and nutrition card text sizes look right (they now actually apply the xs size).
+
+## Finalisation Stage 2 — unit 20 (zero-input pantry), browser-verify owed (2026-10-24) — origin FU-929
+- [ ] With inference on: "Dora thinks …" still shows on stock rows, the item page, recipe cards and planner chips, with the same wording as before.
+- [ ] The planner's Dora-hunch glyph is readable (amber / green) in a light and a dark theme.
+
+## Finalisation Stage 2 — unit 19 (stock overview + stocktake), browser-verify owed (2026-10-24) — origin FU-929
+- [ ] Stock overview: the group filter lists your groups; rename a group in Settings, come back: the new name shows.
+- [ ] Create item and item page: the location picker searches "Pantry › Middle shelf" paths; the group picker lists groups.
+- [ ] Stock overview: export CSV downloads (named file on a same-host install).
+- [ ] Stocktake walk: Mute asks first (walk and sweep); a Low/Out pick lands in the restock prompt at the end.
+- [ ] Stocktake runner and stock rows in a dark theme: "Change level" neutral button hover, row hover / selected / expired outlines.
+- [ ] Item page: change the level from the overview's peek, the item page shows the new level name.
+
+## Finalisation Stage 2 — unit 18 (cook mode), browser-verify owed (2026-10-24) — origin FU-929
+- [ ] Cook mode timer: start a 2-minute timer, switch apps for a minute, come back: it shows about a minute left; it chimes at zero.
+- [ ] Cook mode on a phone, step face and photo face: Previous / Repeat / Next fit one row; photo zoom pages with Previous / Next.
+- [ ] Cook mode "Sub-step" chip text is readable in a dark theme.
+- [ ] Finish cooking with 0 meals: no error.
+
+## Finalisation Stage 2 — unit 17 (shopping lists), browser-verify owed (2026-10-24) — origin FU-929
+- [ ] New list → start from a template, with a name and shop date typed: the list keeps both and has the template's items.
+- [ ] New list → merge a template into an existing list: items already on it are skipped, the rest added.
+- [ ] New list → start from a recipe or a meal plan: all the items land (one request in the Network tab).
+- [ ] Shop mode price sheet: save a price + store, store only, and clear; each sticks, and a failure puts the old values back.
+- [ ] Finish a list, put away: groups by location as before.
+- [ ] A finished list's receipt face still shows its lines, prices and photos; add and delete a receipt photo.
+- [ ] Stock overview: bulk add to list and bulk remove from list still work.
+- [ ] Trim to budget preview and apply on an over-budget list.
+
+## Finalisation Stage 2 — unit 16 (meal plans), browser-verify owed (2026-10-24) — origin FU-929
+- [ ] Planner, phone and desktop: chip menu actions (view, cook, remove, servings ±, link, unlink, lighter, fresh) all work.
+- [ ] Planner chips and phone cards: price, Dora's hunch, chef hat and fridge glyphs show as before; cook-day chip reads "Cook day · N servings".
+- [ ] "This week's shopping" matches on phone and desktop.
+- [ ] Build my week: opens with every slot ticked; a picked recipe with no matching time-of-day lands in the first slot.
+- [ ] Build my week with a budget cap on, money on: stays under; money off: no figures anywhere.
+- [ ] Settings → Meal slots: usage counts match the planner.
+- [ ] Reconcile runner and Meal log: close X, progress, and (?) opens Help → "Reconcile past meals".
+- [ ] New shopping list → from a meal plan: plans read "Week of …", not "null".
+- [ ] Templates → Delete: the Cancel button isn't all-caps.
+- [ ] Meal plans, stock, settings, stocktake, reconcile and log pages still fill the screen below the header.
+- [ ] Planner in a dark theme: the focused day chip's text and pips are readable.
+
+## Finalisation Stage 2 — units 11–14, browser-verify owed (2026-10-24) — origin FU-929
+- [ ] Dora (AI mode): "add milk to my list" returns the add card, no error.
+- [ ] Stock item still used by a recipe → Delete: the "Still used by recipes" dialog lists the recipe names as plain text.
+- [ ] Row menu, item page and bell "Push 7 days" on an expired item all land on today + N; each shows on the History tab.
+- [ ] My products with 51+ saved products shows them all; Price history finds product 51.
+- [ ] Price history card → "Watch this price" opens the same dialog My products uses; Manage alerts → Change opens it too.
+- [ ] As a member (not admin) with a Product Search URL set: the nav link shows; with none set: no Product Search buttons.
+- [ ] Store logos and profile pictures render (incl. the Capacitor shell / a split host).
+- [ ] Settings → Notifications with money off hides "price drops"; with auto-drain on hides "meals to reconcile".
+- [ ] Item page: History tab says "Restocked → …" / "Dropped to …" after renaming a level.
+- [ ] Item page: type in Notes (don't save), toggle Essential: the draft stays.
+- [ ] Item page signal cards (Dora thinks / planned meals / buy verdict) look alike in pesto and blueberry, light and dark.
+- [ ] Recipe page missing-ingredient substitutes and cook-mode "Swap" still list substitutes.
+- [ ] Network tab on a cold load: one `/health` request.
+- [ ] Cook mode → open a different recipe by URL / back-forward: the new recipe loads at step 1.
+- [ ] Run a stocktake, then open `/stock` without reloading: levels match what the stocktake set.
+- [ ] Cookbook: filter badge count and Clear filters still cover every filter (try a few, then Clear).
+- [ ] Recipe card and compact row: favourite (red when on), cook and add-to-list buttons behave as before.
+- [ ] Settings → Categories / Cuisines / Tools: add, rename (incl. a duplicate name → error), delete shows the recipe count.
+- [ ] Recipe images, step images, store logos and list attachments still load.
+
 ## Finalisation Stage 2 — units 1–10, browser-verify owed (2026-10-23) — origin FU-929
 Backup & restore
 - [ ] Settings → Data → Backup: *New backup* with the default sections is accepted; the section list (labels, "sensitive" badges) comes from the server.

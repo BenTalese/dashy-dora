@@ -13,6 +13,8 @@ from typing import List
 from dora_api.features.routers import HELP_ROUTER
 from dora_api.infrastructure.api_response import ok
 
+_LOGGER = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True, slots=True)
 class ChangelogEntry:
@@ -56,14 +58,13 @@ def parse_changelog(text: str) -> List[ChangelogEntry]:
 
 @HELP_ROUTER.route("/changelog", methods=["GET"])
 def get_changelog():
-    _Logger = logging.getLogger(__name__)
     path = _changelog_path()
     if not path.exists():
-        _Logger.info("CHANGELOG.md not found at %s — returning empty list.", path)
+        _LOGGER.info("CHANGELOG.md not found at %s — returning empty list.", path)
         return ok(ChangelogDto(entries=[]))
     try:
         text = path.read_text(encoding="utf-8")
     except OSError as exc:
-        _Logger.warning("Failed to read changelog: %s", exc)
+        _LOGGER.warning("Failed to read changelog: %s", exc)
         return ok(ChangelogDto(entries=[]))
     return ok(ChangelogDto(entries=parse_changelog(text)))

@@ -4,7 +4,7 @@ These DTOs are what
 ``POST /api/recipes/import-from-content`` sends back after parsing a
 pasted recipe. The SPA hands the same shape to its preview surface;
 saving still goes through ``POST /api/recipes`` and its own
-``CreateRecipeIngredientRequest`` shape.
+``RecipeIngredientRequest`` shape.
 
 Kept in their own module so both the parser
 (``_parse_recipe_from_text.py``) and the handler

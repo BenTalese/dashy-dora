@@ -8,7 +8,6 @@ from sqlalchemy import select
 
 from dora_api.app import db
 from dora_api.domain.entities.stock_item import StockItem
-from dora_api.domain import units
 from dora_api.features.routers import STOCK_ITEM_ROUTER
 from dora_api.features.substitutes.canonical import canonical_pair
 from dora_api.features.substitutes.metadata import (
@@ -21,6 +20,8 @@ from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.utils import (field_of, get_request_body)
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class AddSubstituteRequest(BaseModel):
@@ -55,7 +56,7 @@ class AddSubstituteHandler:
         self.repository = repository
 
     def handle(self, stock_item_id: UUID, request: AddSubstituteRequest) -> AddSubstituteResponse:
-        if str(stock_item_id) == str(request.substitute_id):
+        if stock_item_id == request.substitute_id:
             return AddSubstituteResponse(is_self=True)
 
         if not self.repository.get(StockItem).exists(stock_item_id):
@@ -115,7 +116,6 @@ class AddSubstituteHandler:
 @STOCK_ITEM_ROUTER.route("<uuid:stock_item_id>/substitutes", methods=["POST"])
 @has_request_body(AddSubstituteRequest)
 def add_substitute(stock_item_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _Handler = AddSubstituteHandler(SqlAlchemyRepository())
     _Request: AddSubstituteRequest = get_request_body()
     _Response = _Handler.handle(stock_item_id, _Request)
@@ -133,7 +133,7 @@ def add_substitute(stock_item_id: UUID):
     if _Response.invalid_ratio is not None:
         return business_rule_violation(_Response.invalid_ratio)
 
-    _Logger.info(
+    _LOGGER.info(
         "Added substitute %s to stock item %s%s",
         _Request.substitute_id,
         stock_item_id,

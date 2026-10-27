@@ -459,6 +459,47 @@
                         'Group recipes into meals (e.g. roast + sides). Then schedule meals onto a meal plan; the dashboard shows the next entry on the home page.',
                     path: '/meal-plans',
                 },
+                {
+                    // The reconcile runner's and the meal log's (?) deep-link
+                    // here by exact title via `?q=`; keep them in step.
+                    title: 'Reconcile past meals',
+                    summary:
+                        'After a planned day passes, Dora settles what actually happened to each meal so the recipe pool stays right.',
+                    path: '/meal-plans',
+                    details: [
+                        {
+                            kind: 'para',
+                            text: 'In manual mode, Dora walks you through past-day meals that have not been confirmed yet, one at a time, oldest first. Each one offers five options.',
+                        },
+                        {
+                            kind: 'terms',
+                            terms: [
+                                { term: 'Cooked', definition: 'You made it as planned. The cooked count and pool are correct.' },
+                                { term: 'Different portions', definition: 'You made a different amount, say 3 instead of 2. Dora reflows the pool.' },
+                                { term: 'Cooked later', definition: 'You made it, but on a later day. Dora records the date.' },
+                                { term: "Didn't cook", definition: 'The meal did not happen. Dora puts the pool back the way it was.' },
+                                { term: 'Skip for now', definition: 'Not sure yet. The meal stays in the queue for next time.' },
+                            ],
+                        },
+                        {
+                            kind: 'para',
+                            text: 'In auto mode, Dora assumes each planned meal was cooked as its day passes and drains the pool for you. The meal log is the record of what she did with each one.',
+                        },
+                        {
+                            kind: 'terms',
+                            terms: [
+                                { term: 'Logged as cooked', definition: 'Dora assumed you cooked it as planned.' },
+                                { term: 'Cooked / Cooked · N', definition: 'You confirmed it, as planned or with a different amount.' },
+                                { term: 'Not cooked', definition: 'You marked that it did not happen; the pool was put back.' },
+                                { term: 'Skipped', definition: 'Left undecided for later.' },
+                            ],
+                        },
+                        {
+                            kind: 'para',
+                            text: 'Manual or auto is set for the whole household in Settings → Admin → System → Meal reconciliation.',
+                        },
+                    ],
+                },
             ],
         },
         {

@@ -7,10 +7,9 @@ import { useReducedMotion } from 'src/composables/useReducedMotion';
 import { useBatchEnabled } from 'src/composables/useBatchEnabled';
 import { useMoneyEnabled } from 'src/composables/useMoneyEnabled';
 import { useStockStatus } from 'src/composables/useStockStatus';
-import { DEFAULT_MEAL_SLOTS } from 'src/helpers/recipeVocabulary';
 import { isoDate as toIso, localTodayIso, mondayOf, shiftDays } from 'src/helpers/weekDates';
 import type {
-    MealPlan, MealPlanDayCost, MealPlanEntry, MealPlanIngredient,
+    MealPlan, MealPlanEntry, MealPlanIngredient,
     MealPlanSuggestion, UnlinkedIngredient,
 } from 'src/models/mealPlan';
 import type { AddToListConfirm } from 'src/components/shoppingList/addToListTypes';
@@ -69,7 +68,7 @@ export function useMealPlanner() {
     const { addStockItemsToList } = useShoppingListActions();
 
     const { mealPlans, today } = storeToRefs(mealPlanStore);
-    const { mealSlotNames } = storeToRefs(mealSlotStore);
+    const { slotNamesOrDefault } = storeToRefs(mealSlotStore);
     const { templates } = storeToRefs(mealPlanTemplateStore);
     const { sets } = storeToRefs(mealPlanTemplateSetStore);
     const { recipes } = storeToRefs(recipeStore);
@@ -156,9 +155,7 @@ export function useMealPlanner() {
     });
 
     // ── Slots (household vocabulary, C-2.A) ────────────────────────────────
-    const slotNames = computed(() =>
-        mealSlotNames.value.length ? mealSlotNames.value : [...DEFAULT_MEAL_SLOTS],
-    );
+    const slotNames = slotNamesOrDefault;
     const slotNameSet = computed(() => new Set(slotNames.value));
 
     function dayEntries(dayIso: string): MealPlanEntry[] {
@@ -170,47 +167,6 @@ export function useMealPlanner() {
     function otherSlotEntries(dayIso: string): MealPlanEntry[] {
         return dayEntries(dayIso).filter((e) => !slotNameSet.value.has(e.slot));
     }
-
-    // FU-637 — one day's planned calories, summed server-side and looked up
-    // by date here. The lookup is presentation; the sum is not (a cross-entity
-    // aggregate belongs to the server).
-    // `dayNutrition` was deleted on 2026-09-13 with the desktop day card's kcal
-    // cell, its only consumer (owner: the same "a total you don't read" call
-    // that removed the per-day cost rollup the day before). `day_nutrition` is
-    // still on the DTO; a surface that wants a day's calories can read it.
-
-    function dayCost(dayIso: string): MealPlanDayCost | null {
-        return (focusedPlan.value?.day_cost ?? []).find(
-            (d) => toIso(d.scheduled_for) === dayIso,
-        ) ?? null;
-    }
-
-    // Owner feedback 2026-09-03 — *"'X to cook by' needs to properly count
-    // this… it should be the highlighted meal slots after auto-allocation of
-    // meals from the pool."* It counted *recipes* in the shortfall report,
-    // which is a different number from the one on screen: three short fried
-    // rices counted 1. The figure is now exactly the set of chips wearing a
-    // chef hat in the week you are looking at — the server decides which those
-    // are (`MealPlanEntry.needs_cooking`), this only filters the week's own
-    // entries and reads the earliest of them. Deadline = the soonest such day,
-    // which is the day its ingredients have to exist by.
-    const needsCookingEntries = computed(
-        () => (focusedPlan.value?.entries ?? []).filter((e) => e.needs_cooking),
-    );
-    // Owner 2026-09-04 — fresh meals are a third state, not a shortage: they
-    // are cooked on their day and the pool answers for none of them. They are
-    // still cooks, so the week says how many rather than hiding them behind the
-    // batch figure. Un-consumed only, same as the chef-hat set.
-    const freshEntries = computed(
-        () => (focusedPlan.value?.entries ?? []).filter((e) => e.cook_fresh && !e.consumed_at),
-    );
-    const cookByLabel = computed(() => {
-        const days = needsCookingEntries.value
-            .map((e) => toIso(e.scheduled_for))
-            .sort();
-        const earliest = days[0] ?? null;
-        return `${needsCookingEntries.value.length} to cook${earliest ? ` by ${formatDate(earliest)}` : ''}`;
-    });
 
     // ── "Dora suggests" (§4.4) ─────────────────────────────────────────────
     // Replaces the recipe trays, which the rail's filter chips retired on
@@ -724,9 +680,6 @@ export function useMealPlanner() {
     function isOnAList(stockItemId: string): boolean {
         return cartStateFor(stockItemId, listMembership.value) !== 'none';
     }
-    const needToBuyOnList = computed(
-        () => needToBuy.value.filter((ing) => isOnAList(ing.stock_item_id)),
-    );
     const needToBuyOutstanding = computed(
         () => needToBuy.value.filter((ing) => !isOnAList(ing.stock_item_id)),
     );
@@ -836,8 +789,9 @@ export function useMealPlanner() {
         return plan ? `Meals: week of ${formatDate(plan.start_date)}` : 'Shopping list';
     });
 
+    const recipeNames = computed(() => new Map(recipes.value.map((r) => [r.recipe_id, r.name])));
     function recipeNameById(recipeId: string): string | null {
-        return recipes.value.find((r) => r.recipe_id === recipeId)?.name ?? null;
+        return recipeNames.value.get(recipeId) ?? null;
     }
 
     function openAddToList() {
@@ -1155,8 +1109,6 @@ export function useMealPlanner() {
         recipeSearch,
         templates,
         sets,
-        mealPlans,
-        today,
         ingredients,
         ingredientsLoading,
         isInitialLoading,
@@ -1164,29 +1116,19 @@ export function useMealPlanner() {
         focusedMonday,
         focusedPlan,
         weekDays,
-        dayCost,
         weekRangeLabel,
         weekRelativeLabel,
         suggestions,
-        suggestionsLoading,
         loadSuggestions,
         slotNames,
-        slotNameSet,
         currentDayIso,
-        cookByLabel,
-        needsCookingEntries,
-        freshEntries,
         needToBuy,
-        needToBuyOnList,
         needToBuyOutstanding,
         unlinkedIngredients,
         budgetStatus,
         hoveredRecipeIds,
         focusedTarget,
-        slideDir,
         weekTransition,
-        prefersReducedMotion,
-        recurringSourceOptions,
         // lookups
         dayEntries,
         slotEntries,
@@ -1224,7 +1166,6 @@ export function useMealPlanner() {
         goToRecipe,
         cookRecipe,
         toggleCookFresh,
-        onKeydown,
         onTouchStart,
         onTouchEnd,
         // tap-to-target (drag retired — D1, see above)

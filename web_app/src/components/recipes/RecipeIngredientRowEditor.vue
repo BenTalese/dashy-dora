@@ -365,11 +365,10 @@
             if (!itemId) return;
             loadingChoices.value = true;
             try {
-                const detail = await stockItemApi.getDetailAsync(itemId);
+                const choices = await stockItemApi.getBuyChoicesAsync(itemId);
                 if (choicesFor !== itemId) return;
-                preferredBuys.value = [...(detail.preferred_buys ?? [])]
-                    .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
-                linkedProducts.value = detail.products ?? [];
+                preferredBuys.value = choices.preferred_buys;  // server order, A–Z
+                linkedProducts.value = choices.products;
             } catch {
                 // No choices is a usable state: the Called field still works.
             } finally {

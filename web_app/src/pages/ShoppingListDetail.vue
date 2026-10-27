@@ -550,7 +550,6 @@
                         v-else-if="receiptFace"
                         :detail="detail"
                         :amending="amending"
-                        :completed-label="completedLabel"
                         @stop-amend="amending = false"
                         @edit-price="openPriceSheet"
                         @adjust-quantity="onAdjustQuantity"
@@ -1198,6 +1197,7 @@
     import ShoppingListApiService, {
         shoppingListAttachmentUrl,
         type TrimToBudgetResult,
+        type UpdateLineCommand,
     } from 'src/services/api/shoppingListApiService';
     import ImageSourcePicker from 'src/components/ImageSourcePicker.vue';
     import type { ProcessedImage } from 'src/services/files/imageService';
@@ -1793,13 +1793,6 @@
     function priceForLine(line: ShoppingListLine): number {
         return priceOfLine(line);
     }
-
-    /** The receipt's dateline. Null on a list that somehow finished without a
-     *  timestamp rather than rendering "Shopped —". */
-    const completedLabel = computed(() => {
-        const iso = detail.value?.completed_at;
-        return iso ? `Shopped ${formatDate(iso)}` : null;
-    });
 
     function formatDate(iso: string): string {
         try {
@@ -2427,29 +2420,45 @@
             }
             return;
         }
-        const previousPrice = line.actual_unit_price;
-        const previousStore = line.purchased_store_id;
-        const previousStoreName = line.purchased_store_name;
-        line.actual_unit_price = nextPrice;
-        line.purchased_store_id = nextStore ?? null;
-        line.purchased_store_name =
-            storeOptionsFor(line).find((o) => o.value === nextStore)?.label ?? null;
-        try {
-            await api.updateLineAsync(listId.value, line.line_id, {
+        await writeLinePurchase(
+            line,
+            { price: nextPrice, storeId: nextStore ?? null },
+            {
                 actual_unit_price: nextPrice,
                 ...(nextStore
                     ? { purchased_store_id: nextStore }
                     : { clear_purchased_store: true }),
-            });
+            },
+            'Could not save the price.',
+        );
+    }
+
+    /** The one optimistic write for a line's price and bought-from store:
+     *  show the new pair, send `command`, and put the old pair back (with
+     *  `failMessage`) if the server refuses (03-R19). */
+    async function writeLinePurchase(
+        line: ShoppingListLine,
+        next: { price: number | null; storeId: string | null },
+        command: UpdateLineCommand,
+        failMessage: string,
+    ) {
+        const previous = {
+            price: line.actual_unit_price,
+            storeId: line.purchased_store_id,
+            storeName: line.purchased_store_name,
+        };
+        line.actual_unit_price = next.price;
+        line.purchased_store_id = next.storeId;
+        line.purchased_store_name = next.storeId
+            ? storeOptionsFor(line).find((o) => o.value === next.storeId)?.label ?? null
+            : null;
+        try {
+            await api.updateLineAsync(listId.value, line.line_id, command);
         } catch (err) {
-            line.actual_unit_price = previousPrice;
-            line.purchased_store_id = previousStore;
-            line.purchased_store_name = previousStoreName;
-            $q.notify({
-                type: 'negative',
-                message: 'Could not save the price.',
-                caption: toastCaption(err),
-            });
+            line.actual_unit_price = previous.price;
+            line.purchased_store_id = previous.storeId;
+            line.purchased_store_name = previous.storeName;
+            $q.notify({ type: 'negative', message: failMessage, caption: toastCaption(err) });
         }
     }
 
@@ -2492,28 +2501,12 @@
      *  override. Optimistic like its siblings, and rolled back the same way.
      */
     async function saveStoreOnly(line: ShoppingListLine, storeId: string) {
-        const previousPrice = line.actual_unit_price;
-        const previousStore = line.purchased_store_id;
-        const previousStoreName = line.purchased_store_name;
-        line.actual_unit_price = null;
-        line.purchased_store_id = storeId;
-        line.purchased_store_name =
-            storeOptionsFor(line).find((o) => o.value === storeId)?.label ?? null;
-        try {
-            await api.updateLineAsync(listId.value, line.line_id, {
-                clear_actual_unit_price: true,
-                purchased_store_id: storeId,
-            });
-        } catch (err) {
-            line.actual_unit_price = previousPrice;
-            line.purchased_store_id = previousStore;
-            line.purchased_store_name = previousStoreName;
-            $q.notify({
-                type: 'negative',
-                message: 'Could not save the store.',
-                caption: toastCaption(err),
-            });
-        }
+        await writeLinePurchase(
+            line,
+            { price: null, storeId },
+            { clear_actual_unit_price: true, purchased_store_id: storeId },
+            'Could not save the store.',
+        );
     }
 
     /** The line's offers, only while they can still be acted on. A receipt is
@@ -2551,28 +2544,13 @@
     }
 
     async function clearPriceOverride(line: ShoppingListLine) {
-        const previousPrice = line.actual_unit_price;
-        const previousStore = line.purchased_store_id;
-        const previousStoreName = line.purchased_store_name;
-        if (previousPrice == null && previousStore == null) return;
-        line.actual_unit_price = null;
-        line.purchased_store_id = null;
-        line.purchased_store_name = null;
-        try {
-            await api.updateLineAsync(listId.value, line.line_id, {
-                clear_actual_unit_price: true,
-                clear_purchased_store: true,
-            });
-        } catch (err) {
-            line.actual_unit_price = previousPrice;
-            line.purchased_store_id = previousStore;
-            line.purchased_store_name = previousStoreName;
-            $q.notify({
-                type: 'negative',
-                message: 'Could not clear the price.',
-                caption: toastCaption(err),
-            });
-        }
+        if (line.actual_unit_price == null && line.purchased_store_id == null) return;
+        await writeLinePurchase(
+            line,
+            { price: null, storeId: null },
+            { clear_actual_unit_price: true, clear_purchased_store: true },
+            'Could not clear the price.',
+        );
     }
 
     async function setLineQuantity(line: ShoppingListLine, next: number | null) {

@@ -27,7 +27,7 @@ the honest answer rather than a hidden card.
 """
 import logging
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from typing import List
 from uuid import UUID
 
@@ -43,6 +43,8 @@ from dora_api.infrastructure.api_response import ok
 from dora_api.infrastructure.ports import Repository
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
+
+_LOGGER = logging.getLogger(__name__)
 
 # How many rows each half of the card shows. The card is one of nine on the
 # page — it answers "what should I deal with", not "list my pantry".
@@ -93,7 +95,7 @@ class GetUseItUpHandler:
         # an expiry date at all" is still the wrong fetch on a large one — so
         # bound it in SQL and let the shared predicates do the grading.
         # `<=` on the far edge because `is_expiring_soon` is inclusive.
-        horizon = date.fromordinal(today.toordinal() + window)
+        horizon = today + timedelta(days=window)
         candidates: List[StockItem] = self.repository.get(StockItem).all(
             EntityField(StockItem, StockItem.Fields.EXPIRY_DATE).is_not_null()
             & EntityField(StockItem, StockItem.Fields.EXPIRY_DATE).lte(horizon)
@@ -178,9 +180,8 @@ class GetUseItUpHandler:
 
 @DASHBOARD_ROUTER.route("/use-it-up", methods=["GET"])
 def get_use_it_up():
-    _Logger = logging.getLogger(__name__)
     _Result = GetUseItUpHandler(SqlAlchemyRepository()).handle()
-    _Logger.debug(
+    _LOGGER.debug(
         "Use it up: %d expiring items, %d recipes",
         len(_Result.items), len(_Result.recipes),
     )

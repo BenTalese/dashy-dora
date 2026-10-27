@@ -18,6 +18,8 @@ from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 
+_LOGGER = logging.getLogger(__name__)
+
 
 # Allowed parent kind per child kind, so the tree can't grow sideways
 # (e.g. a section under a zone, skipping the area level).
@@ -82,7 +84,6 @@ class CreateLocationHandler:
 @LOCATION_ROUTER.route("", methods=["POST"])
 @has_request_body(CreateLocationRequest)
 def create_location():
-    _Logger = logging.getLogger(__name__)
     _Handler = CreateLocationHandler(SqlAlchemyRepository())
     _Request: CreateLocationRequest = get_request_body()
     _Response = _Handler.handle(_Request)
@@ -97,7 +98,7 @@ def create_location():
             f"{_VALID_PARENT_KIND[_Request.kind] or 'top-level'} parent."
         )
 
-    _Logger.info(f"Created {_Request.kind} '{_Request.name}' ({_Response.new_location_id})")
+    _LOGGER.info(f"Created {_Request.kind} '{_Request.name}' ({_Response.new_location_id})")
     return created(
         resource_id=_Response.new_location_id,
         get_route="LOCATION_ROUTER.get_location_tree",

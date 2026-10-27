@@ -39,11 +39,8 @@
      *  D-006 (one formatting authority): the symbol comes from `useMoney`, the
      *  install-wide money policy, never a hardcoded "$".
      *
-     *  **Adoption is deliberately partial.** This landed with Price History
-     *  (batch G); the other money inputs — `PriceEntry`,
-     *  `ShoppingListPlanRow`, the dashboard budget and Money settings — are
-     *  still hand-rolled and are tracked for a sweep rather than migrated
-     *  blind inside a UI batch.
+     *  Not yet adopted by `ShoppingListPlanRow`, the dashboard budget or the
+     *  Money settings, which still hand-roll their price fields.
      */
     import { useMoney } from 'src/composables/useMoney';
 

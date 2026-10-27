@@ -34,6 +34,8 @@ from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 
+_LOGGER = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True, slots=True)
 class StoreMappingDto:
@@ -185,7 +187,7 @@ def upsert_store_mapping(source_id: UUID):
         return not_found("IngestionSource", source_id)
     if error == "store_not_found":
         return bad_request("store_id does not match any existing Store.")
-    logging.getLogger(__name__).info(
+    _LOGGER.info(
         "Upserted store mapping %s for source %s (external=%s, store=%s)",
         result.id, source_id, result.external_name, result.store_id,
     )

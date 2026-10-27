@@ -74,6 +74,7 @@
     // section — so this page renders each level with the visual that suits it
     // (card → row → chip) rather than as one uniform recursive indented list.
     // See LocationZoneCard for the rationale.
+    import { useSettingsSave } from 'src/composables/useSettingsSave';
     import AppSpinner from 'src/components/AppSpinner.vue';
     import { ICONS } from 'src/style/icons';
     import { useQuasar } from 'quasar';
@@ -83,7 +84,6 @@
     import { useLocationStore } from 'src/stores/locationStore';
     import { useListState } from 'src/composables/useListState';
     import { filterLocationTree } from 'src/helpers/locationDisplay';
-    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import BaseButton from 'src/components/BaseButton.vue';
     import LocationZoneCard from 'src/components/settings/LocationZoneCard.vue';
     import SettingsPageHeader from 'src/components/settings/SettingsPageHeader.vue';
@@ -162,13 +162,7 @@
         persistExpanded();
     }
 
-    function notifyError(message: string, err: unknown) {
-        $q.notify({
-            type: 'negative',
-            message,
-            caption: toastCaption(err),
-        });
-    }
+    const { notifyError } = useSettingsSave();
 
     /** Prompt for a name. Matches the create/rename convention the sibling
      *  taxonomy pages use (VocabListEditor) — one anatomy per job, D-015. */

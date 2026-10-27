@@ -224,9 +224,7 @@ def test__check_stock_item__UnknownItem__NotFound(api):
 def test__snooze_stock_item__OverdueItem__ThreeDayPushWithoutCheckClaim(api):
     item_id = _overdue_item(f"{_token()} pasta")
     assert item_id in _queue_ids()
-    before = requests.get(
-        f"{BASE}/stock-items", params={"filter": f"stock_item_id:eq:{item_id}"},
-    ).json()["items"][0]
+    before = requests.get(f"{BASE}/stock-items/{item_id}/detail").json()
 
     resp = requests.post(f"{BASE}/stock-items/{item_id}/snooze")
 
@@ -235,9 +233,7 @@ def test__snooze_stock_item__OverdueItem__ThreeDayPushWithoutCheckClaim(api):
     delta = snoozed_until - datetime.now(UTC).replace(tzinfo=snoozed_until.tzinfo)
     assert timedelta(days=2, hours=23) < delta <= timedelta(days=3)
     # Push makes no claim the stock is right — last_checked_at untouched.
-    after = requests.get(
-        f"{BASE}/stock-items", params={"filter": f"stock_item_id:eq:{item_id}"},
-    ).json()["items"][0]
+    after = requests.get(f"{BASE}/stock-items/{item_id}/detail").json()
     assert after["last_checked_at"] == before["last_checked_at"]
 
 

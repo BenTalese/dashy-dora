@@ -3,11 +3,10 @@ import DashboardApiService from 'src/services/api/dashboardApiService';
 import type { DoraScore } from 'src/models/doraScore';
 
 /** P8-08 — module-level cache for the dashboard's Dora Score card.
- *  There's only ever one score for the current user, so a shared
- *  singleton is the right shape (no per-key Map). The card mounts and
- *  reads the cached value while a background refresh runs; explicit
- *  `invalidateDoraScore()` bumps the timestamp so the next mount
- *  refetches. STALE_AFTER_MS matches useBuyVerdict for consistency. */
+ *  There's only ever one score, so a shared singleton is the right shape
+ *  (no per-key Map). The card mounts and reads the cached value; a mount
+ *  after STALE_AFTER_MS refetches, and the page calls `refresh` when it
+ *  reloads its cards. STALE_AFTER_MS matches useBuyVerdict. */
 
 const api = new DashboardApiService();
 
@@ -40,19 +39,6 @@ function refresh(): Promise<void> {
         });
     inflight = p;
     return p;
-}
-
-/** Bumped after any mutation that could shift the score (log waste,
- *  finish a shopping list, mark an item checked, cook + drop level).
- *  Doesn't refetch — next `useDoraScore()` mount triggers the reload. */
-export function invalidateDoraScore(): void {
-    fetchedAt = 0;
-}
-
-export function clearDoraScoreCache(): void {
-    value.value = null;
-    fetchedAt = 0;
-    inflight = null;
 }
 
 export function useDoraScore(): {

@@ -150,9 +150,9 @@
                             <span class="rn__factk"><q-icon :name="ICONS.cookTime" size="14px" />Cook</span>
                             <span class="rn__factv">{{ form.cook_time_minutes ? form.cook_time_minutes + ' min' : '–' }}</span>
                         </div>
-                        <div v-if="totalMinutes !== null" class="rn__fact">
+                        <div v-if="totalTimeMinutes !== null" class="rn__fact">
                             <span class="rn__factk"><q-icon :name="ICONS.timer" size="14px" />Total</span>
-                            <span class="rn__factv">{{ totalMinutes }} min</span>
+                            <span class="rn__factv">{{ totalTimeMinutes }} min</span>
                         </div>
                         <div class="rn__fact">
                             <span class="rn__factk"><q-icon :name="ICONS.difficulty" size="14px" />Difficulty</span>
@@ -585,7 +585,7 @@
                                             <RecipeMissingIngredientChip
                                                 v-if="!ingredientsEditing
                                                     && row.stock_item_id
-                                                    && isMissingItem(row.stock_item_id)"
+                                                    && isIngredientMissing(row.stock_item_id)"
                                                 :entries="substitutesForRow(row)"
                                                 :ingredient-name="ingredientLabel(row)"
                                             />
@@ -640,7 +640,7 @@
                                                 />
                                             </template>
                                             <AddToListButton
-                                                v-else-if="row.stock_item_id && isMissingItem(row.stock_item_id)"
+                                                v-else-if="row.stock_item_id && isIngredientMissing(row.stock_item_id)"
                                                 :stock-item-id="row.stock_item_id"
                                                 variant="row"
                                             />
@@ -827,7 +827,7 @@
                                 v-if="methodEditing && form.steps_mode !== 'structured'"
                                 v-model="form.tool_ids"
                                 label="Tools this recipe needs"
-                                :options="toolSelectOptions"
+                                :options="toolOptions"
                                 emit-value map-options multiple use-chips clearable
                                 @update:model-value="markDirty"
                             />
@@ -1063,7 +1063,7 @@
             :total="recipe.estimated_cost"
             :priced-count="recipe.estimated_cost_priced_count"
             :total-count="recipe.estimated_cost_total_count"
-            :servings="form.servings"
+            :per-serving="recipe.estimated_cost_per_serving"
         />
 
         <RecipeIngredientRowEditor
@@ -1195,12 +1195,13 @@
     import { useMoneyEnabled } from 'src/composables/useMoneyEnabled';
     import { useNutritionMode } from 'src/composables/useNutritionMode';
     import { useRecipeExport } from 'src/composables/useRecipeExport';
-    import { DEFAULT_MEAL_SLOTS, DIFFICULTY_VALUES } from 'src/helpers/recipeVocabulary';
+    import { newClientId } from 'src/helpers/clientId';
+    import { totalMinutes } from 'src/helpers/recipeTime';
+    import { DIFFICULTY_OPTIONS } from 'src/helpers/recipeVocabulary';
     import { useShoppingListActions } from 'src/composables/useShoppingListActions';
     import {
         buildUpdateCommand,
         hydrateRecipeForm,
-        newClientId,
         useRecipeForm,
         type IngredientForm,
         type IngredientPatch,
@@ -1222,7 +1223,6 @@
 
     // Domain vocabulary, not a page constant: the same three values rank
     // recipes in the cookbook's sort. R-003 — one home, four readers.
-    const DIFFICULTY_OPTIONS = [...DIFFICULTY_VALUES];
 
     const $q = useQuasar();
     const route = useRoute();
@@ -1236,10 +1236,13 @@
     const stockLevelStore = useStockLevelStore();
     const recipeApi = new RecipeApiService();
     const stockItemApi = new StockItemApiService();
-    const { stockItems } = storeToRefs(stockItemStore);
-    const { recipeCollections } = storeToRefs(recipeStore);
-    const { cuisines, categories, dietaryTags, tools } = storeToRefs(recipeVocabStore);
-    const { mealSlotNames } = storeToRefs(mealSlotStore);
+    const { recipeCollections, collectionOptions } = storeToRefs(recipeStore);
+    const {
+        cuisines, categories, tools,
+        cuisineOptions, categoryOptions, dietaryTagOptions, toolOptions,
+    } = storeToRefs(recipeVocabStore);
+    // `time_of_day` reads the household's own meal-slot names.
+    const { slotNamesOrDefault: timeOfDayOptions } = storeToRefs(mealSlotStore);
     // Shopping-list membership, read from the same place every cart button
     // reads it (R-003) so the page and the buttons can't disagree about
     // whether something is already on a list.
@@ -1439,7 +1442,7 @@
     function hasPantryState(row: IngredientForm): boolean {
         const id = row.stock_item_id;
         if (!id) return false;
-        if (!ingredientsEditing.value && isMissingItem(id)) return true;
+        if (!ingredientsEditing.value && isIngredientMissing(id)) return true;
         return expiringChipFor(id) !== null;
     }
 
@@ -1547,23 +1550,8 @@
     const cuisineName = computed(() => cuisines.value.find((c) => c.cuisine_id === form.cuisine_id)?.name ?? '');
     const categoryName = computed(() => categories.value.find((c) => c.category_id === form.category_id)?.name ?? '');
 
-    const collectionOptions = computed(() =>
-        recipeCollections.value.map((c) => ({ label: c.name, value: c.recipe_collection_id })));
-    const cuisineOptions = computed(() => cuisines.value.map((c) => ({ label: c.name, value: c.cuisine_id })));
-    const categoryOptions = computed(() => categories.value.map((c) => ({ label: c.name, value: c.category_id })));
-    const dietaryTagOptions = computed(() => dietaryTags.value.map((t) => ({ label: t.name, value: t.dietary_tag_id })));
-    const toolSelectOptions = computed(() => tools.value.map((t) => ({ label: t.name, value: t.tool_id })));
 
-    // `time_of_day` reads the household's own meal-slot names; the seed
-    // constant is only the pre-first-load fallback.
-    const timeOfDayOptions = computed(() =>
-        (mealSlotNames.value.length > 0 ? mealSlotNames.value : [...DEFAULT_MEAL_SLOTS]));
-
-    const totalMinutes = computed(() => {
-        const p = form.prep_time_minutes ?? 0;
-        const c = form.cook_time_minutes ?? 0;
-        return p + c > 0 ? p + c : null;
-    });
+    const totalTimeMinutes = computed(() => totalMinutes(form.prep_time_minutes, form.cook_time_minutes));
     const headlineKcal = computed(() => {
         if (isComplex.value && recipe.value?.nutrition?.kcal) return Math.round(recipe.value.nutrition.kcal);
         return form.kcal ?? null;
@@ -1584,7 +1572,7 @@
 
     function stockItemName(row: IngredientForm): string | null {
         if (!row.stock_item_id) return null;
-        return stockItems.value.find((s) => s.stock_item_id === row.stock_item_id)?.name ?? null;
+        return stockItemStore.byId.get(row.stock_item_id)?.name ?? null;
     }
 
     /** The recipe's own name for the row when it has chosen one ("Bega
@@ -1673,7 +1661,7 @@
         }
         const next = new Map<string, SubstituteOption[]>();
         const results = await Promise.allSettled(
-            targets.map((id) => stockItemApi.getDetailAsync(id)),
+            targets.map((id) => stockItemApi.getSubstitutesAsync(id)),
         );
         results.forEach((res, i) => {
             const id = targets[i]!;
@@ -1681,18 +1669,16 @@
             // it isn't worth a toast: substitutes are an enhancement to a row
             // that already reads "Missing" correctly without them.
             if (res.status !== 'fulfilled') return;
-            const entries = (res.value.substitutes ?? []).map((sub) => {
+            const entries = res.value.map((sub) => {
                 // Resolved here, not in the chip: the store is the page's one
                 // source of truth about stock (R-003), and the menu renders
                 // the verdict it was handed.
-                const item = stockItems.value.find(
-                    (s) => s.stock_item_id === sub.stock_item_id,
-                );
+                const item = stockItemStore.byId.get(sub.stock_item_id);
                 return {
                     sub,
                     inStock: !isMissingItem(sub.stock_item_id),
-                    levelSequence: item?.stock_level_sequence ?? null,
-                    levelLabel: item?.stock_level_name
+                    levelSequence: item?.stock_level_sequence ?? sub.stock_level_sequence,
+                    levelLabel: (item ? stockLevelStore.levelById.get(item.stock_level_id)?.name : undefined)
                         ?? sub.stock_level_name
                         ?? 'Out of stock or untracked',
                 };
@@ -1717,7 +1703,7 @@
         ));
     const substitutableNames = computed(() =>
         coverableIngredients.value.map(
-            (i) => stockItems.value.find((s) => s.stock_item_id === i.stock_item_id)?.name
+            (i) => (i.stock_item_id ? stockItemStore.byId.get(i.stock_item_id)?.name : undefined)
                 ?? i.stock_item_name,
         ));
 
@@ -1743,10 +1729,23 @@
         return `Add ${left} to a list`;
     });
 
+    /** A substitute's stock state, from the store (substitutes aren't on the
+     *  recipe DTO). */
     function isMissingItem(stockItemId: string | null | undefined): boolean {
         if (!stockItemId) return false;
-        const item = stockItems.value.find((s) => s.stock_item_id === stockItemId);
+        const item = stockItemStore.byId.get(stockItemId);
         return !item || Boolean(item.is_out_of_stock);
+    }
+    /** An ingredient row's "missing": the server's verdict on the saved
+     *  recipe (R-003); a row added since the last save falls back to the
+     *  store. */
+    const missingByStockItem = computed(() => new Map(
+        (recipe.value?.ingredients ?? [])
+            .filter((i) => i.stock_item_id !== null)
+            .map((i) => [i.stock_item_id as string, i.is_missing]),
+    ));
+    function isIngredientMissing(stockItemId: string): boolean {
+        return missingByStockItem.value.get(stockItemId) ?? isMissingItem(stockItemId);
     }
 
     // Server's per-ingredient expiry verdict, read off the loaded recipe so the
@@ -1772,7 +1771,7 @@
     const atRiskCount = computed(() => expiringItems.value.size);
     const atRiskHeadline = computed(() => {
         const names = [...expiringItems.value.keys()]
-            .map((id) => stockItems.value.find((s) => s.stock_item_id === id)?.name)
+            .map((id) => stockItemStore.byId.get(id)?.name)
             .filter(Boolean);
         if (names.length === 1) return `${names[0]} needs using`;
         return `${atRiskCount.value} ingredients need using`;
@@ -1874,7 +1873,6 @@
     // The steps editor's option shape is {value,label} for all three lists.
     const ingredientOptions = computed(() =>
         form.ingredients.map((i) => ({ value: String(i.client_id), label: ingredientLabel(i) })));
-    const toolOptions = computed(() => tools.value.map((t) => ({ value: t.tool_id, label: t.name })));
     const sectionOptions = computed(() =>
         form.sections.map((s) => ({ value: s.client_id, label: s.name || 'Untitled section' })));
 
@@ -2101,10 +2099,7 @@
         newVersionLoading.value = true;
         try {
             const created = await recipeApi.createNewVersionAsync(recipe.value.recipe_id);
-            // CreatedResponse carries either `recipe_id` (created() body) or
-            // `id` (Location-style). Cover both, as the old page does.
-            const newId = (created as Record<string, unknown>).recipe_id as string | undefined
-                ?? created.id;
+            const newId = created.recipe_id;
             await recipeStore.getRecipesAsync();
             $q.notify({
                 type: 'positive',
@@ -2324,23 +2319,6 @@
     }
     .rn__brow { display: inline-flex; align-items: center; gap: var(--space-1, 4px); }
 
-    /* The inline-edit affordance: reads as text, reveals on hover/focus. */
-    .rn__edit {
-        border-radius: var(--radius-sm, 4px);
-        cursor: pointer;
-        padding: 0 3px;
-        margin: 0 -3px;
-        box-shadow: inset 0 -1px 0 0 transparent;
-        transition: background 100ms ease, box-shadow 100ms ease;
-    }
-    .rn__edit:hover {
-        background: var(--overlay-hover);
-        box-shadow: inset 0 -1px 0 0 var(--border-strong);
-    }
-    .rn__edit:focus-visible {
-        outline: 2px solid var(--brand-primary);
-        outline-offset: 1px;
-    }
 
     .rn__facts {
         display: flex; flex-wrap: wrap;
@@ -2412,13 +2390,6 @@
     .rn__cellv { font-weight: 600; }
     .rn__cellsub { font-size: 0.8125rem; color: var(--text-muted); }
     .rn__pool { display: flex; align-items: center; gap: var(--space-2, 8px); flex-wrap: wrap; }
-    .rn__link {
-        background: none; border: 0; padding: 0;
-        font: inherit; font-size: 0.8125rem; font-weight: 600;
-        color: var(--brand-primary); cursor: pointer; text-align: left;
-    }
-    .rn__link:hover { text-decoration: underline; }
-    .rn__link:focus-visible { outline: 2px solid var(--brand-primary); outline-offset: 2px; }
     .rn__cellbtn { align-self: flex-start; margin-top: var(--space-1, 4px); }
     /* ── Body ─────────────────────────────────────────────────────────── */
     .rn__body {
@@ -2587,8 +2558,6 @@
     }
     .rn__toolk .q-icon { letter-spacing: normal; }
     .rn__tools .q-select { flex: 1 1 240px; min-width: 0; }
-    .rn__hintblock { color: var(--text-muted); font-size: 0.8125rem; margin: 0 0 var(--space-3, 12px); }
-    .rn__editor { margin-top: var(--space-4, 16px); border-top: 1px solid var(--divider); }
 
     .rn__details { margin-top: var(--space-8, 32px); border-top: 1px solid var(--divider); }
     /* The expansion headers wear the Ingredients/Method treatment now, so the
@@ -2656,12 +2625,6 @@
         padding: var(--space-2, 8px);
     }
 
-    .rn__secrow {
-        display: flex;
-        align-items: center;
-        gap: var(--space-2, 8px);
-        margin-bottom: var(--space-2, 8px);
-    }
 
     .rn__discsub {
         font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em;
@@ -2669,24 +2632,6 @@
         margin: var(--space-5, 20px) 0 var(--space-2, 8px);
     }
 
-    .rn__order {
-        list-style: none;
-        margin: 0 0 var(--space-3, 12px);
-        padding: 0;
-    }
-    .rn__order li {
-        display: flex;
-        align-items: center;
-        gap: var(--space-2, 8px);
-        padding: var(--space-1, 4px) 0;
-        border-bottom: 1px solid var(--divider);
-    }
-    .rn__ordername { flex: 1; min-width: 0; }
-    .rn__ordersec {
-        margin-left: var(--space-2, 8px);
-        font-size: 0.75rem;
-        color: var(--text-muted);
-    }
 
     /* ── Phone ────────────────────────────────────────────────────────── */
     @media (max-width: 1023px) {

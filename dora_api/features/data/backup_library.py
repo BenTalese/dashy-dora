@@ -69,6 +69,8 @@ from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 
+_LOGGER = logging.getLogger(__name__)
+
 
 # ── Request/response shapes ────────────────────────────────────────────
 
@@ -169,7 +171,7 @@ def _unlink_quiet(path_str: str) -> None:
     try:
         Path(path_str).unlink(missing_ok=True)
     except OSError as exc:
-        logging.getLogger(__name__).warning(
+        _LOGGER.warning(
             "Backup file unlink failed for %s: %s", path_str, exc
         )
 
@@ -179,7 +181,6 @@ def _unlink_quiet(path_str: str) -> None:
 @DATA_ROUTER.route("/backups", methods=["POST"])
 @has_request_body(CreateBackupRequest)
 def create_backup():
-    _Logger = logging.getLogger(__name__)
     user_id, err = require_admin()
     if err is not None:
         return err
@@ -201,7 +202,7 @@ def create_backup():
         with open(path, "w", encoding="utf-8") as f:
             json.dump(result.payload, f, ensure_ascii=False)
     except OSError as exc:
-        _Logger.exception("Failed to write backup file at %s", path)
+        _LOGGER.exception("Failed to write backup file at %s", path)
         return internal_server_error(f"Could not write backup file: {exc}")
 
     size_bytes = path.stat().st_size
@@ -223,7 +224,7 @@ def create_backup():
 
     dropped = _enforce_retention(repository)
     if dropped:
-        _Logger.info(
+        _LOGGER.info(
             "Backup retention pruned %d row(s): %s",
             len(dropped), [str(r.id) for r in dropped],
         )
@@ -348,7 +349,6 @@ def download_backup(backup_id: UUID):
 
 @DATA_ROUTER.route("/backups/<uuid:backup_id>/restore", methods=["POST"])
 def restore_saved_backup(backup_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _, err = require_admin()
     if err is not None:
         return err
@@ -376,7 +376,7 @@ def restore_saved_backup(backup_id: UUID):
     )
     _Result = RestoreBackupHandler().handle(restore_request)
     if isinstance(_Result, str):
-        _Logger.warning("Library restore failed: %s", _Result)
+        _LOGGER.warning("Library restore failed: %s", _Result)
         if _Result.startswith("Restore failed and was rolled back"):
             return internal_server_error(_Result)
         return bad_request(_Result)
@@ -386,7 +386,6 @@ def restore_saved_backup(backup_id: UUID):
 
 @DATA_ROUTER.route("/backups/<uuid:backup_id>", methods=["DELETE"])
 def delete_backup(backup_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _, err = require_admin()
     if err is not None:
         return err
@@ -402,7 +401,7 @@ def delete_backup(backup_id: UUID):
         return not_found("Backup", backup_id)
     repository.remove(row)
     repository.save_changes()
-    _Logger.info("Deleted backup %s", backup_id)
+    _LOGGER.info("Deleted backup %s", backup_id)
     return no_content()
 
 

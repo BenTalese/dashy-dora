@@ -1,11 +1,9 @@
 import AxiosHttpClient from './axiosHttpClient';
 
 /**
- * C-waste — slim waste log + expiry rescue.
- *
- * Capture is reason-only (no quantity/value/note). The expiry-rescue
- * feed is unchanged — the dashboard's "Needs your attention" card and
- * Dora's `expiry_rescue` tool both still read it.
+ * C-waste — slim waste log. Capture is reason-only (no quantity/value/note).
+ * The expiry-rescue feed (`GET /waste/rescue`) has no SPA reader: Dora's
+ * `expiry_rescue` tool calls its handler server-side.
  */
 
 export type WasteReason =
@@ -14,33 +12,6 @@ export type WasteReason =
     | 'did_not_like'
     | 'overbought'
     | 'other';
-
-export type ExpiringItem = {
-    stock_item_id: string;
-    name: string;
-    expiry_date: string;
-    days_until_expiry: number;
-    is_expired: boolean;
-    stock_level_name: string | null;
-    estimated_value: number | null;
-};
-
-export type RescueRecipe = {
-    recipe_id: string;
-    name: string;
-    cook_time_minutes: number | null;
-    difficulty: string | null;
-    matching_expiring_items: string[];
-    matching_count: number;
-    missing_ingredients: string[];
-    is_favourite: boolean;
-};
-
-export type WasteRescue = {
-    horizon_days: number;
-    items: ExpiringItem[];
-    recipes: RescueRecipe[];
-};
 
 export type LogWasteEventCommand = {
     stock_item_id: string;
@@ -71,13 +42,6 @@ export type BulkDeleteWasteCommand = {
     events: Array<{ event_id: string; restore_expiry_date: string | null }>;
 };
 
-export type WasteEvent = {
-    event_id: string;
-    stock_item_id: string | null;
-    stock_item_name: string;
-    reason: WasteReason;
-    occurred_at: string | null;
-};
 
 export type MostWastedRow = {
     stock_item_id: string | null;
@@ -107,11 +71,6 @@ export type WasteInsights = {
 export default class WasteApiService {
     private httpClient = new AxiosHttpClient();
 
-    getRescueAsync = async (horizonDays = 7): Promise<WasteRescue> =>
-        await this.httpClient.get<WasteRescue>(
-            `/waste/rescue?horizon_days=${horizonDays}`,
-        );
-
     logEventAsync = async (
         command: LogWasteEventCommand,
     ): Promise<{ event_id: string }> =>
@@ -140,11 +99,6 @@ export default class WasteApiService {
             { deleted_count: number; restored_count: number },
             BulkDeleteWasteCommand
         >('/waste/events/bulk-delete', command);
-
-    listEventsAsync = async (limit = 25): Promise<{ events: WasteEvent[] }> =>
-        await this.httpClient.get<{ events: WasteEvent[] }>(
-            `/waste/events?limit=${limit}`,
-        );
 
     deleteEventAsync = async (eventId: string): Promise<void> =>
         await this.httpClient.delete<void>(`/waste/events/${eventId}`);

@@ -13,51 +13,17 @@ bar, the Account header, and the admin Users list). The session middleware
 already gates the route; we don't add a per-user check — the StockItem /
 Store image endpoints set the same precedent.
 """
-import base64
-import re
-
-from flask import Response
-
 from dora_api.domain.entities.user import User
 from dora_api.features.routers import USER_ROUTER
 from dora_api.infrastructure.api_response import not_found
+from dora_api.infrastructure.data_url import data_url_response
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 
 
-_DATA_URL_RE = re.compile(r"^data:(?P<mime>[\w/+.-]+);base64,(?P<data>.+)$", re.DOTALL)
-
-
-def _decode_data_url(blob: bytes | None) -> tuple[str, bytes] | None:
-    """Return `(mime, raw_bytes)` from a stored data-URL blob, or None when
-    the blob is empty or malformed (caller treats either as "no image")."""
-    if not blob:
-        return None
-    try:
-        data_url = blob.decode("utf-8", "ignore")
-    except Exception:  # pragma: no cover — bytes.decode("utf-8", "ignore") doesn't raise
-        return None
-    match = _DATA_URL_RE.match(data_url)
-    if not match:
-        return None
-    try:
-        raw = base64.b64decode(match.group("data"), validate=False)
-    except (ValueError, TypeError):
-        return None
-    return match.group("mime"), raw
-
-
-@USER_ROUTER.route("/<uuid:user_id>/image", methods=["GET"])
+@USER_ROUTER.route("<uuid:user_id>/image", methods=["GET"])
 def get_user_image(user_id):
     repository = SqlAlchemyRepository()
     user = repository.get(User).by_id(user_id)
     if user is None:
         return not_found(User.__name__, user_id)
-    decoded = _decode_data_url(getattr(user, "image", None))
-    if decoded is None:
-        return not_found(User.__name__, user_id)
-    mime, raw = decoded
-    return Response(
-        raw,
-        mimetype=mime,
-        headers={"Cache-Control": "no-cache"},
-    )
+    return data_url_response(user.image, lambda: not_found(User.__name__, user_id))

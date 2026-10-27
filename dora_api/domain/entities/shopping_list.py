@@ -13,8 +13,7 @@ from dora_api.domain.entities.base_entity import BaseEntity
 #   shopping : actively being shopped right now (was is_in_progress).
 #   done     : finished or archived (was is_archived). completed_at carries
 #              the timestamp.
-# Plain str sentinels (not Enum) so SQLAlchemy stores them as varchar,
-# matching the ADDED_VIA_* convention above.
+# Plain str sentinels (not Enum) so SQLAlchemy stores them as varchar.
 SHOPPING_LIST_STATUS_DRAFT = "draft"
 SHOPPING_LIST_STATUS_SHOPPING = "shopping"
 SHOPPING_LIST_STATUS_DONE = "done"
@@ -67,16 +66,15 @@ class ShoppingListLine(BaseEntity):
     # the marker disappears.
     is_auto_added: bool = False
     added_at: datetime | None = None
-    # Snapshot pair captured at the *commit-to-offer* moment: when the line
-    # is added with a `selected_product_id`, or when the user later sets /
-    # changes the selection. Freezes the store offer at that planning
-    # moment so historic reporting (savings, spend-by-store) stays honest
-    # if prices move before purchase. Both stay None for lines that never
-    # had a selected product (e.g. a generic stock-item line the shopper
-    # picks at the shelf). Untick / re-tick does NOT change them — ticking
-    # is "purchase complete", not "commit to offer". (State-ownership
-    # Chunk 6; was previously captured at first-tick, which lost intent
-    # when planning-time and tick-time prices diverged.)
+    # The offer snapshot pair. Nothing has written `picked_offer_price` since
+    # 2026-09-17: an offer price is the shop's advertised number, not the
+    # user's money, so a shop the user never priced recorded spend they had
+    # never confirmed. Pricing is explicit now (the price editor can pull an
+    # offer's price in with one tap), and a list with no prices entered records
+    # no spend. Lines finished before then still hold real values, which
+    # Reports and the paid-price ladder (`_line_price`) read, so the columns
+    # stay. `list_price_at_pick` is still written alongside an entered price
+    # (`snapshot_offer_rrp`) so a saving can be shown.
     picked_offer_price: float | None = None
     list_price_at_pick: float | None = None
     # what the shopper *actually* paid (per unit) and

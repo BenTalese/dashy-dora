@@ -42,19 +42,15 @@ from dora_api.domain.entities.stock_item import StockItem
 from dora_api.domain.entities.stock_location import StockLocation
 from dora_api.domain.location_breadcrumb import build_breadcrumb
 from dora_api.features.routers import STOCKTAKE_ROUTER
-from dora_api.features.stock_items.inference_overlay import (SURFACE_STOCK,
-                                                             current_user,
-                                                             surface_enabled)
-from dora_api.features.stock_items.pantry_belief import (PantryBelief,
-                                                         gather_beliefs_for_items)
-from dora_api.features.stocktake.queue_ranking import (RANK_CONFIDENT,
-                                                       rank_queue)
+from dora_api.features.stock_items.pantry_belief import PantryBelief
+from dora_api.features.stocktake.queue_ranking import RANK_CONFIDENT
 from dora_api.features.stocktake.stocktake import (ENGAGEMENT_WINDOW_DAYS,
-                                                   resolve_overdue_map,
+                                                   ranked_overdue,
                                                    resolve_unengaged_items)
 from dora_api.features.stocktake.sweep import resolve_newly_swept
 from dora_api.infrastructure.api_response import ok, unauthorized
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
+from dora_api.infrastructure.session_user import current_user
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -149,20 +145,11 @@ def get_stocktake_session():
     }
 
     # ── Review + Walk: the overdue set, ranked ──────────────────────────
-    overdue_map = resolve_overdue_map(items, now)
-    overdue = [
-        (info.days, info.band, item)
-        for item in items
-        if (info := overdue_map.get(item.id)) is not None
-    ]
-    beliefs: dict[UUID, PantryBelief] = {}
-    belief_ranked = surface_enabled(user, SURFACE_STOCK)
-    if belief_ranked and overdue:
-        beliefs = gather_beliefs_for_items(repo, [item for _, _, item in overdue])
-
-    band_by_item = {item.id: band for _, band, item in overdue}
-    days_by_item = {item.id: days for days, _, item in overdue}
-    ranked = rank_queue([(days, item) for days, _, item in overdue], beliefs)
+    overdue = ranked_overdue(repo, user, items, now)
+    band_by_item = overdue.band_by_item
+    days_by_item = overdue.days_by_item
+    belief_ranked = overdue.belief_ranked
+    ranked = overdue.ranked
 
     review: List[SessionItemDto] = []
     walk: List[SessionItemDto] = []

@@ -149,6 +149,41 @@ def test__proposers__every_proposer_runs_without_raising(api, name):
     assert "status" in result
 
 
+def test__trim_to_budget__propose_and_commit_reach_the_handler(api):
+    """The smoke test above returns before the handler (no signed-in user),
+    which is how a signature change to `TrimToBudgetHandler.handle` went
+    unnoticed. Signed in, with a draft list, both halves call it."""
+    from flask import session
+    from dora_api.domain.entities.user import User
+    from dora_api.infrastructure.session_user import SESSION_USER_ID_KEY
+    from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
+
+    list_id = requests.post(f"{BASE}/shopping-lists", json={"name": "Trim smoke"}).json()["shopping_list_id"]
+    try:
+        with app.test_request_context():
+            session[SESSION_USER_ID_KEY] = str(SqlAlchemyRepository().get(User).all()[0].id)
+            proposed = confirm_actions.PROPOSERS["trim_list_to_budget"]({})
+            committed = confirm_actions.commit_trim_list_to_budget(
+                {"shopping_list_id": list_id, "list_name": "Trim smoke"},
+            )
+        assert proposed["type"] == "trim_list_to_budget"
+        assert committed["ok"] is False
+    finally:
+        requests.delete(f"{BASE}/shopping-lists/{list_id}")
+
+
+def test__add_to_list_plan__resolves_without_raising(api):
+    """The add-to-list flow has its own resolver beside PROPOSERS; its stock
+    match used `EntityField` without importing it, so every LLM-mode "add X to
+    my list" raised a NameError."""
+    from dora_api.features.assistant import shopping_actions
+
+    with app.test_request_context():
+        plan = shopping_actions.resolve_add_plan([{"name": "milk", "quantity": 1}])
+    assert plan["type"] == "add_to_shopping_list"
+    assert plan["items"][0]["status"] in {"ready", "not_found", "ambiguous", "too_many"}
+
+
 # Finalisation 11-R3 — 11 of 24 nav hints pointed at retired routes
 # (`/recipes`, `/product-search`, `/settings/preferences`), so the "See it"
 # button under an answer landed on the 404 page. Pin every hint against the
@@ -209,3 +244,20 @@ def test__confirm_action_type_union__mirrors_proposers():
     assert members == set(confirm_actions.PROPOSERS), (
         f"ConfirmActionType {sorted(members)} != PROPOSERS {sorted(confirm_actions.PROPOSERS)}"
     )
+
+
+def test__recipes_using_item__finds_the_recipe_from_its_ingredient(api):
+    """11-R41 — the lookup starts from the ingredient side now."""
+    level = requests.get(f"{BASE}/stock-levels").json()["items"][0]["stock_level_id"]
+    item = requests.post(f"{BASE}/stock-items", json={"name": "Zz ladder saffron", "stock_level_id": level}).json()["stock_item_id"]
+    recipe = requests.post(f"{BASE}/recipes", json={
+        "name": "Zz saffron rice",
+        "ingredients": [{"stock_item_id": item, "quantity": 1, "unit": "g"}],
+    }).json()["recipe_id"]
+    try:
+        with app.test_request_context():
+            rows = tools._TOOLS["recipes_using_item"]({"item_name": "Zz ladder saffron"})
+        assert [r["name"] for r in rows] == ["Zz saffron rice"]
+    finally:
+        requests.delete(f"{BASE}/recipes/{recipe}")
+        requests.delete(f"{BASE}/stock-items/{item}")

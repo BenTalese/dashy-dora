@@ -33,6 +33,7 @@ from dora_api.domain.entities.user import (
     User,
 )
 from dora_api.domain.entities.user_llm_provider import UserLlmProvider
+from dora_api.infrastructure.llm import anthropic_client, gemini_client, openai_client
 from dora_api.infrastructure.llm.anthropic_client import AnthropicClient
 from dora_api.infrastructure.llm.gemini_client import GeminiClient
 from dora_api.infrastructure.security.secret_encryption import (
@@ -45,12 +46,29 @@ from dora_api.infrastructure.llm.ollama_client import OllamaClient
 from dora_api.infrastructure.llm.openai_client import OpenAiClient
 
 
-_Logger = logging.getLogger(__name__)
+_LOGGER = logging.getLogger(__name__)
 
 # Outbound network timeout for an LLM request. Long enough for a slow
 # self-hosted Ollama, short enough that a downed paid API doesn't lock
 # the chat turn forever.
 _REQUEST_TIMEOUT_SECONDS = 60
+
+
+# What the settings page shows as placeholders: the endpoint a client falls
+# back to when the base URL is left empty, and an example model id. Served by
+# `/assistant/providers` so the SPA doesn't keep its own copy (11-R16).
+PROVIDER_DEFAULTS: dict[str, tuple[str, str]] = {
+    LLM_PROVIDER_OLLAMA: ("", "qwen2.5:7b"),
+    LLM_PROVIDER_OPENAI: (openai_client.DEFAULT_BASE_URL, "gpt-4o-mini"),
+    LLM_PROVIDER_ANTHROPIC: (anthropic_client.DEFAULT_BASE_URL, "claude-3-5-sonnet-20241022"),
+    LLM_PROVIDER_GEMINI: (gemini_client.DEFAULT_BASE_URL, "gemini-2.0-flash"),
+}
+
+
+def unavailable_client(reason: str) -> LlmClient:
+    """The sentinel for callers outside the factory (the assistant's own
+    sign-in checks; finalisation 11-R32)."""
+    return _UnavailableClient(reason)
 
 
 class _UnavailableClient(LlmClient):
@@ -108,7 +126,7 @@ def build_assistant_client(user: User, config: UserLlmProvider | None) -> LlmCli
         try:
             api_key = decrypt(config.api_key_encrypted)
         except (EncryptionUnavailable, EncryptionFailed) as exc:
-            _Logger.warning("API-key decryption failed for user %s: %s", user.id, exc)
+            _LOGGER.warning("API-key decryption failed for user %s: %s", user.id, exc)
             return _UnavailableClient(str(exc))
     else:
         api_key = ""

@@ -9,7 +9,9 @@ export type SuggestionKind =
     | 'use_soon'
     | 'over_budget'
     | 'likely_due'
-    | 'frequent_waster';
+    | 'frequent_waster'
+    | 'pantry_check'
+    | 'reconcile_meals_pending';
 
 export type SuggestionSeverity = 'high' | 'medium' | 'low';
 

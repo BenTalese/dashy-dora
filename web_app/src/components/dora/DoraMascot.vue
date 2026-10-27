@@ -118,8 +118,9 @@
     let sleepTimer: ReturnType<typeof setInterval> | null = null;
 
     function clearAll() {
-        for (const t of [blinkTimer, talkTimer, sparkleTimer, altIdleTimer, sleepTimer]) {
-            if (t !== null) clearTimeout(t as unknown as number);
+        if (blinkTimer !== null) clearTimeout(blinkTimer);
+        for (const t of [talkTimer, sparkleTimer, altIdleTimer, sleepTimer]) {
+            if (t !== null) clearInterval(t);
         }
         blinkTimer = null;
         talkTimer = null;

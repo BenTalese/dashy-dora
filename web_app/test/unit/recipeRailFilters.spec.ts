@@ -12,7 +12,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-    NO_AXIS_FILTERS, axisFiltersActive, buildFilterChips, filterRecipes,
+    NO_AXIS_FILTERS, buildFilterChips, filterRecipes,
     matchesAxes,
 } from 'src/helpers/recipeRailFilters';
 import type { Recipe } from 'src/models/recipe';
@@ -164,14 +164,6 @@ describe('matchesAxes', () => {
     it('ANDs the two axes together', () => {
         expect(matchesAxes(LUNCH_EASY_FAV, { timeOfDay: 'Lunch', difficulty: 'Easy' })).toBe(true);
         expect(matchesAxes(LUNCH_EASY_FAV, { timeOfDay: 'Lunch', difficulty: 'Hard' })).toBe(false);
-    });
-});
-
-describe('axisFiltersActive', () => {
-    it('is false only when neither axis is set', () => {
-        expect(axisFiltersActive(NO_AXIS_FILTERS)).toBe(false);
-        expect(axisFiltersActive({ timeOfDay: 'Lunch', difficulty: null })).toBe(true);
-        expect(axisFiltersActive({ timeOfDay: null, difficulty: 'Easy' })).toBe(true);
     });
 });
 

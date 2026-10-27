@@ -44,8 +44,8 @@ export const useAuthStore = defineStore('auth', () => {
     // Settings rebuild Phase 4 — per-user profile-picture version counter,
     // bumped whenever an `image`/`clear_image` field is sent on updateMeAsync
     // (mirrors stockItemStore's `imageVersionOf`). Any consumer painting
-    // `userImageUrl(id, imageVersionOf(id))` reactively refreshes after an
-    // upload / clear, since the bytes endpoint sends `Cache-Control: no-cache`.
+    // the picture with `imageVersionOf(id)` in its path refetches after an
+    // upload / clear (`UserAvatar`).
     const imageVersions = ref<Record<string, number>>({});
     function imageVersionOf(userId: string): number {
         return imageVersions.value[userId] ?? 0;

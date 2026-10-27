@@ -158,9 +158,9 @@
                                 <span v-if="aboveLowPct(s) !== null">
                                     · currently {{ aboveLowPct(s) }}% above
                                     <InfoTip label="What above the all-time low means">
-                                        You're paying more than your own usual
-                                        price for this product, based on prices
-                                        you've logged.
+                                        How far today's shelf price is above the
+                                        lowest advertised price Dora has seen
+                                        for this product.
                                     </InfoTip>
                                 </span>
                             </div>
@@ -200,28 +200,16 @@
                             No data yet.
                         </q-card-section>
                         <q-separator />
-                        <!-- PH-3/PH-4 — was a `type="number"` field labelled
-                             "Notify me below ($)" sharing one row with a
-                             full-label button, inside a `col-md-4` card: the
-                             label truncated and the value was sent exactly as
-                             typed. The field is now the shared `MoneyInput`
-                             (symbol as a prefix, settles to 2dp on blur) with
-                             a short label, and the button sits **below** it so
-                             the input gets the card's full width instead of
-                             competing for it. -->
+                        <!-- One watch editor for the whole app (10-R40): the
+                             card opens the same dialog My products uses. -->
                         <q-card-section class="q-pt-sm">
-                            <MoneyInput
-                                :model-value="alertInputs[s.product_id] ?? null"
-                                @update:model-value="alertInputs[s.product_id] = $event"
-                                label="Notify below"
-                            />
                             <BaseButton
                                 variant="primary"
-                                class="full-width q-mt-sm"
+                                class="full-width"
                                 :icon="ICONS.notifications_active"
-                                label="Set alert"
-                                :disable="!alertInputs[s.product_id] || alertInputs[s.product_id]! <= 0"
-                                @click="onSetAlert(s.product_id)"
+                                :label="watchByProduct.has(s.product_id) ? 'Change watch' : 'Watch this price'"
+                                :disable="!productById.get(s.product_id)"
+                                @click="openWatch(s.product_id)"
                             />
                         </q-card-section>
                     </q-card>
@@ -245,17 +233,34 @@
                             </q-item-label>
                         </q-item-section>
                         <q-item-section side>
-                            <BaseButton
-                                variant="danger-ghost"
-                                dense
-                                :icon="ICONS.delete"
-                                label="Remove"
-                                @click="onDeleteAlert(a.price_alert_id)"
-                            />
+                            <div class="row no-wrap q-gutter-xs">
+                                <BaseButton
+                                    v-if="productById.get(a.product_id)"
+                                    variant="ghost"
+                                    dense
+                                    :icon="ICONS.edit"
+                                    label="Change"
+                                    @click="openWatch(a.product_id)"
+                                />
+                                <BaseButton
+                                    variant="danger-ghost"
+                                    dense
+                                    :icon="ICONS.delete"
+                                    label="Remove"
+                                    @click="onDeleteAlert(a.price_alert_id)"
+                                />
+                            </div>
                         </q-item-section>
                     </q-item>
                 </q-list>
         </BaseDialog>
+
+        <ProductPriceWatchDialog
+            v-model="watchOpen"
+            :product="watchTarget"
+            :watch="watchTarget ? (watchByProduct.get(watchTarget.product_id) ?? null) : null"
+            @saved="refreshAlerts"
+        />
     </q-page>
 </template>
 
@@ -268,12 +273,12 @@
     import BaseButton from 'src/components/BaseButton.vue';
     import StoreLogo from 'src/components/StoreLogo.vue';
     import BaseSegmented from 'src/components/BaseSegmented.vue';
-    import MoneyInput from 'src/components/MoneyInput.vue';
+    import ProductPriceWatchDialog from 'src/components/products/ProductPriceWatchDialog.vue';
     import PageToolbar from 'src/components/PageToolbar.vue';
     import DiscountChip from 'src/components/chips/DiscountChip.vue';
     import { formatMoney } from 'src/composables/useMoney';
     import { useQuasar } from 'quasar';
-    import { computed, onBeforeUnmount, onMounted, ref, watch, reactive } from 'vue';
+    import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
     import { useRoute } from 'vue-router';
     import BaseDialog from 'src/components/BaseDialog.vue';
     import PriceHistoryChart from 'src/components/PriceHistoryChart.vue';
@@ -290,8 +295,8 @@
     const route = useRoute();
     const compactToolbar = computed(() => $q.screen.lt.sm);
     const historyApi = new PriceHistoryApiService();
-    // products come through the store (R-003), so a save on the
-    // product-search surface is visible here without a hard refresh.
+    // One product store for the app (R-003): My products and this page read
+    // the same list, hydrated lazily.
     const productStore = useProductStore();
     const { products: candidates } = storeToRefs(productStore);
 
@@ -313,9 +318,16 @@
     const chartSeries = computed(() => productSeriesToChart(series.value));
     const alerts = ref<PriceAlert[]>([]);
     const alertsOpen = ref(false);
-    // Indexed by product id. `| undefined` is explicit because a reactive
-// Record's index access is, and MoneyInput takes `number | null`.
-const alertInputs = reactive<Record<string, number | null | undefined>>({});
+    const watchByProduct = computed(() => new Map(alerts.value.map((a) => [a.product_id, a])));
+    const productById = computed(() => new Map(candidates.value.map((p) => [p.product_id, p])));
+    const watchOpen = ref(false);
+    const watchTarget = ref<Product | null>(null);
+    function openWatch(productId: string): void {
+        const product = productById.value.get(productId);
+        if (!product) return;
+        watchTarget.value = product;
+        watchOpen.value = true;
+    }
 
     // chart width tracks the surrounding card so the graph extends to
     // the card edge at every viewport size. Was hard-coded to 720, which
@@ -335,18 +347,16 @@ const alertInputs = reactive<Record<string, number | null | undefined>>({});
     const filteredCandidates = computed(() => {
         const needle = filter.value.trim().toLowerCase();
         const all = candidates.value;
-        if (!needle) return all.slice(0, 100);
-        return all
-            .filter((p) =>
-                p.name.toLowerCase().includes(needle)
-                || (p.store_name ?? '').toLowerCase().includes(needle),
-            )
-            .slice(0, 100);
+        if (!needle) return all;
+        return all.filter((p) =>
+            p.name.toLowerCase().includes(needle)
+            || (p.store_name ?? '').toLowerCase().includes(needle),
+        );
     });
 
     const selectedProducts = computed(() =>
         selectedIds.value
-            .map((id) => candidates.value.find((p) => p.product_id === id))
+            .map((id) => productById.value.get(id))
             .filter((p): p is Product => Boolean(p)),
     );
 
@@ -399,26 +409,6 @@ const alertInputs = reactive<Record<string, number | null | undefined>>({});
         } catch { /* alerts list is non-critical */ }
     }
 
-    async function onSetAlert(productId: string) {
-        const value = alertInputs[productId];
-        if (!value || value <= 0) return;
-        try {
-            await historyApi.createAlertAsync(productId, value);
-            await refreshAlerts();
-            alertInputs[productId] = null;
-            $q.notify({
-                type: 'positive', 
-                message: "We'll notify you when it drops.",
-            });
-        } catch (err) {
-            $q.notify({
-                type: 'negative', 
-                message: "Couldn't set the alert.",
-                caption: err instanceof Error ? err.message : String(err),
-            });
-        }
-    }
-
     async function onDeleteAlert(alertId: string) {
         try {
             await historyApi.deleteAlertAsync(alertId);
@@ -435,16 +425,12 @@ const alertInputs = reactive<Record<string, number | null | undefined>>({});
     watch([selectedIds, range], () => { void refreshSeries(); });
 
     onMounted(async () => {
-        // hydrate via the store so a save on the product-search
-        // surface (which writes through `productStore.createProductAsync`)
-        // is visible here without a hard refresh.
         await productStore.getProductsAsync();
-        // Deep-link: ?product_id=<id> pre-selects.
+        // Deep-link: ?product_id=<id> pre-selects; the watch above fetches.
         const preselect = (route.query.product_id as string | undefined) ?? null;
-        if (preselect && candidates.value.find((p) => p.product_id === preselect)) {
+        if (preselect && productById.value.has(preselect)) {
             selectedIds.value = [preselect];
         }
-        void refreshSeries();
         void refreshAlerts();
         // Wait one tick so the q-card has mounted before measuring.
         await Promise.resolve();

@@ -1,12 +1,14 @@
+import dataclasses
 import logging
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import List
 from uuid import UUID
 
 from flask import request
 
 from dora_api.domain.entities.app_setting import (
+    NUTRITION_MODE_COMPLEX,
     RATING_SCHEME_HEALTH_STAR,
     RATING_SCHEME_NONE,
     RATING_SCHEME_NUTRI_SCORE,
@@ -21,6 +23,19 @@ from dora_api.domain.recipe_cookability import (cookability_state,
                                                  missing_stock_item_names_for,
                                                  unlinked_count_for)
 from dora_api.domain.stock_status import (is_low_stock, is_missing)
+from dora_api.features.app_settings.access import (get_or_create_app_setting,
+                                                  money_features_enabled)
+from dora_api.features.app_settings.clock import household_today
+from dora_api.features.meal_plans.commitment_access import (committed_servings_by_recipe,
+                                                           plan_counts_by_recipe)
+from dora_api.features.nutrition.recipe_rollup import (
+    IngredientInput, RecipeNutritionInput, effective_kcal_per_serving,
+    rollup_recipe_nutrition, rollup_recipes_nutrition,
+)
+from dora_api.features.nutrition.sources import nutrition_mode
+from dora_api.features.recipes.image_flags import recipe_ids_with_image
+from dora_api.features.recipes.recipe_cost import (estimate_cost_for_ingredients,
+                                                   estimate_costs_for)
 from dora_api.features.recipes.recipe_tag_access import (
     find_recipe_ids_with_all_tags, find_recipe_ids_with_any_tags,
     get_tag_ids_for_recipes,
@@ -33,7 +48,7 @@ from dora_api.features.recipes.recipe_step_access import (
     get_steps_for_recipe, has_structured_steps_for_recipes,
 )
 from dora_api.features.recipes.recipe_step_image_access import (
-    get_step_image_metadata_for_recipe, has_step_images_for_recipes,
+    get_step_image_metadata_for_recipe,
     get_step_image_bytes,
 )
 from dora_api.features.recipes.recipe_section_access import (
@@ -50,7 +65,10 @@ from dora_api.infrastructure.query_options import (InvalidQueryParameter,
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.page import Page
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
+from dora_api.infrastructure.data_url import data_url_response
 from dora_api.infrastructure.ports import Repository
+
+_LOGGER = logging.getLogger(__name__)
 
 
 # How far ahead the cookbook counts an ingredient as "at risk". Owns the
@@ -140,13 +158,13 @@ class RecipeIngredientDto:
             notes = ingredient.notes,
             is_missing = is_missing(_Level) if _Item else False,
             is_low_stock = is_low_stock(_Level) if _Item else False,
-            section_id = getattr(ingredient, "section_id", None),
-            is_optional = getattr(ingredient, "is_optional", False),
-            raw_text = getattr(ingredient, "raw_text", None),
+            section_id = ingredient.section_id,
+            is_optional = ingredient.is_optional,
+            raw_text = ingredient.raw_text,
             expiry_date = _Item.expiry_date.isoformat() if _Item and _Item.expiry_date else None,
-            label = getattr(ingredient, "label", None),
-            preferred_buy_id = getattr(ingredient, "preferred_buy_id", None),
-            selected_product_id = getattr(ingredient, "selected_product_id", None),
+            label = ingredient.label,
+            preferred_buy_id = ingredient.preferred_buy_id,
+            selected_product_id = ingredient.selected_product_id,
         )
 
 
@@ -521,10 +539,6 @@ class RecipeDto:
     # owned; replaces the implicit "has structured rows?" detection so
     # 'image' is a first-class peer. Default 'freeform' for new recipes.
     steps_mode: str = "freeform"
-    # Cheap existence flag mirrored from has_structured_steps. Populated
-    # by the list hydration (`_hydrate_has_step_images`); detail returns
-    # full metadata via `step_images[]` below.
-    has_step_images: bool = False
     # PROPOSAL_RECIPE_IMAGE_STEPS — ordered image metadata for the detail
     # endpoint only. The list endpoint leaves this empty; bytes are never
     # inlined either way (the SPA loads each via the dedicated bytes
@@ -605,7 +619,7 @@ class RecipeDto:
             has_image = False,
             dietary_tag_ids = dietary_tag_ids or [],
             steps_mode = recipe.steps_mode or "freeform",
-            notes = getattr(recipe, "notes", None),
+            notes = recipe.notes,
         )
 
 
@@ -729,12 +743,10 @@ def load_expiring_stock_item_ids(
     `GetWasteRescueHandler.handle()` — same definition of "at risk"
     across the rescue feed and the cookbook surface (R-003).
     """
-    from datetime import timedelta as _timedelta
-    from dora_api.features.app_settings.clock import household_today as _household_today
     if horizon_days < 0:
         return set()
     # R-021 — at-risk horizon uses household-tz today.
-    cutoff = _household_today(repository) + _timedelta(days=horizon_days)
+    cutoff = household_today(repository) + timedelta(days=horizon_days)
     items = repository.get(StockItem).all(
         EntityField(StockItem, StockItem.Fields.EXPIRY_DATE).is_not_null()
         & EntityField(StockItem, StockItem.Fields.EXPIRY_DATE).lte(cutoff)
@@ -780,13 +792,13 @@ def count_expiring_ingredients_per_recipe(
             item = ing.stock_item
             if item is None:
                 continue
-            if getattr(ing, "is_optional", False):
+            if ing.is_optional:
                 continue
             if item.id in at_risk_ids:
                 n += 1
                 # An at-risk item can still have no date (the predicate also
                 # catches items flagged at-risk by other means), so guard.
-                item_expiry = getattr(item, "expiry_date", None)
+                item_expiry = item.expiry_date
                 if item_expiry is not None:
                     as_date = (
                         item_expiry if isinstance(item_expiry, date)
@@ -802,9 +814,10 @@ def count_expiring_ingredients_per_recipe(
 
 
 def load_recipe_cookability(
-    repository,
+    repository, recipe_ids=None,
 ) -> dict[UUID, tuple[int, int, int]]:
-    """Map every recipe id -> ``(missing_count, ingredient_count, unlinked_count)``.
+    """Map every recipe id (or just ``recipe_ids``) ->
+    ``(missing_count, ingredient_count, unlinked_count)``.
 
     One eager-loaded query, shared by the ``?cookable`` / ``?max_missing`` recipe
     filter and the dashboard's ``cookable_count`` so the cookability rule lives in
@@ -822,13 +835,18 @@ def load_recipe_cookability(
     with ``stock_level`` unset and every ingredient would read as missing
     (FU-872, R-032). Safe to call at any point in a request.
     """
-    recipes = (
+    query = (
         repository
         .get(Recipe)
         .include(Recipe.Fields.INGREDIENTS)
             .then_include(RecipeIngredient.Fields.STOCK_ITEM)
-        .all()
     )
+    if recipe_ids is None:
+        recipes = query.all()
+    elif not recipe_ids:
+        return {}
+    else:
+        recipes = query.all(EntityField(Recipe, "id").in_(list(recipe_ids)))
     items = {
         ing.stock_item.id: ing.stock_item
         for r in recipes
@@ -902,7 +920,7 @@ class GetRecipesHandler:
             if any(term in name_lower for term in normalised):
                 # `_recipe_id` is the FK column on the mapping; the
                 # entity itself doesn't carry a `recipe_id` attribute.
-                fk = getattr(ing, "_recipe_id", None) or getattr(ing, "recipe_id", None)
+                fk = ing._recipe_id  # noqa: SLF001
                 if fk is not None:
                     denied.add(fk)
         return denied
@@ -1005,9 +1023,6 @@ class GetRecipesHandler:
         `estimated_cost=None` on every recipe on SQLite deployments,
         regardless of whether the ingredients had priced products.
         """
-        import dataclasses
-        from dora_api.features.recipes.recipe_cost import \
-            estimate_cost_for_ingredients
 
         if not dto.ingredients:
             return dto
@@ -1058,9 +1073,6 @@ class GetRecipesHandler:
         on a 50-card page would balloon the payload for something nothing on
         the list reads.
         """
-        import dataclasses
-        from dora_api.features.app_settings.access import money_features_enabled
-        from dora_api.features.recipes.recipe_cost import estimate_costs_for
 
         if not dtos or not money_features_enabled(self.repository):
             return dtos
@@ -1094,22 +1106,15 @@ class GetRecipesHandler:
         simple have no linked-food data, so the field stays NULL rather than
         reporting a hollow "0 of 8" — R-029); `kcal_per_serving` is filled in
         simple too, from the typed number.""" 
-        from dora_api.features.app_settings.access import get_or_create_app_setting
-        from dora_api.features.nutrition.sources import nutrition_mode
 
         return nutrition_mode(get_or_create_app_setting(self.repository))
 
     def _rating_scheme(self) -> str:
         """Which front-of-pack rating this install shows, if any. `none` by
         default everywhere (see the AppSetting's note)."""
-        from dora_api.domain.entities.app_setting import RATING_SCHEME_NONE
-        from dora_api.features.app_settings.access import get_or_create_app_setting
 
         setting = get_or_create_app_setting(self.repository)
-        return str(
-            getattr(setting, "nutrition_rating_scheme", RATING_SCHEME_NONE)
-            or RATING_SCHEME_NONE
-        )
+        return setting.nutrition_rating_scheme or RATING_SCHEME_NONE
 
     @staticmethod
     def _rating_dto(rollup) -> 'RecipeHealthStarRatingDto | None':  # noqa: ANN001
@@ -1206,11 +1211,6 @@ class GetRecipesHandler:
         gram-conversion ladder and the coverage rule are domain math, and a
         second copy in the SPA is how the two drift apart.
         """
-        import dataclasses
-        from dora_api.domain.entities.app_setting import NUTRITION_MODE_COMPLEX
-        from dora_api.features.nutrition.recipe_rollup import (
-            effective_kcal_per_serving, rollup_recipe_nutrition,
-        )
 
         mode = self._nutrition_mode()
         rollup = (
@@ -1237,12 +1237,6 @@ class GetRecipesHandler:
         judges on it, and a per-recipe fetch to render a card badge would be
         the N+1 that `test_recipes_query_count` exists to catch.
         """
-        import dataclasses
-        from dora_api.domain.entities.app_setting import NUTRITION_MODE_COMPLEX
-        from dora_api.features.nutrition.recipe_rollup import (
-            IngredientInput, RecipeNutritionInput, effective_kcal_per_serving,
-            rollup_recipes_nutrition,
-        )
 
         if not dtos:
             return dtos
@@ -1298,32 +1292,11 @@ class GetRecipesHandler:
         return [_with_nutrition(dto) for dto in dtos]
 
     def _hydrate_has_image(self, dtos: list[RecipeDto]) -> list[RecipeDto]:
-        """FU-090 — bulk-derive `has_image` from a single SQL pass that
-        never touches the deferred image blob column. SQL `image IS NOT
-        NULL` does the work; the wire shape ends up the same as before
-        but the recipe-list query no longer loads megabytes of bytes
-        per row just to set a boolean.
-
-        Routes through the ORM-mapped `Recipe` (not raw `text()`) so the
-        SQLAlchemy UUID type handles the BINARY(16)-on-SQLite id column;
-        raw `text('... IN :ids')` bound with str-UUIDs silently returns
-        zero rows there (blob != string), yielding `has_image=False`
-        across the board.
-        """
+        """FU-090 — bulk-derive `has_image` without loading the image bytes."""
         if not dtos:
             return dtos
-        import dataclasses
-        from sqlalchemy import select
-        from dora_api.app import db
-
-        ids = [d.recipe_id for d in dtos]
-        stmt = select(Recipe.id, Recipe.image.is_not(None)).where(Recipe.id.in_(ids))
-        rows = db.session.execute(stmt).all()
-        flag_by_id = {str(row[0]): bool(row[1]) for row in rows}
-        return [
-            dataclasses.replace(d, has_image=flag_by_id.get(str(d.recipe_id), False))
-            for d in dtos
-        ]
+        with_image = recipe_ids_with_image(d.recipe_id for d in dtos)
+        return [dataclasses.replace(d, has_image=str(d.recipe_id) in with_image) for d in dtos]
 
     def _hydrate_inference(self, dtos: list[RecipeDto]) -> list[RecipeDto]:
         """FU-653 — stamp the Zero-Input belief remark on each recipe.
@@ -1339,7 +1312,6 @@ class GetRecipesHandler:
         """
         if not dtos:
             return dtos
-        import dataclasses
 
         item_ids = {
             ingredient.stock_item_id
@@ -1349,7 +1321,7 @@ class GetRecipesHandler:
         }
         if not item_ids:
             return dtos
-        items = self.repository.get(StockItem).include(StockItem.Fields.STOCK_LEVEL).all(
+        items = self.repository.get(StockItem).all(
             EntityField(StockItem, "id").in_(list(item_ids))
         )
         divergence = resolve_divergence(self.repository, SURFACE_RECIPES, items)
@@ -1359,15 +1331,7 @@ class GetRecipesHandler:
         out: list[RecipeDto] = []
         for dto in dtos:
             hint = recipe_hint(
-                [
-                    IngredientRow(
-                        stock_item_id=i.stock_item_id,
-                        name=i.stock_item_name or (i.raw_text or ""),
-                        is_optional=i.is_optional,
-                        is_missing=i.is_missing,
-                    )
-                    for i in dto.ingredients
-                ],
+                [IngredientRow.from_dto(i) for i in dto.ingredients],
                 divergence,
                 missing_count=dto.missing_count,
                 unlinked_count=dto.unlinked_ingredient_count,
@@ -1385,7 +1349,6 @@ class GetRecipesHandler:
         `sections[]` instead."""
         if not dtos:
             return dtos
-        import dataclasses
         counts = get_section_count_for_recipes([d.recipe_id for d in dtos])
         return [
             dataclasses.replace(d, section_count=counts.get(d.recipe_id, 0))
@@ -1398,24 +1361,10 @@ class GetRecipesHandler:
         loads the full `steps[]` list."""
         if not dtos:
             return dtos
-        import dataclasses
         ids = [d.recipe_id for d in dtos]
         with_steps = has_structured_steps_for_recipes(ids)
         return [
             dataclasses.replace(d, has_structured_steps=d.recipe_id in with_steps)
-            for d in dtos
-        ]
-
-    def _hydrate_has_step_images(self, dtos: list[RecipeDto]) -> list[RecipeDto]:
-        """List endpoint only — set `has_step_images` via one bulk
-        existence query. Detail endpoint hydrates the full metadata list."""
-        if not dtos:
-            return dtos
-        import dataclasses
-        ids = [d.recipe_id for d in dtos]
-        with_images = has_step_images_for_recipes(ids)
-        return [
-            dataclasses.replace(d, has_step_images=d.recipe_id in with_images)
             for d in dtos
         ]
 
@@ -1426,7 +1375,6 @@ class GetRecipesHandler:
         unchanged."""
         if not dtos or not self._expiring_counts:
             return dtos
-        import dataclasses
         return [
             dataclasses.replace(
                 d,
@@ -1457,7 +1405,6 @@ class GetRecipesHandler:
         """
         if not dtos:
             return dtos
-        import dataclasses
 
         at_risk_ids = load_expiring_stock_item_ids(self.repository, EXPIRING_HORIZON_DAYS)
         if not at_risk_ids:
@@ -1466,7 +1413,6 @@ class GetRecipesHandler:
         # server's, exactly as the at-risk query above is. Local import to
         # match `load_expiring_stock_item_ids` and the other clock callers in
         # this module.
-        from dora_api.features.app_settings.clock import household_today
         today = household_today(self.repository)
 
         out: list[RecipeDto] = []
@@ -1496,7 +1442,6 @@ class GetRecipesHandler:
         than mutate."""
         if not dtos:
             return dtos
-        import dataclasses
 
         ids = [d.recipe_id for d in dtos]
         tag_map = get_tag_ids_for_recipes(ids)
@@ -1513,60 +1458,20 @@ class GetRecipesHandler:
     def _hydrate_unallocated(self, dtos: list[RecipeDto]) -> list[RecipeDto]:
         """Subtract the sum of future, un-consumed servings per recipe
         from `available_meals` to derive the unallocated pool. One
-        GROUP BY query keeps this O(1) regardless of list size.
-
-        FU-081 — switched from raw `text()` to ORM `select()` against
-        the mapped table. The text-form bound stringified UUIDs against
-        the `UUIDType` BLOB columns on SQLite (string-vs-BLOB never
-        matches), which silently kept `committed_meals` at 0 whenever
-        future entries existed. The ORM form lets SQLAlchemy apply the
-        UUIDType bind-processor and is portable across SQLite + Postgres.
-        Same row set now also stamps `is_planned` (FU-081 derivation)."""
+        GROUP BY query keeps this O(1) regardless of list size (the
+        aggregates live in `meal_plans/commitment_access.py`). Same row set
+        also stamps `is_planned` (FU-081 derivation)."""
         if not dtos:
             return dtos
-        import dataclasses
-        from datetime import timedelta
-
-        from sqlalchemy import func, select
-
-        from dora_api.app import db
-        from dora_api.features.app_settings.clock import household_today
 
         # "Today" in the household timezone (C-2.K), consistent with the
         # meal-plan rules — not server-local.
         _Today = household_today(self.repository)
         _Ids = [d.recipe_id for d in dtos]
-
-        _Mpe = db.metadata.tables["MealPlanEntry"]
-
-        _Stmt = (
-            select(_Mpe.c.recipe_id, func.sum(_Mpe.c.servings))
-            .where(_Mpe.c.consumed_at.is_(None))
-            .where(_Mpe.c.scheduled_for >= _Today)
-            .where(_Mpe.c.recipe_id.in_(_Ids))
-            .group_by(_Mpe.c.recipe_id)
-        )
-        _Rows = db.session.execute(_Stmt).all()
-
-        # how often each recipe appears across *all* meal plans (the
-        # "frequently planned" tray): a plain all-time entry count.
-        _CountStmt = (
-            select(_Mpe.c.recipe_id, func.count())
-            .where(_Mpe.c.recipe_id.in_(_Ids))
-            .group_by(_Mpe.c.recipe_id)
-        )
-        _CountRows = db.session.execute(_CountStmt).all()
-
-        # UUIDType columns are 16-byte BLOBs in SQLite; text() reads bring them
-        # back as bytes. Normalise to a stable str key.
-        def _key(v) -> str:
-            if isinstance(v, UUID):
-                return str(v)
-            if isinstance(v, bytes):
-                return str(UUID(bytes=v))
-            return str(v)
-        _Committed = {_key(row[0]): int(row[1] or 0) for row in _Rows}
-        _PlanCount = {_key(row[0]): int(row[1] or 0) for row in _CountRows}
+        _Committed = committed_servings_by_recipe(_Ids, _Today)
+        # How often each recipe appears across *all* meal plans (the
+        # "frequently planned" tray).
+        _PlanCount = plan_counts_by_recipe(_Ids)
 
         # "haven't had in a while": never made, or last made before the
         # household 21-day window. The server owns the threshold (R-003).
@@ -1604,7 +1509,6 @@ class GetRecipesHandler:
         page = query.paginate(
             options, RecipeDto.from_entity, field_map=_FIELD_MAP
         )
-        import dataclasses
         # Each step takes the page's DTOs and returns them with one more field
         # populated; they are independent and run in listed order. This was a
         # ten-deep nest of calls read inside-out — adding cost to it would have
@@ -1613,7 +1517,6 @@ class GetRecipesHandler:
         items = self._hydrate_tags(items)
         items = self._hydrate_expiring_count(items)
         items = self._hydrate_expiring_ingredients(items)
-        items = self._hydrate_has_step_images(items)
         items = self._hydrate_structured_steps_flag(items)
         items = self._hydrate_section_count(items)
         items = self._hydrate_has_image(items)
@@ -1691,7 +1594,6 @@ class GetRecipesHandler:
             )
             for row in step_image_rows
         ]
-        import dataclasses
         _WithAssoc = dataclasses.replace(
             dto,
             # keys are UUIDs from the SQL result; use entity.id
@@ -1704,7 +1606,6 @@ class GetRecipesHandler:
             sections=section_dtos,
             section_count=len(section_dtos),
             step_images=step_image_dtos,
-            has_step_images=bool(step_image_dtos),
         )
         _Hydrated = self._hydrate_inference(self._hydrate_expiring_ingredients(
             self._hydrate_unallocated(self._hydrate_has_image([_WithAssoc]))
@@ -1789,14 +1690,12 @@ def get_recipe(recipe_id: UUID):
     handler = GetRecipesHandler(SqlAlchemyRepository())
     dto = handler.handle_by_id(recipe_id)
     if dto is None:
-        from dora_api.domain.entities.recipe import Recipe as _Recipe
-        return not_found(_Recipe.__name__, recipe_id)
+        return not_found(Recipe.__name__, recipe_id)
     return ok(dto)
 
 
 @RECIPE_ROUTER.route("")
 def get_recipes():
-    _Logger = logging.getLogger(__name__)
     try:
         _Options = parse_query_options(request.args)
     except InvalidQueryParameter as exc:
@@ -1806,7 +1705,7 @@ def get_recipes():
         _Page = GetRecipesHandler(SqlAlchemyRepository()).handle(_Options, _Filters)
     except InvalidQueryParameter as exc:
         return bad_request(str(exc))
-    _Logger.info(
+    _LOGGER.info(
         f"Retrieved {len(_Page.items)} of {_Page.total} recipes "
         f"(tags_include={_Filters.tags_include}, "
         f"tags_exclude={_Filters.tags_exclude}, "
@@ -1831,59 +1730,21 @@ def get_recipes():
 
 @RECIPE_ROUTER.route("/<uuid:recipe_id>/image", methods=["GET"])
 def get_recipe_image(recipe_id):
-    import base64
-    import re as _re
-    from flask import Response
-
-    repository = SqlAlchemyRepository()
-    recipe = repository.get(Recipe).by_id(recipe_id)
-    if recipe is None or not recipe.image:
-        return not_found(Recipe.__name__, recipe_id)
-    data_url = recipe.image.decode("utf-8", "ignore")
-    match = _re.match(r"^data:(?P<mime>[\w/+.-]+);base64,(?P<data>.+)$", data_url, _re.DOTALL)
-    if not match:
-        return not_found(Recipe.__name__, recipe_id)
-    try:
-        raw = base64.b64decode(match.group("data"), validate=False)
-    except (ValueError, TypeError):
-        return not_found(Recipe.__name__, recipe_id)
-    return Response(
-        raw,
-        mimetype=match.group("mime"),
-        headers={"Cache-Control": "no-cache"},
+    recipe = SqlAlchemyRepository().get(Recipe).by_id(recipe_id)
+    return data_url_response(
+        recipe.image if recipe else None, lambda: not_found(Recipe.__name__, recipe_id),
     )
 
 
 # ── GET /api/recipes/<id>/step-images/<image_id> ────────────────────────
 # PROPOSAL_RECIPE_IMAGE_STEPS — step images are stored as data-URL bytes on
-# the RecipeStepImage row and served here as raw bytes so the SPA can use a
-# plain <img src>. Mirrors `/recipes/<id>/image` exactly; lives on a child
-# route so the decoder stays a one-liner.
+# the RecipeStepImage row and served here as raw bytes, like the recipe image.
 
 @RECIPE_ROUTER.route("/<uuid:recipe_id>/step-images/<uuid:image_id>", methods=["GET"])
 def get_recipe_step_image(recipe_id, image_id):
-    import base64
-    import re as _re
-    from flask import Response
-
-    raw_bytes = get_step_image_bytes(UUID(str(recipe_id)), UUID(str(image_id)))
-    if not raw_bytes:
-        return not_found("RecipeStepImage", image_id)
-    data_url = raw_bytes.decode("utf-8", "ignore")
-    match = _re.match(
-        r"^data:(?P<mime>[\w/+.-]+);base64,(?P<data>.+)$",
-        data_url, _re.DOTALL,
-    )
-    if not match:
-        return not_found("RecipeStepImage", image_id)
-    try:
-        raw = base64.b64decode(match.group("data"), validate=False)
-    except (ValueError, TypeError):
-        return not_found("RecipeStepImage", image_id)
-    return Response(
-        raw,
-        mimetype=match.group("mime"),
-        headers={"Cache-Control": "no-cache"},
+    return data_url_response(
+        get_step_image_bytes(recipe_id, image_id),
+        lambda: not_found("RecipeStepImage", image_id),
     )
 
 

@@ -11,18 +11,10 @@ import { ingredientDisplayName } from 'src/helpers/recipeIngredientLabel';
 import type { MealPlanIngredient, UnlinkedIngredient } from 'src/models/mealPlan';
 import type { Recipe } from 'src/models/recipe';
 
-/** Round the aggregate to something a human would write on a list. The server
- *  scales by `servings / recipe.servings`, which routinely lands on
- *  2.6666666666666665 tomatoes. Display math only (R-003 Type C). */
-function roundQuantity(value: number): number {
-    return Math.round(value * 100) / 100;
-}
-
 function quantityLabel(quantity: number | null, unit: string | null): string | null {
     if (quantity === null && !unit) return null;
-    const label = formatQuantity(
-        quantity === null ? null : roundQuantity(quantity), unit,
-    );
+    // `formatQuantity` rounds to two places itself (R-079).
+    const label = formatQuantity(quantity, unit);
     return label || null;
 }
 

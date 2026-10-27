@@ -30,25 +30,25 @@
     -->
     <CollapsibleCard
         v-if="demand && demand.planned_meals > 0"
-        :class="['demand-card', `is-${demand.urgency}`]"
+        :class="['dora-signal-card', toneClass]"
         header-toggles
         reveals="details"
     >
         <template #header>
-            <div class="demand-card__summary">
-                <q-icon :name="ICONS.event" size="18px" class="demand-card__icon" />
-                <span class="demand-card__headline">{{ headline }}</span>
+            <div class="dora-signal-card__summary">
+                <q-icon :name="ICONS.event" size="18px" class="dora-signal-card__icon" />
+                <span class="dora-signal-card__headline">{{ headline }}</span>
             </div>
         </template>
 
-        <div class="demand-card__body">
+        <div class="dora-signal-card__body">
             <div>{{ demand.reason }}</div>
-            <div v-if="demand.covered_meals > 0" class="demand-card__meta dora-text-muted">
+            <div v-if="demand.covered_meals > 0" class="dora-signal-card__meta dora-text-muted">
                 {{ demand.needed_meals }} still to cook, so
                 {{ demand.needed_meals === 1 ? 'that meal needs' : 'those meals need' }}
                 this on hand.
             </div>
-            <div class="demand-card__meta dora-text-muted">
+            <div class="dora-signal-card__meta dora-text-muted">
                 <template v-if="demand.urgency === 'blocking'">
                     You've recorded this as out.
                 </template>
@@ -73,6 +73,9 @@
         demand: PlannedDemand | null;
     }>();
 
+    const TONE_BY_URGENCY: Record<string, string> = { blocking: 'is-negative', watch: 'is-warning' };
+    const toneClass = computed(() => (props.demand ? TONE_BY_URGENCY[props.demand.urgency] ?? '' : ''));
+
     // The headline counts the meals that still have to be *cooked*, not the
     // ones merely planned: a week whose every meal is already in the freezer
     // needs nothing bought, and saying "3 planned meals need this" there would
@@ -87,55 +90,3 @@
             : `${n} planned ${noun}, all covered`;
     });
 </script>
-
-<style scoped>
-    /* Same colour reasoning as PantryBeliefCard: the semantic tint lives in
-       the fill, the border and the (graphical, non-text) icon, never in the
-       text ink — full-strength semantic ink on a soft fill is the D-002
-       contrast fail those two cards already corrected. */
-    .demand-card {
-        border-radius: 8px;
-        padding: 10px 12px;
-        background: var(--surface-sunken);
-        border: 1px solid var(--border-strong);
-        color: var(--text-primary);
-    }
-    .demand-card.is-watch {
-        background: var(--semantic-warning-soft);
-        border-color: var(--semantic-warning);
-    }
-    .demand-card.is-blocking {
-        background: var(--semantic-negative-soft);
-        border-color: var(--semantic-negative);
-    }
-    .demand-card__summary {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        min-width: 0;
-        /* D-004 — the header is the tap target that opens the card. */
-        min-height: 44px;
-    }
-    .demand-card__headline {
-        font-weight: 600;
-        font-size: 0.875rem;
-    }
-    .demand-card.is-watch .demand-card__icon {
-        color: var(--semantic-warning);
-    }
-    .demand-card.is-blocking .demand-card__icon {
-        color: var(--semantic-negative);
-    }
-    .demand-card.is-none .demand-card__icon {
-        color: var(--text-secondary);
-    }
-    .demand-card__body {
-        margin-top: 6px;
-        font-size: 0.8125rem;
-        line-height: 1.45;
-    }
-    .demand-card__meta {
-        font-size: 0.75rem;
-        margin-top: 2px;
-    }
-</style>

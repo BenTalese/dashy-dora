@@ -1,0 +1,57 @@
+/* The three per-item signal cards on the stock-item page (Pantry belief,
+   Planned demand, Buy verdict): one shell and one tone vocabulary
+   (finalisation 06-R20). The semantic tint lives in the fill, the border and
+   the graphical icon, never in the text ink: full-strength semantic ink on a
+   soft fill is the D-002 contrast fail. Each card keeps only its own content
+   rules. */
+.dora-signal-card {
+    border-radius: var(--radius-lg);
+    padding: var(--space-2) var(--space-3);
+    background: var(--surface-sunken);
+    border: 1px solid var(--border-strong);
+    color: var(--text-primary);
+}
+.dora-signal-card.is-positive {
+    background: var(--semantic-positive-soft);
+    border-color: var(--semantic-positive);
+}
+.dora-signal-card.is-warning {
+    background: var(--semantic-warning-soft);
+    border-color: var(--semantic-warning);
+}
+.dora-signal-card.is-negative {
+    background: var(--semantic-negative-soft);
+    border-color: var(--semantic-negative);
+}
+.dora-signal-card__icon {
+    flex-shrink: 0;
+    color: var(--text-secondary);
+}
+.dora-signal-card.is-positive .dora-signal-card__icon { color: var(--semantic-positive); }
+.dora-signal-card.is-warning .dora-signal-card__icon { color: var(--semantic-warning); }
+.dora-signal-card.is-negative .dora-signal-card__icon { color: var(--semantic-negative); }
+/* D-004: the summary row is the tap target that opens the card. */
+.dora-signal-card__summary {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+    min-height: 44px;
+}
+.dora-signal-card__headline {
+    font-weight: 600;
+    font-size: calc(var(--font-size-sm) * 1rem);
+}
+.dora-signal-card__body {
+    margin-top: var(--space-2);
+    font-size: calc(var(--font-size-sm) * 1rem);
+    line-height: 1.45;
+}
+.dora-signal-card__meta {
+    font-size: calc(var(--font-size-xs) * 1rem);
+    margin-top: 2px;
+}
+/* A reason's sub-line, indented under its icon (badge popover + card). */
+.dora-buy-verdict__detail {
+    margin-left: var(--space-6);
+}

@@ -121,6 +121,17 @@ export function seriesColour(index: number): string {
     return paletteToken(`--chart-${slot + 1}`, CHART_RAMP_FALLBACKS[slot]);
 }
 
+/**
+ * Colour for a named category (a spend group, a waste reason): the key hashes
+ * onto the same ramp `seriesColour` walks, so one key keeps its hue between
+ * renders and across cards. Six slots, so distinct keys can collide (FU-843).
+ */
+export function categoricalColour(key: string): string {
+    let hash = 0;
+    for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) | 0;
+    return seriesColour(Math.abs(hash));
+}
+
 export function useThemePalette() {
     return {
         /** Increments on each theme application. Depend on this directly if you
@@ -129,5 +140,6 @@ export function useThemePalette() {
         paletteToken,
         paletteTokens,
         seriesColour,
+        categoricalColour,
     };
 }

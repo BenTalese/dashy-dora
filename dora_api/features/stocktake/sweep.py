@@ -47,6 +47,7 @@ from uuid import UUID
 
 from sqlalchemy import func, select
 
+from dora_api.persistence.aware import as_utc
 from dora_api.app import db
 from dora_api.domain.entities.shopping_list import SHOPPING_LIST_STATUS_DONE
 from dora_api.domain.entities.stock_item import StockItem
@@ -63,15 +64,6 @@ class SweptItem:
     last_activity_at: datetime
 
 
-def _aware(stamp: datetime | None) -> datetime | None:
-    """SQLite hands back naive datetimes for `DateTime(timezone=True)`; every
-    write in this codebase uses `datetime.now(UTC)`, so re-attaching UTC is the
-    honest read. Same idiom as `stocktake._gather_engagement_signals`."""
-    if stamp is None:
-        return None
-    return stamp if stamp.tzinfo is not None else stamp.replace(tzinfo=UTC)
-
-
 def _latest_activity_by_item(item_ids: list[UUID]) -> dict[UUID, datetime]:
     """`{item_id: most recent engagement event}` — two aggregate queries,
     regardless of pantry size.
@@ -84,6 +76,7 @@ def _latest_activity_by_item(item_ids: list[UUID]) -> dict[UUID, datetime]:
     if not item_ids:
         return {}
 
+    # R-005 carve-out: two MAX aggregates across tables the port can't join.
     slc = db.metadata.tables["StockLevelChange"]
     line = db.metadata.tables["ShoppingListLine"]
     lst = db.metadata.tables["ShoppingList"]
@@ -96,7 +89,7 @@ def _latest_activity_by_item(item_ids: list[UUID]) -> dict[UUID, datetime]:
         .group_by(slc.c.stock_item_id)
     ).all()
     for item_id, changed_at in change_rows:
-        stamp = _aware(changed_at)
+        stamp = as_utc(changed_at)
         if stamp is not None:
             latest[item_id] = stamp
 
@@ -115,7 +108,7 @@ def _latest_activity_by_item(item_ids: list[UUID]) -> dict[UUID, datetime]:
         .group_by(line.c.stock_item_id)
     ).all()
     for item_id, completed_at in list_rows:
-        stamp = _aware(completed_at)
+        stamp = as_utc(completed_at)
         if stamp is None:
             continue
         current = latest.get(item_id)
@@ -150,9 +143,9 @@ def resolve_newly_swept(
     # It went unnoticed because nothing seeded a past session: the field was
     # None on every dev and test user, and None short-circuits above. The
     # 2026-08-27 Sweep fixture (which sets it) is what surfaced it.
-    last_session_ = _aware(last_session_at)
+    last_session_ = as_utc(last_session_at)
     assert last_session_ is not None  # non-None checked above; narrows the type
-    now_ = _aware(now) or datetime.now(UTC)
+    now_ = as_utc(now) or datetime.now(UTC)
     window = timedelta(days=engagement_window_days)
     latest = _latest_activity_by_item([item.id for item in unengaged_items])
 

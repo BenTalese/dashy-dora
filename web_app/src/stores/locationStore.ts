@@ -4,7 +4,7 @@ import LocationApiService, {
     type CreateLocationCommand,
     type UpdateLocationCommand
 } from 'src/services/api/locationApiService';
-import { readonly, ref } from 'vue';
+import { computed, readonly, ref } from 'vue';
 
 const api = new LocationApiService();
 
@@ -67,26 +67,33 @@ export const useLocationStore = defineStore('location', () => {
         return null;
     };
 
-    // Returns the names from root → target so the UI can show
-    // "Pantry > Middle shelf > Left side".
-    const breadcrumb = (locationId: string): string[] => {
-        const parentMap = new Map<string, string | null>();
-        const nameMap = new Map<string, string>();
+    // Parent and name per node, built once per tree load: `breadcrumb` runs
+    // once per stock row, so it must not walk the whole tree each time.
+    const lookups = computed(() => {
+        const parent = new Map<string, string | null>();
+        const name = new Map<string, string>();
         const stack: LocationNode[] = [...tree.value];
         while (stack.length) {
             const node = stack.pop()!;
-            parentMap.set(node.location_id, node.parent_id);
-            nameMap.set(node.location_id, node.name);
+            parent.set(node.location_id, node.parent_id);
+            name.set(node.location_id, node.name);
             for (const child of node.children) stack.push(child);
         }
+        return { parent, name };
+    });
+
+    // Returns the names from root → target so the UI can show
+    // "Pantry > Middle shelf > Left side".
+    const breadcrumb = (locationId: string): string[] => {
+        const { parent, name } = lookups.value;
         const path: string[] = [];
         let cursor: string | null | undefined = locationId;
         let safety = 16;
         while (cursor && safety-- > 0) {
-            const name = nameMap.get(cursor);
-            if (name === undefined) break;
-            path.unshift(name);
-            cursor = parentMap.get(cursor) ?? null;
+            const label = name.get(cursor);
+            if (label === undefined) break;
+            path.unshift(label);
+            cursor = parent.get(cursor) ?? null;
         }
         return path;
     };

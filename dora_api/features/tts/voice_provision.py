@@ -37,7 +37,7 @@ import requests
 from dora_api.features.tts.voice_catalog import VoiceDef, get_voice
 from dora_api.infrastructure.configuration_manager import DORA_CONFIG
 
-_LOG = logging.getLogger(__name__)
+_LOGGER = logging.getLogger(__name__)
 
 # Per-voice download state, guarded by _LOCK. `_IN_FLIGHT` holds ids currently
 # downloading; `_ERRORS` holds the last error message per id (cleared on a
@@ -186,11 +186,11 @@ def start_download(voice: VoiceDef) -> str:
 def _run_download(voice: VoiceDef) -> None:
     try:
         _download_voice(voice)
-        _LOG.info("Downloaded Piper voice '%s' (%s)", voice.id, voice.filename)
+        _LOGGER.info("Downloaded Piper voice '%s' (%s)", voice.id, voice.filename)
         with _LOCK:
             _ERRORS.pop(voice.id, None)
     except Exception as exc:  # noqa: BLE001 — surface any failure as UI state
-        _LOG.exception("Failed to download Piper voice '%s'", voice.id)
+        _LOGGER.exception("Failed to download Piper voice '%s'", voice.id)
         with _LOCK:
             _ERRORS[voice.id] = str(exc) or exc.__class__.__name__
     finally:

@@ -8,10 +8,11 @@ from dora_api.features.routers import AUTH_ROUTER
 from dora_api.infrastructure.api_response import no_content
 from dora_api.infrastructure.audit import emit as audit_emit
 
+_LOGGER = logging.getLogger(__name__)
+
 
 @AUTH_ROUTER.route("/logout", methods=["POST"])
 def logout():
-    _Logger = logging.getLogger(__name__)
     _UserId = session.get("user_id")
     if _UserId:
         # FU-548 — session termination is a security-relevant event, so it's
@@ -32,5 +33,5 @@ def logout():
         )
     session.clear()
     if _UserId:
-        _Logger.info(f"Logout for user {_UserId}")
+        _LOGGER.info(f"Logout for user {_UserId}")
     return no_content()

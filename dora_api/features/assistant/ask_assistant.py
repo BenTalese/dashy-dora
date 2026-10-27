@@ -22,15 +22,14 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Optional
 from uuid import UUID
 
-from flask import session
 from pydantic import BaseModel, ConfigDict, Field
 
 from dora_api.domain.entities.user import User
 from dora_api.features.assistant import (app_knowledge, confirm_actions,
                                           shopping_actions, tools)
-from dora_api.features.auth.register_user import SESSION_USER_ID_KEY
 from dora_api.features.routers import ASSISTANT_ROUTER
-from dora_api.infrastructure.api_response import ProblemDetails, ok, unauthorized
+from dora_api.infrastructure.llm.factory import unavailable_client
+from dora_api.infrastructure.api_response import ok
 from dora_api.infrastructure.auth_helpers import (
     rate_limit, rate_limit_remaining_seconds,
 )
@@ -38,8 +37,10 @@ from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.llm import LlmClient, LlmUnavailable, build_assistant_client
 from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
+from dora_api.infrastructure.session_user import current_user_id
+from dora_api.infrastructure.api_response import too_many_requests
 
-_Logger = logging.getLogger(__name__)
+_LOGGER = logging.getLogger(__name__)
 
 # Fixed per-request timeout. The endpoint/model are admin-configured; the
 # timeout isn't worth exposing in the UI. Generous so a big model on CPU
@@ -69,39 +70,14 @@ _RATE_SCOPE_ACT = "assistant.act"
 _RATE_SCOPE_CONFIRM = "assistant.confirm"
 
 
-def _too_many_requests(retry_after: int):
-    """RFC 6585 §4 shaped 429 with a `Retry-After` header. Mirrors the
-    helper in `features/auth/email_flows.py` — kept local to this module
-    for now (R-007 scope discipline). If a third caller needs it,
-    promote to `infrastructure/api_response.py`."""
-    from http.client import TOO_MANY_REQUESTS
-    from flask import jsonify
-    response = jsonify(ProblemDetails(
-        detail=f"Too many requests. Try again in {retry_after}s.",
-        errors={}, status=TOO_MANY_REQUESTS, title="Rate limit exceeded.",
-        type="https://datatracker.ietf.org/doc/html/rfc6585#section-4",
-    ))
-    response.content_type = "application/problem+json"
-    response.status_code = TOO_MANY_REQUESTS
-    response.headers["Retry-After"] = str(max(retry_after, 1))
-    return response
-
-
 def _rate_limit_subject() -> str | None:
     """Returns the authenticated user_id (as string) so the rate-limit
     bucket is per-user across a shared household IP. None → falls
     back to the IP-based bucket inside the helper. Silently
     tolerates a session that doesn't carry a user_id — the ambient
     auth guards do the real 401."""
-    raw = session.get(SESSION_USER_ID_KEY)
-    if not raw:
-        return None
-    try:
-        # Round-trip through UUID so a malformed session id doesn't
-        # accidentally share a bucket by literal string equality.
-        return str(UUID(raw))
-    except (ValueError, TypeError):
-        return None
+    user_id = current_user_id()
+    return str(user_id) if user_id else None
 
 
 class AskAssistantRequest(BaseModel):
@@ -232,24 +208,17 @@ def _build_client_for_current_user() -> LlmClient:
     switch. Returns an "unavailable" sentinel client when any prerequisite
     is missing so the assistant handler's fallback path stays in charge of
     UX."""
-    user_id_raw = session.get(SESSION_USER_ID_KEY)
-    if not user_id_raw:
+    user_id = current_user_id()
+    if user_id is None:
         # Unauthenticated callers can't talk to the assistant (route-
         # level check still applies); returning unavailable here is
         # belt-and-braces.
-        from dora_api.infrastructure.llm.factory import _UnavailableClient
-        return _UnavailableClient("Not signed in.")
-    try:
-        user_id = UUID(user_id_raw)
-    except (ValueError, TypeError):
-        from dora_api.infrastructure.llm.factory import _UnavailableClient
-        return _UnavailableClient("Not signed in.")
+        return unavailable_client("Not signed in.")
 
     repo = SqlAlchemyRepository()
     user = repo.get(User).by_id(user_id)
     if user is None:
-        from dora_api.infrastructure.llm.factory import _UnavailableClient
-        return _UnavailableClient("User not found.")
+        return unavailable_client("User not found.")
     # The per-provider details live in UserLlmProvider (source of truth);
     # load the active provider's row for the factory.
     from dora_api.features.assistant.providers import get_provider_config
@@ -273,7 +242,7 @@ class AskAssistantHandler:
         except LlmUnavailable as exc:
             # Lost the model mid-turn (timeout, server died). Degrade to the
             # frontend rule engine rather than surfacing an error.
-            _Logger.warning("Assistant degraded to local fallback: %s", exc)
+            _LOGGER.warning("Assistant degraded to local fallback: %s", exc)
             return AssistantReplyDto(available=False, defer_to_local=True)
 
     def _answer(self, request: AskAssistantRequest) -> AssistantReplyDto:
@@ -480,11 +449,11 @@ def ask_assistant():
     # burn parser cycles either.
     _Subject = _rate_limit_subject()
     if not rate_limit(_RATE_SCOPE_ASK, _ASK_PER_MINUTE, subject=_Subject):
-        return _too_many_requests(
+        return too_many_requests(
             rate_limit_remaining_seconds(_RATE_SCOPE_ASK, _ASK_PER_MINUTE, subject=_Subject),
         )
     _Request: AskAssistantRequest = get_request_body()
-    _Logger.info("Assistant asked: %s", _Request.message[:80])
+    _LOGGER.info("Assistant asked: %s", _Request.message[:80])
     # Constructed directly (not via the DI container) because the handler's
     # only dependency is the process-wide LLM client from its own factory.
     _Reply = AskAssistantHandler().handle(_Request)
@@ -526,11 +495,11 @@ def commit_action():
     # shopping-list writes without one.
     _Subject = _rate_limit_subject()
     if not rate_limit(_RATE_SCOPE_ACT, _ACT_PER_MINUTE, subject=_Subject):
-        return _too_many_requests(
+        return too_many_requests(
             rate_limit_remaining_seconds(_RATE_SCOPE_ACT, _ACT_PER_MINUTE, subject=_Subject),
         )
     _Request: CommitAddRequest = get_request_body()
-    _Logger.info(
+    _LOGGER.info(
         "Assistant committing %s add(s) to list %s",
         len(_Request.items), _Request.shopping_list_id,
     )
@@ -565,11 +534,11 @@ def confirm_action():
     # round-trip; the dispatcher just applies a Tier-2 change).
     _Subject = _rate_limit_subject()
     if not rate_limit(_RATE_SCOPE_CONFIRM, _CONFIRM_PER_MINUTE, subject=_Subject):
-        return _too_many_requests(
+        return too_many_requests(
             rate_limit_remaining_seconds(_RATE_SCOPE_CONFIRM, _CONFIRM_PER_MINUTE, subject=_Subject),
         )
     _Request: ConfirmActionRequest = get_request_body()
-    _Logger.info("Assistant confirming action: %s", _Request.type)
+    _LOGGER.info("Assistant confirming action: %s", _Request.type)
     result = confirm_actions.commit(_Request.type, _Request.payload)
     if result is None:
         return ok({"ok": False, "answer": f"I don't know how to commit '{_Request.type}'."})

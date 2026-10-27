@@ -1,16 +1,12 @@
 <template>
     <div class="settings-page">
         <SettingsPageHeader
-            title="Alert thresholds"
-            description="Household-wide tuning for inventory alerts. These shape the alerts list and the location heatmap for everyone; each account's own on/off and priority preferences layer on top."
+            title="Expiring-soon window"
+            description="When an item starts showing as expiring soon, for everyone in the household. Each person still chooses which alerts they get in their own Notifications settings."
             :icon="ICONS.notifications"
         />
 
-        <q-banner v-if="!isAdmin" class="dora-bg-negative-soft text-negative" dense rounded>
-            You don't have admin permissions to view this page.
-        </q-banner>
-
-        <template v-else-if="!loading">
+        <template v-if="ready">
             <SettingsSection>
                 <template #title>Expiring-soon window</template>
                 <template #description>
@@ -20,15 +16,15 @@
 
                 <SettingsRow label="Days">
                     <q-input
-                        v-model.number="expiringSoonWindowDraft"
+                        v-model.number="draft.expiring_soon_window_days"
                         type="number"
                         outlined
                         dense
                         style="max-width: 140px"
                         :min="1"
                         :max="365"
-                        :loading="savingThresholds"
-                        @blur="() => onSaveThreshold('expiring_soon_window_days', expiringSoonWindowDraft)"
+                        :loading="saving"
+                        @blur="onSaveWindow"
                     />
                 </SettingsRow>
             </SettingsSection>
@@ -45,86 +41,23 @@
 
 <script lang="ts" setup>
     import { ICONS } from 'src/style/icons';
-    import { storeToRefs } from 'pinia';
-    import { useQuasar } from 'quasar';
-    import AppSettingsApiService from 'src/services/api/appSettingsApiService';
-    import { useAuthStore } from 'src/stores/authStore';
-    import { onMounted, reactive, ref } from 'vue';
-    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+    import { useAppSettingDrafts } from 'src/composables/useAppSettingDrafts';
     import SettingsSection from 'src/components/settings/SettingsSection.vue';
     import SettingsRow from 'src/components/settings/SettingsRow.vue';
     import SettingsPageHeader from 'src/components/settings/SettingsPageHeader.vue';
 
-    const $q = useQuasar();
-    const { isAdmin } = storeToRefs(useAuthStore());
-    const api = new AppSettingsApiService();
+    const { draft, ready, saving, save, reset } = useAppSettingDrafts({ expiring_soon_window_days: 7 });
 
-    const loading = ref(true);
-
-    const expiringSoonWindowDraft = ref<number>(7);
-    const savedThresholds = reactive({
-        expiring_soon_window_days: 7,
-    });
-    const savingThresholds = ref(false);
-
-    type ThresholdKey = 'expiring_soon_window_days';
-
-    function resetThresholdDrafts() {
-        expiringSoonWindowDraft.value = savedThresholds.expiring_soon_window_days;
-    }
-
-    async function onSaveThreshold(key: ThresholdKey, value: number) {
+    function onSaveWindow() {
+        const value = draft.expiring_soon_window_days;
         if (typeof value !== 'number' || Number.isNaN(value)) {
-            resetThresholdDrafts();
+            reset();
             return;
         }
-        if (value === savedThresholds[key]) return;
-        savingThresholds.value = true;
-        try {
-            const result = await api.updateAsync({ [key]: value });
-            savedThresholds.expiring_soon_window_days = result.expiring_soon_window_days;
-            resetThresholdDrafts();
-            $q.notify({
-                type: 'positive', 
-                message: 'Alert thresholds saved.',
-            });
-        } catch (err) {
-            resetThresholdDrafts();
-            $q.notify({
-                type: 'negative', 
-                message: 'Could not save alert thresholds.',
-                caption: toastCaption(err),
-            });
-        } finally {
-            savingThresholds.value = false;
-        }
+        void save({ expiring_soon_window_days: value }, 'Expiring-soon window saved.');
     }
-
-    onMounted(async () => {
-        if (!isAdmin.value) {
-            loading.value = false;
-            return;
-        }
-        try {
-            const s = await api.getAsync();
-            if (s.expiring_soon_window_days !== undefined) {
-                savedThresholds.expiring_soon_window_days = s.expiring_soon_window_days;
-                expiringSoonWindowDraft.value = s.expiring_soon_window_days;
-            }
-        } catch {
-            // Leave defaults.
-        } finally {
-            loading.value = false;
-        }
-    });
 </script>
 
 <style scoped lang="scss">
     .settings-page { display: flex; flex-direction: column; }
-    .settings-divider {
-        border: 0;
-        height: 1px;
-        background: color-mix(in srgb, var(--text-primary) 8%, transparent);
-        margin: 8px 0;
-    }
 </style>

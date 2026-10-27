@@ -1,5 +1,5 @@
 import { acceptHMRUpdate, defineStore } from 'pinia';
-import type { Alert, Alerts } from 'src/models/alert';
+import { DEFAULT_SNOOZE_DAYS, type Alert, type Alerts } from 'src/models/alert';
 import AlertApiService from 'src/services/api/alertApiService';
 import { computed, readonly, ref } from 'vue';
 
@@ -8,9 +8,8 @@ const api = new AlertApiService();
 // Server now owns "what counts" (C-9.1): alert conditions are derived live
 // and the user's snooze/dismiss decisions are persisted in
 // AlertInteraction, so the badge, list, snoozed set, and (later) channels
-// all read one server-derived truth. The store is a thin cache shared across
-// the header bell and Dora's "what needs my attention?"
-// intent — no client-side recompute of counts or snooze (R-003).
+// all read one server-derived truth. The store is a thin cache behind the
+// header bell — no client-side recompute of counts or snooze (R-003).
 const EMPTY: Alerts = {
     items: [],
     snoozed: [],
@@ -18,7 +17,6 @@ const EMPTY: Alerts = {
     medium_count: 0,
     low_count: 0,
     actionable_count: 0,
-    fyi_count: 0,
     snoozed_count: 0,
 };
 
@@ -47,7 +45,7 @@ export const useAlertStore = defineStore('alert', () => {
     };
 
     // All mutations go server-side, then refresh so every surface agrees.
-    const snoozeAlert = async (alertId: string, days = 7) => {
+    const snoozeAlert = async (alertId: string, days = DEFAULT_SNOOZE_DAYS) => {
         await api.snoozeAsync(alertId, days);
         await refreshAsync();
     };

@@ -47,6 +47,7 @@ from dora_api.features.nutrition.household_measures import (
 )
 from dora_api.infrastructure.ports import Repository
 from dora_api.persistence.field import EntityField as Field
+from dora_api.domain.rating_tables import kcal_to_kj
 
 
 # Why an ingredient contributed nothing. Closed set (R-010) — the SPA maps
@@ -349,7 +350,7 @@ def _rollup_one(recipe: 'RecipeNutritionInput', food_ids_by_item: dict, foods: d
             return totals[key] / (total_grams / 100.0)
 
         rating = hsr.rate(hsr.NutrientProfile(
-            energy_kj = hsr.kcal_to_kj(per_100g("kcal")),
+            energy_kj = kcal_to_kj(per_100g("kcal")),
             saturated_fat_g = per_100g("saturated_fat_g"),
             total_sugars_g = per_100g("sugars_g"),
             sodium_mg = per_100g("sodium_mg"),
@@ -362,7 +363,7 @@ def _rollup_one(recipe: 'RecipeNutritionInput', food_ids_by_item: dict, foods: d
         # `nutri_score` wants sodium in mg exactly as HSR does — it converts to
         # salt internally.
         nutri_score = ns.rate(ns.NutrientProfile(
-            energy_kj = hsr.kcal_to_kj(per_100g("kcal")),
+            energy_kj = kcal_to_kj(per_100g("kcal")),
             saturated_fat_g = per_100g("saturated_fat_g"),
             total_sugars_g = per_100g("sugars_g"),
             sodium_mg = per_100g("sodium_mg"),

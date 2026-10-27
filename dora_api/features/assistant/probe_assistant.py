@@ -59,11 +59,10 @@ from dora_api.domain.entities.user import (ALLOWED_LLM_PROVIDERS,
                                            LLM_PROVIDERS_REQUIRING_API_KEY,
                                            User)
 from dora_api.features.assistant.providers import get_provider_config
-from dora_api.features.auth.register_user import SESSION_USER_ID_KEY
+from dora_api.infrastructure.session_user import SESSION_USER_ID_KEY
 from dora_api.features.routers import ASSISTANT_ROUTER
-from dora_api.infrastructure.api_response import (bad_request,
-                                                  business_rule_violation,
-                                                  ok, unauthorized)
+from dora_api.infrastructure.api_response import (ok, too_many_requests,
+                                                  unauthorized)
 from dora_api.infrastructure.audit import emit as audit_emit
 from dora_api.infrastructure.auth_helpers import (rate_limit,
                                                   rate_limit_remaining_seconds)
@@ -78,7 +77,7 @@ from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 
 
-_Logger = logging.getLogger(__name__)
+_LOGGER = logging.getLogger(__name__)
 _PROBE_TIMEOUT_SECONDS = 8
 _PROBES_PER_MINUTE = 10
 _RATE_SCOPE = "assistant.probe"
@@ -226,9 +225,7 @@ def probe_assistant():
         retry_after = rate_limit_remaining_seconds(
             _RATE_SCOPE, _PROBES_PER_MINUTE, subject=_Subject,
         )
-        return business_rule_violation(
-            f"Too many probes. Try again in {retry_after}s.",
-        )
+        return too_many_requests(retry_after)
 
     request: ProbeAssistantRequest = get_request_body()
     response = ProbeAssistantHandler(SqlAlchemyRepository()).handle(request, user_id)

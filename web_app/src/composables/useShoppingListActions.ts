@@ -151,27 +151,8 @@ export function useShoppingListActions() {
         return removed;
     }
 
-    /**
-     * Finish shopping: archives the list, bumps stock levels for ticked items.
-     */
-    async function finishShopping(listId: string) {
-        try {
-            const result = await api.finishAsync(listId);
-            await shoppingListStore.refreshAsync();
-            notifyOk(
-                `Shopping finished. ${result.items_restocked} item${
-                    result.items_restocked === 1 ? '' : 's'
-                } restocked.`,
-            );
-            return result;
-        } catch (err) {
-            notifyErr('Could not finish shopping.', String(err));
-            return null;
-        }
-    }
-
     return {
-        addItems, addStockItemsToList, finishShopping, removeFromList,
+        addItems, addStockItemsToList, removeFromList,
         removeFromAllLists,
     };
 }

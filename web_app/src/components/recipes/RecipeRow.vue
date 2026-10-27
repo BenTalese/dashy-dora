@@ -126,33 +126,13 @@
                  in one spot. Label suppressed here (glyph + tooltip only) —
                  the row has no width to spend on wording. -->
             <RecipeBeliefChip :recipe="recipe" :labelled="false" class="q-mr-xs" />
-            <BaseButton
-                variant="icon"
-                :icon="recipe.is_favourite ? ICONS.favorite : ICONS.favorite_border"
-                :color="recipe.is_favourite ? 'red' : undefined"
-                @click.stop="emit('toggle-favourite', recipe.recipe_id)"
-            >
-                <BaseTooltip>
-                    {{ recipe.is_favourite ? 'Remove from favourites' : 'Mark favourite' }}
-                </BaseTooltip>
-            </BaseButton>
-            <BaseButton
-                variant="filled-icon"
-                :icon="ICONS.chef_hat"
-                :color="cookButtonColor"
-                @click.stop="emit('cook', recipe.recipe_id)"
-            >
-                <BaseTooltip>{{ cookButtonTooltip }}</BaseTooltip>
-            </BaseButton>
-            <BaseButton
-                variant="icon"
-                :icon="cookable === true ? ICONS.add_shopping_cart : ICONS.remove_shopping_cart"
-                :color="cookable === false ? 'warning' : undefined"
-                :disable="recipe.ingredients.length === 0"
-                @click.stop="onAddToList"
-            >
-                <BaseTooltip>{{ addListTooltip }}</BaseTooltip>
-            </BaseButton>
+            <RecipeActions
+                :recipe="recipe"
+                @toggle-favourite="(id) => emit('toggle-favourite', id)"
+                @cook="(id) => emit('cook', id)"
+                @add-missing="(id, ids) => emit('add-missing', id, ids)"
+                @add-all-to-list="(id) => emit('add-all-to-list', id)"
+            />
         </q-card-section>
     </q-card>
 </template>
@@ -163,8 +143,8 @@
     import ExpiringChip from 'src/components/recipes/ExpiringChip.vue';
     import RecipeBeliefChip from 'src/components/recipes/RecipeBeliefChip.vue';
     import RecipeRatingChip from 'src/components/recipes/RecipeRatingChip.vue';
+    import RecipeActions from 'src/components/recipes/RecipeActions.vue';
     import { useQuasar } from 'quasar';
-    import BaseButton from 'src/components/BaseButton.vue';
     import type { Recipe } from 'src/models/recipe';
     import { useRecipeDisplay } from 'src/composables/useRecipeDisplay';
     import { useMoneyEnabled } from 'src/composables/useMoneyEnabled';
@@ -196,8 +176,6 @@
     // own two-or-three-fact second line rather than the card's prose one.
     const {
         totalTime, ingredientCount, kcal, kcalTooltip, cost, costTooltip,
-        missingIds, cookable,
-        cookButtonColor, cookButtonTooltip, addListTooltip,
     } = useRecipeDisplay(() => props.recipe);
     const { moneyEnabled } = useMoneyEnabled();
 
@@ -210,10 +188,6 @@
             || kcal.value.value !== null
             || (moneyEnabled.value && cost.value.value !== null));
 
-    function onAddToList() {
-        if (cookable.value) emit('add-all-to-list', props.recipe.recipe_id);
-        else emit('add-missing', props.recipe.recipe_id, missingIds.value);
-    }
 </script>
 
 <style scoped>

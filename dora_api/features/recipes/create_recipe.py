@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import List
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 from dora_api.domain.entities.category import Category
 from dora_api.domain.entities.cuisine import Cuisine
@@ -19,7 +19,7 @@ from dora_api.domain.entities.stock_item import StockItem
 from dora_api.domain.types import EMPTY_UUID
 from dora_api.features.meal_slots.slot_validation import (
     get_valid_slot_names, invalid_slot_message)
-from dora_api.features.recipes.get_recipes import get_recipes
+from dora_api.features.recipes.get_recipes import GetRecipesHandler, get_recipes
 from dora_api.features.recipes.ingredient_choice import (
     InvalidIngredientChoice, resolve_ingredient_choice,
 )
@@ -37,91 +37,19 @@ from dora_api.features.recipes.recipe_section_access import (
     SectionWrite, replace_sections_for_recipe,
 )
 from dora_api.features.routers import RECIPE_ROUTER
-from dora_api.infrastructure.api_response import (bad_request,
-                                                  business_rule_violation,
-                                                  created,
-                                                  entity_existence_failure,
-                                                  entity_existence_failures)
+from dora_api.infrastructure.api_response import created
 from dora_api.infrastructure.decorators import has_request_body
-from dora_api.infrastructure.utils import (field_of, get_request_body)
+from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
+from dora_api.features.recipes._recipe_errors import (RecipeWriteOutcome,
+                                                     recipe_write_error_response)
+from dora_api.features.recipes.recipe_requests import (RecipeIngredientRequest,
+                                                     RecipeSectionRequest,
+                                                     RecipeStepRequest)
 
-
-class CreateRecipeIngredientRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    # IMPL_PLAN_RECIPE_IMPORTER §Chunk 4 — either ``stock_item_id`` or
-    # ``raw_text`` MUST be set; both may be set. The validator below
-    # enforces the invariant. Paste-based imports whose fuzzy match
-    # missed a StockItem send raw_text only; the user can link later
-    # via the bulk-linker (Chunk 6). Existing "quick-add" flows send
-    # stock_item_id only and don't need to change.
-    stock_item_id: UUID | None = None
-    raw_text: str | None = Field(default = None, max_length = 500)
-    quantity: float | None = None
-    unit: str | None = Field(default = None, max_length = 50)
-    notes: str | None = Field(default = None, max_length = 255)
-    # optional client-side identifier (any string) used by
-    # `steps[].ingredient_client_ids` to point at this ingredient before the
-    # server has assigned its UUID. Omit when no step references it.
-    client_id: str | None = Field(default = None, max_length = 64)
-    # optional section grouping; the client_id of one of the
-    # sections in the same payload. Omit/null to leave in the implicit
-    # "main" group.
-    section_client_id: str | None = Field(default = None, max_length = 64)
-    # Cookbook revision §1.9 — optional ingredients are ignored by the
-    # cookability rule. Default false keeps the existing client contract
-    # backward-compatible (omitting the field = required ingredient).
-    is_optional: bool = False
-    # Which one of the stock item this recipe means (`ingredient_choice`).
-    label: str | None = Field(default = None, max_length = 255)
-    preferred_buy_id: UUID | None = None
-    selected_product_id: UUID | None = None
-
-    @model_validator(mode="after")
-    def _require_anchor(self) -> "CreateRecipeIngredientRequest":
-        if self.stock_item_id is None and not (self.raw_text or "").strip():
-            raise ValueError(
-                "CreateRecipeIngredientRequest requires either stock_item_id "
-                "or raw_text; both are null."
-            )
-        return self
-
-
-class CreateRecipeStepRequest(BaseModel):
-    """C-4 Chunk 6 — one structured step on a create payload.
-
-    `client_id` is required (any string the client picks) so steps can
-    refer to one another (parent_client_id) and to ingredients
-    (ingredient_client_ids) before the server has issued real ids.
-    """
-    model_config = ConfigDict(extra="forbid")
-
-    client_id: str = Field(min_length = 1, max_length = 64)
-    parent_client_id: str | None = Field(default = None, max_length = 64)
-    sequence: int = Field(default = 0, ge = 0)
-    text: str = Field(min_length = 1)
-    hint: str | None = None
-    ingredient_client_ids: List[str] = Field(default_factory = list)
-    tool_ids: List[UUID] = Field(default_factory = list)
-    # optional section grouping; resolved against the sibling
-    # `sections[]` entry with the same client_id.
-    section_client_id: str | None = Field(default = None, max_length = 64)
-    # Owner feedback 2026-09-01 — explicit per-step timer, in minutes. The
-    # ceiling is a day: past that it isn't a cook-mode countdown, it's a
-    # ferment, and nobody stands at the bench for it.
-    timer_minutes: int | None = Field(default = None, ge = 1, le = 1440)
-
-
-class CreateRecipeSectionRequest(BaseModel):
-    """C-4 Chunk 10 — a named section in the create payload."""
-    model_config = ConfigDict(extra="forbid")
-
-    client_id: str = Field(min_length = 1, max_length = 64)
-    sequence: int = Field(default = 0, ge = 0)
-    name: str = Field(min_length = 1, max_length = 255)
+_LOGGER = logging.getLogger(__name__)
 
 
 class CreateRecipeRequest(BaseModel):
@@ -146,7 +74,7 @@ class CreateRecipeRequest(BaseModel):
     # simple nutrition (kcal). Gated on the C-cross
     # nutrition opt-in client-side; the server stores whatever's sent.
     kcal: int | None = Field(default = None, ge = 0, le = 100_000)
-    ingredients: List[CreateRecipeIngredientRequest] = Field(default_factory = list)
+    ingredients: List[RecipeIngredientRequest] = Field(default_factory = list)
     # dietary tag ids (FK to DietaryTag). Validated server-side
     # against existing rows; unknown ids surface as a 400.
     dietary_tag_ids: List[UUID] = Field(default_factory = list)
@@ -160,7 +88,7 @@ class CreateRecipeRequest(BaseModel):
     # (cook-mode falls back to splitting `instructions` on newline). Each
     # step's `ingredient_client_ids` references its sibling ingredients via
     # the `client_id` field above.
-    steps: List[CreateRecipeStepRequest] = Field(default_factory = list)
+    steps: List[RecipeStepRequest] = Field(default_factory = list)
     # PROPOSAL_RECIPE_IMAGE_STEPS — explicit step payload selector. Closed
     # set validated below (R-010). Defaults to 'freeform'; the editor flips
     # to 'structured'/'image' as the user picks the mode.
@@ -173,22 +101,12 @@ class CreateRecipeRequest(BaseModel):
     # creates RecipeSection rows; ingredients and steps reference them by
     # `section_client_id`. Unreferenced sections still get created (empty
     # group) so the user can type the name first, then drop rows into it.
-    sections: List[CreateRecipeSectionRequest] = Field(default_factory = list)
+    sections: List[RecipeSectionRequest] = Field(default_factory = list)
 
 
 @dataclass(slots=True)
-class CreateRecipeResponse:
+class CreateRecipeResponse(RecipeWriteOutcome):
     new_recipe_id: UUID = EMPTY_UUID
-    recipe_already_exists: bool = False
-    recipe_collection_not_found: bool = False
-    cuisine_not_found: bool = False
-    category_not_found: bool = False
-    missing_stock_item_ids: tuple[UUID, ...] = ()
-    invalid_tag_message: str | None = None
-    invalid_step_message: str | None = None
-    invalid_section_message: str | None = None
-    invalid_vocabulary_message: str | None = None
-    invalid_choice_message: str | None = None
 
 
 class CreateRecipeHandler:
@@ -353,30 +271,24 @@ class CreateRecipeHandler:
                 }
             except ValueError as exc:
                 return CreateRecipeResponse(invalid_section_message=str(exc))
-            # Back-fill section_id on the freshly-inserted ingredients.
-            if _SectionClientToReal:
-                from dora_api.app import db
-                _IngTable = db.metadata.tables["RecipeIngredient"]
-                for ing_req, (_cid, ing_ent) in zip(request.ingredients, _IngredientPairs):
-                    if not ing_req.section_client_id:
-                        continue
-                    real = _SectionClientToReal.get(ing_req.section_client_id)
-                    if real is None:
-                        continue
-                    db.session.execute(
-                        _IngTable.update()
-                        .where(_IngTable.c.id == ing_ent.id)
-                        .values(section_id=real)
-                    )
+            # Back-fill section_id on the freshly-added ingredients (a plain
+            # mapped column, so the ORM writes it with the rest).
+            for ing_req, (_cid, ing_ent) in zip(request.ingredients, _IngredientPairs):
+                real = _SectionClientToReal.get(ing_req.section_client_id) if ing_req.section_client_id else None
+                if real is not None:
+                    ing_ent.section_id = real
 
         if request.dietary_tag_ids or request.tool_ids:
             try:
                 if request.dietary_tag_ids:
                     set_tag_ids_for_recipe(_NewRecipe.id, request.dietary_tag_ids)
+            except ValueError as exc:
+                return CreateRecipeResponse(invalid_tag_message=str(exc))
+            try:
                 if request.tool_ids:
                     set_tool_ids_for_recipe(_NewRecipe.id, request.tool_ids)
             except ValueError as exc:
-                return CreateRecipeResponse(invalid_tag_message=str(exc))
+                return CreateRecipeResponse(invalid_tool_message=str(exc))
 
         if request.steps:
             try:
@@ -433,70 +345,16 @@ class CreateRecipeHandler:
 @RECIPE_ROUTER.route("", methods=["POST"])
 @has_request_body(CreateRecipeRequest)
 def create_recipe():
-    _Logger = logging.getLogger(__name__)
-    _Logger.info("Received request to create recipe.")
+    _LOGGER.info("Received request to create recipe.")
     _Handler = CreateRecipeHandler(SqlAlchemyRepository())
     _Request: CreateRecipeRequest = get_request_body()
     _Response = _Handler.handle(_Request)
 
-    if _Response.recipe_already_exists:
-        _Logger.warning(f"Recipe already exists with name: {_Request.name}")
-        return business_rule_violation(f"A recipe with the name '{_Request.name}' already exists.")
+    _Error = recipe_write_error_response(_Response, _Request)
+    if _Error is not None:
+        return _Error
 
-    if _Response.recipe_collection_not_found and _Request.recipe_collection_id:
-        _Logger.warning(f"Recipe collection not found: {_Request.recipe_collection_id}")
-        return entity_existence_failure(
-            RecipeCollection.__name__,
-            field_of(CreateRecipeRequest, 'recipe_collection_id'),
-            _Request.recipe_collection_id,
-        )
-
-    if _Response.cuisine_not_found and _Request.cuisine_id:
-        _Logger.warning(f"Cuisine not found: {_Request.cuisine_id}")
-        return entity_existence_failure(
-            Cuisine.__name__,
-            field_of(CreateRecipeRequest, 'cuisine_id'),
-            _Request.cuisine_id,
-        )
-
-    if _Response.category_not_found and _Request.category_id:
-        _Logger.warning(f"Category not found: {_Request.category_id}")
-        return entity_existence_failure(
-            Category.__name__,
-            field_of(CreateRecipeRequest, 'category_id'),
-            _Request.category_id,
-        )
-
-    if _Response.missing_stock_item_ids:
-        _Logger.warning(f"Stock items not found: {_Response.missing_stock_item_ids}")
-        return entity_existence_failures(
-            StockItem.__name__,
-            field_of(CreateRecipeRequest, 'ingredients'),
-            *_Response.missing_stock_item_ids,
-        )
-
-    if _Response.invalid_tag_message:
-        _Logger.warning(f"Invalid recipe tag: {_Response.invalid_tag_message}")
-        return bad_request(_Response.invalid_tag_message)
-
-    if _Response.invalid_step_message:
-        _Logger.warning(f"Invalid recipe step: {_Response.invalid_step_message}")
-        return bad_request(_Response.invalid_step_message)
-
-    if _Response.invalid_section_message:
-        _Logger.warning(f"Invalid recipe section: {_Response.invalid_section_message}")
-        return bad_request(_Response.invalid_section_message)
-
-    if _Response.invalid_choice_message:
-        _Logger.warning(f"Invalid ingredient choice: {_Response.invalid_choice_message}")
-        return business_rule_violation(_Response.invalid_choice_message)
-
-    if _Response.invalid_vocabulary_message:
-        _Logger.warning(f"Invalid recipe vocabulary: {_Response.invalid_vocabulary_message}")
-        return bad_request(_Response.invalid_vocabulary_message)
-
-    _Logger.info(f"Successfully created recipe with ID: {_Response.new_recipe_id}")
-    from dora_api.features.recipes.get_recipes import GetRecipesHandler
+    _LOGGER.info(f"Successfully created recipe with ID: {_Response.new_recipe_id}")
     _Dto = GetRecipesHandler(SqlAlchemyRepository()).handle_by_id(_Response.new_recipe_id)
     return created(
         _Response.new_recipe_id,

@@ -5,6 +5,7 @@ import MealSlotApiService, {
 } from 'src/services/api/mealSlotApiService';
 import type { Ref } from 'vue';
 import { computed, ref } from 'vue';
+import { DEFAULT_MEAL_SLOTS } from 'src/helpers/recipeVocabulary';
 
 // shared cache of the household-wide meal-slot vocabulary, consumed by the
 // planner, the planner edit dialog and the recipe `time_of_day` pickers.
@@ -30,6 +31,11 @@ export const useMealSlotStore = defineStore('mealSlot', () => {
             .sort((a, b) => a.sequence - b.sequence || a.name.localeCompare(b.name))
             .map((s) => s.name),
     );
+
+    /** Slot names for a picker; the seeded defaults stand in until the
+     *  household's own slots have loaded. */
+    const slotNamesOrDefault = computed<string[]>(() =>
+        (mealSlotNames.value.length > 0 ? mealSlotNames.value : [...DEFAULT_MEAL_SLOTS]));
 
     let hydrated = false;
     let inflight: Promise<void> | null = null;
@@ -77,6 +83,7 @@ export const useMealSlotStore = defineStore('mealSlot', () => {
     return {
         mealSlots,
         mealSlotNames,
+        slotNamesOrDefault,
         getMealSlotsAsync,
         ensureLoadedAsync,
         createAsync,

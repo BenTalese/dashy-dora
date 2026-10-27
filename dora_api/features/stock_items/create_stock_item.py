@@ -5,6 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from dora_api.domain.entities.stock_group import StockGroup
 from dora_api.domain.entities.stock_item import StockItem
 from dora_api.domain.entities.stock_item_expiry_event import (
     StockItemExpiryEvent, classify_expiry_transition,
@@ -15,7 +16,8 @@ from dora_api.domain.types import EMPTY_UUID
 from dora_api.features.app_settings.access import get_or_create_app_setting
 from dora_api.features.app_settings.clock import household_today
 from dora_api.features.routers import STOCK_ITEM_ROUTER
-from dora_api.features.stock_items.get_stock_items import get_stock_items
+from dora_api.features.stock_items.get_stock_items import (GetStockItemsHandler,
+                                                         get_stock_items)
 from dora_api.infrastructure.api_response import (business_rule_violation,
                                                   created,
                                                   entity_existence_failure)
@@ -24,6 +26,8 @@ from dora_api.infrastructure.utils import (field_of, get_request_body)
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class CreateStockItemRequest(BaseModel):
@@ -88,7 +92,6 @@ class CreateStockItemHandler:
         # Stock group is optional; we look it up locally so we can pass the
         # entity into the StockItem constructor (saves an extra round-trip
         # from the repository on read later).
-        from dora_api.domain.entities.stock_group import StockGroup
         _StockGroup = None
         if request.stock_group_id:
             _StockGroup = self.repository.get(StockGroup).by_id(request.stock_group_id)
@@ -181,25 +184,23 @@ class CreateStockItemHandler:
 @STOCK_ITEM_ROUTER.route("", methods=["POST"])
 @has_request_body(CreateStockItemRequest)
 def create_stock_item():
-    _Logger = logging.getLogger(__name__)
-    _Logger.info("Received request to create stock item.")
+    _LOGGER.info("Received request to create stock item.")
     _Handler = CreateStockItemHandler(SqlAlchemyRepository())
     _Request: CreateStockItemRequest = get_request_body()
     _Response = _Handler.handle(_Request)
 
     if _Response.stock_level_not_found:
-        _Logger.warning(f"Stock level not found: {_Request.stock_level_id}")
+        _LOGGER.warning(f"Stock level not found: {_Request.stock_level_id}")
         return entity_existence_failure(StockLevel.__name__, field_of(CreateStockItemRequest, 'stock_level_id'), _Request.stock_level_id)
 
     if _Response.stock_location_not_found and _Request.stock_location_id:
-        _Logger.warning(f"Stock location not found: {_Request.stock_location_id}")
+        _LOGGER.warning(f"Stock location not found: {_Request.stock_location_id}")
         return entity_existence_failure(StockLocation.__name__, field_of(CreateStockItemRequest, 'stock_location_id'), _Request.stock_location_id)
 
     if _Response.stock_group_not_found and _Request.stock_group_id:
-        _Logger.warning(f"Stock group not found: {_Request.stock_group_id}")
+        _LOGGER.warning(f"Stock group not found: {_Request.stock_group_id}")
         # Lazy import — avoids dragging StockGroup into the module's top-
         # level imports just for an error response constant.
-        from dora_api.domain.entities.stock_group import StockGroup
         return entity_existence_failure(
             StockGroup.__name__,
             field_of(CreateStockItemRequest, 'stock_group_id'),
@@ -207,11 +208,10 @@ def create_stock_item():
         )
 
     if _Response.stock_item_already_exists:
-        _Logger.warning(f"Stock item already exists with name: {_Request.name}")
+        _LOGGER.warning(f"Stock item already exists with name: {_Request.name}")
         return business_rule_violation(f"A stock item with the name '{_Request.name}' already exists.")
 
-    _Logger.info(f"Successfully created stock item with ID: {_Response.new_stock_item_id}")
-    from dora_api.features.stock_items.get_stock_items import GetStockItemsHandler
+    _LOGGER.info(f"Successfully created stock item with ID: {_Response.new_stock_item_id}")
     _Dto = GetStockItemsHandler(SqlAlchemyRepository()).handle_by_id(
         _Response.new_stock_item_id
     )

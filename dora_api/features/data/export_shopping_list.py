@@ -29,6 +29,8 @@ from dora_api.features.shopping_lists.get_shopping_list_detail import (
 from dora_api.infrastructure.api_response import not_found
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 
+_LOGGER = logging.getLogger(__name__)
+
 
 # ── Shared row prep ────────────────────────────────────────────────────
 
@@ -175,7 +177,7 @@ def print_view_shopping_list(shopping_list_id: UUID):
     if detail is None:
         return not_found("ShoppingList", shopping_list_id)
     html = _render_print_view(detail)
-    logging.getLogger(__name__).info(
+    _LOGGER.info(
         "Rendered print view for shopping list %s (%d lines)",
         shopping_list_id, len(detail.lines),
     )

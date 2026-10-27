@@ -16,6 +16,8 @@ from dora_api.infrastructure.api_response import no_content, not_found
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 
+_LOGGER = logging.getLogger(__name__)
+
 
 @dataclass(slots=True)
 class BlockingRecipe:
@@ -103,21 +105,20 @@ def _blocked_by_recipes_response(blocked_by: list[BlockingRecipe]) -> Response:
 
 @STOCK_ITEM_ROUTER.route("<uuid:stock_item_id>", methods=["DELETE"])
 def delete_stock_item(stock_item_id: UUID):
-    _Logger = logging.getLogger(__name__)
-    _Logger.info("Received request to delete stock item.")
+    _LOGGER.info("Received request to delete stock item.")
     _Handler: DeleteStockItemHandler = DeleteStockItemHandler(SqlAlchemyRepository())
     _Response = _Handler.handle(stock_item_id)
 
     if _Response.stock_item_not_found:
-        _Logger.warning(f"Stock item not found with ID: {stock_item_id}")
+        _LOGGER.warning(f"Stock item not found with ID: {stock_item_id}")
         return not_found(StockItem.__name__, stock_item_id)
 
     if _Response.blocked_by_recipes:
-        _Logger.info(
+        _LOGGER.info(
             f"Refused delete of stock item {stock_item_id}: still used by "
             f"{len(_Response.blocked_by_recipes)} recipe(s)."
         )
         return _blocked_by_recipes_response(_Response.blocked_by_recipes)
 
-    _Logger.info(f"Successfully deleted stock item with ID {stock_item_id}.")
+    _LOGGER.info(f"Successfully deleted stock item with ID {stock_item_id}.")
     return no_content()

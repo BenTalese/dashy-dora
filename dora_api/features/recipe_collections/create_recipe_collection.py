@@ -17,6 +17,8 @@ from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 
+_LOGGER = logging.getLogger(__name__)
+
 
 class CreateRecipeCollectionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -49,13 +51,12 @@ class CreateRecipeCollectionHandler:
 @RECIPE_COLLECTION_ROUTER.route("", methods=["POST"])
 @has_request_body(CreateRecipeCollectionRequest)
 def create_recipe_collection():
-    _Logger = logging.getLogger(__name__)
     _Handler = CreateRecipeCollectionHandler(SqlAlchemyRepository())
     _Request: CreateRecipeCollectionRequest = get_request_body()
     _Response = _Handler.handle(_Request)
 
     if _Response.recipe_collection_already_exists:
-        _Logger.warning(f"Recipe collection already exists: {_Request.name}")
+        _LOGGER.warning(f"Recipe collection already exists: {_Request.name}")
         return business_rule_violation(
             f"A recipe collection with the name '{_Request.name}' already exists."
         )

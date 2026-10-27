@@ -38,8 +38,7 @@
                         </div>
                         <div
                             v-if="reasonDetail(reason)"
-                            class="text-caption dora-text-muted"
-                            style="margin-left: 24px"
+                            class="text-caption dora-text-muted dora-buy-verdict__detail"
                         >
                             {{ reasonDetail(reason) }}
                         </div>
@@ -49,15 +48,7 @@
                     v-if="verdict.data_used"
                     class="text-caption dora-text-muted q-mt-sm"
                 >
-                    Based on
-                    {{ verdict.data_used.price_samples }} price sample{{
-                        verdict.data_used.price_samples === 1 ? '' : 's'
-                    }}<template v-if="verdict.data_used.waste_events_last_12mo > 0">
-                    · {{ verdict.data_used.waste_events_last_12mo }} waste event{{
-                        verdict.data_used.waste_events_last_12mo === 1 ? '' : 's'
-                    }}
-                    </template>
-                    (last 12 months).
+                    {{ dataUsedLine(verdict.data_used) }}
                 </div>
                 <div
                     v-if="verdict.one_tap_action.kind !== 'none'"
@@ -76,7 +67,9 @@
 
 <script setup lang="ts">
     import BaseButton from 'src/components/BaseButton.vue';
-    import { axisIcon, reasonDetail } from 'src/components/stock/buyVerdictDisplay';
+    import {
+        axisIcon, dataUsedLine, headlineFor, reasonDetail,
+    } from 'src/components/stock/buyVerdictDisplay';
     import type { BuyVerdict } from 'src/services/api/buyVerdictApiService';
     import { ICONS } from 'src/style/icons';
     import { computed } from 'vue';
@@ -92,9 +85,9 @@
     // the badge is a signal, the popover is the explanation.
     const BADGE_META = {
         buy:    { label: 'Buy',    icon: ICONS.shopping_cart },
-        wait:   { label: 'Wait',   icon: ICONS.schedule ?? 'schedule' },
+        wait:   { label: 'Wait',   icon: ICONS.schedule },
         skip:   { label: 'Skip',   icon: ICONS.close },
-        unsure: { label: 'Unsure', icon: ICONS.help ?? 'help_outline' },
+        unsure: { label: 'Unsure', icon: ICONS.help },
     } as const;
 
     const badgeLabel = computed(() =>
@@ -104,15 +97,7 @@
         props.verdict ? BADGE_META[props.verdict.verdict].icon : undefined,
     );
 
-    const headline = computed(() => {
-        if (!props.verdict) return '';
-        if (props.verdict.verdict === 'buy') return 'Worth buying now';
-        if (props.verdict.verdict === 'wait') return 'Might be worth waiting';
-        if (props.verdict.verdict === 'skip') return 'Probably skip';
-        // Same wording as BuyVerdictCard — one phrase for one verdict
-        // (2026-08-21 feedback: name the signal it's about).
-        return 'No strong buy signal';
-    });
+    const headline = computed(() => (props.verdict ? headlineFor(props.verdict) : ''));
 
     const confidenceLabel = computed(() =>
         props.verdict?.confidence ?? '',
@@ -130,7 +115,7 @@
         font-weight: 600;
         letter-spacing: 0.02em;
         text-transform: uppercase;
-        font-size: 0.6875rem;
+        font-size: calc(var(--font-size-xs) * 1rem);
         padding: 0 8px;
         height: 22px;
         border: 1px solid transparent;

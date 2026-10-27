@@ -50,47 +50,13 @@
                     <q-icon :name="ICONS.cookFresh" size="12px" />
                     Fresh
                 </span>
-                <!-- Owner 2026-09-12 — order by how often each thing is
-                     there: Dora's hunch is the rarest, then the price, then
-                     the status glyphs, then the always-present servings. -->
-                <q-icon
-                    v-if="entry.inference_hint"
-                    :name="ICONS.dora_voice"
-                    size="22px"
-                    class="rich-card__status"
-                    :class="entry.inference_hint === 'at_risk' ? 'text-warning' : 'text-positive'"
-                >
-                    <BaseTooltip max-width="280px">{{ inferenceTooltip }}</BaseTooltip>
-                </q-icon>
-                <span v-if="priceLabel" class="meal-chip meal-chip--price">{{ priceLabel }}</span>
-                <q-icon
-                    v-if="entry.consumed_at"
-                    :name="ICONS.check"
-                    size="22px"
-                    class="rich-card__status"
-                >
-                    <BaseTooltip>Cooked</BaseTooltip>
-                </q-icon>
-                <template v-else>
-                    <q-icon
-                        v-if="status.supply"
-                        :name="ICONS.chef_hat"
-                        size="22px"
-                        class="rich-card__status"
-                        :class="statusToneClass(status.supply)"
-                    >
-                        <BaseTooltip>{{ supplyTooltip(entry) }}</BaseTooltip>
-                    </q-icon>
-                    <q-icon
-                        v-if="status.readiness"
-                        :name="ICONS.mealsPrepared"
-                        size="22px"
-                        class="rich-card__status"
-                        :class="statusToneClass(status.readiness)"
-                    >
-                        <BaseTooltip>{{ readinessTooltip(entry, !!shortfall) }}</BaseTooltip>
-                    </q-icon>
-                </template>
+                <MealEntryGlyphs
+                    :entry="entry"
+                    :status="status"
+                    :price-label="priceLabel"
+                    :inference-tooltip="inferenceTooltip"
+                    :shortfall="!!shortfall"
+                />
                 <span v-if="entry.cook_time_minutes" class="rich-card__cook-time">
                     <q-icon :name="ICONS.timer" size="12px" />
                     {{ entry.cook_time_minutes }}m
@@ -120,21 +86,13 @@
 </template>
 
 <script lang="ts" setup>
-    import BaseTooltip from 'src/components/BaseTooltip.vue';
     import { ICONS } from 'src/style/icons';
+    import MealEntryGlyphs from 'src/components/MealEntryGlyphs.vue';
     import MealPlanEntryMenu from 'src/components/MealPlanEntryMenu.vue';
     import { recipeImageUrl } from 'src/services/api/recipeApiService';
-    import { formatMoney } from 'src/composables/useMoney';
-    import {
-        mealCardStatus, readinessTooltip, statusToneClass, supplyTooltip,
-    } from 'src/helpers/mealPlanEntryStatus';
-    import { useBatchEnabled } from 'src/composables/useBatchEnabled';
-    import { useMoneyEnabled } from 'src/composables/useMoneyEnabled';
+    import { useMealEntryPresentation } from 'src/composables/useMealEntryPresentation';
     import type { MealPlanEntry } from 'src/models/mealPlan';
     import { computed } from 'vue';
-
-    const { batchEnabled } = useBatchEnabled();
-    const { moneyEnabled } = useMoneyEnabled();
 
     const props = withDefaults(
         defineProps<{
@@ -156,81 +114,28 @@
         (e: 'fresh'): void;
     }>();
 
-    // FU-653 — Dora's belief about this meal, as a remark. It was on the
-    // desktop chip only until 2026-09-12; the two cards draw the same meal, so
-    // the phone was quietly missing a signal the week grid had (R-001).
-    const inferenceTooltip = computed(() => {
-        const names = (props.entry.inference_stock_item_names ?? []).join(', ');
-        return props.entry.inference_hint === 'at_risk'
-            ? `Dora thinks you may have run out of ${names} since you planned this.`
-            : `Recorded as missing ${names}, but Dora thinks you're back in stock.`;
-    });
-
-    // PROPOSAL_MEAL_PLANS_PART_2 — linked cook batch (Batch households only).
-    const linked = computed(() => batchEnabled.value && !!props.entry.cook_batch_id);
-    // Owner 2026-09-04 — cooked on the day, outside the pool. Batch households
-    // only: where every meal is fresh, saying so about one of them is noise.
-    const fresh = computed(() => batchEnabled.value && props.entry.cook_fresh);
-    // Owner 2026-09-12 — "Cook day · 6 servings": the chip names the day's role
-    // first, then what that one cook produces.
-    const cookMarkerLabel = computed(() => {
-        if (!props.entry.is_cook_day) return 'Leftovers';
-        const serves = props.entry.cook_batch_total_servings ?? props.entry.servings;
-        return `Cook day · ${serves} serving${serves === 1 ? '' : 's'}`;
-    });
-
-    const status = computed(
-        () => mealCardStatus(props.entry, batchEnabled.value, props.shortfall),
-    );
-
-    /** The price chip's text, or '' for no chip. A batch's cook day prices the
-     *  whole cook; its leftover days price nothing. Both figures are
-     *  server-owned — no money arithmetic here (R-003). */
-    const priceLabel = computed(() => {
-        if (!moneyEnabled.value) return '';
-        if (props.entry.cook_batch_id !== null) {
-            if (!props.entry.is_cook_day) return '';
-            return props.entry.cook_batch_estimated_cost === null
-                ? '' : formatMoney(props.entry.cook_batch_estimated_cost);
-        }
-        return props.entry.estimated_cost === null
-            ? '' : formatMoney(props.entry.estimated_cost);
-    });
+    const {
+        inferenceTooltip, linked, fresh, cookMarkerLabel, status, priceLabel, accessibleLabel,
+    } = useMealEntryPresentation(() => props.entry, () => props.shortfall);
 
     const thumbUrl = computed(() => recipeImageUrl(props.entry.recipe_id));
     const monogramLetter = computed(
         () => (props.entry.recipe_name?.trim().charAt(0) || '?').toUpperCase(),
     );
-
-    // R-Phase 6 §4.6 — single combined accessible label so AT users hear the
-    // whole meal at once (name + slot + servings + status) instead of as
-    // separate text fragments. Status text alternative covers 1.4.1.
-    const accessibleLabel = computed(() => {
-        const base = `${props.entry.recipe_name}, ${props.entry.slot}, ${props.entry.servings} serving${props.entry.servings === 1 ? '' : 's'}`;
-        let withCook = base;
-        if (linked.value) {
-            withCook = `${base}, ${props.entry.is_cook_day ? 'cook day of a batch' : 'leftovers from a batch cook'}`;
-        } else if (fresh.value) {
-            withCook = `${base}, cooked fresh on the day`;
-        }
-        if (props.entry.consumed_at) return `${withCook}, cooked`;
-        if (props.shortfall && batchEnabled.value) return `${withCook}, needs cooking`;
-        return withCook;
-    });
 </script>
 
 <style scoped>
     .rich-card {
         display: flex;
         align-items: stretch;
-        gap: 8px;
+        gap: var(--space-2);
         padding: 6px 8px;
         background: var(--surface-elevated);
         border: 1px solid var(--border-default);
         border-left: 3px solid var(--brand-primary);
         border-radius: 8px;
         cursor: pointer;
-        transition: background 0.12s ease, border-color 0.12s ease, transform 0.12s ease;
+        transition: background var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease), transform var(--motion-fast) var(--motion-ease);
         position: relative;
         color: var(--text-primary);
         text-align: left;
@@ -247,7 +152,7 @@
         outline: none;
     }
     .rich-card:focus-visible {
-        border-color: var(--q-primary);
+        border-color: var(--brand-primary);
     }
     /* The trim rolls up the two status glyphs (see `mealPlanEntryStatus`):
        green = all good and something still to do, grey = nothing required of
@@ -256,7 +161,7 @@
         opacity: 0.55;
     }
     .rich-card--trim-alert {
-        border-left-color: var(--q-warning);
+        border-left-color: var(--semantic-warning);
     }
     .rich-card--trim-idle {
         border-left-color: var(--border-strong);
@@ -269,7 +174,7 @@
         flex: 0 0 auto;
         width: 48px;
         height: 48px;
-        border-radius: 6px;
+        border-radius: var(--radius-md);
         overflow: hidden;
         background: var(--surface-sunken);
         display: flex;
@@ -335,7 +240,4 @@
        right. Inconsistent."* The meta line reads left-to-right for every card
        now; the glyph keeps its place immediately before the servings count,
        which is the column the 2026-09-03 alignment feedback established. */
-    .rich-card__status {
-        flex: 0 0 auto;
-    }
 </style>

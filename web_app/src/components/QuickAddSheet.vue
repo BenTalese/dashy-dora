@@ -96,7 +96,6 @@
     const stockLevelStore = useStockLevelStore();
     const shoppingListStore = useShoppingListStore();
     const { stockItems } = storeToRefs(stockItemStore);
-    const { stockLevels } = storeToRefs(stockLevelStore);
     const { summaries, quickAddTargetListId, membership } = storeToRefs(shoppingListStore);
 
     // Bridge the module-level open flag to a local v-model so q-dialog's hide
@@ -122,10 +121,10 @@
     );
 
     function levelSequence(id: string | null) {
-        return stockLevels.value.find((l) => l.stock_level_id === id)?.sequence ?? -1;
+        return (id ? stockLevelStore.levelById.get(id)?.sequence : undefined) ?? -1;
     }
     function levelLabel(id: string | null): string {
-        return stockLevels.value.find((l) => l.stock_level_id === id)?.name ?? 'No level set';
+        return (id ? stockLevelStore.levelById.get(id)?.name : undefined) ?? 'No level set';
     }
 
     // Cached on each sheet-open: stock items the user has historically added

@@ -14,14 +14,22 @@ import logging
 import re
 import statistics
 from collections import Counter
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 from uuid import UUID
 
+from dora_api.features.assistant._name_resolution import resolve_by_name
+from dora_api.features.alerts.alert_kinds import SEVERITY_BY_KIND
+from dora_api.features._ranges import range_start
+from dora_api.features.assistant._limits import MAX_CANDIDATES
+from dora_api.domain.recipe_cookability import missing_stock_item_names_for
+from dora_api.domain.substitutes import SUBSTITUTE_ALIASES, SUBSTITUTES
 from dora_api.domain.entities.meal_plan_entry import MealPlanEntry
 from dora_api.domain.entities.store import Store
 from dora_api.domain.entities.product import Product
 from dora_api.domain.entities.product_offer import ProductOffer
+from dora_api.domain.product_offer import discount_percent
+from dora_api.domain.cadence_math import mean_gap_days
 from dora_api.domain.entities.recipe import Recipe
 from dora_api.domain.entities.recipe_ingredient import RecipeIngredient
 from dora_api.domain.entities.shopping_list import (
@@ -30,7 +38,6 @@ from dora_api.domain.entities.stock_item import StockItem
 from dora_api.domain.entities.stock_level import StockLevel
 from dora_api.domain.entities.stock_location import StockLocation
 from dora_api.domain.entities.stock_item_waste_event import StockItemWasteEvent
-from dora_api.domain.entities.app_setting import AppSetting
 # the assistant now honours the admin-configured expiring-soon window
 # (AppSetting.expiring_soon_window_days), matching alerts + the location
 # heatmap. The constant below is still the seeded default; the resolver
@@ -39,16 +46,17 @@ from dora_api.domain.entities.app_setting import AppSetting
 # repo-aware helper the assistant tools use per call.
 from dora_api.domain.stock_status import (LOW_STOCK_SEQUENCE,
                                           effective_expiring_soon_window,
-                                          is_out_of_stock,
+                                          is_missing, is_out_of_stock,
                                           needs_restock)
 from dora_api.features.alerts.get_alerts import GetAlertsHandler
 from dora_api.features.shopping_lists._line_price import line_paid_unit_price
 from dora_api.persistence.bool_operation import BoolOperation
 from dora_api.persistence.field import EntityField
+from dora_api.features.app_settings.access import get_or_create_app_setting
 from dora_api.features.app_settings.clock import household_timezone, household_today
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 
-_Logger = logging.getLogger(__name__)
+_LOGGER = logging.getLogger(__name__)
 
 # Cap rows handed back to the model. A small model's context is precious and
 # the user doesn't want a wall of text — summaries beat exhaustive dumps.
@@ -57,7 +65,6 @@ _MAX_ROWS = 25
 # When a name lookup finds multiple matches, we don't drown the user (or
 # the model) in options. Above this we say "be more specific" rather than
 # listing everything. Mirrors the shopping_actions threshold.
-_MAX_CANDIDATES = 6
 
 # Stock-status thresholds and predicates are owned by domain/stock_status.py
 # (LOW_STOCK_SEQUENCE, is_out_of_stock, needs_restock). An ingredient counts as
@@ -90,7 +97,7 @@ TOOL_SCHEMAS: list[dict] = [
                 "properties": {
                     "keywords": {"type": "string", "description": "Specific item name(s) the user mentioned, e.g. 'milk'. Leave empty to return all items."},
                     "low_only": {"type": "boolean", "description": "Only items that are low or out of stock."},
-                    "expiring_soon": {"type": "boolean", "description": "Only items expiring within a week."},
+                    "expiring_soon": {"type": "boolean", "description": "Only items inside the household's expiring-soon window."},
                     "flagged_only": {"type": "boolean", "description": "Only flagged/essential items."},
                     "open_only": {"type": "boolean", "description": "Only items currently opened/in use."},
                     "location_name": {"type": "string", "description": "Restrict to a storage location, e.g. 'fridge'."},
@@ -104,8 +111,8 @@ TOOL_SCHEMAS: list[dict] = [
         "function": {
             "name": "search_products",
             "description": (
-                "Search merchant products and deals across the household's "
-                "configured merchants, e.g. 'any specials on cheese?'. Do NOT "
+                "Search the products Dora has prices for (the ingested catalogue "
+                "and saved products), e.g. 'any specials on cheese?'. Do NOT "
                 "use for 'how do I search for products'; that's a how-to "
                 "question."
             ),
@@ -261,8 +268,8 @@ TOOL_SCHEMAS: list[dict] = [
         "function": {
             "name": "find_deals",
             "description": (
-                "Find currently-on-special merchant products, optionally filtered "
-                "by keyword or merchant. Use for 'any specials right now', "
+                "Find products currently on special in Dora's catalogue, optionally "
+                "filtered by keyword or store. Use for 'any specials right now', "
                 "'cheap meat this week', 'what's on sale at <store>'."
             ),
             "parameters": {
@@ -363,7 +370,7 @@ TOOL_SCHEMAS: list[dict] = [
                 "type": "object",
                 "properties": {
                     "severity": {"type": "string", "description": "Filter by severity: 'high', 'medium', or 'low'. Omit for all."},
-                    "kind": {"type": "string", "description": "Filter by kind: 'expired', 'expiring_soon', 'essential_low', 'no_planned_meals', 'shopping_day', 'meal_reconcile_overdue'. Omit for all."},
+                    "kind": {"type": "string", "description": f"Filter by kind: {', '.join(repr(k) for k in SEVERITY_BY_KIND)}. Omit for all."},
                 },
                 "required": [],
             },
@@ -607,7 +614,7 @@ TOOL_SCHEMAS: list[dict] = [
                 "and whether they're tracking over or under. Returns "
                 "`enabled=false` when the user hasn't opted in to budget "
                 "tracking; the assistant should then point them at "
-                "Settings → Preferences. Use for 'what's left in my "
+                "Settings → Kitchen setup → Money. Use for 'what's left in my "
                 "budget?', 'how much have I spent this week?', 'am I over "
                 "budget?'."
             ),
@@ -710,7 +717,7 @@ TOOL_SCHEMAS: list[dict] = [
                 "properties": {
                     "meal_name": {"type": "string"},
                     "date": {"type": "string", "description": "yyyy-mm-dd"},
-                    "slot": {"type": "string", "description": "'Breakfast', 'Lunch', 'Dinner'. Defaults to Dinner."},
+                    "slot": {"type": "string", "description": "One of the household's meal slots (e.g. 'Breakfast', 'Dinner'). Defaults to the household's first slot."},
                     "servings": {"type": "integer", "description": "Default 1."},
                 },
                 "required": ["meal_name", "date"],
@@ -973,8 +980,7 @@ def _resolve_expiring_window(repo) -> int:  # noqa: ANN001 — duck-typed reposi
     overlaid on the default (R-003). Falls back to ``EXPIRING_SOON_WINDOW_DAYS``
     when no AppSetting row exists or the column is unset.
     """
-    settings = repo.get(AppSetting).all()
-    return effective_expiring_soon_window(settings[0] if settings else None)
+    return effective_expiring_soon_window(get_or_create_app_setting(repo))
 
 
 def search_stock(args: dict) -> list[dict]:
@@ -1139,19 +1145,15 @@ def _stock_coverage(recipe: Recipe) -> tuple[int, int, list[str]]:
     field for having no consumer. The shared cookability rule it was built on is
     unchanged — only the collection-wide sum went.)
     """
-    total = 0
-    in_stock = 0
-    missing: list[str] = []
-    for ingredient in recipe.ingredients or []:
-        if getattr(ingredient, "is_optional", False):
-            continue
-        total += 1
-        item = ingredient.stock_item
-        level = item.stock_level if item else None
-        if level is not None and not is_out_of_stock(level):
-            in_stock += 1
-        elif item is not None:
-            missing.append(item.name)
+    # The missing rule and its names come from `domain/recipe_cookability`
+    # (finalisation 11-R19); "in stock" is a required, linked ingredient that
+    # isn't missing, so an unlinked one counts toward neither.
+    required = [i for i in (recipe.ingredients or []) if not i.is_optional]
+    missing = missing_stock_item_names_for(required)
+    in_stock = sum(
+        1 for i in required if i.stock_item is not None and not is_missing(i.stock_item.stock_level)
+    )
+    total = len(required)
     return in_stock, total, missing[:_MAX_MISSING]
 
 
@@ -1287,6 +1289,7 @@ def suggest_recipes(args: dict) -> list[dict]:
 # price-entry widget and the harvest path (FU-227 chunk 1). This function
 # is the assistant tool-call adapter: same return shape the LLM expects.
 from dora_api.domain import units as _units
+from dora_api.infrastructure.session_user import current_user_id
 
 
 def convert_measurement(args: dict) -> list[dict]:
@@ -1360,48 +1363,6 @@ def convert_measurement(args: dict) -> list[dict]:
 
 
 
-# ── Substitution table ───────────────────────────────────────────────────
-# Same data the rule-engine fallback uses, plus a few extras the AI can lean
-# on. Keyed by canonical lowercase singular name.
-
-_SUBSTITUTES: dict[str, list[str]] = {
-    "butter": ["margarine (1:1)", "oil (¾ the amount)", "applesauce (baking, 1:1, reduces fat)", "greek yogurt (baking, 1:1)"],
-    "milk": ["oat milk", "almond milk", "soy milk", "evaporated milk diluted 1:1 with water", "powdered milk + water"],
-    "egg": ["1 tbsp flaxseed + 3 tbsp water (let it gel)", "1/4 cup mashed banana (sweet bakes)", "1/4 cup applesauce", "1/4 cup silken tofu (blended)"],
-    "sour cream": ["greek yogurt (1:1)", "creme fraiche", "cottage cheese (blended)"],
-    "buttermilk": ["1 cup milk + 1 tbsp lemon juice or vinegar, sit 5 min", "plain yogurt thinned with milk"],
-    "self-raising flour": ["1 cup plain flour + 1.5 tsp baking powder + a pinch of salt"],
-    "baking powder": ["1/4 tsp bicarb + 1/2 tsp cream of tartar per 1 tsp"],
-    "breadcrumbs": ["crushed cornflakes", "rolled oats (pulsed)", "crushed crackers", "panko"],
-    "garlic": ["1/2 tsp garlic powder per clove", "a pinch of asafoetida"],
-    "onion": ["1 tbsp dried onion flakes per 1/4 cup fresh", "leek (white part)", "shallots"],
-    "cornstarch": ["plain flour (2:1)", "arrowroot (1:1)", "rice flour"],
-    "white wine": ["apple juice", "white grape juice", "chicken broth + a splash of white vinegar"],
-    "red wine": ["cranberry juice", "beef broth + a splash of balsamic", "pomegranate juice"],
-    "lemon juice": ["lime juice (1:1)", "white vinegar (use 1/2 the amount)"],
-    "brown sugar": ["1 cup white sugar + 1 tbsp molasses"],
-    "honey": ["maple syrup (1:1)", "agave (1:1)", "golden syrup"],
-    "vanilla extract": ["maple syrup (1:1, mellower)", "almond extract (1/2 the amount, stronger)"],
-    "heavy cream": ["3/4 cup milk + 1/4 cup melted butter", "evaporated milk (won't whip)", "coconut cream"],
-    "cream cheese": ["ricotta (smoother spread)", "mascarpone", "greek yogurt + a knob of butter"],
-    "yeast": ["1.25x the amount of active dry if you have instant", "sourdough starter (adjust hydration)"],
-    "parmesan": ["pecorino", "grana padano", "aged gouda"],
-    "soy sauce": ["tamari (gf)", "coconut aminos", "Worcestershire (less salty, sweeter)"],
-    "tomato paste": ["3 tbsp tomato sauce reduced", "ketchup (sweeter)"],
-    "fish sauce": ["soy sauce + a squeeze of lime", "Worcestershire (different flavour)"],
-    "coriander leaves": ["parsley + a pinch of lime zest"],
-    "ricotta": ["cottage cheese (blended)", "greek yogurt strained"],
-}
-
-_SUBSTITUTE_ALIASES: dict[str, str] = {
-    "eggs": "egg", "creme fraiche": "sour cream", "self raising flour": "self-raising flour",
-    "sr flour": "self-raising flour", "parm": "parmesan", "parmigiano": "parmesan",
-    "spring onion": "onion", "scallion": "onion", "shallot": "onion",
-    "cilantro": "coriander leaves", "coriander": "coriander leaves",
-    "passata": "tomato paste",
-}
-
-
 def suggest_substitution(args: dict) -> list[dict]:
     raw = str(args.get("ingredient") or "").strip().lower()
     if not raw:
@@ -1410,12 +1371,12 @@ def suggest_substitution(args: dict) -> list[dict]:
     # One trailing "s", not every one — `rstrip("s")` turned "molasses"
     # into "molasse" and "cress" into "cre" (finalisation 11-R7).
     cleaned = re.sub(r"s$", "", re.sub(r"^(some|any|a|an)\s+", "", raw))
-    if cleaned not in _SUBSTITUTES:
+    if cleaned not in SUBSTITUTES:
         cleaned_plural = cleaned + "s"
-        canonical = _SUBSTITUTE_ALIASES.get(cleaned) or _SUBSTITUTE_ALIASES.get(cleaned_plural) or _SUBSTITUTE_ALIASES.get(raw)
+        canonical = SUBSTITUTE_ALIASES.get(cleaned) or SUBSTITUTE_ALIASES.get(cleaned_plural) or SUBSTITUTE_ALIASES.get(raw)
         if canonical:
             cleaned = canonical
-    options = _SUBSTITUTES.get(cleaned)
+    options = SUBSTITUTES.get(cleaned)
     if not options:
         return [{"ingredient": raw, "options": [], "note": "no curated substitute on file"}]
     return [{"ingredient": cleaned, "options": options}]
@@ -1501,7 +1462,7 @@ def find_deals(args: dict) -> list[dict]:
             "price_now": offer.price_now,
             "price_was": offer.price_was,
             "savings": savings,
-            "savings_percent": round((savings / offer.price_was) * 100, 0) if offer.price_was else 0,
+            "savings_percent": discount_percent(offer.price_now, offer.price_was) or 0,
             "web_url": product.web_url,
         })
     # Biggest % discount first — that's what "deals" usually means.
@@ -1536,7 +1497,7 @@ def pantry_health(_args: dict) -> list[dict]:
         "out_count": out,
         "flagged_count": flagged,
         "open_count": open_items,
-        "expiring_within_week": expiring_soon,
+        "expiring_soon_count": expiring_soon,
         "expired_count": expired,
     }]
 
@@ -1624,41 +1585,32 @@ def recipes_using_item(args: dict) -> list[dict]:
     if not name:
         return [{"error": "item_name is required"}]
     repo = SqlAlchemyRepository()
-    # Find candidate stock items by name (exact then substring).
-    candidates: list[StockItem] = repo.get(StockItem).all(
-        EntityField(StockItem, StockItem.Fields.NAME).eq(name)
-    )
-    if not candidates:
-        candidates = repo.get(StockItem).all(
-            EntityField(StockItem, StockItem.Fields.NAME).contains(name)
-        )
+    candidates: list[StockItem] = resolve_by_name(lambda: repo.get(StockItem), StockItem, name).matches
     if not candidates:
         return [{"item_name": name, "recipes": []}]
 
-    item_ids = {str(c.id) for c in candidates}
-    # Walk recipes and find any whose ingredients reference one of the candidates.
+    # The recipes whose ingredients name a candidate, found from the
+    # ingredient side rather than by loading every recipe (finalisation 11-R41).
+    ingredients = repo.get(RecipeIngredient).all(
+        EntityField(RecipeIngredient, "_stock_item_id").in_([c.id for c in candidates])
+    )
+    recipe_ids = list({ing._recipe_id for ing in ingredients})
     recipes: list[Recipe] = (
         repo.get(Recipe)
-        .include(Recipe.Fields.INGREDIENTS)
-        .then_include(RecipeIngredient.Fields.STOCK_ITEM)
         # cuisine noload; response body reads it below.
         .include(Recipe.Fields.CUISINE)
-        .all()
-    )
-    matches: list[dict] = []
-    for recipe in recipes:
-        used = any(
-            ing.stock_item and str(ing.stock_item.id) in item_ids
-            for ing in (recipe.ingredients or [])
-        )
-        if used:
-            matches.append({
-                "name": recipe.name,
-                "cuisine": recipe.cuisine.name if recipe.cuisine else None,
-                "difficulty": recipe.difficulty,
-                "cook_time_minutes": recipe.cook_time_minutes,
-                "is_favourite": bool(recipe.is_favourite),
-            })
+        .all(EntityField(Recipe, "id").in_(recipe_ids))
+    ) if recipe_ids else []
+    matches: list[dict] = [
+        {
+            "name": recipe.name,
+            "cuisine": recipe.cuisine.name if recipe.cuisine else None,
+            "difficulty": recipe.difficulty,
+            "cook_time_minutes": recipe.cook_time_minutes,
+            "is_favourite": bool(recipe.is_favourite),
+        }
+        for recipe in recipes
+    ]
     matches.sort(key=lambda r: (not r["is_favourite"], r["name"]))
     return matches[:_MAX_ROWS]
 
@@ -1695,26 +1647,6 @@ def get_alerts(args: dict) -> list[dict]:
     return rows[:_MAX_ROWS]
 
 
-def _find_one_by_name(repo: SqlAlchemyRepository, entity: type, name: str, query_builder=None):
-    """Exact name match first (case-insensitive), substring fallback. Returns
-    the single best match or None when there are 0 or >1 candidates. The
-    caller renders a 'be more specific' message in the >1 case."""
-    field = EntityField(entity, "name")
-    query = query_builder() if query_builder else repo.get(entity)
-    exact = query.all(field.eq(name))
-    if len(exact) == 1:
-        return exact[0], "exact"
-    if len(exact) > 1:
-        return None, "ambiguous_exact"
-    query = query_builder() if query_builder else repo.get(entity)
-    fuzzy = query.all(field.contains(name))
-    if len(fuzzy) == 1:
-        return fuzzy[0], "fuzzy"
-    if len(fuzzy) == 0:
-        return None, "not_found"
-    return None, "ambiguous_fuzzy", fuzzy
-
-
 def stock_item_detail(args: dict) -> list[dict]:
     name = str(args.get("name") or "").strip()
     if not name:
@@ -1729,18 +1661,16 @@ def stock_item_detail(args: dict) -> list[dict]:
             .include(StockItem.Fields.STOCK_GROUP)
         )
 
-    result = _find_one_by_name(repo, StockItem, name, build)
-    status = result[1] if isinstance(result, tuple) else "not_found"
-    if status == "not_found":
+    resolution = resolve_by_name(build, StockItem, name)
+    if not resolution.matches:
         return [{"query": name, "status": "not_found"}]
-    if status.startswith("ambiguous"):
-        candidates = result[2] if len(result) > 2 else []
+    if resolution.single is None:
         return [{
             "query": name,
             "status": "ambiguous",
-            "candidates": [{"name": c.name, "location": c.stock_location.name if c.stock_location else None} for c in candidates[:_MAX_CANDIDATES]],
+            "candidates": [{"name": c.name, "location": c.stock_location.name if c.stock_location else None} for c in resolution.matches[:MAX_CANDIDATES]],
         }]
-    item: StockItem = result[0]
+    item: StockItem = resolution.single
 
     # Recipes that reference this item.
     recipes_using: list[str] = []
@@ -1798,18 +1728,16 @@ def recipe_detail(args: dict) -> list[dict]:
             .include(Recipe.Fields.CATEGORY)
         )
 
-    result = _find_one_by_name(repo, Recipe, name, build)
-    status = result[1] if isinstance(result, tuple) else "not_found"
-    if status == "not_found":
+    resolution = resolve_by_name(build, Recipe, name)
+    if not resolution.matches:
         return [{"query": name, "status": "not_found"}]
-    if status.startswith("ambiguous"):
-        candidates = result[2] if len(result) > 2 else []
+    if resolution.single is None:
         return [{
             "query": name,
             "status": "ambiguous",
-            "candidates": [{"name": c.name, "cuisine": c.cuisine.name if c.cuisine else None} for c in candidates[:_MAX_CANDIDATES]],
+            "candidates": [{"name": c.name, "cuisine": c.cuisine.name if c.cuisine else None} for c in resolution.matches[:MAX_CANDIDATES]],
         }]
-    recipe: Recipe = result[0]
+    recipe: Recipe = resolution.single
 
     in_stock, total, missing = _stock_coverage(recipe)
 
@@ -1867,7 +1795,7 @@ def shopping_list_contents(args: dict) -> list[dict]:
             return [{
                 "query": name,
                 "status": "ambiguous",
-                "candidates": [{"name": l.name, "status": l.status} for l in lists[:_MAX_CANDIDATES]],
+                "candidates": [{"name": l.name, "status": l.status} for l in lists[:MAX_CANDIDATES]],
             }]
         shopping_list = lists[0]
     else:
@@ -1941,18 +1869,16 @@ def meal_detail(args: dict) -> list[dict]:
         # cuisine noload; response body reads it below.
         return repo.get(Recipe).include(Recipe.Fields.CUISINE)
 
-    result = _find_one_by_name(repo, Recipe, name, build)
-    status = result[1] if isinstance(result, tuple) else "not_found"
-    if status == "not_found":
+    resolution = resolve_by_name(build, Recipe, name)
+    if not resolution.matches:
         return [{"query": name, "status": "not_found"}]
-    if status.startswith("ambiguous"):
-        candidates = result[2] if len(result) > 2 else []
+    if resolution.single is None:
         return [{
             "query": name,
             "status": "ambiguous",
-            "candidates": [{"name": c.name} for c in candidates[:_MAX_CANDIDATES]],
+            "candidates": [{"name": c.name} for c in resolution.matches[:MAX_CANDIDATES]],
         }]
-    recipe: Recipe = result[0]
+    recipe: Recipe = resolution.single
 
     return [{
         "name": recipe.name,
@@ -2030,17 +1956,9 @@ def find_location(args: dict) -> list[dict]:
 # happens server-side, so the model only ever sees live suggestions.
 
 def list_suggestions(_args: dict) -> list[dict]:
-    from flask import session
     from dora_api.features.suggestions.suggestions import GetSuggestionsHandler
 
-    raw = session.get("user_id")
-    user_id: UUID | None = None
-    if raw:
-        try:
-            user_id = UUID(raw)
-        except (ValueError, TypeError):
-            user_id = None
-    rows = GetSuggestionsHandler(SqlAlchemyRepository()).handle(user_id)
+    rows = GetSuggestionsHandler(SqlAlchemyRepository()).handle(current_user_id())
     if not rows:
         return [{
             "status": "no_suggestions",
@@ -2189,20 +2107,12 @@ def waste_insights(args: dict) -> list[dict]:
 # action tools use for shopping-list mutations.
 
 def budget_status(_args: dict) -> list[dict]:
-    from flask import session
     from dora_api.features.budget.budget import GetBudgetStatusHandler
 
-    raw = session.get("user_id")
-    if not raw:
-        return [{"error": "not signed in"}]
-    try:
-        user_id = UUID(raw)
-    except (ValueError, TypeError):
+    if current_user_id() is None:
         return [{"error": "not signed in"}]
 
     dto = GetBudgetStatusHandler(SqlAlchemyRepository()).handle()
-    if dto is None:
-        return [{"error": "user not found"}]
     if not dto.enabled:
         return [{
             "status": "disabled",
@@ -2244,20 +2154,16 @@ def purchase_price_stats(args: dict) -> list[dict]:
         return [{"error": "item_name is required"}]
     repo = SqlAlchemyRepository()
 
-    # Resolve the stock item by exact then substring match. Multiple
-    # matches → ask the model to disambiguate rather than averaging
+    # Several matches → ask the model to disambiguate rather than averaging
     # across distinct items.
-    field = EntityField(StockItem, StockItem.Fields.NAME)
-    matches: list[StockItem] = repo.get(StockItem).all(field.eq(raw_name))
-    if not matches:
-        matches = repo.get(StockItem).all(field.contains(raw_name))
+    matches: list[StockItem] = resolve_by_name(lambda: repo.get(StockItem), StockItem, raw_name).matches
     if not matches:
         return [{"query": raw_name, "status": "not_found"}]
     if len(matches) > 1:
         return [{
             "query": raw_name,
             "status": "ambiguous",
-            "candidates": [{"name": m.name} for m in matches[:_MAX_CANDIDATES]],
+            "candidates": [{"name": m.name} for m in matches[:MAX_CANDIDATES]],
         }]
     item = matches[0]
 
@@ -2403,15 +2309,8 @@ def purchase_price_stats(args: dict) -> list[dict]:
     unique_dates = sorted({
         s[3].date() for s in samples if s[3] is not None
     })
-    average_days_between_purchase: float | None = None
-    if len(unique_dates) >= 2:
-        gaps = [
-            (unique_dates[i] - unique_dates[i - 1]).days
-            for i in range(1, len(unique_dates))
-            if (unique_dates[i] - unique_dates[i - 1]).days > 0
-        ]
-        if gaps:
-            average_days_between_purchase = round(sum(gaps) / len(gaps), 1)
+    mean_gap = mean_gap_days(unique_dates)
+    average_days_between_purchase = round(mean_gap, 1) if mean_gap is not None else None
 
     days_since_last_purchase: int | None = None
     if last_completed_at is not None:
@@ -2486,17 +2385,14 @@ def compare_prices(args: dict) -> list[dict]:
                 .then_include("current_offer")
         )
 
-    field = EntityField(StockItem, StockItem.Fields.NAME)
-    matches = build_query().all(field.eq(name))
-    if not matches:
-        matches = build_query().all(field.contains(name))
+    matches = resolve_by_name(build_query, StockItem, name).matches
     if not matches:
         return [{"query": name, "status": "not_found"}]
     if len(matches) > 1:
         return [{
             "query": name,
             "status": "ambiguous",
-            "candidates": [{"name": m.name} for m in matches[:_MAX_CANDIDATES]],
+            "candidates": [{"name": m.name} for m in matches[:MAX_CANDIDATES]],
         }]
     item = matches[0]
     products = item.products or []
@@ -2521,7 +2417,7 @@ def compare_prices(args: dict) -> list[dict]:
             "size": p.size,
             "price_now": offer.price_now,
             "price_was": offer.price_was,
-            "on_special": bool(offer.price_was and offer.price_now < offer.price_was),
+            "on_special": discount_percent(offer.price_now, offer.price_was) is not None,
             "savings": round(savings, 2) if savings else 0,
             "web_url": p.web_url,
         })
@@ -2610,16 +2506,15 @@ def recipe_for_occasion(args: dict) -> list[dict]:
 # handlers so the assistant answers recall questions from the same
 # aggregation logic the /reports page renders (single source, R-003).
 def meals_cooked_in_range(args: dict) -> list[dict]:
-    from dora_api.features.reports.reports import (
-        MealsCookedHandler, _parse_range,
-    )
+    from dora_api.features.reports._common import parse_range
+    from dora_api.features.reports.memory import MealsCookedHandler
     range_token = args.get("range") or "90d"
     limit_raw = args.get("limit")
     try:
         limit = max(1, min(int(limit_raw) if limit_raw is not None else 10, 50))
     except (TypeError, ValueError):
         limit = 10
-    since = _parse_range(range_token)
+    since = parse_range(range_token)
     payload = MealsCookedHandler(SqlAlchemyRepository()).handle(since, limit)
     return [{
         "range": range_token,
@@ -2634,11 +2529,10 @@ def meals_cooked_in_range(args: dict) -> list[dict]:
 
 def spend_by_category(args: dict) -> list[dict]:
     from dataclasses import asdict as _asdict
-    from dora_api.features.reports.reports import (
-        SpendByCategoryHandler, _parse_range,
-    )
+    from dora_api.features.reports._common import parse_range
+    from dora_api.features.reports.spend import SpendByCategoryHandler
     range_token = args.get("range") or "90d"
-    since = _parse_range(range_token)
+    since = parse_range(range_token)
     rows, total = SpendByCategoryHandler(SqlAlchemyRepository()).handle(since)
     return [{
         "range": range_token,
@@ -2648,11 +2542,10 @@ def spend_by_category(args: dict) -> list[dict]:
 
 
 def spend_year_over_year(args: dict) -> list[dict]:
-    from dora_api.features.reports.reports import (
-        SpendYoYHandler, _range_days,
-    )
+    from dora_api.features.reports._common import range_days
+    from dora_api.features.reports.spend import SpendYoYHandler
     range_token = args.get("range") or "1y"
-    days = _range_days(range_token)
+    days = range_days(range_token)
     if days is None:
         # The schema restricts the enum, but be defensive — a bad model
         # response shouldn't 500 the assistant path.
@@ -2660,10 +2553,11 @@ def spend_year_over_year(args: dict) -> list[dict]:
             "status": "error",
             "message": "spend_year_over_year needs a bounded window (30d/90d/1y/2y/5y).",
         }]
-    now = datetime.now(timezone.utc)
-    current_since = now - timedelta(days=days)
-    previous_since = now - timedelta(days=days * 2)
-    payload = SpendYoYHandler(SqlAlchemyRepository()).handle(
+    # Windows open at the household's midnight (R-021; finalisation 11-R35).
+    repo = SqlAlchemyRepository()
+    current_since = range_start(days, repo)
+    previous_since = range_start(days * 2, repo)
+    payload = SpendYoYHandler(repo).handle(
         current_since, previous_since, current_since,
     )
     return [{
@@ -2756,7 +2650,7 @@ def is_data_tool(name: str) -> bool:
 
 def run_tool(name: str, args: dict) -> list[dict]:
     """Execute a read-only tool. Raises KeyError for unknown names."""
-    _Logger.info("Assistant tool '%s' args=%s", name, args)
+    _LOGGER.info("Assistant tool '%s' args=%s", name, args)
     return _TOOLS[name](args or {})
 
 

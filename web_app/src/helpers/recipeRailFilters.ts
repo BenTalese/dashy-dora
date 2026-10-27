@@ -59,10 +59,6 @@ export type RecipeAxisFilters = {
 
 export const NO_AXIS_FILTERS: RecipeAxisFilters = { timeOfDay: null, difficulty: null };
 
-export function axisFiltersActive(axes: RecipeAxisFilters): boolean {
-    return axes.timeOfDay !== null || axes.difficulty !== null;
-}
-
 export type RecipeFilterChip = {
     key: RecipeFilterKey;
     label: string;

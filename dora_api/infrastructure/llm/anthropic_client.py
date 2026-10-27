@@ -22,15 +22,16 @@ tool-capable Claude models; users can also type a model name manually.
 """
 import json
 import logging
-from time import time
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
-from dora_api.infrastructure.llm.llm_client import LlmClient, LlmUnavailable
+from dora_api.infrastructure.llm.llm_client import (LlmClient, LlmUnavailable,
+                                                 remember_availability,
+                                                 remembered_availability)
 
 
-_Logger = logging.getLogger(__name__)
-_DEFAULT_BASE_URL = "https://api.anthropic.com"
+_LOGGER = logging.getLogger(__name__)
+DEFAULT_BASE_URL = "https://api.anthropic.com"
 _API_VERSION = "2023-06-01"
 # Curated tool-capable models. Update on a new Claude release; the
 # user can also type a model id manually in Settings.
@@ -55,16 +56,15 @@ class AnthropicClient(LlmClient):
         self._model = model
         self._timeout = timeout_seconds
         self._enabled = enabled
-        self._base_url = (base_url or _DEFAULT_BASE_URL).rstrip("/")
-        self._available_cache: bool | None = None
-        self._available_checked_at: float = 0.0
+        self._base_url = (base_url or DEFAULT_BASE_URL).rstrip("/")
+        self._availability_key = (type(self).__name__, self._base_url, self._api_key)
 
     def is_available(self) -> bool:
         if not self._enabled or not self._api_key:
             return False
-        now = time()
-        if self._available_cache is not None and (now - self._available_checked_at) < 15:
-            return self._available_cache
+        remembered = remembered_availability(self._availability_key)
+        if remembered is not None:
+            return remembered
         # Anthropic doesn't have a cheap "ping" — a tiny no-op message
         # is the standard probe. Costs ~1 input token.
         available = False
@@ -83,9 +83,8 @@ class AnthropicClient(LlmClient):
             with urlopen(req, timeout=3) as resp:
                 available = resp.status == 200
         except (URLError, OSError, ValueError) as exc:
-            _Logger.debug("Anthropic not reachable: %s", exc)
-        self._available_cache = available
-        self._available_checked_at = now
+            _LOGGER.debug("Anthropic not reachable: %s", exc)
+        remember_availability(self._availability_key, available)
         return available
 
     def list_models(self) -> list[str]:
@@ -123,7 +122,7 @@ class AnthropicClient(LlmClient):
             with urlopen(req, timeout=self._timeout) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
         except (URLError, OSError, ValueError) as exc:
-            self._available_cache = False
+            remember_availability(self._availability_key, False)
             raise LlmUnavailable(f"Anthropic request failed: {exc}") from exc
 
         return _to_openai_shape(data)

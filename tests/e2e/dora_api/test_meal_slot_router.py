@@ -71,6 +71,26 @@ def test_list_is_ordered_by_sequence_and_carries_usage_count():
         assert isinstance(s["usage_count"], int)
 
 
+def test_usage_count_tallies_plan_entries_by_label():
+    slot_id = _create("Second breakfast")
+    recipe_id = _a_recipe_id()
+    resp = requests.post(MEAL_PLANS, json={
+        "name": "Usage-count plan",
+        "start_date": _future_iso(),
+        "entries": [
+            {"recipe_id": recipe_id, "scheduled_for": _future_iso(), "servings": 1, "slot": "Second breakfast"},
+            {"recipe_id": recipe_id, "scheduled_for": _future_iso(8), "servings": 1, "slot": "Second breakfast"},
+        ],
+    })
+    assert resp.status_code == 201, resp.text
+    try:
+        counts = {s["name"]: s["usage_count"] for s in _list()}
+        assert counts["Second breakfast"] == 2
+    finally:
+        requests.delete(f"{MEAL_PLANS}/{resp.json()['meal_plan_id']}")
+        _delete(slot_id)
+
+
 def test_create_rename_reorder_delete_roundtrip():
     slot_id = _create("Brunch")
     try:

@@ -13,7 +13,7 @@ lives as a one-tap action on the stock-item row. The signal (events
 themselves) is preserved so the future Dora Score can still read it.
 """
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from typing import List
 from uuid import UUID
@@ -40,6 +40,8 @@ from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
+
+_LOGGER = logging.getLogger(__name__)
 
 
 # How far ahead "expiring soon" looks by default: the admin-configured
@@ -140,14 +142,23 @@ class GetWasteRescueHandler:
         # We deliberately don't filter to "fully-cookable now" — the
         # point is to surface options that *help*, not options that
         # require a full pantry.
+        # Only recipes that use an at-risk item can rank, so they are found
+        # from the ingredient side rather than by loading every recipe
+        # (finalisation 12-R27, the 11-R41 pattern).
         at_risk_ids = {i.id for i in items}
+        recipe_ids = list({
+            ing._recipe_id  # noqa: SLF001 (the FK is mapped privately)
+            for ing in self.repository.get(RecipeIngredient).all(
+                EntityField(RecipeIngredient, "_stock_item_id").in_(list(at_risk_ids))
+            )
+        }) if at_risk_ids else []
         recipes: list[Recipe] = (
             self.repository.get(Recipe)
             .include(Recipe.Fields.INGREDIENTS)
             .then_include(RecipeIngredient.Fields.STOCK_ITEM)
             .then_include(StockItem.Fields.STOCK_LEVEL)
-            .all()
-        )
+            .all(EntityField(Recipe, "id").in_(recipe_ids))
+        ) if recipe_ids else []
         ranked: list[RescueRecipeDto] = []
         for recipe in recipes:
             matches: list[str] = []
@@ -190,7 +201,6 @@ class GetWasteRescueHandler:
 
 @WASTE_ROUTER.route("/rescue", methods=["GET"])
 def get_waste_rescue():
-    _Logger = logging.getLogger(__name__)
     repository = SqlAlchemyRepository()
     default_horizon = effective_expiring_soon_window(get_or_create_app_setting(repository))
     try:
@@ -198,7 +208,7 @@ def get_waste_rescue():
     except (TypeError, ValueError):
         horizon = default_horizon
     dto = GetWasteRescueHandler(repository).handle(horizon)
-    _Logger.debug(
+    _LOGGER.debug(
         "waste rescue horizon=%d items=%d recipes=%d",
         dto.horizon_days, len(dto.items), len(dto.recipes),
     )
@@ -246,7 +256,6 @@ class LogWasteEventHandler:
 @WASTE_ROUTER.route("/events", methods=["POST"])
 @has_request_body(LogWasteEventRequest)
 def log_waste_event():
-    _Logger = logging.getLogger(__name__)
     _Request: LogWasteEventRequest = get_request_body()
     _Response = LogWasteEventHandler(SqlAlchemyRepository()).handle(_Request)
     if _Response.invalid_reason:
@@ -256,7 +265,7 @@ def log_waste_event():
         )
     if _Response.item_not_found:
         return not_found("StockItem", _Request.stock_item_id)
-    _Logger.info(
+    _LOGGER.info(
         "Logged waste event %s (item=%s reason=%s)",
         _Response.event_id, _Request.stock_item_id, _Request.reason,
     )
@@ -293,15 +302,14 @@ def list_waste_events():
 @WASTE_ROUTER.route("/events/<uuid:event_id>", methods=["DELETE"])
 def delete_waste_event(event_id: UUID):
     # R-033: uuid converter parses the id at the routing edge (FU-544).
-    _Logger = logging.getLogger(__name__)
     repo = SqlAlchemyRepository()
     event = repo.get(StockItemWasteEvent).by_id(event_id)
     if event is None:
-        _Logger.debug("Delete waste event %s: already gone (no-op)", event_id)
+        _LOGGER.debug("Delete waste event %s: already gone (no-op)", event_id)
         return no_content()
     repo.remove(event)
     repo.save_changes()
-    _Logger.info("Deleted waste event %s", event_id)
+    _LOGGER.info("Deleted waste event %s", event_id)
     return no_content()
 
 
@@ -346,14 +354,8 @@ class BulkLoggedEvent:
 @dataclass(slots=True)
 class BulkLogWasteResponse:
     invalid_reason: bool = False
-    logged: List[BulkLoggedEvent] = None  # type: ignore[assignment]
-    missing_ids: List[UUID] = None  # type: ignore[assignment]
-
-    def __post_init__(self):
-        if self.logged is None:
-            self.logged = []
-        if self.missing_ids is None:
-            self.missing_ids = []
+    logged: List[BulkLoggedEvent] = field(default_factory=list)
+    missing_ids: List[UUID] = field(default_factory=list)
 
 
 class BulkLogWasteHandler:
@@ -412,7 +414,6 @@ class BulkLogWasteHandler:
 @WASTE_ROUTER.route("/events/bulk", methods=["POST"])
 @has_request_body(BulkLogWasteRequest)
 def bulk_log_waste_events():
-    _Logger = logging.getLogger(__name__)
     _Request: BulkLogWasteRequest = get_request_body()
     _Response = BulkLogWasteHandler(SqlAlchemyRepository()).handle(_Request)
     if _Response.invalid_reason:
@@ -420,7 +421,7 @@ def bulk_log_waste_events():
             f"Invalid reason '{_Request.reason}'. Allowed: "
             f"{sorted(WASTE_REASON_VALUES)}"
         )
-    _Logger.info(
+    _LOGGER.info(
         "Bulk-logged %d of %d waste event(s) (reason=%s)",
         len(_Response.logged), len(_Request.stock_item_ids), _Request.reason,
     )
@@ -484,7 +485,6 @@ class BulkDeleteWasteHandler:
                 continue
             stock_item_id = event.stock_item_id
             self.repository.remove(event)
-            self.repository.save_changes()
             deleted += 1
 
             if entry.restore_expiry_date is not None and stock_item_id is not None:
@@ -494,16 +494,18 @@ class BulkDeleteWasteHandler:
                 )
                 restored += 1
 
+        # One commit for the removals (R-031); each expiry restore above
+        # commits through the update handler's own write path.
+        self.repository.save_changes()
         return BulkDeleteWasteResponse(deleted_count=deleted, restored_count=restored)
 
 
 @WASTE_ROUTER.route("/events/bulk-delete", methods=["POST"])
 @has_request_body(BulkDeleteWasteRequest)
 def bulk_delete_waste_events():
-    _Logger = logging.getLogger(__name__)
     _Request: BulkDeleteWasteRequest = get_request_body()
     _Response = BulkDeleteWasteHandler(SqlAlchemyRepository()).handle(_Request)
-    _Logger.info(
+    _LOGGER.info(
         "Bulk-deleted %d of %d waste event(s); restored %d expiry date(s)",
         _Response.deleted_count, len(_Request.events), _Response.restored_count,
     )
@@ -541,15 +543,16 @@ def _rank_buckets(events: list[StockItemWasteEvent]) -> list[dict]:
             "last_occurred_at": None,
         })
         bucket["event_count"] += 1
-        if (
-            bucket["last_occurred_at"] is None
-            or event.occurred_at > datetime.fromisoformat(bucket["last_occurred_at"])
-        ):
-            bucket["last_occurred_at"] = event.occurred_at.isoformat()
-    return sorted(
+        if bucket["last_occurred_at"] is None or event.occurred_at > bucket["last_occurred_at"]:
+            bucket["last_occurred_at"] = event.occurred_at
+    ranked = sorted(
         buckets.values(),
         key=lambda b: (-b["event_count"], b["stock_item_name"]),
     )[:_MAX_ROWS]
+    # Datetimes compare as datetimes; serialised once, here (12-R14).
+    for bucket in ranked:
+        bucket["last_occurred_at"] = bucket["last_occurred_at"].isoformat()
+    return ranked
 
 
 @WASTE_ROUTER.route("/insights", methods=["GET"])

@@ -21,7 +21,6 @@ C-9.4+) have no act_on_alert actions yet.
 """
 import logging
 from dataclasses import dataclass
-from datetime import timedelta
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -36,10 +35,15 @@ from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
+from dora_api.features.stock_items.expiry_change import apply_expiry_change, push_expiry
+
+_LOGGER = logging.getLogger(__name__)
 
 
 ACTION_RESET_EXPIRY = "reset_expiry"
 ACTION_EXTEND_EXPIRY = "extend_expiry"
+# What the bell's "Push 7 days" moves an expiry by.
+EXTEND_EXPIRY_DAYS = 7
 
 
 class AlertActionRequest(BaseModel):
@@ -62,14 +66,11 @@ class AlertActionHandler:
         if item is None:
             return AlertActionResponse(item_not_found=True)
 
+        # Through the item's one expiry path, so the History tab records it.
         if action == ACTION_RESET_EXPIRY:
-            item.expiry_date = None
+            apply_expiry_change(self.repository, item, None)
         elif action == ACTION_EXTEND_EXPIRY:
-            # R-021 — when no expiry is set, "extend by 7 days" anchors
-            # on household-tz today, not server-local.
-            from dora_api.features.app_settings.clock import household_today
-            base = item.expiry_date or household_today(self.repository)
-            item.expiry_date = base + timedelta(days=7)
+            push_expiry(self.repository, item, EXTEND_EXPIRY_DAYS)
         else:
             return AlertActionResponse(invalid_action=True)
 
@@ -80,7 +81,6 @@ class AlertActionHandler:
 @ALERT_ROUTER.route("/<alert_id>/action", methods=["POST"])
 @has_request_body(AlertActionRequest)
 def act_on_alert(alert_id: str):
-    _Logger = logging.getLogger(__name__)
     # `<scope>:<id>:<kind>` — only stock-scoped alerts carry actions; parse
     # out the stock item id and route by the action in the body.
     parsed = parse_alert_key(alert_id)
@@ -96,7 +96,7 @@ def act_on_alert(alert_id: str):
         return not_found("StockItem", stock_item_id)
     if _Response.invalid_action:
         return business_rule_violation(f"Unknown action '{_Request.action}'.")
-    _Logger.info(
+    _LOGGER.info(
         f"Alert action {_Request.action} applied to {stock_item_id} (alert {alert_id})"
     )
     return no_content()

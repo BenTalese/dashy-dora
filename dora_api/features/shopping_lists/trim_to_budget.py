@@ -17,10 +17,9 @@ from the same classification (Step 4 lands the read-path derivation).
 import logging
 from dataclasses import dataclass, field
 from datetime import date, timedelta
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Literal, Set
 from uuid import UUID
 
-from flask import session
 from pydantic import BaseModel, ConfigDict, Field
 
 from dora_api.domain.entities.meal_plan_entry import MealPlanEntry
@@ -30,25 +29,22 @@ from dora_api.domain.entities.recipe_ingredient import RecipeIngredient
 from dora_api.domain.entities.shopping_list import (ShoppingList,
                                                     ShoppingListLine)
 from dora_api.domain.entities.stock_item import StockItem
-from dora_api.domain.entities.user import User
 from dora_api.features.app_settings.clock import household_today
-from dora_api.features.auth.register_user import SESSION_USER_ID_KEY
 from dora_api.features.budget.budget import (projected_unit_price,
                                              period_headroom)
 from dora_api.features.routers import SHOPPING_LIST_ROUTER
 from dora_api.features.shopping_lists._frequently_added import (
     DEFAULT_FREQUENTLY_ADDED_LIMIT, frequently_added_id_set)
-from dora_api.features.shopping_lists._line_price import line_paid_unit_price
 from dora_api.domain.stock_status import is_low_stock, is_out_of_stock
-from dora_api.features.stock_items.get_buy_verdict import (BuyVerdictDto,
-                                                           _gather_inputs,
-                                                           compose_verdict)
+from dora_api.features.stock_items.get_buy_verdict import (
+    BuyVerdictDto, VerdictInputs, compose_verdict, gather_verdict_inputs_for_items)
 from dora_api.infrastructure.api_response import not_found, ok, unauthorized
 from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.utils import (get_request_body)
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
+from dora_api.infrastructure.session_user import current_user_id
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -84,7 +80,7 @@ MIN_LINE_VALUE              = 2.00  # never-cut lines below this (not worth the 
 
 class TrimToBudgetRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    mode: str = Field(default="preview")  # "preview" | "apply"
+    mode: Literal["preview", "apply"] = "preview"
     # Optional override of the target budget. None → period-remaining, as
     # computed by `period_headroom(on_date)`. Callers who want a
     # one-off ("keep this shop under $X") pass an explicit target.
@@ -141,7 +137,9 @@ class _Ctx:
     # current behaviour, so it's answered from live history rather than from
     # a provenance label frozen onto the line when it was created.
     habit_item_ids: Set[UUID] = field(default_factory=set)
-    repository: SqlAlchemyRepository | None = None
+    # Composer inputs for every candidate item, gathered once with the bulk
+    # helper (fixed query count) before classification runs.
+    verdict_inputs: Dict[UUID, VerdictInputs] = field(default_factory=dict)
 
 
 # ── The handler ───────────────────────────────────────────────────────
@@ -152,14 +150,8 @@ class TrimToBudgetHandler:
         self.repository = repository
 
     def handle(
-        self,
-        shopping_list_id: UUID,
-        request: TrimToBudgetRequest,
-        user_id: UUID,
+        self, shopping_list_id: UUID, request: TrimToBudgetRequest,
     ) -> TrimToBudgetResponse | None:
-        user: User | None = self.repository.get(User).by_id(user_id)
-        if user is None:
-            return None
         shopping_list: ShoppingList | None = (
             self.repository.get(ShoppingList).by_id(shopping_list_id)
         )
@@ -202,12 +194,7 @@ class TrimToBudgetHandler:
                 EntityField(ProductOffer, "_product_id").in_(product_ids)
             )
             for offer in offers:
-                pid = (
-                    getattr(offer, "_product_id", None)
-                    or getattr(offer, "product_id", None)
-                )
-                if pid is not None:
-                    offer_by_product_id[pid] = offer
+                offer_by_product_id[offer._product_id] = offer
 
         demand = _load_meal_demand(
             self.repository, today, SHORT_TERM_DEMAND_DAYS,
@@ -221,7 +208,6 @@ class TrimToBudgetHandler:
             habit_item_ids=frequently_added_id_set(
                 self.repository.session, DEFAULT_FREQUENTLY_ADDED_LIMIT,
             ),
-            repository=self.repository,
         )
 
         # Projected active-list total from lines that aren't already
@@ -251,6 +237,10 @@ class TrimToBudgetHandler:
             return response
 
         excluded: Set[UUID] = set(request.exclude_line_ids)
+        ctx.verdict_inputs = gather_verdict_inputs_for_items(
+            self.repository,
+            [stock_items_by_id[l.stock_item_id] for l in active_lines if l.stock_item_id in stock_items_by_id],
+        )
         candidates = _classify_lines(active_lines, ctx, excluded)
         # Cheapest cut first inside a tier isn't what we want — brief §4
         # says highest-priced within a tier for max bang per cut.
@@ -322,12 +312,7 @@ def _load_meal_demand(
     # MealPlanEntry.recipe is lazy=noload; use the mapped FK column
     # `_recipe_id` and load recipe rows in one bulk query so we can
     # surface the recipe name in the Tier-5 chip.
-    recipe_ids = list({
-        rid for rid in (
-            getattr(e, "_recipe_id", None) or getattr(e, "recipe_id", None)
-            for e in entries
-        ) if rid is not None
-    })
+    recipe_ids = list({e._recipe_id for e in entries})
     if not recipe_ids:
         return {}
     recipes = repository.get(Recipe).all(
@@ -339,16 +324,13 @@ def _load_meal_demand(
     )
     per_recipe: Dict[UUID, List[RecipeIngredient]] = {}
     for ing in ingredients:
-        rid = getattr(ing, "_recipe_id", None) or getattr(ing, "recipe_id", None)
-        if rid is None or ing.stock_item is None or ing.is_optional:
+        if ing.stock_item is None or ing.is_optional:
             continue
-        per_recipe.setdefault(rid, []).append(ing)
+        per_recipe.setdefault(ing._recipe_id, []).append(ing)
 
     result: Dict[UUID, _MealDemand] = {}
     for entry in entries:
-        rid = getattr(entry, "_recipe_id", None) or getattr(entry, "recipe_id", None)
-        if rid is None:
-            continue
+        rid = entry._recipe_id
         ings = per_recipe.get(rid, [])
         recipe_name = recipe_name_by_id.get(rid)
         for ing in ings:
@@ -426,11 +408,8 @@ def _verdict_for(ctx: _Ctx, item: StockItem) -> BuyVerdictDto:
     return verdict
 
 
-def _verdict_inputs_for(ctx: _Ctx, item: StockItem):
-    # `_gather_inputs` reads from the repository — safe to call because
-    # ctx.repository is set by the handler before classification runs.
-    assert ctx.repository is not None
-    return _gather_inputs(ctx.repository, item)
+def _verdict_inputs_for(ctx: _Ctx, item: StockItem) -> VerdictInputs:
+    return ctx.verdict_inputs[item.id]
 
 
 def _stock_band(item: StockItem | None) -> str:
@@ -475,7 +454,7 @@ def _classify_lines(
 
         # ── Never-cut set ─────────────────────────────────────────────
         # Essentials.
-        if getattr(item, "is_essential", False):
+        if item.is_essential:
             continue
         # Meals booked in next 2 days.
         demand = ctx.demand.get(item.id)
@@ -561,16 +540,6 @@ def _classify_lines(
 # ── Route ─────────────────────────────────────────────────────────────
 
 
-def _current_user_id() -> UUID | None:
-    raw = session.get(SESSION_USER_ID_KEY)
-    if not raw:
-        return None
-    try:
-        return UUID(str(raw))
-    except (TypeError, ValueError):
-        return None
-
-
 def _response_payload(response: TrimToBudgetResponse) -> dict:
     return {
         "projected_total": response.projected_total,
@@ -595,18 +564,10 @@ def _response_payload(response: TrimToBudgetResponse) -> dict:
 )
 @has_request_body(TrimToBudgetRequest)
 def trim_to_budget(shopping_list_id: UUID):
-    user_id = _current_user_id()
-    if user_id is None:
+    if current_user_id() is None:
         return unauthorized()
     request: TrimToBudgetRequest = get_request_body()
-    if request.mode not in {"preview", "apply"}:
-        # Pydantic could enforce this via Literal[...], but the surface
-        # is small enough that a runtime check keeps the error message
-        # clearer than a validator dump.
-        return {"error": "mode must be 'preview' or 'apply'"}, 400
-    response = TrimToBudgetHandler(SqlAlchemyRepository()).handle(
-        shopping_list_id, request, user_id,
-    )
+    response = TrimToBudgetHandler(SqlAlchemyRepository()).handle(shopping_list_id, request)
     if response is None:
         return not_found("ShoppingList", shopping_list_id)
     _LOGGER.info(

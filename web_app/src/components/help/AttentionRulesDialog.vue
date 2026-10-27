@@ -206,6 +206,7 @@
     import BaseButton from 'src/components/BaseButton.vue';
     import BaseDialog from 'src/components/BaseDialog.vue';
     import StockRowLegend from 'src/components/stock/StockRowLegend.vue';
+    import { attentionBand } from 'src/composables/useStockFilters';
     import { useStockLevelStore } from 'src/stores/stockLevelStore';
     import { ICONS } from 'src/style/icons';
 
@@ -222,29 +223,31 @@
     });
 
     /**
-     * One column, not three (D-8). The table used to carry an Outline
-     * column with two tiers and a separate Dimmed column, which let it
-     * describe combinations the row can't actually render — the treatments
-     * are bands on ONE scale, so an item is in exactly one of them. `band`
-     * mirrors `attentionBand()` in `useStockFilters`: 0 outlined, 1 plain,
-     * 2 dimmed. Position in the default sort is a property of the band,
-     * which is the whole point of the scale.
+     * One column, not three (D-8): the treatments are bands on ONE scale, so
+     * an item is in exactly one of them. Each row states the inputs and the
+     * band comes from `attentionBand()` itself (0 outlined, 1 plain, 2 dimmed),
+     * so the table cannot disagree with the stock row. Position in the default
+     * sort is a property of the band, which is the whole point of the scale.
      */
     const BAND_POSITION = ['top', 'middle', 'bottom'] as const;
 
-    type CheatRow = { state: string; band: 0 | 1 | 2 };
-    const cheatRows: CheatRow[] = [
-        { state: 'Stocked, no expiry issue', band: 1 },
-        { state: 'Low, not essential', band: 1 },
-        { state: 'Low, essential', band: 0 },
-        { state: 'Out, not essential', band: 2 },
-        { state: 'Out, essential', band: 0 },
-        { state: 'Expiring inside your window (any item)', band: 0 },
-        { state: 'Expired (any item)', band: 0 },
+    type CheatInput = { state: string; needsAttention: boolean; essential: boolean; out: boolean };
+    const CHEAT_INPUTS: CheatInput[] = [
+        { state: 'Stocked, no expiry issue', needsAttention: false, essential: false, out: false },
+        { state: 'Low, not essential', needsAttention: false, essential: false, out: false },
+        { state: 'Low, essential', needsAttention: true, essential: true, out: false },
+        { state: 'Out, not essential', needsAttention: false, essential: false, out: true },
+        { state: 'Out, essential', needsAttention: true, essential: true, out: true },
+        { state: 'Expiring inside your window (any item)', needsAttention: true, essential: false, out: false },
+        { state: 'Expired (any item)', needsAttention: true, essential: false, out: false },
         // Attention wins over the dim: expired is something to act on, so
         // the row is outlined and full opacity even though it's also out.
-        { state: 'Expired + Out, not essential', band: 0 },
+        { state: 'Expired + Out, not essential', needsAttention: true, essential: false, out: true },
     ];
+    const cheatRows = CHEAT_INPUTS.map((r) => ({
+        state: r.state,
+        band: attentionBand({ needs_attention: r.needsAttention, is_essential: r.essential }, r.out),
+    }));
 </script>
 
 <style scoped lang="scss">
@@ -255,8 +258,8 @@
         border-left: 4px solid transparent;
     }
     .dora-attention-sample--alert {
-        border-left-color: var(--q-negative);
-        box-shadow: inset 0 0 0 1px var(--q-negative);
+        border-left-color: var(--semantic-negative);
+        box-shadow: inset 0 0 0 1px var(--semantic-negative);
     }
     .dora-attention-essential-sample {
         position: relative;
@@ -277,12 +280,12 @@
     .dora-attention-table {
         width: 100%;
         border-collapse: collapse;
-        font-size: 0.85rem;
+        font-size: calc(var(--font-size-sm) * 1rem);
     }
     .dora-attention-table th,
     .dora-attention-table td {
         text-align: left;
-        padding: 8px 10px;
+        padding: var(--space-2) var(--space-3);
         border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
     }
     .dora-attention-table th {

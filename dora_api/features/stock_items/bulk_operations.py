@@ -48,6 +48,8 @@ from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 
+_LOGGER = logging.getLogger(__name__)
+
 # Same ceiling the stocktake bulk-check uses. A selection larger than this
 # is a "select all" on a pantry big enough that the client should be
 # chunking anyway, and an unbounded id list is an easy way to hold a
@@ -118,12 +120,11 @@ class BulkMoveHandler:
 @STOCK_ITEM_ROUTER.route("/bulk-move", methods=["POST"])
 @has_request_body(BulkMoveRequest)
 def bulk_move_stock_items():
-    _Logger = logging.getLogger(__name__)
     _Request: BulkMoveRequest = get_request_body()
     _Response = BulkMoveHandler(SqlAlchemyRepository()).handle(_Request)
     if _Response.destination_not_found:
         return business_rule_violation("Destination location was not found.")
-    _Logger.info(
+    _LOGGER.info(
         f"Bulk-moved {_Response.moved_count} of {len(_Request.stock_item_ids)} "
         f"stock item(s) -> {_Request.destination_location_id}"
     )
@@ -175,12 +176,11 @@ class BulkSetLevelHandler:
 @STOCK_ITEM_ROUTER.route("/bulk-set-level", methods=["POST"])
 @has_request_body(BulkSetLevelRequest)
 def bulk_set_stock_level():
-    _Logger = logging.getLogger(__name__)
     _Request: BulkSetLevelRequest = get_request_body()
     _Response = BulkSetLevelHandler(SqlAlchemyRepository()).handle(_Request)
     if _Response.stock_level_not_found:
         return business_rule_violation("Stock level was not found.")
-    _Logger.info(
+    _LOGGER.info(
         f"Bulk-set level {_Request.stock_level_id} on "
         f"{_Response.updated_count} of {len(_Request.stock_item_ids)} stock item(s)"
     )

@@ -27,6 +27,8 @@ from dora_api.features.routers import MEAL_PLAN_ROUTER
 from dora_api.infrastructure.api_response import ok
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 
+_LOGGER = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True, slots=True)
 class ShortfallDto:
@@ -57,7 +59,6 @@ class GetShortfallHandler:
 
 @MEAL_PLAN_ROUTER.route("shortfall")
 def get_shortfall():
-    _Logger = logging.getLogger(__name__)
     _Result = GetShortfallHandler().handle()
-    _Logger.info(f"Shortfall report: {len(_Result)} recipes need cooking")
+    _LOGGER.info(f"Shortfall report: {len(_Result)} recipes need cooking")
     return ok(_Result)

@@ -1,10 +1,13 @@
+import dataclasses
 import logging
 from dataclasses import dataclass
 from datetime import date, datetime
 from uuid import UUID
 
-from flask import request, session
+from flask import request
+from sqlalchemy import func, select
 
+from dora_api.app import db
 from dora_api.domain.entities.alert_preference import AlertPreference
 from dora_api.domain.entities.app_setting import AppSetting
 from dora_api.domain.entities.stock_item import StockItem
@@ -22,6 +25,9 @@ from dora_api.persistence.field import EntityField
 from dora_api.persistence.page import Page
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
+from dora_api.infrastructure.session_user import current_user_id
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,7 +35,6 @@ class StockItemDto:
     name: str
     stock_item_id: UUID
     stock_level_id: UUID
-    stock_level_name: str | None
     # Status keyed to the level's ordinal sequence, plus the server-owned
     # derived predicates — so the client never matches on a level name.
     stock_level_sequence: int | None
@@ -42,8 +47,9 @@ class StockItemDto:
     expiry_date: date | None
     is_essential: bool
     is_open: bool
+    # Read by the detail page, which mirrors it from the store so an "opened"
+    # set elsewhere shows without a refetch.
     opened_on: date | None
-    last_checked_at: datetime | None
     # ── Server-owned attention (Chunk 3b) ──────────────────────────────
     # The one rule, evaluated for the requesting user: see
     # `stock_attention.py` for what it says and why it lives there. The
@@ -76,7 +82,6 @@ class StockItemDto:
             name = stock_item.name,
             stock_item_id = stock_item.id,
             stock_level_id = stock_item.stock_level.id,
-            stock_level_name = level.name if level else None,
             stock_level_sequence = level.sequence if level else None,
             is_out_of_stock = is_out_of_stock(level),
             is_low_stock = is_low_stock(level),
@@ -88,7 +93,6 @@ class StockItemDto:
             is_essential = bool(stock_item.is_essential),
             is_open = bool(stock_item.is_open),
             opened_on = stock_item.opened_on,
-            last_checked_at = stock_item.last_checked_at,
         )
 
 
@@ -123,7 +127,6 @@ class GetStockItemsHandler:
         the whole page, not per row."""
         if not dtos:
             return dtos
-        import dataclasses
 
         settings: list[AppSetting] = self.repository.get(AppSetting).all()
         window = effective_expiring_soon_window(settings[0] if settings else None)
@@ -149,12 +152,8 @@ class GetStockItemsHandler:
         """Kinds the requesting user has switched off. B2: the bell honoured
         these and the rows did not, so disabling a kind half-worked. One read
         per request, not per item."""
-        raw = session.get("user_id")
-        if not raw:
-            return frozenset()
-        try:
-            user_id = UUID(raw)
-        except (ValueError, TypeError):
+        user_id = current_user_id()
+        if user_id is None:
             return frozenset()
         rows: list[AlertPreference] = self.repository.get(AlertPreference).all(
             EntityField(AlertPreference, AlertPreference.Fields.USER_ID).eq(user_id)
@@ -165,7 +164,8 @@ class GetStockItemsHandler:
         self, dtos: list[StockItemDto]
     ) -> list[StockItemDto]:
         """C-7 Chunk 2 — bulk-count linked products per stock item.
-        A single GROUP BY against the link table.
+        A single GROUP BY against the link table. R-005 carve-out: a grouped
+        count over an association with no entity.
 
         FU-463 — built with the ORM `select()` (not raw `text()`) so
         SQLAlchemy adapts UUID bindings to whatever the column type uses
@@ -178,9 +178,6 @@ class GetStockItemsHandler:
         """
         if not dtos:
             return dtos
-        import dataclasses
-        from sqlalchemy import func, select
-        from dora_api.app import db
 
         link_table = db.metadata.tables["StockItemProduct"]
 
@@ -208,7 +205,6 @@ class GetStockItemsHandler:
         ]
 
     def handle(self, options) -> Page[StockItemDto]:
-        import dataclasses
         # The entities are needed alongside the DTOs for the attention pass —
         # it reads `stock_level` / `expiry_date` / `is_essential` off the
         # entity, and re-deriving them from the DTO would be a third copy of
@@ -238,11 +234,10 @@ class GetStockItemsHandler:
 
 @STOCK_ITEM_ROUTER.route("")
 def get_stock_items():
-    _Logger = logging.getLogger(__name__)
     try:
         _Options = parse_query_options(request.args)
         _Page = GetStockItemsHandler(SqlAlchemyRepository()).handle(_Options)
     except InvalidQueryParameter as exc:
         return bad_request(str(exc))
-    _Logger.info(f"Retrieved {len(_Page.items)} of {_Page.total} stock items.")
+    _LOGGER.info(f"Retrieved {len(_Page.items)} of {_Page.total} stock items.")
     return paginated(_Page.items, _Page.total, _Page.page, _Page.limit)

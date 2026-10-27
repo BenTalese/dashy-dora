@@ -1,24 +1,46 @@
 import dataclasses
 import logging
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import List
 from uuid import UUID
 
 from flask import request
-from sqlalchemy import bindparam, text
 
+from dora_api.domain.entities.app_setting import NUTRITION_MODE_COMPLEX, NUTRITION_MODE_OFF
 from dora_api.domain.entities.meal_plan import MealPlan
 from dora_api.domain.entities.meal_plan_entry import MealPlanEntry
+from dora_api.domain.entities.recipe import Recipe
+from dora_api.domain.entities.recipe_ingredient import RecipeIngredient
+from dora_api.domain.entities.stock_item import StockItem
+from dora_api.domain.recipe_cookability import missing_count_for, unlinked_count_for
+from dora_api.features.app_settings.access import get_or_create_app_setting, money_features_enabled
+from dora_api.features.meal_plans.planned_meals import upcoming_planned_meals
+from dora_api.features.nutrition.recipe_rollup import (
+    effective_kcal_per_serving,
+    input_from_entity,
+    rollup_recipes_nutrition,
+)
+from dora_api.features.nutrition.sources import nutrition_mode
 from dora_api.features.recipes.get_recipes import load_recipe_cookability
+from dora_api.features.recipes.image_flags import recipe_ids_with_image
+from dora_api.features.recipes.recipe_cost import estimate_costs_for
 from dora_api.features.routers import MEAL_PLAN_ROUTER
+from dora_api.features.stock_items.inference_overlay import (
+    IngredientRow,
+    recipe_hint,
+    resolve_divergence,
+    SURFACE_MEAL_PLAN,
+)
 from dora_api.infrastructure.api_response import bad_request, paginated
-from dora_api.infrastructure.query_options import (InvalidQueryParameter,
-                                                   parse_query_options)
+from dora_api.infrastructure.ports import Repository
+from dora_api.infrastructure.query_options import InvalidQueryParameter, parse_query_options
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.page import Page
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
-from dora_api.infrastructure.ports import Repository
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -165,46 +187,6 @@ class MealPlanDayNutritionDto:
 
 
 @dataclass(frozen=True, slots=True)
-class _CostIngredient:
-    """One ingredient in the shape `recipe_cost` reads: the pricing ladder was
-    written against `RecipeDto.ingredients`, which carries a flat
-    `stock_item_id`, while the entity carries the `stock_item` relationship."""
-    stock_item_id: UUID | None
-    quantity: float | None
-    unit: str | None
-    # Carried because `_line_cost` prices a mass↔volume line by looking the
-    # ingredient's density up by name (FU-874). An adapter that dropped it
-    # would have the planner quote a lower figure than the cookbook for the
-    # same recipe — the exact disagreement the shared batch path exists to
-    # prevent (R-003).
-    stock_item_name: str | None
-
-
-@dataclass(frozen=True, slots=True)
-class _CostInput:
-    """Adapter for `recipe_cost.estimate_costs_for`, which asks for
-    `.recipe_id` + `.ingredients` (it was written against `RecipeDto`). The
-    plan endpoint has `Recipe` entities, whose id field is `.id`."""
-    recipe_id: UUID
-    ingredients: list
-
-    @classmethod
-    def from_entity(cls, recipe) -> '_CostInput':
-        return _CostInput(
-            recipe_id = recipe.id,
-            ingredients = [
-                _CostIngredient(
-                    stock_item_id = ing.stock_item.id if ing.stock_item else None,
-                    quantity = ing.quantity,
-                    unit = ing.unit,
-                    stock_item_name = ing.stock_item.name if ing.stock_item else None,
-                )
-                for ing in (recipe.ingredients or [])
-            ],
-        )
-
-
-@dataclass(frozen=True, slots=True)
 class MealPlanDayCostDto:
     """Owner 2026-09-05 — one day's planned cost, and how much of the day it
     covers.
@@ -257,7 +239,6 @@ def _apply_cook_batch_view(entries: List['MealPlanEntryDto']) -> List['MealPlanE
     happens on the batch's earliest day; total yield is what that one cook must
     produce. Standalone entries (no cook_batch_id) pass through untouched.
     """
-    from collections import defaultdict
     members: dict = defaultdict(list)
     for entry in entries:
         if entry.cook_batch_id is not None:
@@ -291,6 +272,24 @@ _FIELD_MAP: dict[str, EntityField] = {
 class GetMealPlansHandler:
     def __init__(self, repository: Repository) -> None:
         self.repository = repository
+        # The plan's recipes with their ingredient tree, loaded once per
+        # request for the nutrition, cost and inference passes (FU-879,
+        # finalisation 02-R4). The plan query itself carries no ingredients.
+        self._recipes_by_id: dict[UUID, Recipe] = {}
+
+    def _recipes_with_ingredients(self, recipe_ids) -> list[Recipe]:
+        wanted = list(set(recipe_ids))
+        missing = [rid for rid in wanted if rid not in self._recipes_by_id]
+        if missing:
+            for recipe in (
+                self.repository.get(Recipe)
+                .include(Recipe.Fields.INGREDIENTS)
+                    .then_include(RecipeIngredient.Fields.STOCK_ITEM)
+                    .then_include(StockItem.Fields.STOCK_LEVEL)
+                .all(EntityField(Recipe, "id").in_(missing))
+            ):
+                self._recipes_by_id[recipe.id] = recipe
+        return [self._recipes_by_id[rid] for rid in wanted if rid in self._recipes_by_id]
 
     def _base_query(self):
         # Recipe.cuisine / Recipe.category are noload now; the
@@ -298,7 +297,6 @@ class GetMealPlansHandler:
         # the entry.recipe path. Re-`include(ENTRIES)` resets the chain
         # so each `then_include` starts fresh (see get_recipes._base_query
         # for the same idiom on Recipe.INGREDIENTS).
-        from dora_api.domain.entities.recipe import Recipe
         return (
             self.repository
             .get(MealPlan)
@@ -314,36 +312,15 @@ class GetMealPlansHandler:
 
     def _hydrate_entry_has_image(self, plans: list[MealPlanDto]) -> list[MealPlanDto]:
         """Bulk-derive `has_image` for every entry across every plan in one
-        SQL pass. Mirrors get_recipes._hydrate_has_image (FU-090) so the
-        deferred `image` bytes column is never loaded just to set a flag.
-        """
-        recipe_ids: set[str] = set()
-        for plan in plans:
-            for entry in plan.entries:
-                recipe_ids.add(str(entry.recipe_id))
-        if not recipe_ids:
-            return plans
-
-        from dora_api.app import db
-        from sqlalchemy import select
-        from dora_api.domain.entities.recipe import Recipe as _Recipe
-        # ORM select() — raw text() with str-UUID bindings silently returns
-        # zero rows on SQLite's BINARY(16) id column (bug class fixed with
-        # get_recipes._hydrate_has_image).
-        stmt = select(_Recipe.id, _Recipe.image.is_not(None)).where(
-            _Recipe.id.in_([UUID(r) for r in recipe_ids])
+        pass that never loads the image bytes (FU-090)."""
+        with_image = recipe_ids_with_image(
+            {entry.recipe_id for plan in plans for entry in plan.entries}
         )
-        rows = db.session.execute(stmt).all()
-        flag_by_id = {str(row[0]): bool(row[1]) for row in rows}
-
         return [
             dataclasses.replace(
                 plan,
                 entries=[
-                    dataclasses.replace(
-                        entry,
-                        has_image=flag_by_id.get(str(entry.recipe_id), False),
-                    )
+                    dataclasses.replace(entry, has_image=str(entry.recipe_id) in with_image)
                     for entry in plan.entries
                 ],
             )
@@ -353,24 +330,11 @@ class GetMealPlansHandler:
     def _hydrate_nutrition(self, plans: list[MealPlanDto]) -> list[MealPlanDto]:
         """FU-637 — per-entry and per-day calories across every plan in the page.
 
-        Costs a constant number of queries: one to load the distinct recipes
-        with their ingredients (the plan query deliberately doesn't carry
-        ingredients — nothing else on this endpoint needs them), then the
-        rollup's own three. Skipped entirely when nutrition is off, so the
+        Costs a constant number of queries: the shared recipe load
+        (`_recipes_with_ingredients`), then the rollup's own three. Skipped entirely when nutrition is off, so the
         endpoint pays nothing for a feature the install isn't using.
         """
-        from collections import defaultdict
 
-        from dora_api.domain.entities.app_setting import (
-            NUTRITION_MODE_COMPLEX, NUTRITION_MODE_OFF,
-        )
-        from dora_api.domain.entities.recipe import Recipe
-        from dora_api.domain.entities.recipe_ingredient import RecipeIngredient
-        from dora_api.features.app_settings.access import get_or_create_app_setting
-        from dora_api.features.nutrition.recipe_rollup import (
-            effective_kcal_per_serving, input_from_entity, rollup_recipes_nutrition,
-        )
-        from dora_api.features.nutrition.sources import nutrition_mode
 
         mode = nutrition_mode(get_or_create_app_setting(self.repository))
         if mode == NUTRITION_MODE_OFF or not plans:
@@ -382,12 +346,7 @@ class GetMealPlansHandler:
         if not recipe_ids:
             return plans
 
-        recipes = (
-            self.repository.get(Recipe)
-            .include(Recipe.Fields.INGREDIENTS)
-                .then_include(RecipeIngredient.Fields.STOCK_ITEM)
-            .all(EntityField(Recipe, "id").in_(recipe_ids))
-        )
+        recipes = self._recipes_with_ingredients(recipe_ids)
         rollups = (
             rollup_recipes_nutrition(
                 self.repository, [input_from_entity(r) for r in recipes]
@@ -456,12 +415,7 @@ class GetMealPlansHandler:
         cookbook list and the auto builder use, so three surfaces cannot quote
         three different costs for one recipe.
         """
-        from collections import defaultdict
 
-        from dora_api.domain.entities.recipe import Recipe
-        from dora_api.domain.entities.recipe_ingredient import RecipeIngredient
-        from dora_api.features.app_settings.access import money_features_enabled
-        from dora_api.features.recipes.recipe_cost import estimate_costs_for
 
         if not plans or not money_features_enabled(self.repository):
             return plans
@@ -472,14 +426,9 @@ class GetMealPlansHandler:
         if not recipe_ids:
             return plans
 
-        recipes = (
-            self.repository.get(Recipe)
-            .include(Recipe.Fields.INGREDIENTS)
-                .then_include(RecipeIngredient.Fields.STOCK_ITEM)
-            .all(EntityField(Recipe, "id").in_(recipe_ids))
-        )
+        recipes = self._recipes_with_ingredients(recipe_ids)
         estimates = estimate_costs_for(
-            self.repository, [_CostInput.from_entity(recipe) for recipe in recipes],
+            self.repository, [input_from_entity(recipe) for recipe in recipes],
         )
         # A recipe with no servings recorded has no per-serving figure, so a
         # planned entry of it can't be priced — see the DTO note.
@@ -570,15 +519,6 @@ class GetMealPlansHandler:
         Entries already cooked are left alone: a warning about an ingredient
         for a meal you've eaten is noise.
         """
-        from dora_api.domain.entities.recipe import Recipe
-        from dora_api.domain.entities.recipe_ingredient import RecipeIngredient
-        from dora_api.domain.entities.stock_item import StockItem
-        from dora_api.domain.recipe_cookability import (missing_count_for,
-                                                        unlinked_count_for)
-        from dora_api.domain.stock_status import is_missing
-        from dora_api.features.stock_items.inference_overlay import (
-            SURFACE_MEAL_PLAN, IngredientRow, recipe_hint, resolve_divergence,
-        )
 
         pending = [
             entry for plan in plans for entry in plan.entries
@@ -587,13 +527,7 @@ class GetMealPlansHandler:
         if not pending:
             return plans
         recipe_ids = list({entry.recipe_id for entry in pending})
-        recipes = (
-            self.repository.get(Recipe)
-            .include(Recipe.Fields.INGREDIENTS)
-                .then_include(RecipeIngredient.Fields.STOCK_ITEM)
-                .then_include(StockItem.Fields.STOCK_LEVEL)
-            .all(EntityField(Recipe, "id").in_(recipe_ids))
-        )
+        recipes = self._recipes_with_ingredients(recipe_ids)
         items = {
             ingredient.stock_item.id: ingredient.stock_item
             for recipe in recipes
@@ -609,17 +543,7 @@ class GetMealPlansHandler:
         hint_by_recipe: dict = {}
         for recipe in recipes:
             hint = recipe_hint(
-                [
-                    IngredientRow(
-                        stock_item_id=i.stock_item.id if i.stock_item else None,
-                        name=i.stock_item.name if i.stock_item else (i.raw_text or ""),
-                        is_optional=bool(getattr(i, "is_optional", False)),
-                        is_missing=(
-                            is_missing(i.stock_item.stock_level) if i.stock_item else False
-                        ),
-                    )
-                    for i in (recipe.ingredients or [])
-                ],
+                [IngredientRow.from_entity(i) for i in (recipe.ingredients or [])],
                 divergence,
                 missing_count=missing_count_for(recipe.ingredients),
                 unlinked_count=unlinked_count_for(recipe.ingredients),
@@ -659,8 +583,6 @@ class GetMealPlansHandler:
         pays nothing for a feature the install isn't using — same trade
         `_hydrate_nutrition` makes when nutrition is off.
         """
-        from dora_api.features.app_settings.access import get_or_create_app_setting
-        from dora_api.features.meal_plans.planned_meals import upcoming_planned_meals
 
         if not plans:
             return plans
@@ -723,15 +645,17 @@ class GetMealPlansHandler:
         """Owner 2026-09-12 — how many linked ingredients each planned meal is
         missing, so a card can flag a meal you can't actually cook.
 
-        One query for the whole cookbook, through the same
-        `load_recipe_cookability` the `?cookable` filter and the dashboard's
-        cookable count use — the rule lives once (R-003). Not gated on anything:
+        Through the same `load_recipe_cookability` the `?cookable` filter and
+        the dashboard's cookable count use — the rule lives once (R-003) —
+        restricted to the plans' recipes. Not gated on anything:
         "can I cook this" is the planner's core question, not a money or
         nutrition feature.
         """
         if not plans:
             return plans
-        cookability = load_recipe_cookability(self.repository)
+        cookability = load_recipe_cookability(
+            self.repository, {entry.recipe_id for plan in plans for entry in plan.entries},
+        )
         return [
             dataclasses.replace(plan, entries=[
                 dataclasses.replace(
@@ -768,11 +692,10 @@ class GetMealPlansHandler:
 
 @MEAL_PLAN_ROUTER.route("")
 def get_meal_plans():
-    _Logger = logging.getLogger(__name__)
     try:
         _Options = parse_query_options(request.args)
         _Page = GetMealPlansHandler(SqlAlchemyRepository()).handle(_Options)
     except InvalidQueryParameter as exc:
         return bad_request(str(exc))
-    _Logger.info(f"Retrieved {len(_Page.items)} of {_Page.total} meal plans.")
+    _LOGGER.info(f"Retrieved {len(_Page.items)} of {_Page.total} meal plans.")
     return paginated(_Page.items, _Page.total, _Page.page, _Page.limit)

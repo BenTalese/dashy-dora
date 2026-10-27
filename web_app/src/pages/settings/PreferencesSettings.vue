@@ -1,9 +1,6 @@
 <template>
-    <div v-if="!currentUser">
-        <q-banner class="dora-bg-sunken" dense>Not signed in.</q-banner>
-    </div>
-
-    <div v-else class="settings-page">
+    <!-- The router guard owns "signed in"; this only waits for the user row. -->
+    <div v-if="currentUser" class="settings-page">
         <SettingsPageHeader title="Appearance" :icon="ICONS.palette" />
 
         <SettingsSection>
@@ -108,7 +105,7 @@
         THEME_FAMILIES,
         familyAndModeOf,
         themeKeyFor,
-        osPrefersDark,
+        osPrefersDarkRef,
         fontFamilyOptions as buildFontFamilyOptions,
         coalesceFontFamily,
         type ThemeFamily,
@@ -158,14 +155,7 @@
     const modeDraft = ref<ThemeMode>(initial.mode);
     const familyDraft = ref<string>(initial.familyKey);
 
-    const osCurrentlyDark = ref<boolean>(osPrefersDark());
-    if (typeof window !== 'undefined' && window.matchMedia) {
-        const mql = window.matchMedia('(prefers-color-scheme: dark)');
-        const onChange = (e: MediaQueryListEvent) => { osCurrentlyDark.value = e.matches; };
-        if ('addEventListener' in mql) {
-            mql.addEventListener('change', onChange);
-        }
-    }
+    const osCurrentlyDark = osPrefersDarkRef();
 
     function swatchFor(family: ThemeFamily): string[] {
         const key = modeDraft.value === 'dark'
@@ -176,7 +166,6 @@
         return THEMES[key]?.swatch ?? [];
     }
 
-    const themeDraft = ref<ThemePreference>(currentUser.value?.theme ?? 'system');
     const fontFamilyDraft = ref<FontFamilyPreference>(
         coalesceFontFamily(currentUser.value?.font_family)
     );
@@ -187,7 +176,6 @@
 
     watch(currentUser, (u) => {
         if (!u) return;
-        themeDraft.value = u.theme;
         const decoded = modeAndFamilyForKey(u.theme);
         modeDraft.value = decoded.mode;
         familyDraft.value = decoded.familyKey;
@@ -202,7 +190,6 @@
             authStore.updateMeAsync({ theme: value })
         );
         if (result === null) {
-            themeDraft.value = previous;
             const decoded = modeAndFamilyForKey(previous);
             modeDraft.value = decoded.mode;
             familyDraft.value = decoded.familyKey;
@@ -246,12 +233,6 @@
     .settings-page {
         display: flex;
         flex-direction: column;
-    }
-    .settings-divider {
-        border: 0;
-        height: 1px;
-        background: color-mix(in srgb, var(--text-primary) 8%, transparent);
-        margin: 0;
     }
 
     /* Keeps the inline-flex segmented control hugging its content on the left.

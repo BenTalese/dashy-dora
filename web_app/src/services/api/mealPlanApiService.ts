@@ -1,6 +1,6 @@
 import type {
     AutoBuildRequest, AutoBuildResponse, MealPlan, MealPlanIngredients,
-    MealPlanSuggestions, Shortfall,
+    MealPlanSuggestions,
 } from 'src/models/mealPlan';
 import type { CreatedResponse } from './axiosHttpClient';
 import AxiosHttpClient from './axiosHttpClient';
@@ -62,9 +62,6 @@ export default class MealPlanApiService {
 
     getIngredientsAsync = async (mealPlanId: string): Promise<MealPlanIngredients> =>
         await this.httpClient.get<MealPlanIngredients>(`/meal-plans/${mealPlanId}/ingredients`);
-
-    getShortfallAsync = async (): Promise<Shortfall[]> =>
-        await this.httpClient.get<Shortfall[]>('/meal-plans/shortfall');
 
     /** The household's current date (ISO) in the install's configured
      *  timezone — the planner trusts this over the browser clock (C-2.K). */

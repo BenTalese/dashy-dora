@@ -155,15 +155,6 @@ export type MealPlanIngredients = {
     meals_cost: number | null;
 };
 
-export type Shortfall = {
-    recipe_id: string;
-    recipe_name: string;
-    available_meals: number;
-    committed_meals: number;
-    shortfall: number;
-    earliest_needed: string | null;
-};
-
 // ── FU-596 — "Build my week" auto-planner ───────────────────────────────
 // Mirrors dora_api/features/meal_plans/build_week.py. Selection + slot/day
 // placement are server-owned (R-003); the client sends guidance and renders

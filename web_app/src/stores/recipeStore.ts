@@ -9,7 +9,7 @@ import type {
 } from 'src/services/api/recipeCollectionApiService';
 import RecipeCollectionApiService from 'src/services/api/recipeCollectionApiService';
 import type { Ref } from 'vue';
-import { readonly, ref } from 'vue';
+import { computed, readonly, ref } from 'vue';
 
 const recipeApiService = new RecipeApiService();
 const recipeCollectionApiService = new RecipeCollectionApiService();
@@ -84,11 +84,7 @@ export const useRecipeStore = defineStore('recipe', () => {
     };
 
     const createRecipeAsync = async (command: CreateRecipeCommand): Promise<Recipe> => {
-        const resource = await recipeApiService.createAsync(command);
-        const entity =
-            'recipe_id' in resource
-                ? (resource as unknown as Recipe)
-                : await recipeApiService.getAsync(resource.id as string);
+        const entity = await recipeApiService.createAsync(command);
         recipes.value.push(entity);
         recipes.value.sort((a, b) => collator.compare(a.name, b.name));
         // callers (RecipeEditDialog) navigate to the new detail
@@ -147,12 +143,16 @@ export const useRecipeStore = defineStore('recipe', () => {
         );
     };
 
+    const collectionOptions = computed(() =>
+        recipeCollections.value.map((c) => ({ label: c.name, value: c.recipe_collection_id })));
+
     return {
         // Exposed as a plain ref (not readonly): consumers pass recipes into
         // display components and filter helpers typed as mutable Recipe[].
         recipes,
         recipesHydrated: readonly(recipesHydrated),
         recipeCollections: readonly(recipeCollections),
+        collectionOptions,
         getRecipesAsync,
         getRecipeCollectionsAsync,
         ensureLoadedAsync,

@@ -21,7 +21,9 @@ from typing import List
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import func, select
 
+from dora_api.app import db
 from dora_api.domain.entities.preferred_buy import PreferredBuy
 from dora_api.domain.entities.product import Product
 from dora_api.domain.entities.shopping_list import (ShoppingList, format_list_date,
@@ -42,8 +44,11 @@ from dora_api.infrastructure.api_response import (business_rule_violation,
 from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.field import EntityField
+from dora_api.persistence.uuid_key import uuid_key
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
+
+_LOGGER = logging.getLogger(__name__)
 
 
 # ───── DTOs ──────────────────────────────────────────────────────────────
@@ -90,17 +95,21 @@ class GetTemplatesHandler:
         templates: List[ShoppingListTemplate] = self.repository.get(ShoppingListTemplate).all()
         if not templates:
             return []
-        all_lines: List[ShoppingListTemplateLine] = self.repository.get(ShoppingListTemplateLine).all()
-        counts: dict[UUID, int] = {}
-        for line in all_lines:
-            counts[line.template_id] = counts.get(line.template_id, 0) + 1
+        # R-005 carve-out: a grouped count the repository has no port for.
+        table = db.metadata.tables["ShoppingListTemplateLine"]
+        counts = {
+            uuid_key(template_id): int(n)
+            for template_id, n in db.session.execute(
+                select(table.c.template_id, func.count()).group_by(table.c.template_id)
+            ).all()
+        }
         summaries = [
             TemplateSummaryDto(
                 template_id = t.id,
                 name = t.name,
                 created_at = t.created_at,
                 updated_at = t.updated_at,
-                line_count = counts.get(t.id, 0),
+                line_count = counts.get(uuid_key(t.id), 0),
             )
             for t in templates
         ]
@@ -112,9 +121,8 @@ class GetTemplatesHandler:
 
 @SHOPPING_LIST_TEMPLATE_ROUTER.route("", methods=["GET"])
 def get_templates():
-    _Logger = logging.getLogger(__name__)
     _Result = GetTemplatesHandler(SqlAlchemyRepository()).handle()
-    _Logger.debug("Returned %d template summaries", len(_Result))
+    _LOGGER.debug("Returned %d template summaries", len(_Result))
     return ok(_Result)
 
 
@@ -239,10 +247,9 @@ class CreateTemplateHandler:
 @SHOPPING_LIST_TEMPLATE_ROUTER.route("", methods=["POST"])
 @has_request_body(CreateTemplateRequest)
 def create_template():
-    _Logger = logging.getLogger(__name__)
     _Request: CreateTemplateRequest = get_request_body()
     _Response = CreateTemplateHandler(SqlAlchemyRepository()).handle(_Request)
-    _Logger.info(
+    _LOGGER.info(
         f"Created template {_Response.template_id} '{_Request.name}' with {len(_Request.lines)} line(s)"
     )
     return created(
@@ -283,12 +290,11 @@ class UpdateTemplateHandler:
 @SHOPPING_LIST_TEMPLATE_ROUTER.route("/<uuid:template_id>", methods=["PATCH"])
 @has_request_body(UpdateTemplateRequest)
 def update_template(template_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _Request: UpdateTemplateRequest = get_request_body()
     _Response = UpdateTemplateHandler(SqlAlchemyRepository()).handle(_Request, template_id)
     if _Response.not_found:
         return not_found("ShoppingListTemplate", template_id)
-    _Logger.info(f"Updated template {template_id}")
+    _LOGGER.info(f"Updated template {template_id}")
     return no_content()
 
 
@@ -314,11 +320,10 @@ class DeleteTemplateHandler:
 
 @SHOPPING_LIST_TEMPLATE_ROUTER.route("/<uuid:template_id>", methods=["DELETE"])
 def delete_template(template_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _Response = DeleteTemplateHandler(SqlAlchemyRepository()).handle(template_id)
     if _Response.not_found:
         return not_found("ShoppingListTemplate", template_id)
-    _Logger.info(f"Deleted template {template_id}")
+    _LOGGER.info(f"Deleted template {template_id}")
     return no_content()
 
 
@@ -377,14 +382,13 @@ class AddTemplateLineHandler:
 @SHOPPING_LIST_TEMPLATE_ROUTER.route("/<uuid:template_id>/lines", methods=["POST"])
 @has_request_body(AddTemplateLineRequest)
 def add_template_line(template_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _Request: AddTemplateLineRequest = get_request_body()
     _Response = AddTemplateLineHandler(SqlAlchemyRepository()).handle(_Request, template_id)
     if _Response.template_not_found:
         return not_found("ShoppingListTemplate", template_id)
     if _Response.item_not_found:
         return not_found("StockItem", _Request.stock_item_id)
-    _Logger.info(
+    _LOGGER.info(
         f"Added template line {_Response.line_id} to {template_id} "
         f"(already_on_template={_Response.already_on_template})"
     )
@@ -417,11 +421,10 @@ class DeleteTemplateLineHandler:
 
 @SHOPPING_LIST_TEMPLATE_ROUTER.route("/<uuid:template_id>/lines/<uuid:line_id>", methods=["DELETE"])
 def delete_template_line(template_id: UUID, line_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _Response = DeleteTemplateLineHandler(SqlAlchemyRepository()).handle(template_id, line_id)
     if _Response.not_found:
         return not_found("ShoppingListTemplateLine", line_id)
-    _Logger.info(f"Deleted template line {line_id} from template {template_id}")
+    _LOGGER.info(f"Deleted template line {line_id} from template {template_id}")
     return no_content()
 
 
@@ -488,7 +491,6 @@ class UpdateTemplateLineHandler:
 @SHOPPING_LIST_TEMPLATE_ROUTER.route("/<uuid:template_id>/lines/<uuid:line_id>", methods=["PATCH"])
 @has_request_body(UpdateTemplateLineRequest)
 def update_template_line(template_id: UUID, line_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _Request: UpdateTemplateLineRequest = get_request_body()
     _Response = UpdateTemplateLineHandler(SqlAlchemyRepository()).handle(
         _Request, template_id, line_id,
@@ -497,7 +499,7 @@ def update_template_line(template_id: UUID, line_id: UUID):
         return not_found("ShoppingListTemplateLine", line_id)
     if _Response.invalid_choice:
         return business_rule_violation(_Response.invalid_choice)
-    _Logger.debug(f"Updated template line {line_id} on template {template_id}")
+    _LOGGER.debug(f"Updated template line {line_id} on template {template_id}")
     return no_content()
 
 
@@ -507,13 +509,19 @@ class InstantiateTemplateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     # Optional name override; if absent, defaults to "<template_name> · <today>".
     name: str | None = None
+    # Top up this existing list instead of creating one (`name` is then
+    # ignored). Items already on it are skipped, like any other add.
+    merge_into_list_id: UUID | None = None
 
 
 @dataclass(slots=True)
 class InstantiateTemplateResponse:
     new_shopping_list_id: UUID | None = None
     not_found: bool = False
+    target_not_found: bool = False
+    target_done: bool = False
     line_count: int = 0
+    skipped_count: int = 0
 
 
 class InstantiateTemplateHandler:
@@ -537,14 +545,29 @@ class InstantiateTemplateHandler:
             return InstantiateTemplateResponse(not_found=True)
 
         now = datetime.now(timezone.utc)
-        # Household date through `format_list_date` (R-021 / R-056) — this
-        # was a server-local `strftime`, a second copy of that format
-        # (finalisation 03-R8).
-        today = household_today(self.repository)
-        name = (request.name or "").strip() or f"{template.name} · {format_list_date(today, today)}"
-
-        new_list = ShoppingList(name=name, created_at=now)
-        self.repository.add(new_list)
+        on_list: set[UUID] = set()
+        next_sequence = 0
+        if request.merge_into_list_id is not None:
+            target = self.repository.get(ShoppingList).by_id(request.merge_into_list_id)
+            if target is None:
+                return InstantiateTemplateResponse(target_not_found=True)
+            if target.is_done:
+                return InstantiateTemplateResponse(target_done=True)
+            existing = self.repository.get(ShoppingListLine).all(
+                EntityField(ShoppingListLine, "shopping_list_id").eq(target.id)
+            )
+            # The same "already on the list" rule as `AddLineHandler`: a
+            # plain stock-item line, not a product nested under one.
+            on_list = {l.stock_item_id for l in existing if l.stock_item_id and l.product_id is None}
+            next_sequence = max((l.sequence for l in existing), default=-1) + 1
+        else:
+            # Household date through `format_list_date` (R-021 / R-056) — this
+            # was a server-local `strftime`, a second copy of that format
+            # (finalisation 03-R8).
+            today = household_today(self.repository)
+            name = (request.name or "").strip() or f"{template.name} · {format_list_date(today, today)}"
+            target = ShoppingList(name=name, created_at=now)
+            self.repository.add(target)
 
         template_lines: List[ShoppingListTemplateLine] = self.repository.get(ShoppingListTemplateLine).all(
             EntityField(ShoppingListTemplateLine, "template_id").eq(template_id)
@@ -571,18 +594,22 @@ class InstantiateTemplateHandler:
             }
 
         new_lines: List[ShoppingListLine] = []
+        skipped = 0
         for tl in template_lines:
             item = items.get(tl.stock_item_id)
             if item is None:
+                continue
+            if tl.stock_item_id in on_list:
+                skipped += 1
                 continue
             offer: Product | None = next(
                 (p for p in item.products or [] if p.id == tl.selected_product_id), None,
             )
             new_lines.append(ShoppingListLine(
-                shopping_list_id = new_list.id,
+                shopping_list_id = target.id,
                 stock_item_id = tl.stock_item_id,
                 quantity = tl.quantity,
-                sequence = len(new_lines),
+                sequence = next_sequence + len(new_lines),
                 selected_product_id = offer.id if offer else None,
                 planned_store_id = offer.store.id if offer else None,
                 preferred_buy_id = (
@@ -594,29 +621,33 @@ class InstantiateTemplateHandler:
         for line in new_lines:
             self.repository.add(line)
         added = len(new_lines)
-        # FU-512 unit-of-work: single commit. `new_list` still persists even
+        # FU-512 unit-of-work: single commit. A new list still persists even
         # when every template line points at a deleted stock item (added==0).
         self.repository.save_changes()
         return InstantiateTemplateResponse(
-            new_shopping_list_id=new_list.id, line_count=added,
+            new_shopping_list_id=target.id, line_count=added, skipped_count=skipped,
         )
 
 
 @SHOPPING_LIST_TEMPLATE_ROUTER.route("/<uuid:template_id>/instantiate", methods=["POST"])
 @has_request_body(InstantiateTemplateRequest)
 def instantiate_template(template_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _Request: InstantiateTemplateRequest = get_request_body()
     _Response = InstantiateTemplateHandler(SqlAlchemyRepository()).handle(_Request, template_id)
     if _Response.not_found:
         return not_found("ShoppingListTemplate", template_id)
-    _Logger.info(
+    if _Response.target_not_found:
+        return not_found("ShoppingList", _Request.merge_into_list_id)
+    if _Response.target_done:
+        return business_rule_violation("A finished list can't take more items.")
+    _LOGGER.info(
         f"Instantiated template {template_id} -> list {_Response.new_shopping_list_id} "
-        f"({_Response.line_count} lines)"
+        f"({_Response.line_count} lines, {_Response.skipped_count} already on it)"
     )
     return ok({
         "shopping_list_id": _Response.new_shopping_list_id,
         "line_count": _Response.line_count,
+        "skipped_count": _Response.skipped_count,
     })
 
 
@@ -694,12 +725,11 @@ class SnapshotFromListHandler:
 @SHOPPING_LIST_TEMPLATE_ROUTER.route("/from-list/<uuid:source_list_id>", methods=["POST"])
 @has_request_body(SnapshotRequest)
 def snapshot_from_list(source_list_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _Request: SnapshotRequest = get_request_body()
     _Response = SnapshotFromListHandler(SqlAlchemyRepository()).handle(_Request, source_list_id)
     if _Response.source_not_found:
         return not_found("ShoppingList", source_list_id)
-    _Logger.info(
+    _LOGGER.info(
         f"Snapshotted list {source_list_id} -> template {_Response.template_id} "
         f"({_Response.line_count} lines)"
     )

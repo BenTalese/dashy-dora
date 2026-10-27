@@ -1,13 +1,14 @@
 // Phase D / FU-186 — admin-set URL the Product Search nav opens.
 //
 // Lives in the small composable shape established by `useFeatureFlags`
-// (ADR-002): one composable per concern, never a parallel store. Fetches
-// `/api/app-settings` once per session; `refresh()` re-reads after the
+// (ADR-002): one composable per concern, never a parallel store. Reads
+// `/api/health` (`products_policy`) once per session, because members can't
+// read the admin-only `/app-settings` (R-038); `refresh()` re-reads after the
 // admin saves a change.
 
 import { computed, ref } from 'vue';
 import type { Router } from 'vue-router';
-import AppSettingsApiService from 'src/services/api/appSettingsApiService';
+import HealthApiService, { invalidateHealthInfo } from 'src/services/api/healthApiService';
 
 // Admin page that owns the Product Search URL row — the Product data
 // ingestion page since 2026-09-03, where the URL now sits beside the ingestion
@@ -25,14 +26,13 @@ let inflight: Promise<void> | null = null;
 
 function load(): Promise<void> {
     if (!inflight) {
-        inflight = new AppSettingsApiService()
-            .getAsync()
-            .then((s) => {
-                url.value = s.product_search_url || '';
+        inflight = new HealthApiService()
+            .getInfoAsync()
+            .then((info) => {
+                url.value = info.products_policy?.search_url ?? '';
             })
             .catch(() => {
-                // Anonymous / unreachable / non-admin — leave the URL empty.
-                // The Product Search nav entry just stays hidden.
+                // Unreachable — leave the URL empty; the nav entry stays hidden.
             })
             .finally(() => {
                 loaded.value = true;
@@ -47,6 +47,7 @@ export function useProductSearchUrl() {
     function refresh(): Promise<void> {
         loaded.value = false;
         inflight = null;
+        invalidateHealthInfo();
         return load();
     }
     return {

@@ -11,15 +11,14 @@ exactly on a published threshold, or one step either side of it.
 import pytest
 
 from dora_api.domain.health_star_rating import (
-    KJ_PER_KCAL,
     PROTEIN_GATE_BASELINE_POINTS,
     PROTEIN_GATE_MIN_V_POINTS,
     V_POINTS_MAX,
     NutrientProfile,
-    kcal_to_kj,
     rate,
     stars_for_score,
 )
+from dora_api.domain.rating_tables import KJ_PER_KCAL, kcal_to_kj
 
 
 def _profile(**overrides) -> NutrientProfile:

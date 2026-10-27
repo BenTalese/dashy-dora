@@ -15,33 +15,33 @@ all share one definition (R-003 — no domain rule lives in two places):
   ladder's twin. Added when a fifth rung (`planned_store_id`) landed and the
   ordering was still an if/elif chain inline in the detail handler, where
   nothing could test it.
+* :func:`spend_lines`: "what was bought in this window", the one read every
+  spend figure (budget, Reports) is built from (finalisation 12-R10).
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import datetime
 from uuid import UUID
 
+from sqlalchemy import func, select
+
 from dora_api.domain import units
-from dora_api.domain.entities.shopping_list import ShoppingListLine
+from dora_api.domain.entities.shopping_list import (SHOPPING_LIST_STATUS_DONE,
+                                                    ShoppingList,
+                                                    ShoppingListLine)
 
 
 def lifetime_spend(session) -> float:
-    """Lifetime spend: ticked lines on completed lists, priced `actual` first
-    and `picked_offer` second, times quantity — the same ladder
-    `line_paid_unit_price` applies per line and `/reports/spend-by-store`
-    applies per row. One home for the aggregate so About and Reports can't
-    disagree (R-003; finalisation 08-R6). Lines with neither price are
-    skipped, not counted as zero — a floor, which is the honest reading of
-    "spend *tracked*".
+    """Lifetime spend: the `spend_lines` rule (ticked, not deferred, priced
+    `actual` then `picked_offer`, times a positive quantity) summed in SQL
+    over every finished list, so About and Reports can't disagree (R-003;
+    finalisation 08-R6). Lines with neither price are skipped, not counted as
+    zero: a floor, which is the honest reading of "spend *tracked*".
 
     R-005 carve-out: a single-number aggregate over two tables is Core SQL
     (the documented reports pattern), not a repository walk of every line.
     """
-    from sqlalchemy import func, select
-
-    from dora_api.domain.entities.shopping_list import (
-        SHOPPING_LIST_STATUS_DONE, ShoppingList,
-    )
-
     unit_price = func.coalesce(
         ShoppingListLine.actual_unit_price, ShoppingListLine.picked_offer_price,
     )
@@ -52,17 +52,101 @@ def lifetime_spend(session) -> float:
         .where(
             ShoppingList.status == SHOPPING_LIST_STATUS_DONE,
             ShoppingListLine.is_ticked == True,  # noqa: E712
+            ShoppingListLine.deferred_by_budget == False,  # noqa: E712
+            func.coalesce(ShoppingListLine.quantity, 1) > 0,
             unit_price.isnot(None),
         )
     )
     return round(float(session.execute(stmt).scalar() or 0.0), 2)
 
 
+@dataclass(frozen=True, slots=True)
+class SpendLine:
+    """One bought line on a finished list, as the spend reports read it."""
+    shopping_list_id: UUID
+    completed_at: datetime
+    stock_item_id: UUID | None
+    selected_product_id: UUID | None
+    quantity: float
+    # The actual→picked ladder; None when the line carries no price.
+    unit_price: float | None
+    list_price_at_pick: float | None
+    purchased_store_id: UUID | None
+    planned_store_id: UUID | None
+
+    @property
+    def spent(self) -> float:
+        """What the line cost: nothing when unpriced or a non-positive quantity,
+        never a guess."""
+        if self.unit_price is None or self.quantity <= 0:
+            return 0.0
+        return self.unit_price * self.quantity
+
+
+def spend_lines(
+    session, since: datetime | None, until: datetime | None = None,
+) -> list[SpendLine]:
+    """Every bought line on a list finished in ``[since, until)``: ticked, not
+    deferred by trim-to-budget, priced or not (a report states its unpriced
+    count rather than dropping it silently, R-041). ``since=None`` is all time.
+
+    R-003 chokepoint (finalisation 12-R10): the budget period, its history and
+    every Reports spend card read this one definition, so their totals agree
+    on one window. R-005 carve-out: a two-table read for aggregates is Core SQL,
+    the documented reports pattern.
+    """
+    stmt = (
+        select(
+            ShoppingList.id,
+            ShoppingList.completed_at,
+            ShoppingListLine.stock_item_id,
+            ShoppingListLine.selected_product_id,
+            ShoppingListLine.quantity,
+            ShoppingListLine.actual_unit_price,
+            ShoppingListLine.picked_offer_price,
+            ShoppingListLine.list_price_at_pick,
+            ShoppingListLine.purchased_store_id,
+            ShoppingListLine.planned_store_id,
+        )
+        .select_from(ShoppingListLine)
+        .join(ShoppingList, ShoppingList.id == ShoppingListLine.shopping_list_id)
+        .where(
+            ShoppingList.status == SHOPPING_LIST_STATUS_DONE,
+            ShoppingList.completed_at.isnot(None),
+            ShoppingListLine.is_ticked == True,  # noqa: E712
+            ShoppingListLine.deferred_by_budget == False,  # noqa: E712
+        )
+    )
+    if since is not None:
+        stmt = stmt.where(ShoppingList.completed_at >= since)
+    if until is not None:
+        stmt = stmt.where(ShoppingList.completed_at < until)
+    out: list[SpendLine] = []
+    for (
+        list_id, completed_at, stock_item_id, product_id, quantity,
+        actual, picked, rrp, purchased_store_id, planned_store_id,
+    ) in session.execute(stmt).all():
+        paid = actual if actual is not None else picked
+        out.append(SpendLine(
+            shopping_list_id=list_id,
+            completed_at=completed_at,
+            stock_item_id=stock_item_id,
+            selected_product_id=product_id,
+            quantity=float(quantity) if quantity is not None else 1.0,
+            unit_price=float(paid) if paid is not None else None,
+            list_price_at_pick=float(rrp) if rrp is not None else None,
+            purchased_store_id=purchased_store_id,
+            planned_store_id=planned_store_id,
+        ))
+    return out
+
+
 def line_paid_unit_price(line: ShoppingListLine) -> float | None:
     """The per-unit price actually paid for a shopping line, via the standard
     ladder: the user-entered ``actual_unit_price`` wins, else the
-    ``picked_offer_price`` snapshot taken at commit-to-offer time, else
-    ``None`` (no captured price — the line doesn't contribute to spend).
+    ``picked_offer_price`` snapshot (written on lines finished before
+    2026-09-17, never since), else ``None`` (no captured price — the line
+    doesn't contribute to spend).
 
     R-003 chokepoint (K2): the single definition of "what did this line cost".
     """

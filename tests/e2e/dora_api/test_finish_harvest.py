@@ -60,9 +60,8 @@ def test__finish__harvests_one_observation_per_priced_line(api):
     o = obs[0]
     # Sizeless line (no selected product) → count observation in ea.
     assert o["total_price"] == 5.0 and o["total_measure"] == 1.0 and o["unit"] == "ea"
-    # Provenance via the FK — and the SPA gets the list name resolved for it.
-    assert o["shopping_list_line_id"] == line_id
-    assert o["shopping_list_name"]
+    # Provenance via the FK, resolved server-side to the list's name.
+    assert o["shopping_list_name"] == requests.get(f"{SHOPPING_LISTS}/{list_id}").json()["display_name"]
 
 
 def test__finish__double_tap_is_idempotent(api):
@@ -101,7 +100,7 @@ def test__prefill__draft_line_shows_last_receipt(api):
     ).json()["shopping_list_id"]
     requests.post(f"{SHOPPING_LISTS}/{draft}/lines", json={"stock_item_id": item})
     line = requests.get(f"{SHOPPING_LISTS}/{draft}").json()["lines"][0]
-    assert line["prefill_unit_price"] == 4.50
+    assert line["estimated_unit_price"] == 4.50
     assert line["prefill_source_label"] == "from your last receipt"
 
 
@@ -149,7 +148,7 @@ def test__amend_price_on_done_list__rewrites_the_observation(api):
     obs = _detail(item)["price_observations"]
     assert len(obs) == 1, "amend must correct in place, never add a second point"
     assert obs[0]["total_price"] == 11.00
-    assert obs[0]["shopping_list_line_id"] == line_id
+    assert obs[0]["shopping_list_name"]
 
 
 def test__amend_quantity_on_done_list__rescales_the_observation(api):

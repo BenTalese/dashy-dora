@@ -42,6 +42,11 @@ class OfferResult:
     historic_offer_id: str | None  # None when DUPLICATE
 
 
+# Source stamped on an offer a person typed in (create or edit a product), as
+# against an ingest provenance string.
+OFFER_SOURCE_MANUAL = "manual"
+
+
 def apply_offer_to_product(
     repository: SqlAlchemyRepository,
     product: Product,

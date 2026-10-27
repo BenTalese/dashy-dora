@@ -19,16 +19,17 @@ The adapter flattens text + ``functionCall`` parts into the OpenAI-shape
 """
 import json
 import logging
-from time import time
 from urllib.error import URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
-from dora_api.infrastructure.llm.llm_client import LlmClient, LlmUnavailable
+from dora_api.infrastructure.llm.llm_client import (LlmClient, LlmUnavailable,
+                                                 remember_availability,
+                                                 remembered_availability)
 
 
-_Logger = logging.getLogger(__name__)
-_DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com"
+_LOGGER = logging.getLogger(__name__)
+DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com"
 # Curated tool-capable Gemini models. Picker hint; users can also
 # type a model id manually in Settings.
 _DEFAULT_MODELS = [
@@ -52,16 +53,15 @@ class GeminiClient(LlmClient):
         self._model = model
         self._timeout = timeout_seconds
         self._enabled = enabled
-        self._base_url = (base_url or _DEFAULT_BASE_URL).rstrip("/")
-        self._available_cache: bool | None = None
-        self._available_checked_at: float = 0.0
+        self._base_url = (base_url or DEFAULT_BASE_URL).rstrip("/")
+        self._availability_key = (type(self).__name__, self._base_url, self._api_key)
 
     def is_available(self) -> bool:
         if not self._enabled or not self._api_key:
             return False
-        now = time()
-        if self._available_cache is not None and (now - self._available_checked_at) < 15:
-            return self._available_cache
+        remembered = remembered_availability(self._availability_key)
+        if remembered is not None:
+            return remembered
         available = False
         try:
             # /v1beta/models is the cheapest auth-gated probe.
@@ -69,9 +69,8 @@ class GeminiClient(LlmClient):
             with urlopen(Request(url, method="GET"), timeout=3) as resp:
                 available = resp.status == 200
         except (URLError, OSError, ValueError) as exc:
-            _Logger.debug("Gemini not reachable: %s", exc)
-        self._available_cache = available
-        self._available_checked_at = now
+            _LOGGER.debug("Gemini not reachable: %s", exc)
+        remember_availability(self._availability_key, available)
         return available
 
     def list_models(self) -> list[str]:
@@ -125,7 +124,7 @@ class GeminiClient(LlmClient):
             with urlopen(req, timeout=self._timeout) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
         except (URLError, OSError, ValueError) as exc:
-            self._available_cache = False
+            remember_availability(self._availability_key, False)
             raise LlmUnavailable(f"Gemini request failed: {exc}") from exc
 
         return _to_openai_shape(data)

@@ -1,9 +1,10 @@
-import type {
-    AlertAction,
-    AlertPrefs,
-    Alerts,
-    Upcoming,
-    UpdateAlertPrefCommand,
+import {
+    DEFAULT_SNOOZE_DAYS,
+    type AlertAction,
+    type AlertPrefs,
+    type Alerts,
+    type Upcoming,
+    type UpdateAlertPrefCommand,
 } from 'src/models/alert';
 import AxiosHttpClient from './axiosHttpClient';
 
@@ -25,7 +26,7 @@ export default class AlertApiService {
     dismissAllAsync = async (): Promise<void> =>
         await this.httpClient.post<void, undefined>('/alerts/dismiss-all', undefined);
 
-    snoozeAsync = async (alertId: string, days = 7): Promise<void> =>
+    snoozeAsync = async (alertId: string, days = DEFAULT_SNOOZE_DAYS): Promise<void> =>
         await this.httpClient.post<void, { days: number }>(
             `/alerts/${alertId}/snooze`,
             { days },
@@ -38,9 +39,9 @@ export default class AlertApiService {
         await this.httpClient.delete<void>(`/alerts/${alertId}/suppression`);
 
     // ── Per-user preferences (C-9.2) ───────────────────────────────────
-    // Enable/disable a kind + override its tier. The server applies these to
-    // GET /alerts, so the badge/list already reflect them (R-003); the store
-    // is for the (C-9.3) manage panel.
+    // Enable/disable a kind. The server applies these to GET /alerts, so the
+    // badge/list already reflect them (R-003); Settings → Notifications reads
+    // and writes them.
     getPrefsAsync = async (): Promise<AlertPrefs> =>
         await this.httpClient.get<AlertPrefs>('/alerts/prefs');
 

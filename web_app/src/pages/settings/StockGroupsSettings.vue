@@ -24,17 +24,20 @@
 <script lang="ts" setup>
     import { ICONS } from 'src/style/icons';
     import TaxonomyManagerPage, { type VocabItem } from 'src/components/settings/TaxonomyManagerPage.vue';
-    import StockGroupApiService from 'src/services/api/stockGroupApiService';
+    import { useStockGroupStore } from 'src/stores/stockGroupStore';
 
-    const api = new StockGroupApiService();
+    const stockGroupStore = useStockGroupStore();
 
-    const load = async (): Promise<VocabItem[]> =>
-        (await api.getAllAsync()).map((g) => ({
+    // Always refetched here: the page shows live usage counts.
+    const load = async (): Promise<VocabItem[]> => {
+        await stockGroupStore.refreshAsync();
+        return stockGroupStore.stockGroups.map((g) => ({
             id: g.stock_group_id,
             name: g.name,
             usage_count: g.item_count ?? 0,
         }));
-    const create = (name: string) => api.createAsync({ name });
-    const rename = (id: string, name: string) => api.updateAsync(id, { name });
-    const remove = (id: string) => api.deleteAsync(id).then(() => undefined);
+    };
+    const create = (name: string) => stockGroupStore.createAsync(name);
+    const rename = (id: string, name: string) => stockGroupStore.renameAsync(id, name);
+    const remove = (id: string) => stockGroupStore.deleteAsync(id).then(() => undefined);
 </script>

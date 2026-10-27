@@ -116,6 +116,14 @@
 .dora-chip--neutral.dora-chip--positive .q-icon {
     color: color-mix(in srgb, var(--semantic-positive) 62%, var(--text-primary));
 }
+// The same darkened tones for a bare glyph (the planner's Dora-hunch icon,
+// finalisation 07-R15), so it clears D-002 on a card ground in every theme.
+.dora-glyph--warning {
+    color: color-mix(in srgb, var(--semantic-warning) 62%, var(--text-primary));
+}
+.dora-glyph--positive {
+    color: color-mix(in srgb, var(--semantic-positive) 62%, var(--text-primary));
+}
 
 // ── B2 tinted state chip (owner 2026-09-01) ──────────────────────────────
 // The recipe row's missing/swap chip was reworked into a soft-tinted pill —
@@ -144,7 +152,7 @@
     padding: 0 var(--space-2);
     border: 1px solid transparent;
     border-radius: var(--radius-pill);
-    font-size: var(--font-size-xs);
+    font-size: calc(var(--font-size-xs) * 1rem);
     font-weight: 600;
     line-height: 1.2;
     text-align: left;

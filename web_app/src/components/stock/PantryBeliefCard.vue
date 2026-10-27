@@ -23,23 +23,23 @@
          by two components happening to agree. -->
     <CollapsibleCard
         v-if="belief"
-        :class="['belief-card', `is-${tone}`]"
+        :class="['dora-signal-card', toneClass]"
         header-toggles
         reveals="details"
     >
         <template #header>
-            <div class="belief-card__summary">
-                <q-icon :name="ICONS.dora_voice" size="18px" class="belief-card__icon" />
-                <span class="belief-card__headline">{{ headline }}</span>
+            <div class="dora-signal-card__summary">
+                <q-icon :name="ICONS.dora_voice" size="18px" class="dora-signal-card__icon" />
+                <span class="dora-signal-card__headline">{{ headline }}</span>
             </div>
         </template>
 
-        <div class="belief-card__body">
+        <div class="dora-signal-card__body">
             <div>{{ belief.reason }}</div>
-            <div class="belief-card__meta dora-text-muted">
+            <div class="dora-signal-card__meta dora-text-muted">
                 Confidence: {{ belief.confidence_band }}
             </div>
-            <div class="belief-card__meta dora-text-muted">
+            <div class="dora-signal-card__meta dora-text-muted">
                 <template v-if="belief.differs_from_recorded">
                     This differs from your recorded level.
                 </template>
@@ -63,63 +63,7 @@
 
     // Amber only when Dora disagrees — that's the case worth pulling the eye.
     // Agreement is information, not an alert, so it sits on a neutral surface.
-    const tone = computed(() =>
-        props.belief?.differs_from_recorded ? 'differs' : 'agrees',
-    );
+    const toneClass = computed(() => (props.belief?.differs_from_recorded ? 'is-warning' : ''));
 
-    const BAND_WORD: Record<string, string> = {
-        out: 'out',
-        low: 'low',
-        stocked: 'stocked',
-    };
-    const headline = computed(() => {
-        if (!props.belief) return '';
-        const band = BAND_WORD[props.belief.believed_band] ?? props.belief.believed_band;
-        return `Dora thinks ${band}`;
-    });
+    const headline = computed(() => (props.belief ? `Dora thinks ${props.belief.believed_band}` : ''));
 </script>
-
-<style scoped>
-    /* Same colour reasoning as the row's belief ring: the warning tint lives in
-       the fill/border and the (graphical, non-text) icon, never in the text
-       ink — full-strength warning ink is the D-002 1.98:1 contrast fail. */
-    .belief-card {
-        border-radius: 8px;
-        padding: 10px 12px;
-        background: var(--surface-sunken);
-        border: 1px solid var(--border-strong);
-        color: var(--text-primary);
-    }
-    .belief-card.is-differs {
-        background: var(--semantic-warning-soft);
-        border-color: var(--semantic-warning);
-    }
-    /* The header row, the 44px caret and the focus ring all come from
-       `CollapsibleCard` now. What's left here is this card's own content. */
-    .belief-card__summary {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        min-width: 0;
-        min-height: 44px;
-    }
-    .belief-card__headline {
-        font-weight: 600;
-        font-size: 0.875rem;
-    }
-    .belief-card.is-differs .belief-card__icon {
-        color: var(--semantic-warning);
-    }
-    .belief-card.is-agrees .belief-card__icon {
-        color: var(--text-secondary);
-    }
-    .belief-card__body {
-        margin-top: 6px;
-        font-size: 0.8125rem;
-        line-height: 1.45;
-    }
-    .belief-card__meta {
-        font-size: 0.75rem;
-        margin-top: 2px;
-    }
-</style>

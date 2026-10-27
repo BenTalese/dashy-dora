@@ -30,7 +30,7 @@ from dora_api.infrastructure.ingestion_auth import authenticate_ingestion_reques
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 
 
-_Logger = logging.getLogger(__name__)
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,7 +58,7 @@ def ingest_list_stores():
         _IngestStore(store_id=str(r["id"]), name=r["name"], has_image=bool(r["has_image"]))
         for r in rows
     ]
-    _Logger.debug("Ingest store list: %d store(s).", len(items))
+    _LOGGER.debug("Ingest store list: %d store(s).", len(items))
     return ok({"items": [asdict(i) for i in items]})
 
 

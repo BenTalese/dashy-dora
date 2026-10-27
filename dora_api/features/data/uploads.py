@@ -41,6 +41,8 @@ from dora_api.infrastructure.api_response import bad_request, no_content, not_fo
 from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.utils import get_request_body
 
+_LOGGER = logging.getLogger(__name__)
+
 
 # 2 GB total cap per upload session. 8 MB default chunk size.
 MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024
@@ -97,7 +99,6 @@ class StartUploadRequest(BaseModel):
 @DATA_ROUTER.route("/uploads/start", methods=["POST"])
 @has_request_body(StartUploadRequest)
 def start_upload():
-    _Logger = logging.getLogger(__name__)
     # the entire /uploads/* chain feeds admin-only
     # workflows (backup inspect + restore, admin import). Gate on
     # /start so a non-admin can't even open a staging slot; the
@@ -119,7 +120,7 @@ def start_upload():
     flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
     fd = os.open(staged_path(upload_id), flags, 0o600)
     os.close(fd)
-    _Logger.info("Started upload session %s", upload_id)
+    _LOGGER.info("Started upload session %s", upload_id)
     return ok({
         "upload_id": upload_id,
         "chunk_size": DEFAULT_CHUNK_BYTES,
@@ -131,7 +132,6 @@ def start_upload():
 
 @DATA_ROUTER.route("/uploads/chunk", methods=["POST"])
 def append_chunk():
-    _Logger = logging.getLogger(__name__)
     _, err = require_admin()
     if err is not None:
         return err
@@ -181,7 +181,7 @@ def append_chunk():
                 )
             out.write(data)
 
-    _Logger.debug(
+    _LOGGER.debug(
         "Appended %d bytes to %s (total=%d)", written, upload_id, current_size + written
     )
     return ok({"received": current_size + written})
@@ -203,7 +203,6 @@ class FinishUploadResponse:
 @DATA_ROUTER.route("/uploads/finish", methods=["POST"])
 @has_request_body(FinishUploadRequest)
 def finish_upload():
-    _Logger = logging.getLogger(__name__)
     _, err = require_admin()
     if err is not None:
         return err
@@ -216,7 +215,7 @@ def finish_upload():
     size = path.stat().st_size
     if size == 0:
         return bad_request("Upload is empty.")
-    _Logger.info("Finished upload session %s (%d bytes)", _Request.upload_id, size)
+    _LOGGER.info("Finished upload session %s (%d bytes)", _Request.upload_id, size)
     return ok({"upload_id": _Request.upload_id, "size": size})
 
 
@@ -228,7 +227,6 @@ def abort_upload(upload_id: UUID):
     # (a malformed value 404s), which also removes the path-traversal concern
     # on the staged-file name (FU-544). The `/start|/chunk|/finish` routes take
     # upload_id in the BODY as a str, so `_is_valid_upload_id` stays for them.
-    _Logger = logging.getLogger(__name__)
     _, err = require_admin()
     if err is not None:
         return err
@@ -237,5 +235,5 @@ def abort_upload(upload_id: UUID):
         try:
             path.unlink()
         except OSError as exc:
-            _Logger.warning("Failed to unlink staged upload %s: %s", upload_id, exc)
+            _LOGGER.warning("Failed to unlink staged upload %s: %s", upload_id, exc)
     return no_content()

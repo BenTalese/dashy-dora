@@ -50,7 +50,7 @@ from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 
 
-_Logger = logging.getLogger(__name__)
+_LOGGER = logging.getLogger(__name__)
 
 # Keeps a pull bounded on a large catalogue. The caller pages with `offset`.
 _DEFAULT_LIMIT = 200
@@ -180,7 +180,7 @@ def ingest_list_products():
     stamp_used(source)
     repository.save_changes()
 
-    _Logger.info(
+    _LOGGER.info(
         "Source %s pulled %d ingestable product(s) (limit=%d, offset=%d).",
         source.id, len(items), limit, offset,
     )

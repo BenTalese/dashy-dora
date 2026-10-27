@@ -14,6 +14,8 @@ from sqlalchemy import delete
 
 from dora_api.app import app, db
 
+_LOGGER = logging.getLogger(__name__)
+
 
 DEFAULT_RETENTION_DAYS = 365
 
@@ -33,7 +35,6 @@ def prune_audit_events() -> int:
     """Delete events older than the retention cut-off. Returns the count
     deleted. Wrapped in app.app_context so it can run from APScheduler
     threads outside an HTTP request."""
-    log = logging.getLogger(__name__)
     cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days())
     try:
         with app.app_context():
@@ -44,11 +45,11 @@ def prune_audit_events() -> int:
             db.session.commit()
             deleted = result.rowcount or 0
             if deleted:
-                log.info(
+                _LOGGER.info(
                     "Audit retention pruned %d event(s) older than %s",
                     deleted, cutoff.isoformat(),
                 )
             return deleted
     except Exception as exc:  # noqa: BLE001
-        log.warning("Audit retention prune failed: %s", exc)
+        _LOGGER.warning("Audit retention prune failed: %s", exc)
         return 0

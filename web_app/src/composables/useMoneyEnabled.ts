@@ -14,12 +14,8 @@ import { useFeatureFlags } from 'src/composables/useFeatureFlags';
 export function useMoneyEnabled() {
     const { money: installMoney } = useFeatureFlags();
 
-    const installEnabled = computed(() => installMoney.value);
-    /** The install-wide money flag — the only gate for dollar surfaces. */
-    const moneyEnabled = computed(() => installEnabled.value);
+    /** The install-wide money flag, the only gate for dollar surfaces. */
+    const moneyEnabled = computed(() => installMoney.value);
 
-    return {
-        moneyEnabled,
-        installEnabled,
-    };
+    return { moneyEnabled };
 }

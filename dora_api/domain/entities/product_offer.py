@@ -9,7 +9,6 @@ class ProductOffer(BaseEntity):
     offered_on: datetime
     price_now: float
     price_was: float
-    # TODO: Presentation only: calculate save amount, save percentage, per unit price
 
     class Fields(BaseEntity.Fields):
         OFFERED_ON = "offered_on"

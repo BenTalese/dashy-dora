@@ -1,8 +1,13 @@
 <template>
-    <q-dialog v-model="open" @hide="onHide">
-        <q-card class="food-picker">
+    <BaseDialog
+        v-model="open"
+        :title="`Link ${itemName} to a food`"
+        closable
+        card-class="food-picker"
+        card-style="width: 560px; max-width: 95vw"
+        @cancel="onHide"
+    >
             <q-card-section class="food-picker__head">
-                <div class="food-picker__title">Link {{ itemName }} to a food</div>
                 <div class="food-picker__sub dora-text-muted">
                     Search by name, or type a barcode.
                 </div>
@@ -80,11 +85,10 @@
                 </button>
             </q-card-section>
 
-            <q-card-actions align="right">
-                <BaseButton variant="ghost" label="Cancel" @click="open = false" />
-            </q-card-actions>
-        </q-card>
-    </q-dialog>
+        <template #actions>
+            <BaseButton variant="ghost" label="Cancel" @click="open = false" />
+        </template>
+    </BaseDialog>
 </template>
 
 <script lang="ts" setup>
@@ -103,9 +107,11 @@
     // a curated USDA entry from a crowd-sourced supermarket product (P3).
     import AppSpinner from 'src/components/AppSpinner.vue';
     import BaseButton from 'src/components/BaseButton.vue';
+    import BaseDialog from 'src/components/BaseDialog.vue';
+    import { useQuasar } from 'quasar';
+    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { ICONS } from 'src/style/icons';
     import { computed, ref, watch } from 'vue';
-    import { useSettingsSave } from 'src/composables/useSettingsSave';
     import NutritionApiService, {
         type NutritionFoodResult,
     } from 'src/services/api/nutritionApiService';
@@ -122,7 +128,10 @@
     }>();
 
     const api = new NutritionApiService();
-    const { notifyError } = useSettingsSave();
+    const $q = useQuasar();
+    function notifyError(message: string, err: unknown): void {
+        $q.notify({ type: 'negative', message, caption: toastCaption(err) });
+    }
 
     const query = ref('');
     const results = ref<NutritionFoodResult[]>([]);
@@ -199,24 +208,14 @@
 </script>
 
 <style scoped lang="scss">
-    .food-picker {
-        width: 100%;
-        max-width: 560px;
-        border-radius: var(--radius-lg);
-    }
     .food-picker__head { padding-bottom: var(--space-2); }
-    .food-picker__title {
-        font-size: 1rem;
-        font-weight: 700;
-        color: var(--text-primary);
-    }
     .food-picker__sub {
-        font-size: 0.8125rem;
+        font-size: calc(var(--font-size-sm) * 1rem);
         line-height: 1.4;
         margin-top: 2px;
     }
     .food-picker__hint {
-        font-size: 0.75rem;
+        font-size: calc(var(--font-size-xs) * 1rem);
         margin-top: var(--space-1);
     }
     .food-picker__results {
@@ -230,12 +229,12 @@
         display: flex;
         align-items: center;
         gap: var(--space-2);
-        font-size: 0.8125rem;
+        font-size: calc(var(--font-size-sm) * 1rem);
         color: var(--text-warning);
         padding: var(--space-2) 0;
     }
     .food-picker__empty {
-        font-size: 0.8125rem;
+        font-size: calc(var(--font-size-sm) * 1rem);
         line-height: 1.5;
         padding: var(--space-3) 0;
     }
@@ -251,8 +250,8 @@
         background: none;
         font: inherit;
         cursor: pointer;
-        transition: background-color var(--motion-fast, 120ms) ease,
-            border-color var(--motion-fast, 120ms) ease;
+        transition: background-color var(--motion-fast) var(--motion-ease),
+            border-color var(--motion-fast) var(--motion-ease);
     }
     .food-row:hover:not(:disabled) {
         background: var(--surface-sunken);
@@ -266,14 +265,14 @@
     .food-row__main { flex: 1 1 auto; min-width: 0; }
     .food-row__name {
         color: var(--text-primary);
-        font-size: 0.9375rem;
+        font-size: calc(var(--font-size-md) * 1rem);
         line-height: 1.3;
     }
-    .food-row__brand { font-size: 0.8125rem; margin-left: var(--space-1); }
+    .food-row__brand { font-size: calc(var(--font-size-sm) * 1rem); margin-left: var(--space-1); }
     .food-row__meta {
         display: flex;
         gap: var(--space-2);
-        font-size: 0.75rem;
+        font-size: calc(var(--font-size-xs) * 1rem);
         margin-top: 2px;
     }
     // --text-accent was never defined — the declaration was invalid and the
@@ -281,7 +280,7 @@
     .food-row__exact { color: var(--accent-ink); }
     .food-row__source {
         flex: 0 0 auto;
-        font-size: 0.6875rem;
+        font-size: calc(var(--font-size-xs) * 1rem);
         padding: 2px 8px;
         border-radius: var(--radius-sm);
         background: var(--surface-sunken);

@@ -1,6 +1,6 @@
 import { acceptHMRUpdate, defineStore } from 'pinia';
 import type {
-    MealPlan, MealPlanIngredients, MealPlanSuggestion, Shortfall,
+    MealPlan, MealPlanIngredients, MealPlanSuggestion,
 } from 'src/models/mealPlan';
 import MealPlanApiService, {
     type CreateMealPlanCommand,
@@ -13,7 +13,6 @@ const api = new MealPlanApiService();
 
 export const useMealPlanStore = defineStore('mealPlan', () => {
     const mealPlans: Ref<MealPlan[]> = ref([]);
-    const shortfall: Ref<Shortfall[]> = ref([]);
     // Household "today" (ISO) in the install's timezone — server-owned (C-2.K).
     const today: Ref<string | null> = ref(null);
 
@@ -50,35 +49,12 @@ export const useMealPlanStore = defineStore('mealPlan', () => {
     ): Promise<MealPlanSuggestion[]> =>
         (await api.getWeekSuggestionsAsync(weekStart)).suggestions;
 
-    /**
-     * `GET /meal-plans/shortfall` — the recipe-level report: how many *servings*
-     * short of its plan each recipe is.
-     *
-     * **No client consumer since 2026-09-03.** The meal planner was the only
-     * one, and it used these rows to decide which meal chips to mark as needing
-     * a cook — a recipe-level answer to a per-entry question, which is why three
-     * planned fried rices all lit up when the pool covered two. That verdict now
-     * rides on the plan entries themselves (`MealPlanEntry.needs_cooking`), so
-     * the planner stopped fetching this; keeping the second fetch would have
-     * left two answers to one question in the client (R-003).
-     *
-     * Kept rather than deleted because the *endpoint* is live and answers a
-     * different question (servings short, not meals to cook) — the assistant's
-     * `meals_shortfall` tool reads it server-side. If nothing on the client
-     * claims it, this and `MealPlanApiService.getShortfallAsync` should go; see
-     * DORA_FOLLOWUPS FU-862.
-     */
-    const getShortfallAsync = async () => {
-        shortfall.value = await api.getShortfallAsync();
-    };
-
     const getTodayAsync = async () => {
         today.value = await api.getTodayAsync();
     };
 
     return {
         mealPlans,
-        shortfall,
         today,
         getMealPlansAsync,
         createMealPlanAsync,
@@ -86,7 +62,6 @@ export const useMealPlanStore = defineStore('mealPlan', () => {
         deleteMealPlanAsync,
         getIngredientsForPlanAsync,
         getWeekSuggestionsAsync,
-        getShortfallAsync,
         getTodayAsync,
     };
 });

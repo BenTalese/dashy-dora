@@ -27,11 +27,13 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
-from dora_api.domain.entities.meal_plan import MealPlan
+from dora_api.domain.entities.meal_plan_entry import MealPlanEntry
 from dora_api.domain.entities.recipe import Recipe
 from dora_api.domain.entities.shopping_list import (ShoppingList, ShoppingListLine,
                                                     format_list_date)
 from dora_api.domain.entities.stock_item import StockItem
+from dora_api.domain.stock_status import (is_low_stock, is_out_of_stock,
+                                          needs_restock)
 from dora_api.features.app_settings.clock import household_today
 from dora_api.features.routers import SHOPPING_LIST_ROUTER
 from dora_api.features.shopping_lists._frequently_added import (
@@ -44,12 +46,7 @@ from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 
-
-# Stock level sequences (seed.py): 0=Stocked, 1=Low, 2=Out.
-SEQ_STOCKED = 0
-SEQ_LOW = 1
-SEQ_OUT = 2
-LOW_OR_OUT = {SEQ_LOW, SEQ_OUT}
+_LOGGER = logging.getLogger(__name__)
 
 
 class AutoGenerateSources(BaseModel):
@@ -272,20 +269,16 @@ class AutoGenerateHandler:
         candidates: Dict[UUID, StockItem],
         sources: AutoGenerateSources,
     ) -> None:
-        wanted_seqs = set()
-        if sources.low_stock:
-            wanted_seqs.add(SEQ_LOW)
-        if sources.out_of_stock:
-            wanted_seqs.add(SEQ_OUT)
-        if not wanted_seqs:
+        if not (sources.low_stock or sources.out_of_stock):
             return
 
-        items = self._all_items_with_level()
-        for item in items:
-            if item.stock_level is None:
-                continue
-            seq = getattr(item.stock_level, "sequence", -1)
-            if seq not in wanted_seqs:
+        for item in self._all_items_with_level():
+            level = item.stock_level
+            wanted = (
+                (sources.low_stock and is_low_stock(level))
+                or (sources.out_of_stock and is_out_of_stock(level))
+            )
+            if not wanted:
                 continue
             if sources.essentials_only_for_low and not item.is_essential:
                 continue
@@ -307,48 +300,48 @@ class AutoGenerateHandler:
         recipe_ids: List[UUID],
         unlinked_skipped: List[_UnlinkedSkip],
     ) -> None:
-        # Pull each recipe with ingredients, then for each ingredient stock
-        # item: if it's not stocked, schedule it. Recipe name goes into
-        # `detail` so the UI can render "auto: recipe Tomato Soup".
-        # FU-505 — ingredients without a linked StockItem can't be turned
-        # into a shopping-list line (no stock-item id to anchor the line);
-        # collect them so the response can carry a "you'll need to add
-        # these manually" warning back to the SPA.
-        for rid in recipe_ids:
-            recipe = (
-                self.repository.get(Recipe)
-                .include(Recipe.Fields.INGREDIENTS)
-                .by_id(rid)
-            )
+        """Each recipe's ingredients that aren't stocked go on the list.
+        FU-505 — ingredients without a linked StockItem can't become a line
+        (no stock-item id to anchor it); they're collected so the response
+        can say "you'll need to add these manually". One recipe load and one
+        item load for the whole set (finalisation 03-R12)."""
+        wanted = list(dict.fromkeys(recipe_ids))
+        if not wanted:
+            return
+        recipes_by_id = {
+            r.id: r
+            for r in self.repository.get(Recipe)
+            .include(Recipe.Fields.INGREDIENTS)
+            .all(EntityField(Recipe, "id").in_(wanted))
+        }
+        stock_item_ids: set[UUID] = set()
+        for rid in wanted:
+            recipe = recipes_by_id.get(rid)
             if recipe is None:
                 continue
-            ingredients = recipe.ingredients or []
-            for ing in ingredients:
-                # R-032 — `stock_item` is lazy="noload" and is NOT included on
-                # this `by_id().include(INGREDIENTS)` load, so reading the
-                # relationship always returned None: every linked ingredient was
-                # mis-reported as unlinked AND never added as a line (the recipe
-                # + meal-plan sources silently added nothing). Read the loaded FK
-                # column (`_stock_item_id`, the codebase's underscore-bound FK
-                # convention) instead — FU-587 fix; the separate StockItem fetch
-                # below already resolves the real rows.
+            for ing in recipe.ingredients or []:
+                # R-032 — `stock_item` is lazy="noload" and isn't included on
+                # this load; the FK column (`_stock_item_id`) is (FU-587).
                 if ing._stock_item_id is None:
                     unlinked_skipped.append(_UnlinkedSkip(
                         recipe_name=recipe.name,
                         ingredient_name=(ing.raw_text or "").strip() or "(unnamed ingredient)",
                     ))
-            stock_item_ids = [ing._stock_item_id for ing in ingredients if ing._stock_item_id is not None]
-            if not stock_item_ids:
+                else:
+                    stock_item_ids.add(ing._stock_item_id)
+        if not stock_item_ids:
+            return
+        items: List[StockItem] = (
+            self.repository.get(StockItem)
+            .include(StockItem.Fields.STOCK_LEVEL)
+            .all(EntityField(StockItem, "id").in_(list(stock_item_ids)))
+        )
+        for item in items:
+            # The user already has it: a recorded level that doesn't need a
+            # restock. An item with no level record is still listed.
+            if item.stock_level is not None and not needs_restock(item.stock_level):
                 continue
-            items: List[StockItem] = (
-                self.repository.get(StockItem)
-                .include(StockItem.Fields.STOCK_LEVEL)
-                .all(EntityField(StockItem, "id").in_(stock_item_ids))
-            )
-            for item in items:
-                if item.stock_level is not None and item.stock_level.sequence == SEQ_STOCKED:
-                    continue
-                self._merge(candidates, item.id, item)
+            self._merge(candidates, item.id, item)
 
     def _collect_meal_plan_week(
         self,
@@ -356,65 +349,15 @@ class AutoGenerateHandler:
         week_start: date,
         unlinked_skipped: List[_UnlinkedSkip],
     ) -> None:
-        # Window = 7 days starting at week_start. Pull every entry in range,
-        # then every recipe their meals reference, then ingredients. Items
-        # already stocked are subtracted (the user has them).
+        """The recipes planned in the 7 days from `week_start`, minus meals
+        already cooked (they drew from the pool, not the upcoming shop)."""
         week_end = week_start + timedelta(days=6)
-        plans: List[MealPlan] = (
-            self.repository.get(MealPlan).include(MealPlan.Fields.ENTRIES).all()
+        entries: List[MealPlanEntry] = self.repository.get(MealPlanEntry).all(
+            EntityField(MealPlanEntry, MealPlanEntry.Fields.SCHEDULED_FOR).gte(week_start)
+            & EntityField(MealPlanEntry, MealPlanEntry.Fields.SCHEDULED_FOR).lte(week_end)
+            & EntityField(MealPlanEntry, MealPlanEntry.Fields.CONSUMED_AT).is_null()
         )
-        recipe_ids: List[UUID] = []
-        for plan in plans:
-            for entry in plan.entries or []:
-                if not (week_start <= entry.scheduled_for <= week_end):
-                    continue
-                if entry.consumed_at is not None:
-                    # Past entries already drew from the pool — they're
-                    # not part of the upcoming shop.
-                    continue
-                _RecipeId = getattr(entry, "_recipe_id", None)
-                if _RecipeId is not None:
-                    recipe_ids.append(_RecipeId)
-
-        if not recipe_ids:
-            return
-
-        # Dedupe recipe IDs and fetch with ingredients
-        for rid in set(recipe_ids):
-            recipe = (
-                self.repository.get(Recipe)
-                .include(Recipe.Fields.INGREDIENTS)
-                .by_id(rid)
-            )
-            if recipe is None:
-                continue
-            ingredients = recipe.ingredients or []
-            for ing in ingredients:
-                # R-032 — `stock_item` is lazy="noload" and is NOT included on
-                # this `by_id().include(INGREDIENTS)` load, so reading the
-                # relationship always returned None: every linked ingredient was
-                # mis-reported as unlinked AND never added as a line (the recipe
-                # + meal-plan sources silently added nothing). Read the loaded FK
-                # column (`_stock_item_id`, the codebase's underscore-bound FK
-                # convention) instead — FU-587 fix; the separate StockItem fetch
-                # below already resolves the real rows.
-                if ing._stock_item_id is None:
-                    unlinked_skipped.append(_UnlinkedSkip(
-                        recipe_name=recipe.name,
-                        ingredient_name=(ing.raw_text or "").strip() or "(unnamed ingredient)",
-                    ))
-            stock_item_ids = [ing._stock_item_id for ing in ingredients if ing._stock_item_id is not None]
-            if not stock_item_ids:
-                continue
-            items: List[StockItem] = (
-                self.repository.get(StockItem)
-                .include(StockItem.Fields.STOCK_LEVEL)
-                .all(EntityField(StockItem, "id").in_(stock_item_ids))
-            )
-            for item in items:
-                if item.stock_level is not None and item.stock_level.sequence == SEQ_STOCKED:
-                    continue
-                self._merge(candidates, item.id, item)
+        self._collect_recipes(candidates, [e._recipe_id for e in entries], unlinked_skipped)
 
     def _collect_frequently_added(
         self,
@@ -475,12 +418,11 @@ def _response_payload(response: AutoGenerateResponse) -> dict:
 @SHOPPING_LIST_ROUTER.route("/auto-generate", methods=["POST"])
 @has_request_body(AutoGenerateRequest)
 def auto_generate():
-    _Logger = logging.getLogger(__name__)
     _Request: AutoGenerateRequest = get_request_body()
     _Response = AutoGenerateHandler(SqlAlchemyRepository()).handle(_Request)
     if _Response.list_not_found:
         return not_found("ShoppingList", _Request.merge_into_list_id or "?")
-    _Logger.info(
+    _LOGGER.info(
         "Auto-generate -> list %s: +%d added, %d already on list",
         _Response.shopping_list_id,
         _Response.added_count,

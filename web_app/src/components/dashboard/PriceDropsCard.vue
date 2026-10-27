@@ -29,7 +29,7 @@
                         <span v-if="row.linked_stock_item_id">
                             ·
                             <router-link
-                                class="text-primary"
+                                class="dora-text-accent"
                                 :to="`/stock/${row.linked_stock_item_id}`"
                             >
                                 {{ row.linked_stock_item_name }}
@@ -41,9 +41,9 @@
                     <span class="dora-deal-now">{{ formatMoney(row.price_now) }}</span>
                     <span class="dora-deal-was">was {{ formatMoney(row.previous_low) }}</span>
                 </div>
-                <q-badge class="dora-deal-badge" color="negative" text-color="white">
+                <span class="dora-deal-badge dora-chip--tint dora-chip--tint-negative">
                     {{ row.drop_percent }}% off
-                </q-badge>
+                </span>
             </li>
         </ul>
         <div v-else class="dora-empty">

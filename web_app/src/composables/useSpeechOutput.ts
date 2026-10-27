@@ -249,6 +249,8 @@ export function useSpeechOutput() {
     // otherwise invisible, and the two engines have different failure
     // modes — without this you cannot tell which one you are debugging
     // (FU-722). Surfaced in cook mode's Sous Chef popover.
+    // FU-722 diagnostic: no reader since the 2026-09-03 popover went; kept
+    // until the clipping investigation closes (finalisation 04-R16).
     const lastEngine = ref<'piper' | 'browser' | null>(null);
 
     // Both probes always run, and `available` is their OR. The old code short-

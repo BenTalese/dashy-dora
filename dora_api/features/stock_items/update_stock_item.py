@@ -6,29 +6,33 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from dora_api.domain.entities.app_setting import AppSetting
 from dora_api.domain.entities.consumption_event import (
     CONSUMPTION_SOURCE_COOK, CONSUMPTION_SOURCE_MANUAL,
     CONSUMPTION_SOURCE_WASTE, ConsumptionEvent,
 )
 from dora_api.domain.entities.recipe import Recipe
+from dora_api.domain.entities.stock_group import StockGroup
 from dora_api.domain.entities.stock_item import StockItem
-from dora_api.domain.entities.stock_item_expiry_event import (
-    StockItemExpiryEvent, classify_expiry_transition,
-)
 from dora_api.domain.entities.stock_level import StockLevel
 from dora_api.domain.entities.stock_level_change import StockLevelChange
 from dora_api.domain.entities.stock_location import StockLocation
 from dora_api.domain.stock_status import needs_restock
+from dora_api.features.app_settings.access import get_or_create_app_setting
+from dora_api.features.app_settings.clock import household_today
 from dora_api.features.routers import STOCK_ITEM_ROUTER
 from dora_api.infrastructure.api_response import (business_rule_violation,
                                                   entity_existence_failure,
-                                                  no_content, not_found)
+                                                  no_content, not_found, ok)
 from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.utils import get_request_body
 from dora_api.features.shopping_lists._line_defaults import apply_line_defaults
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
+from dora_api.features.stock_items.expiry_change import apply_expiry_change
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class UpdateStockItemRequest(BaseModel):
@@ -222,25 +226,8 @@ class UpdateStockItemHandler:
             _StockItem.stocktake_alerts_are_enabled = request.stocktake_alerts_are_enabled
 
         if "expiry_date" in _SetFields:
-            # History-tab feed — capture the transition BEFORE mutating,
-            # then emit whichever kind the classifier reports (set /
-            # pushed / cleared). Same-date writes emit nothing. The
-            # row-menu "+N days" and "Clear expiry" nudges both flow
-            # through this same PATCH, so this is the single emit site
-            # for every expiry mutation on an existing item.
-            _PrevExpiry = _StockItem.expiry_date
-            _StockItem.expiry_date = request.expiry_date
-            _ExpiryTransition = classify_expiry_transition(_PrevExpiry, request.expiry_date)
-            if _ExpiryTransition is not None:
-                _Kind, _Delta = _ExpiryTransition
-                self.repository.add(StockItemExpiryEvent(
-                    stock_item_id = _StockItem.id,
-                    kind = _Kind,
-                    previous_expiry_date = _PrevExpiry,
-                    new_expiry_date = request.expiry_date,
-                    delta_days = _Delta,
-                    occurred_at = datetime.now(UTC),
-                ))
+            # The one expiry write path: records the History-tab transition.
+            apply_expiry_change(self.repository, _StockItem, request.expiry_date)
 
         if "is_essential" in _SetFields and request.is_essential is not None:
             _StockItem.is_essential = request.is_essential
@@ -284,7 +271,6 @@ class UpdateStockItemHandler:
                 _StockItem._stock_group_id = None
                 _StockItem.stock_group = None
             else:
-                from dora_api.domain.entities.stock_group import StockGroup
                 _Group = self.repository.get(StockGroup).by_id(request.stock_group_id)
                 if _Group is None:
                     return UpdateStockItemResponse(stock_group_not_found=True)
@@ -299,7 +285,6 @@ class UpdateStockItemHandler:
             _StockItem.is_open = request.is_open
             if request.is_open and not previous_open:
                 # R-021 — "opened on" stamps the household calendar day.
-                from dora_api.features.app_settings.clock import household_today
                 _StockItem.opened_on = household_today(self.repository)
             elif not request.is_open:
                 _StockItem.opened_on = None
@@ -385,10 +370,6 @@ class UpdateStockItemHandler:
         item. Unknown / missing modes degrade to `essential_only`, matching
         the seeded default so a bad row can't silently disable auto-add
         for `is_essential` items."""
-        from dora_api.domain.entities.app_setting import AppSetting
-        from dora_api.features.app_settings.access import (
-            get_or_create_app_setting,
-        )
         setting: AppSetting = get_or_create_app_setting(self.repository)
         mode = (setting.auto_add_mode or "essential_only").strip().lower()
         if mode == "off":
@@ -458,42 +439,39 @@ class UpdateStockItemHandler:
 @STOCK_ITEM_ROUTER.route("<uuid:stock_item_id>", methods=["PATCH"])
 @has_request_body(UpdateStockItemRequest)
 def update_stock_item(stock_item_id: UUID):
-    _Logger = logging.getLogger(__name__)
-    _Logger.info("Received request to update stock item.")
+    _LOGGER.info("Received request to update stock item.")
     _Handler = UpdateStockItemHandler(SqlAlchemyRepository())
     _Request: UpdateStockItemRequest = get_request_body()
     _Response = _Handler.handle(_Request, stock_item_id)
 
     if _Response.stock_item_not_found:
-        _Logger.warning(f"Stock item not found with ID: {stock_item_id}")
+        _LOGGER.warning(f"Stock item not found with ID: {stock_item_id}")
         return not_found(StockItem.__name__, stock_item_id)
 
     if _Response.stock_item_already_exists:
-        _Logger.warning(f"Stock item already exists with name: {_Request.name}")
+        _LOGGER.warning(f"Stock item already exists with name: {_Request.name}")
         return business_rule_violation(f"A stock item with the name '{_Request.name}' already exists.")
 
     if _Response.stock_level_not_found and _Request.stock_level_id is not None:
-        _Logger.warning(f"Stock level not found: {_Request.stock_level_id}")
+        _LOGGER.warning(f"Stock level not found: {_Request.stock_level_id}")
         return entity_existence_failure(StockLevel.__name__, "stock_level_id", _Request.stock_level_id)
 
     if _Response.stock_location_not_found and _Request.stock_location_id is not None:
-        _Logger.warning(f"Stock location not found: {_Request.stock_location_id}")
+        _LOGGER.warning(f"Stock location not found: {_Request.stock_location_id}")
         return entity_existence_failure(StockLocation.__name__, "stock_location_id", _Request.stock_location_id)
 
     if _Response.stock_group_not_found and _Request.stock_group_id is not None:
-        _Logger.warning(f"Stock group not found: {_Request.stock_group_id}")
-        from dora_api.domain.entities.stock_group import StockGroup
+        _LOGGER.warning(f"Stock group not found: {_Request.stock_group_id}")
         return entity_existence_failure(
             StockGroup.__name__, "stock_group_id", _Request.stock_group_id,
         )
 
-    _Logger.info(f"Successfully updated stock item with ID: {stock_item_id}")
+    _LOGGER.info(f"Successfully updated stock item with ID: {stock_item_id}")
     # If the auto-add hook fired (FU-511, driven by AppSetting.auto_add_mode +
     # is_essential), return a 200 with a minimal body so the UI can pop the
     # undoable "auto-added to <list>" toast. No trigger → keep the original
     # 204 for simplicity.
     if _Response.auto_added_line_id is not None:
-        from dora_api.infrastructure.api_response import ok
         return ok({
             "auto_added": {
                 "line_id": _Response.auto_added_line_id,

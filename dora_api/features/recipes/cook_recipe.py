@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import UUID
 
-from flask import session
 from pydantic import BaseModel, ConfigDict, Field
 
 from dora_api.domain.entities.cook_event import CookEvent
@@ -11,21 +10,14 @@ from dora_api.domain.entities.recipe import Recipe
 from dora_api.features.app_settings.clock import household_today
 from dora_api.features.recipes.pool import bump_pool
 from dora_api.features.routers import RECIPE_ROUTER
-from dora_api.infrastructure.api_response import no_content, not_found, ok
+from dora_api.infrastructure.api_response import not_found, ok
 from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
+from dora_api.infrastructure.session_user import current_user_id
 
-
-def _current_user_id() -> UUID | None:
-    raw = session.get("user_id")
-    if not raw:
-        return None
-    try:
-        return UUID(raw)
-    except (ValueError, TypeError):
-        return None
+_LOGGER = logging.getLogger(__name__)
 
 
 class CookRecipeRequest(BaseModel):
@@ -81,16 +73,14 @@ class CookRecipeHandler:
 @RECIPE_ROUTER.route("<uuid:recipe_id>/cook", methods=["POST"])
 @has_request_body(CookRecipeRequest)
 def cook_recipe(recipe_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _Handler = CookRecipeHandler(SqlAlchemyRepository())
     _Request: CookRecipeRequest = get_request_body()
-    _Response = _Handler.handle(_Request, recipe_id, _current_user_id())
+    _Response = _Handler.handle(_Request, recipe_id, current_user_id())
     if _Response.recipe_not_found:
         return not_found(Recipe.__name__, recipe_id)
-    _Logger.info(
+    _LOGGER.info(
         f"Cooked recipe {recipe_id}: +{_Request.meals_cooked} meals "
         f"(pool now {_Response.available_meals})"
     )
-    if _Request.meals_cooked == 0:
-        return no_content()
+    # One shape whatever the count (finalisation 04-R19); 0 is a valid no-op.
     return ok({"available_meals": _Response.available_meals})

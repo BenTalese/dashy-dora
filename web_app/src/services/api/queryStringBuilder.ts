@@ -63,3 +63,28 @@ export function createQueryString(
     const qs = params.toString();
     return qs.length > 0 ? `?${qs}` : '';
 }
+
+/** The server's page-size ceiling (`query_options.MAX_LIMIT`). */
+export const MAX_PAGE_LIMIT = 500;
+
+/**
+ * Load every row of a paginated list endpoint by asking for full pages until a
+ * short page arrives (or `total` is reached). Stores that filter and search
+ * client-side over what they hold use this, so row 51 onward is never silently
+ * dropped by the default page size (FU-035, FU-668).
+ */
+export async function fetchAllPages<T>(
+    fetchPage: (page: number, limit: number) => Promise<Page<T>>,
+    limit: number = MAX_PAGE_LIMIT,
+): Promise<T[]> {
+    const collected: T[] = [];
+    let page = 1;
+    while (true) {
+        const result = await fetchPage(page, limit);
+        collected.push(...result.items);
+        if (result.items.length < limit || collected.length >= (result.total ?? collected.length)) {
+            return collected;
+        }
+        page += 1;
+    }
+}

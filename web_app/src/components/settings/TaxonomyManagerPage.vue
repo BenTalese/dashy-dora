@@ -28,9 +28,8 @@
 </template>
 
 <script lang="ts" setup>
-    import { useQuasar } from 'quasar';
+    import { useSettingsSave } from 'src/composables/useSettingsSave';
     import VocabListEditor from 'src/components/settings/VocabListEditor.vue';
-    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { computed, onMounted, ref } from 'vue';
 
     export type VocabItem = { id: string; name: string; usage_count?: number };
@@ -67,7 +66,6 @@
         { usageLabel: 'recipe', preservesLabel: false, reorderable: false },
     );
 
-    const $q = useQuasar();
     const items = ref<VocabItem[]>([]);
     const loading = ref(false);
     const busy = ref(false);
@@ -78,14 +76,7 @@
         props.emptyAction !== undefined ? { emptyAction: props.emptyAction } : {},
     );
 
-    function notifyError(message: string, err: unknown) {
-        $q.notify({
-            type: 'negative',
-            
-            message,
-            caption: toastCaption(err),
-        });
-    }
+    const { notifyError } = useSettingsSave();
 
     async function reload() {
         loading.value = true;

@@ -15,6 +15,7 @@
 // against every intent's `matches` list — first hit wins, so ORDER MATTERS:
 // narrower intents must come before broader ones (e.g. `convert` before
 // `find_recipe`, since both could contain food words).
+import { SUBSTITUTE_ALIASES, SUBSTITUTES } from 'src/generated/substitutes_table';
 import type { DoraMood } from 'src/components/dora/doraTypes';
 import { LOW_STOCK_SEQUENCE, OUT_OF_STOCK_SEQUENCE } from 'src/helpers/stockStatus';
 import {
@@ -136,6 +137,8 @@ export type DoraContext = {
     getRecipes?: () => RecipeSnapshot[];
     getShoppingLists?: () => ShoppingListSnapshot[];
     getMealPlan?: () => MealPlanSnapshot | null;
+    /** The household's expiring-soon window from `/health.alerts_policy`. */
+    expiringSoonWindowDays?: number | undefined;
 };
 
 // ── Shared reply-bank cursor ───────────────────────────────────────────
@@ -225,11 +228,11 @@ function pageSummary(path: string): { text: string; mood: DoraMood } {
 
 // ── Reply banks ────────────────────────────────────────────────────────
 
-const GREETING_REPLIES = (name: string) => [
+const GREETING_REPLIES = (name: string, displayName: string) => [
     `Hi${name}! Dora reporting for pantry duty. What's the move?`,
     `Heyyy${name}. Ready to be unreasonably helpful. Or at least entertaining.`,
     `Oh hi${name}! I was just rearranging the imaginary spice rack. Whatcha need?`,
-    `${name ? `${name.replace(', ', '')}!` : 'Hello!'} I'm Dora, professional pantry-rememberer. Fire away.`,
+    `${displayName ? `${displayName}!` : 'Hello!'} I'm Dora, professional pantry-rememberer. Fire away.`,
     `Hi${name}. The kettle of my soul is on. What can I do?`,
 ];
 
@@ -304,7 +307,10 @@ const FALLBACK_REPLIES = [
 // sequence constants live in `helpers/stockStatus.ts` (R-003).
 // The duplicates that previously sat here had drifted off the canonical
 // source and would have silently broken if either side changed.
-const EXPIRY_HORIZON_DAYS = 7;
+// R-003 carve-out: only when the household window hasn't arrived from
+// `/health` (offline, first paint). Basic mode is the offline fallback, so
+// it keeps a fallback of its own; the live window comes in on the context.
+const EXPIRY_HORIZON_FALLBACK_DAYS = 7;
 
 function daysUntil(iso: string | null): number | null {
     if (!iso) return null;
@@ -551,50 +557,8 @@ function tryConvert(text: string): string | null {
 }
 
 // ── Substitution table ────────────────────────────────────────────────
-// Curated. Notes occasionally append a baking caveat. Keyed by canonical
-// ingredient name (singular, lowercase). Aliases handled at lookup time.
-
-const SUBSTITUTES: Record<string, string[]> = {
-    butter: ['margarine (1:1)', 'oil (¾ the amount)', 'applesauce (baking, 1:1, reduces fat)', 'greek yogurt (baking, 1:1)'],
-    milk: ['oat milk', 'almond milk', 'soy milk', 'evaporated milk diluted 1:1 with water', 'powdered milk + water'],
-    egg: ['1 tbsp flaxseed + 3 tbsp water (let it gel)', '¼ cup mashed banana (sweet bakes)', '¼ cup applesauce', '¼ cup silken tofu (blended)'],
-    'sour cream': ['greek yogurt (1:1)', 'crème fraîche', 'cottage cheese (blended)'],
-    buttermilk: ['1 cup milk + 1 tbsp lemon juice or vinegar, sit 5 min', 'plain yogurt thinned with milk'],
-    'self-raising flour': ['1 cup plain flour + 1.5 tsp baking powder + a pinch of salt'],
-    'baking powder': ['¼ tsp bicarb + ½ tsp cream of tartar per 1 tsp'],
-    breadcrumbs: ['crushed cornflakes', 'rolled oats (pulsed)', 'crushed crackers', 'panko'],
-    garlic: ['½ tsp garlic powder per clove', 'a pinch of asafoetida'],
-    onion: ['1 tbsp dried onion flakes per ¼ cup fresh', 'leek (white part)', 'shallots'],
-    cornstarch: ['plain flour (2:1)', 'arrowroot (1:1)', 'rice flour'],
-    'white wine': ['apple juice', 'white grape juice', 'chicken broth + a splash of white vinegar'],
-    'red wine': ['cranberry juice', 'beef broth + a splash of balsamic', 'pomegranate juice'],
-    'lemon juice': ['lime juice (1:1)', 'white vinegar (use ½ the amount)'],
-    'brown sugar': ['1 cup white sugar + 1 tbsp molasses'],
-    honey: ['maple syrup (1:1)', 'agave (1:1)', 'golden syrup'],
-    'vanilla extract': ['maple syrup (1:1, mellower)', 'almond extract (½ the amount, stronger)'],
-    'heavy cream': ['¾ cup milk + ¼ cup melted butter', 'evaporated milk (whipping won\'t work)', 'coconut cream'],
-    'cream cheese': ['ricotta (smoother spread)', 'mascarpone', 'greek yogurt + a knob of butter'],
-    yeast: ['1.25× the amount of active dry if you have instant', 'sourdough starter (adjust hydration)'],
-    'parmesan': ['pecorino', 'grana padano', 'aged gouda'],
-    'soy sauce': ['tamari (gf)', 'coconut aminos', 'Worcestershire (less salty, sweeter)'],
-};
-
-const SUBSTITUTE_ALIASES: Record<string, string> = {
-    'eggs': 'egg',
-    'creme fraiche': 'sour cream',
-    'creme fraîche': 'sour cream',
-    'self raising flour': 'self-raising flour',
-    'self-raising': 'self-raising flour',
-    'sr flour': 'self-raising flour',
-    'caster sugar': 'brown sugar',
-    'icing sugar': 'brown sugar',
-    'plain flour': 'self-raising flour', // weird, but reverse direction: tell them how to make SR
-    'parmigiano': 'parmesan',
-    'parm': 'parmesan',
-    'spring onion': 'onion',
-    'scallion': 'onion',
-    'shallot': 'onion',
-};
+// Generated from `dora_api/domain/substitutes.py` (R-003; 11-R12), the same
+// table the AI's `suggest_substitution` tool reads.
 
 function trySubstitute(query: string): string | null {
     const q = query.toLowerCase().trim().replace(/^(some|any|a|an)\s+/, '').replace(/s$/, '');
@@ -933,7 +897,7 @@ export async function runIntent(
     switch (id) {
         case 'greet': {
             return {
-                text: pick(GREETING_REPLIES(name)),
+                text: pick(GREETING_REPLIES(name, displayName)),
                 mood: 'happy',
                 suggestions: ['whats_for_dinner', 'attention', 'pantry_summary', 'joke'],
             };
@@ -970,13 +934,12 @@ export async function runIntent(
                 ? ` There's also a newer version (${versionInfo.latest}) available.`
                 : '';
             return {
-                text: `You're on Dashy Dora ${versionInfo?.current ?? 'an unknown version'}. The Help page has the full changelog; recent highlights include the assistant (that's me, the burger), the locations heatmap, and per-user preferences.${updateBit}`,
+                // The Help-page changelog is the one place updates are written
+                // up, so the reply points there rather than listing highlights
+                // that go stale (finalisation 11-R23).
+                text: `You're on Dashy Dora ${versionInfo?.current ?? 'an unknown version'}. The Help page has the full changelog.${updateBit}`,
                 mood: versionInfo?.updateAvailable ? 'super_excited' : 'excited',
                 navigateTo: { path: '/help', label: 'Open Help (changelog tab)' },
-                // The Help-page changelog is the canonical place to read about
-                // updates, so this reply points there rather than surfacing the
-                // raw release URL as an external link.
-                ...{},
             };
         }
 
@@ -1109,13 +1072,14 @@ export async function runIntent(
                 };
             }
             const low = stock.filter((s) => (s.levelSequence ?? 0) >= LOW_STOCK_SEQUENCE);
+            const horizon = context.expiringSoonWindowDays ?? EXPIRY_HORIZON_FALLBACK_DAYS;
             const expiring = stock.filter((s) => {
                 const d = daysUntil(s.expiryDate);
-                return d !== null && d <= EXPIRY_HORIZON_DAYS;
+                return d !== null && d <= horizon;
             });
             const flagged = stock.filter((s) => s.isEssential);
             return {
-                text: `${stock.length} item${stock.length === 1 ? '' : 's'} tracked. ${low.length} low, ${expiring.length} expiring within a week, ${flagged.length} flagged. ${low.length + expiring.length === 0 ? "All under control. Magnificent." : "Want the rundown?"}`,
+                text: `${stock.length} item${stock.length === 1 ? '' : 's'} tracked. ${low.length} low, ${expiring.length} expiring soon, ${flagged.length} flagged. ${low.length + expiring.length === 0 ? "All under control. Magnificent." : "Want the rundown?"}`,
                 mood: low.length + expiring.length === 0 ? 'super_excited' : 'searching',
                 navigateTo: { path: '/stock', label: 'Open Stock' },
                 suggestions: ['low_stock', 'expiring', 'attention'],
@@ -1143,9 +1107,10 @@ export async function runIntent(
 
         case 'expiring': {
             const stock = context.getStock?.() ?? [];
+            const horizon = context.expiringSoonWindowDays ?? EXPIRY_HORIZON_FALLBACK_DAYS;
             const expiring = stock
                 .map((s) => ({ s, d: daysUntil(s.expiryDate) }))
-                .filter((x) => x.d !== null && x.d <= EXPIRY_HORIZON_DAYS)
+                .filter((x) => x.d !== null && x.d <= horizon)
                 .sort((a, b) => (a.d! - b.d!));
             if (expiring.length === 0) {
                 return {

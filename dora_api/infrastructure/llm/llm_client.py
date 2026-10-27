@@ -1,4 +1,23 @@
 from abc import ABC, abstractmethod
+from time import time
+
+# A client is built per request, so an availability probe cached on the
+# instance never got reused and every `/ask` paid a network round trip (up to
+# 3 s) before the chat (finalisation 11-R43). Shared per endpoint instead.
+_AVAILABILITY_TTL_SECONDS = 60
+_availability: dict[tuple, tuple[float, bool]] = {}
+
+
+def remembered_availability(key: tuple) -> bool | None:
+    """The last probe result for this endpoint, or None when stale or unknown."""
+    entry = _availability.get(key)
+    if entry is None or time() - entry[0] >= _AVAILABILITY_TTL_SECONDS:
+        return None
+    return entry[1]
+
+
+def remember_availability(key: tuple, available: bool) -> None:
+    _availability[key] = (time(), available)
 
 
 class LlmUnavailable(Exception):

@@ -162,7 +162,7 @@
         stroke-width: 4;
     }
     .dora-donut-seg {
-        transition: stroke-dasharray 0.6s ease, stroke-dashoffset 0.6s ease, opacity 0.15s ease;
+        transition: stroke-dasharray var(--motion-slow) var(--motion-ease), stroke-dashoffset var(--motion-slow) var(--motion-ease), opacity var(--motion-fast) var(--motion-ease);
     }
     /* FU-299 — clickable low/out segments.
        This used to set `outline: none` on `:focus` with an opacity change as

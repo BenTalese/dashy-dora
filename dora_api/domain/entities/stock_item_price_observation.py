@@ -12,7 +12,7 @@ class StockItemPriceObservation(BaseEntity):
 
     **Folded shape (A1 ratified 2026-06-22):** the user logs the TOTAL price
     they paid + the TOTAL measure they got + the unit. Per-unit cost is
-    derived server-side (``get_stock_item_unit_cost_at``); the client never
+    derived server-side (``get_stock_item_unit_cost_with_unit_at``); the client never
     divides (R-003). Count is *not* stored — it's a UI input that contributes
     to ``total_measure`` and ``total_price`` at entry time (cleaner canonical
     truth; no "two 12-packs vs one 24-pack" ambiguity — see plan §6a).

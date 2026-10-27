@@ -253,7 +253,7 @@
         $q.dialog({
             title: 'Delete template',
             message: `Delete the template "${t.name}"? Weeks you've already planned from it are unaffected.`,
-            cancel: true,
+            cancel: { label: 'Cancel', flat: true, noCaps: true },
             ok: { label: 'Delete', noCaps: true, color: 'negative' },
         }).onOk(() => void run(
             () => templateStore.deleteAsync(t.meal_plan_template_id), 'Deleted.',

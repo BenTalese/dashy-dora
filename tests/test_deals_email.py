@@ -171,3 +171,21 @@ def test__subject__falls_back_to_the_count_on_an_unremarkable_week():
 def test__subject__is_singular_for_one_deal():
     digest = build_digest([_Dto(price_now=3.8, price_was=4.0)], "AUD", compact=False)
     assert subject_line(digest) == "1 deal this week"
+
+
+def test__mail_links__target_declared_spa_routes():
+    """The "See all deals" button used to link `/products`, a route the SPA
+    never had, so every weekly mail landed on the 404 page."""
+    import re
+    from pathlib import Path
+
+    from dora_api.features.deals.send_deals_email import DEALS_ROUTE, UNSUBSCRIBE_ROUTE
+
+    routes = (Path(__file__).resolve().parents[1] / "web_app" / "src" / "router" / "routes.ts").read_text(encoding="utf-8")
+    segments = {
+        seg for raw in re.findall(r"path:\s*'([^']*)'", routes)
+        for seg in raw.strip("/").split("/") if seg and not seg.startswith(":")
+    }
+    for route in (DEALS_ROUTE, UNSUBSCRIBE_ROUTE):
+        for seg in route.strip("/").split("/"):
+            assert seg in segments, f"{route}: '{seg}' is not a declared SPA route segment"

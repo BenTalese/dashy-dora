@@ -34,7 +34,7 @@ from dora_api.infrastructure.security.secret_encryption import (
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 
 
-_Logger = logging.getLogger(__name__)
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,13 +67,13 @@ def _decrypt_or_empty(ciphertext: str, *, field: str) -> str:
     try:
         return decrypt(ciphertext.encode("ascii"))
     except EncryptionUnavailable:
-        _Logger.warning(
+        _LOGGER.warning(
             "Cannot decrypt %s: DORA_SECRET_ENCRYPTION_KEY is unset. "
             "Configure the key or re-enter the secret in Settings.", field,
         )
         return ""
     except EncryptionFailed:
-        _Logger.warning(
+        _LOGGER.warning(
             "Stored %s ciphertext no longer decodes (key rotated?). "
             "Re-enter the secret in Settings.", field,
         )
@@ -88,24 +88,24 @@ def resolved_operational_config() -> OperationalConfig:
     (admin-driven config changes should take effect on the next request)."""
     row = get_or_create_app_setting(SqlAlchemyRepository())
     return OperationalConfig(
-        smtp_host=(getattr(row, "smtp_host", "") or "").strip(),
-        smtp_port=int(getattr(row, "smtp_port", 587) or 587),
-        smtp_username=(getattr(row, "smtp_username", "") or "").strip(),
+        smtp_host=(row.smtp_host or "").strip(),
+        smtp_port=int(row.smtp_port or 587),
+        smtp_username=(row.smtp_username or "").strip(),
         smtp_password=_decrypt_or_empty(
-            (getattr(row, "smtp_password_encrypted", "") or "").strip(),
+            (row.smtp_password_encrypted or "").strip(),
             field="smtp_password",
         ),
-        smtp_from=(getattr(row, "smtp_from", "") or "").strip(),
-        smtp_use_tls=bool(getattr(row, "smtp_use_tls", True)),
-        vapid_public_key=(getattr(row, "vapid_public_key", "") or "").strip(),
+        smtp_from=(row.smtp_from or "").strip(),
+        smtp_use_tls=bool(row.smtp_use_tls),
+        vapid_public_key=(row.vapid_public_key or "").strip(),
         vapid_private_key=_decrypt_or_empty(
-            (getattr(row, "vapid_private_key_encrypted", "") or "").strip(),
+            (row.vapid_private_key_encrypted or "").strip(),
             field="vapid_private_key",
         ),
-        vapid_subject=(getattr(row, "vapid_subject", "") or "").strip() or "mailto:admin@dora.local",
-        piper_bin=(getattr(row, "piper_bin", "") or "").strip(),
-        piper_bundled_voice_dir=(getattr(row, "piper_bundled_voice_dir", "") or "").strip(),
-        email_enabled=bool(getattr(row, "email_enabled", False)),
-        audit_retention_days=int(getattr(row, "audit_retention_days", 365) or 365),
-        public_url=(getattr(row, "public_url", "") or "").strip(),
+        vapid_subject=(row.vapid_subject or "").strip() or "mailto:admin@dora.local",
+        piper_bin=(row.piper_bin or "").strip(),
+        piper_bundled_voice_dir=(row.piper_bundled_voice_dir or "").strip(),
+        email_enabled=bool(row.email_enabled),
+        audit_retention_days=int(row.audit_retention_days or 365),
+        public_url=(row.public_url or "").strip(),
     )

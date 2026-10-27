@@ -66,6 +66,8 @@ Several features assume *one* of something globally:
 - `is_primary` shopping list is a global singleton flag (see `SHOPPING_LIST_REDESIGN_PROPOSAL.md`). Per-household it must become one-primary-**per-household**.
 - Dashboard aggregates (`get_dashboard_summary.py`) count *all* rows — must become per-household counts.
 - Stock-level definitions, locations, stock groups: shared catalog or per-household? A design decision, not a default.
+- Meal plans: one plan per week per install. `MealPlan.start_date` is the lookup key (`_fork_template_onto_week` finds by it) and there is no per-user plan; per-household it becomes one plan per week per household (finalisation 02-D3).
+- Quick-add target memory is per-tab `sessionStorage` while lists are household-shared; per-user or per-household it needs a home on the server (finalisation 03-D3).
 
 ---
 

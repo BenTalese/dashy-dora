@@ -182,10 +182,11 @@
                  by-step navigation with a scrollable image gallery. The
                  ingredients panel, finish flow, and substitute swaps still
                  render below (same as the other modes). -->
-            <RecipeCookModeImageView
+            <CookImageView
                 v-if="isImageMode"
                 :recipe-id="recipe.recipe_id"
                 :images="recipe.step_images ?? []"
+                :nav-size="navButtonSize"
                 @finish="openFinish"
             />
 
@@ -219,7 +220,7 @@
                             v-if="currentStepObject?.isSubStep"
                             dense
                             color="primary"
-                            text-color="white"
+                            class="dora-text-on-primary"
                             :icon="ICONS.subdirectory_arrow_right"
                         >
                             Sub-step
@@ -298,42 +299,18 @@
                 <CookNotesSection v-if="cookNotes" :notes="cookNotes" />
             </q-card>
 
-            <!-- Owner feedback 2026-09-03: *"Could we make the buttons prev
-                 next and repeat fit in one row for mobile?"* They wrapped
-                 because three `size="lg"` labelled buttons want ~380px and a
-                 phone gives ~340. One flex row with each button free to
-                 shrink to a third of it fixes that without dropping a label:
-                 the icons keep the meaning legible at the narrow end. -->
-            <div v-if="!isImageMode" class="cook-nav q-mb-lg">
-                <!-- ambiguous, mapped to ghost -->
-                <BaseButton
-                    variant="ghost"
-                    :size="navButtonSize"
-                    :icon="ICONS.arrow_back"
-                    label="Previous"
-                    :disable="currentStepIndex === 0"
-                    @click="prevStep"
-                />
-                <!-- ambiguous, mapped to ghost -->
-                <BaseButton
-                    variant="ghost"
-                    :size="navButtonSize"
-                    :icon="ICONS.replay"
-                    label="Repeat"
-                    @click="speakCurrent"
-                    :disable="!speechEnabled"
-                />
-                <!-- Raw Material names (`check` / `arrow_forward`) render
-                     nothing on an MDI icon set; these have to come from the
-                     ICONS registry like every other glyph (A7 / D-005). -->
-                <BaseButton
-                    :size="navButtonSize"
-                    variant="primary"
-                    :icon-right="currentStepIndex === steps.length - 1 ? ICONS.check : ICONS.arrow_forward"
-                    :label="currentStepIndex === steps.length - 1 ? 'Finish' : 'Next'"
-                    @click="nextStep"
-                />
-            </div>
+            <CookNavRow
+                v-if="!isImageMode"
+                class="q-mb-lg"
+                :size="navButtonSize"
+                :can-prev="currentStepIndex > 0"
+                :is-last="currentStepIndex === steps.length - 1"
+                show-repeat
+                :repeat-disabled="!speechEnabled"
+                @prev="prevStep"
+                @repeat="speakCurrent"
+                @next="nextStep"
+            />
 
             <!-- RD-29 — image mode has no step card for the notes band to hang
                  off, so this is the one call site that supplies its own card.
@@ -403,6 +380,8 @@
                                             <span class="ingredient-name">{{ row.ingredient.raw_text ?? 'Unlinked ingredient' }}</span>
                                         </template>
                                         <template v-else-if="sessionSwaps.has(row.ingredient.stock_item_id)">
+                                            <!-- R-002: no --text-on-secondary token yet, so
+                                                 this chip keeps white ink; FU-671 / FU-652. -->
                                             <q-chip
                                                 dense
                                                 color="secondary"
@@ -788,9 +767,10 @@
     import StockLevelPicker from 'src/components/stock/StockLevelPicker.vue';
     import BaseDialog from 'src/components/BaseDialog.vue';
     import CookStepProgress from 'src/components/recipes/CookStepProgress.vue';
-    import RecipeCookModeImageView from 'src/components/recipes/RecipeCookModeImageView.vue';
+    import CookImageView from 'src/components/recipes/CookImageView.vue';
+    import CookNavRow from 'src/components/recipes/CookNavRow.vue';
+    import { formatTimer, useCookTimer } from 'src/composables/useCookTimer';
     import CookNotesSection from 'src/components/recipes/CookNotesSection.vue';
-    import { storeToRefs } from 'pinia';
     import { useQuasar } from 'quasar';
     import { useCookingPolicy } from 'src/composables/useCookingPolicy';
     import { formatQuantity } from 'src/helpers/formatQuantity';
@@ -837,8 +817,6 @@
     const wakeLockWanted = ref(true);
     useWakeLock(wakeLockWanted);
 
-    const { stockItems } = storeToRefs(stockItemStore);
-    const { stockLevels } = storeToRefs(stockLevelStore);
 
     // Resolve location_id → breadcrumb names using the locations tree.
     // We hit the location store lazily on mount so cook mode keeps working
@@ -928,8 +906,6 @@
         return formatQuantity(scaled, unit);
     }
 
-    // (the headcount nudge + its clamp live in `NumberStepper` now.)
-
 
     // ── P2-13 voice (extracted into composables) ────────────────────────
     // The user's persisted preference seeds the local toggle; subsequent
@@ -976,17 +952,25 @@
     const listening = computed(() => voiceInput.listening.value);
     const speechRecognitionAvailable = computed(() => voiceInput.available.value);
 
-    const timerRemaining = ref<number | null>(null);
-    const timerRunning = ref(false);
-    // captured at start so the fill-bar has a stable
-    // denominator even after pause/reset shuffles `timerRemaining`.
-    const timerTotal = ref<number | null>(null);
-    let timerIntervalId: ReturnType<typeof setInterval> | null = null;
-
-    const timerProgress = computed<number>(() => {
-        if (timerTotal.value === null || timerTotal.value <= 0) return 0;
-        if (timerRemaining.value === null) return 1;
-        return Math.max(0, Math.min(1, timerRemaining.value / timerTotal.value));
+    const {
+        remaining: timerRemaining,
+        running: timerRunning,
+        total: timerTotal,
+        progress: timerProgress,
+        start: startTimer,
+        pause: pauseTimer,
+        reset: resetTimer,
+    } = useCookTimer({
+        // On iOS / macOS WKWebView a timer callback is not a user activation,
+        // so `speak()` and `playTimerFinishTone()` are subject to the autoplay
+        // gate; `useSpeechOutput` primes audio on the first gesture, which
+        // covers most timers. The toast is the load-bearing "done" signal;
+        // audio and narration are best-effort.
+        onFinish: () => {
+            $q.notify({ type: 'positive', message: 'Timer finished!', icon: ICONS.timer });
+            if (speechEnabled.value) speak('Timer finished');
+            playTimerFinishTone();
+        },
     });
 
     // Sous Chef voice command list, surfaced via the help
@@ -1107,16 +1091,13 @@
     const currentStepObject = computed<CookStep | null>(
         () => cookSteps.value[currentStepIndex.value] ?? null,
     );
-    // (was a `hasStructuredSteps` computed; removed as unused — Chunk 5
-    //  reads `currentStepObject.ingredientIds.length > 0` directly to
-    //  decide whether to apply the text-match fallback.)
-
     type IngredientRow = { ingredient: Recipe['ingredients'][number]; stockItem: StockItem | null };
     const ingredientRows = computed<IngredientRow[]>(() =>
         (recipe.value?.ingredients ?? []).map((ingredient) => ({
             ingredient,
-            stockItem:
-                stockItems.value.find((si) => si.stock_item_id === ingredient.stock_item_id) ?? null,
+            stockItem: ingredient.stock_item_id
+                ? stockItemStore.byId.get(ingredient.stock_item_id) ?? null
+                : null,
         })),
     );
 
@@ -1270,8 +1251,7 @@
         swapPickerOpen.value = true;
         loadingSwapOptions.value = true;
         try {
-            const detail = await stockItemApi.getDetailAsync(stockItemId);
-            swapOptions.value = detail.substitutes ?? [];
+            swapOptions.value = await stockItemApi.getSubstitutesAsync(stockItemId);
         } catch {
             swapOptions.value = [];
         } finally {
@@ -1316,11 +1296,6 @@
         sessionSwaps.value = new Map(sessionSwaps.value);
     }
 
-    // `markIngredientsUsedInStep` + `toggleStepDone` removed
-    // along with `usedIds` / `doneSteps`. "Used" is no longer a per-cook
-    // toggle; every ingredient on a recipe is used by definition, and the
-    // finish flow now ranges over `recipe.ingredients` directly.
-
     /** The old whole-app behaviour: read a duration out of the step's prose.
      *  Kept, because it is the only thing a free-text or photo method can
      *  offer — there is nowhere on a line of prose to record "this step is
@@ -1347,55 +1322,6 @@
     const stepTimerMinutes = computed<number | null>(
         () => currentStepObject.value?.timerMinutes ?? sniffedTimerMinutes.value,
     );
-
-    function formatTimer(seconds: number): string {
-        const m = Math.floor(seconds / 60);
-        const s = Math.floor(seconds % 60);
-        return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-    }
-
-    function startTimer(seconds: number) {
-        if (timerRemaining.value === null) {
-            timerRemaining.value = seconds;
-            timerTotal.value = seconds;
-        }
-        timerRunning.value = true;
-        if (timerIntervalId) clearInterval(timerIntervalId);
-        timerIntervalId = setInterval(() => {
-            if (timerRemaining.value === null) return;
-            timerRemaining.value -= 1;
-            if (timerRemaining.value <= 0) {
-                timerRemaining.value = 0;
-                pauseTimer();
-                $q.notify({ type: 'positive', message: 'Timer finished!', icon: ICONS.timer });
-                // on iOS / macOS WKWebView a timer callback is not
-                // a user activation, so both `speak()` (HTMLAudioElement)
-                // and `playTimerFinishTone()` (Web Audio) are subject to
-                // the autoplay gate. `useSpeechOutput` primes the audio
-                // context on first user gesture (session-scoped), which
-                // covers most in-session timers; a timer that fires long
-                // after the last interaction may still be silent. The
-                // visible Notify above is the load-bearing "timer done"
-                // signal; audio + narration are best-effort.
-                if (speechEnabled.value) speak('Timer finished');
-                playTimerFinishTone();
-            }
-        }, 1000);
-    }
-
-    function pauseTimer() {
-        timerRunning.value = false;
-        if (timerIntervalId) {
-            clearInterval(timerIntervalId);
-            timerIntervalId = null;
-        }
-    }
-
-    function resetTimer() {
-        pauseTimer();
-        timerRemaining.value = null;
-        timerTotal.value = null;
-    }
 
     // generated beep via WebAudio. Stays silent if the
     // browser denies audio (PWA / iOS may require a user gesture before any
@@ -1502,7 +1428,7 @@
      *  the word, so the row has to. */
     function levelNameFor(levelId: string | undefined): string {
         if (!levelId) return 'No level set';
-        return stockLevels.value.find((l) => l.stock_level_id === levelId)?.name ?? '';
+        return stockLevelStore.levelById.get(levelId)?.name ?? '';
     }
 
     function buildFinishRows(): FinishRow[] {
@@ -1519,7 +1445,7 @@
             if (ing.stock_item_id === null) continue;
             const swap = sessionSwaps.value.get(ing.stock_item_id);
             const targetId = swap?.substituteId ?? ing.stock_item_id;
-            const item = stockItems.value.find((si) => si.stock_item_id === targetId);
+            const item = stockItemStore.byId.get(targetId);
             const fallbackName = swap?.substituteName ?? ing.stock_item_name ?? ing.raw_text ?? '';
             rows.push({
                 targetStockItemId: targetId,
@@ -1810,8 +1736,6 @@
     ]);
 
     onMounted(async () => {
-        // speechRecognitionAvailable is a computed off the composable
-        // now, so no manual seeding required.
         await loadRecipe(route.params.id as string);
 
         // Warm the locations tree so ingredient breadcrumbs render without
@@ -1855,7 +1779,7 @@
     // with them: the list is right there, and the number was the only thing
     // making the three headers different shapes.
     .cook-section__head {
-        font-size: 1rem;
+        font-size: calc(var(--font-size-md) * 1rem);
         font-weight: 600;
     }
     .cook-section__title {
@@ -1896,7 +1820,7 @@
     }
     // fill-bar visually echoes the MM:SS countdown.
     .timer-bar {
-        transition: opacity var(--motion-normal, 200ms) ease;
+        transition: opacity var(--motion-normal) var(--motion-ease);
     }
     .timer-text {
         font-variant-numeric: tabular-nums;
@@ -1960,7 +1884,7 @@
         opacity: 0.65;
     }
     .all-steps-row--sub {
-        padding-left: 32px;
+        padding-left: var(--space-8);
     }
     // The swapped-in substitute's conversion + note, under the row it applies
     // to. Secondary ink rather than muted: it is an instruction you act on,
@@ -2037,35 +1961,6 @@
             flex: 1 1 100%;
             margin-left: 0;
             justify-content: space-between;
-        }
-    }
-    // Prev / Repeat / Next — one row at every width (owner feedback
-    // 2026-09-03). Each button shrinks from a zero basis so three labelled
-    // `size="lg"` buttons share a 340px phone instead of wrapping the third
-    // one onto its own line.
-    .cook-nav {
-        display: flex;
-        justify-content: center;
-        gap: var(--space-2);
-    }
-    .cook-nav :deep(.dora-btn) {
-        flex: 0 1 auto;
-        min-width: 0;
-        // D-004. These were 42px at `size="lg"` before this pass and 42px
-        // after the mobile type step-down below — measured, not assumed — on
-        // the surface most likely to be tapped with a floury finger.
-        min-height: 44px;
-    }
-    @media (max-width: 599px) {
-        .cook-nav :deep(.dora-btn) {
-            flex: 1 1 0;
-            padding-left: var(--space-2);
-            padding-right: var(--space-2);
-        }
-        // …and stop q-btn's content from wrapping if a translation or a
-        // narrower phone puts it back on the boundary.
-        .cook-nav :deep(.q-btn__content) {
-            flex-wrap: nowrap;
         }
     }
 </style>

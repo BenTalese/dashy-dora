@@ -6,9 +6,7 @@ export type BeliefBand = 'out' | 'low' | 'stocked';
 export type ConfidenceBand = 'high' | 'medium' | 'low';
 
 export interface PantryBelief {
-    believed_sequence: number;
     believed_band: BeliefBand;
-    confidence: number;          // 0..1
     confidence_band: ConfidenceBand;
     reason: string;
     /** True when this is a genuine inference (extrapolated), false when it

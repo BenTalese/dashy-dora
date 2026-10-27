@@ -20,7 +20,9 @@ from typing import List
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import func, select
 
+from dora_api.app import db
 from dora_api.domain.entities.stock_group import StockGroup
 from dora_api.domain.entities.stock_item import StockItem
 from dora_api.features.routers import STOCK_GROUP_ROUTER
@@ -30,8 +32,11 @@ from dora_api.infrastructure.api_response import (business_rule_violation,
 from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.field import EntityField
+from dora_api.persistence.uuid_key import uuid_key
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,23 +54,22 @@ class GetStockGroupsHandler:
 
     def handle(self) -> List[StockGroupDto]:
         groups: List[StockGroup] = self.repository.get(StockGroup).all()
-        # Pull every stock item once and bucket — cheaper than N round trips
-        # when there are a few dozen groups.
-        items = self.repository.get(StockItem).all()
-        counts: dict[UUID, int] = {}
-        for item in items:
-            # Bucket via the underscore FK, not the `stock_group` relationship:
-            # the latter is lazy="noload" so it read as None on every item and
-            # item_count was always 0 (FU-527). We only need the id to count,
-            # so read the FK column directly — no relationship load required.
-            group_id = item._stock_group_id
-            if group_id is not None:
-                counts[group_id] = counts.get(group_id, 0) + 1
+        # R-005 carve-out: a grouped count the repository has no port for
+        # (finalisation 05-R31; it loaded every stock item to bucket them).
+        item = db.metadata.tables["StockItem"]
+        counts = {
+            uuid_key(group_id): int(n)
+            for group_id, n in db.session.execute(
+                select(item.c.stock_group_id, func.count())
+                .where(item.c.stock_group_id.is_not(None))
+                .group_by(item.c.stock_group_id)
+            ).all()
+        }
         out = [
             StockGroupDto(
                 stock_group_id = g.id,
                 name = g.name,
-                item_count = counts.get(g.id, 0),
+                item_count = counts.get(uuid_key(g.id), 0),
             )
             for g in groups
         ]
@@ -75,9 +79,8 @@ class GetStockGroupsHandler:
 
 @STOCK_GROUP_ROUTER.route("", methods=["GET"])
 def get_stock_groups():
-    _Logger = logging.getLogger(__name__)
     _Result = GetStockGroupsHandler(SqlAlchemyRepository()).handle()
-    _Logger.debug("Returned %d stock groups", len(_Result))
+    _LOGGER.debug("Returned %d stock groups", len(_Result))
     return ok(_Result)
 
 
@@ -116,14 +119,13 @@ class CreateStockGroupHandler:
 @STOCK_GROUP_ROUTER.route("", methods=["POST"])
 @has_request_body(CreateStockGroupRequest)
 def create_stock_group():
-    _Logger = logging.getLogger(__name__)
     _Request: CreateStockGroupRequest = get_request_body()
     _Response = CreateStockGroupHandler(SqlAlchemyRepository()).handle(_Request)
     if _Response.duplicate:
         return business_rule_violation(
             f"A stock group named '{_Request.name}' already exists."
         )
-    _Logger.info(f"Created stock group {_Response.stock_group_id} '{_Request.name}'")
+    _LOGGER.info(f"Created stock group {_Response.stock_group_id} '{_Request.name}'")
     return created(
         _Response.stock_group_id,
         f"{STOCK_GROUP_ROUTER.name}.{get_stock_groups.__name__}",
@@ -169,7 +171,6 @@ class UpdateStockGroupHandler:
 @STOCK_GROUP_ROUTER.route("/<uuid:stock_group_id>", methods=["PATCH"])
 @has_request_body(UpdateStockGroupRequest)
 def update_stock_group(stock_group_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _Request: UpdateStockGroupRequest = get_request_body()
     _Response = UpdateStockGroupHandler(SqlAlchemyRepository()).handle(_Request, stock_group_id)
     if _Response.not_found:
@@ -178,7 +179,7 @@ def update_stock_group(stock_group_id: UUID):
         return business_rule_violation(
             f"A stock group named '{_Request.name}' already exists."
         )
-    _Logger.info(f"Renamed stock group {stock_group_id}")
+    _LOGGER.info(f"Renamed stock group {stock_group_id}")
     return no_content()
 
 
@@ -212,11 +213,10 @@ class DeleteStockGroupHandler:
 
 @STOCK_GROUP_ROUTER.route("/<uuid:stock_group_id>", methods=["DELETE"])
 def delete_stock_group(stock_group_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _Response = DeleteStockGroupHandler(SqlAlchemyRepository()).handle(stock_group_id)
     if _Response.not_found:
         return not_found("StockGroup", stock_group_id)
-    _Logger.info(
+    _LOGGER.info(
         f"Deleted stock group {stock_group_id}; "
         f"{_Response.items_affected} stock item(s) had their group nulled"
     )

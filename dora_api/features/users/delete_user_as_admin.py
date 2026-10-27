@@ -26,7 +26,7 @@ from sqlalchemy import delete
 from dora_api.app import db
 from dora_api.domain.entities.audit_event import SEVERITY_AUDIT
 from dora_api.domain.entities.user import User
-from dora_api.features.auth.admin_gate import _require_admin
+from dora_api.features.auth.admin_gate import require_admin
 from dora_api.features.routers import USER_ROUTER
 from dora_api.features.users.admin_guards import other_usable_admins
 from dora_api.infrastructure.api_response import (business_rule_violation,
@@ -35,6 +35,8 @@ from dora_api.infrastructure.api_response import (business_rule_violation,
 from dora_api.infrastructure.audit import emit as audit_emit
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
+
+_LOGGER = logging.getLogger(__name__)
 
 
 # Tables that carry a plain `user_id` column with no FK-cascade — we clear
@@ -81,8 +83,7 @@ class AdminDeleteUserHandler:
 
 @USER_ROUTER.route("<uuid:user_id>", methods=["DELETE"])
 def admin_delete_user(user_id: UUID):
-    _Logger = logging.getLogger(__name__)
-    _CallerId, err = _require_admin()
+    _CallerId, err = require_admin()
     if err is not None:
         return err
 
@@ -109,5 +110,5 @@ def admin_delete_user(user_id: UUID):
         payload={},
     )
 
-    _Logger.info("Admin %s deleted user %s", _CallerId, user_id)
+    _LOGGER.info("Admin %s deleted user %s", _CallerId, user_id)
     return no_content()

@@ -23,6 +23,8 @@ from dora_api.infrastructure.api_response import ok
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 
+_LOGGER = logging.getLogger(__name__)
+
 
 @dataclass
 class LocationItemDto:
@@ -116,7 +118,6 @@ class GetLocationTreeHandler:
 
 @LOCATION_ROUTER.route("", methods=["GET"])
 def get_location_tree():
-    _Logger = logging.getLogger(__name__)
     _Tree = GetLocationTreeHandler(SqlAlchemyRepository()).handle()
-    _Logger.info(f"Returning location tree with {len(_Tree)} root zones.")
+    _LOGGER.info(f"Returning location tree with {len(_Tree)} root zones.")
     return ok(_Tree)

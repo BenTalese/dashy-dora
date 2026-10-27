@@ -15,17 +15,19 @@ producer the install runs — this round just creates / lists / removes
 the subscription rows.
 """
 import logging
-from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import UUID
 
-from flask import request, session
+from flask import request
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import and_, select
+from sqlalchemy import select
 
 from dora_api.app import db
 from dora_api.domain.entities.price_alert import PriceAlert
+from dora_api.domain.entities.product import Product
+from dora_api.domain.product_offer import discount_percent
+from dora_api.features._ranges import RANGE_DAYS, range_start
 from dora_api.features.routers import PRICE_HISTORY_ROUTER
 from dora_api.features.stock_items.your_prices import (
     build_product_observation_series, build_your_prices_for_product)
@@ -35,20 +37,14 @@ from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
+from dora_api.infrastructure.session_user import current_user_id
+
+_LOGGER = logging.getLogger(__name__)
 
 
-_RANGE_DAYS = {"30d": 30, "90d": 90, "1y": 365}
-
-
-def _range_cutoff(value: str | None) -> datetime | None:
-    """`None` = "all" (no cutoff). Otherwise returns the earliest
-    timestamp we'll include points from."""
-    if not value or value == "all":
-        return None
-    days = _RANGE_DAYS.get(value)
-    if days is None:
-        return None
-    return datetime.now(timezone.utc) - timedelta(days=days)
+def _as_utc(value: datetime) -> datetime:
+    """SQLite hands back naive datetimes, which are stored as UTC."""
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
 
 
 def _parse_product_ids(raw: str | None) -> list[UUID]:
@@ -66,29 +62,22 @@ def _parse_product_ids(raw: str | None) -> list[UUID]:
     return out
 
 
-def _current_user_id() -> UUID | None:
-    raw = session.get("user_id")
-    if not raw:
-        return None
-    try:
-        return UUID(raw)
-    except (ValueError, TypeError):
-        return None
-
-
 # ── GET /api/price-history ────────────────────────────────────────────
 
 @PRICE_HISTORY_ROUTER.route("", methods=["GET"])
 def get_price_history():
-    _Logger = logging.getLogger(__name__)
     ids = _parse_product_ids(request.args.get("product_ids"))
     if not ids:
         return bad_request("Provide one or more product_ids (comma-separated UUIDs).")
     if len(ids) > 5:
         return bad_request("At most 5 products at a time.")
 
-    cutoff = _range_cutoff(request.args.get("range"))
+    # An absent or unknown token (and "all") means all time.
+    repo = SqlAlchemyRepository()
+    cutoff = range_start(RANGE_DAYS.get(request.args.get("range") or ""), repo)
 
+    # R-005 carve-out: a four-table aggregate (product, store, live offer,
+    # history) read once per request; core SQL is portable both ways.
     product_table = db.metadata.tables["Product"]
     store_table = db.metadata.tables["Store"]
     offer_table = db.metadata.tables["ProductOffer"]
@@ -105,15 +94,17 @@ def get_price_history():
     ).mappings().all()
     products_by_id = {row["id"]: dict(row) for row in products}
 
-    # Historic points per product.
-    where_clauses = [historic_table.c.product_id.in_(ids)]
-    if cutoff is not None:
-        where_clauses.append(historic_table.c.offered_on >= cutoff)
-    historic_rows = db.session.execute(
-        select(historic_table).where(and_(*where_clauses)).order_by(
+    # Every historic point once: the all-time low reads them all, the series
+    # only those inside the range.
+    all_history = db.session.execute(
+        select(historic_table).where(historic_table.c.product_id.in_(ids)).order_by(
             historic_table.c.product_id, historic_table.c.offered_on,
         )
     ).mappings().all()
+    historic_rows = [
+        row for row in all_history
+        if cutoff is None or (row["offered_on"] is not None and _as_utc(row["offered_on"]) >= cutoff)
+    ]
 
     # Live offers (current).
     current_rows = db.session.execute(
@@ -121,11 +112,6 @@ def get_price_history():
     ).mappings().all()
     current_by_product = {row["product_id"]: dict(row) for row in current_rows}
 
-    # All-time-low needs the full history regardless of range.
-    atl_where = [historic_table.c.product_id.in_(ids)]
-    all_history = db.session.execute(
-        select(historic_table).where(and_(*atl_where))
-    ).mappings().all()
     atl_by_product: dict[Any, dict[str, Any]] = {}
     for row in all_history:
         pid = row["product_id"]
@@ -162,8 +148,6 @@ def get_price_history():
     # observation series only when a product has no offers (the H2 fallback)
     # so the per-unit observation scale never clashes with the raw offer scale
     # on a product that has offers (decision: H2-fallback-only).
-    _Repo = SqlAlchemyRepository()
-
     for pid in ids:
         product = products_by_id.get(pid)
         if product is None:
@@ -176,16 +160,10 @@ def get_price_history():
             })
             continue
         current = current_by_product.get(pid)
-        deal_pct = None
-        if current and current.get("price_now") and current.get("price_was"):
-            try:
-                pct = (1.0 - (current["price_now"] / current["price_was"])) * 100.0
-                deal_pct = max(0, int(round(pct)))
-            except (TypeError, ZeroDivisionError):
-                deal_pct = None
+        deal_pct = discount_percent(current["price_now"], current["price_was"]) if current else None
 
-        _Yp = build_your_prices_for_product(_Repo, pid)
-        _ObsUnit, _ObsPoints = build_product_observation_series(_Repo, pid)
+        _Yp = build_your_prices_for_product(repo, pid)
+        _ObsUnit, _ObsPoints = build_product_observation_series(repo, pid)
 
         series.append({
             "product_id": str(pid),
@@ -221,7 +199,7 @@ def get_price_history():
             ],
         })
 
-    _Logger.debug(
+    _LOGGER.debug(
         "price_history requested ids=%s range=%s", ids, request.args.get("range"),
     )
     return ok({"series": series})
@@ -238,16 +216,13 @@ class CreatePriceAlertRequest(BaseModel):
 @PRICE_HISTORY_ROUTER.route("/alerts", methods=["POST"])
 @has_request_body(CreatePriceAlertRequest)
 def create_price_alert():
-    user_id = _current_user_id()
+    user_id = current_user_id()
     if user_id is None:
         return bad_request("Not signed in.")
     body: CreatePriceAlertRequest = get_request_body()
 
     repo = SqlAlchemyRepository()
-    product_table = db.metadata.tables["Product"]
-    if db.session.execute(
-        select(product_table.c.id).where(product_table.c.id == body.product_id)
-    ).first() is None:
+    if repo.get(Product).by_id(body.product_id) is None:
         return not_found("Product", body.product_id)
 
     # One watch per product per user (owner 2026-10-15): setting a new price
@@ -267,7 +242,6 @@ def create_price_alert():
         repo.add(row)
     else:
         row.threshold_unit_price = float(body.threshold_unit_price)
-        row.last_fired_at = None
     repo.save_changes()
     return ok({
         "price_alert_id": str(row.id),
@@ -279,9 +253,11 @@ def create_price_alert():
 
 @PRICE_HISTORY_ROUTER.route("/alerts", methods=["GET"])
 def list_price_alerts():
-    user_id = _current_user_id()
+    user_id = current_user_id()
     if user_id is None:
         return bad_request("Not signed in.")
+    # R-005 carve-out: a three-table projection (watch + product + store) for
+    # one list; core SQL is portable to Postgres and SQLite alike.
     alert_table = db.metadata.tables["PriceAlert"]
     product_table = db.metadata.tables["Product"]
     store_table = db.metadata.tables["Store"]
@@ -289,7 +265,6 @@ def list_price_alerts():
         select(
             alert_table.c.id, alert_table.c.product_id,
             alert_table.c.threshold_unit_price, alert_table.c.created_at,
-            alert_table.c.last_fired_at,
             product_table.c.name.label("product_name"),
             store_table.c.name.label("store_name"),
         )
@@ -309,7 +284,6 @@ def list_price_alerts():
                 "store_name": r["store_name"],
                 "threshold_unit_price": float(r["threshold_unit_price"]),
                 "created_at": r["created_at"].isoformat() if r["created_at"] else None,
-                "last_fired_at": r["last_fired_at"].isoformat() if r["last_fired_at"] else None,
             }
             for r in rows
         ],
@@ -319,18 +293,17 @@ def list_price_alerts():
 @PRICE_HISTORY_ROUTER.route("/alerts/<uuid:alert_id>", methods=["DELETE"])
 def delete_price_alert(alert_id: UUID):
     # R-033: uuid converter parses the id at the routing edge (FU-544).
-    user_id = _current_user_id()
+    user_id = current_user_id()
     if user_id is None:
         return bad_request("Not signed in.")
-    alert_table = db.metadata.tables["PriceAlert"]
+    repo = SqlAlchemyRepository()
     # Scope by user so one account can't delete another's alerts.
-    result = db.session.execute(
-        alert_table.delete().where(
-            alert_table.c.id == alert_id,
-            alert_table.c.user_id == user_id,
-        )
+    alert = repo.get(PriceAlert).one(
+        EntityField(PriceAlert, "id").eq(alert_id)
+        & EntityField(PriceAlert, PriceAlert.Fields.USER_ID).eq(user_id)
     )
-    db.session.commit()
-    if (result.rowcount or 0) == 0:
+    if alert is None:
         return not_found("PriceAlert", alert_id)
+    repo.remove(alert)
+    repo.save_changes()
     return no_content()

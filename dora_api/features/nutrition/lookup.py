@@ -38,15 +38,15 @@ from dora_api.domain.entities.nutrition_food import (
     NUTRITION_SOURCE_USDA_API,
     NutritionFood,
 )
-from dora_api.domain.entities.nutrition_portion import NutritionPortion
 from dora_api.features.help.version_info import CURRENT_VERSION
 from dora_api.features.nutrition.nutrients import (
-    NUTRIENT_ATTRS, USDA_NUTRIENT_ATTRS, off_values,
+    NUTRIENT_ATTRS, USDA_NUTRIENT_ATTRS, off_values, to_float,
 )
 from dora_api.persistence.bool_operation import Or
 from dora_api.persistence.field import EntityField as Field
+from dora_api.features.nutrition.household_measures import portions_by_food
 
-_LOG = logging.getLogger(__name__)
+_LOGGER = logging.getLogger(__name__)
 
 _OFF_PRODUCT_URL = (
     "https://world.openfoodfacts.org/api/v2/product/{ean}.json"
@@ -262,21 +262,15 @@ def _search_local(repository, text: str, is_barcode: bool) -> List[FoodResult]: 
 
 
 def _portions_for(repository, food_ids) -> dict:  # noqa: ANN001
-    """Batch-load portions for the whole result page — one query, not one per
-    row (the mapping deliberately has no relationship object; R-032)."""
-    if not food_ids:
-        return {}
-    rows = repository.get(NutritionPortion).where(
-        Field(NutritionPortion, NutritionPortion.Fields.NUTRITION_FOOD_ID).in_(list(food_ids))
-    ).all()
-    grouped: dict = {}
-    for row in rows:
-        grouped.setdefault(row.nutrition_food_id, []).append({
-            "amount": row.amount,
-            "measure": row.measure,
-            "gram_weight": row.gram_weight,
-        })
-    return grouped
+    """The result page's portions, as plain dicts for the DTO (one batch query
+    through `household_measures.portions_by_food`)."""
+    return {
+        food_id: [
+            {"amount": p.amount, "measure": p.measure, "gram_weight": p.gram_weight}
+            for p in rows
+        ]
+        for food_id, rows in portions_by_food(repository, list(food_ids or [])).items()
+    }
 
 
 def _fetch_json(url: str, purpose: str) -> dict:
@@ -334,13 +328,6 @@ def _fetch_json_once(url: str, purpose: str) -> dict:
     return body
 
 
-def _to_float(raw) -> Optional[float]:  # noqa: ANN001
-    try:
-        return float(raw) if raw not in (None, "") else None
-    except (TypeError, ValueError):
-        return None
-
-
 def _off_result(product: dict) -> Optional[FoodResult]:
     name = (
         (product.get("product_name") or "").strip()
@@ -356,7 +343,7 @@ def _off_result(product: dict) -> Optional[FoodResult]:
         brand = (product.get("brands") or "").strip() or None,
         barcode = (product.get("code") or "").strip() or None,
         # OFF's key names + the sodium g→mg conversion live in `nutrients.py`.
-        **off_values(nutriments, _to_float),
+        **off_values(nutriments),
     )
 
 
@@ -465,7 +452,7 @@ def _parse_usda_foods(body: dict) -> List[FoodResult]:
         for nutrient in (food.get("foodNutrients") or []):
             name = (nutrient.get("nutrientName") or "").strip().lower()
             unit = (nutrient.get("unitName") or "").strip().lower()
-            amount = _to_float(nutrient.get("value"))
+            amount = to_float(nutrient.get("value"))
             if amount is None:
                 continue
             # Same (name, unit) table the bulk CSV importer matches on.

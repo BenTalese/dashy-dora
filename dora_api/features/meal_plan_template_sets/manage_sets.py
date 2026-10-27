@@ -30,6 +30,8 @@ from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 
+_LOGGER = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True, slots=True)
 class TemplateSetItemDto:
@@ -201,14 +203,13 @@ class CreateSetHandler:
 @MEAL_PLAN_TEMPLATE_SET_ROUTER.route("", methods=["POST"])
 @has_request_body(CreateSetRequest)
 def create_template_set():
-    _Logger = logging.getLogger(__name__)
     _Request: CreateSetRequest = get_request_body()
     _Response = CreateSetHandler(SqlAlchemyRepository()).handle(_Request)
     if _Response.missing_template_ids:
         return business_rule_violation(
             f"Unknown template id(s): {', '.join(str(t) for t in _Response.missing_template_ids)}"
         )
-    _Logger.info(f"Created template set {_Response.set_id} '{_Request.name}'")
+    _LOGGER.info(f"Created template set {_Response.set_id} '{_Request.name}'")
     return created(
         _Response.set_id,
         f"{MEAL_PLAN_TEMPLATE_SET_ROUTER.name}.{get_template_sets.__name__}",
@@ -298,9 +299,8 @@ class DeleteSetHandler:
 
 @MEAL_PLAN_TEMPLATE_SET_ROUTER.route("/<uuid:set_id>", methods=["DELETE"])
 def delete_template_set(set_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _Response = DeleteSetHandler(SqlAlchemyRepository()).handle(set_id)
     if _Response.not_found:
         return not_found("MealPlanTemplateSet", set_id)
-    _Logger.info(f"Deleted template set {set_id}")
+    _LOGGER.info(f"Deleted template set {set_id}")
     return no_content()

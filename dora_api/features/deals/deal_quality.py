@@ -25,14 +25,16 @@ Two layers, same file shape as `get_buy_verdict.py`:
 import logging
 import statistics
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Literal, Optional
 from uuid import UUID
 
+from dora_api.persistence.aware import as_utc
 from dora_api.domain.entities.product import Product
 from dora_api.domain.entities.stock_item_price_observation import \
     StockItemPriceObservation
-from dora_api.features.app_settings.clock import household_today
+from dora_api.features.app_settings.clock import household_timezone, household_today
+from dora_api.features.products.product_links import linked_stock_items
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 
@@ -143,21 +145,6 @@ def compute_deal_quality(
 # ── The only repo-touching layer ──────────────────────────────────────
 
 
-def _linked_stock_item_ids(repository: SqlAlchemyRepository, product_id: UUID) -> list[UUID]:
-    """Stock items this product is linked to (StockItemProduct join). Read
-    straight off the link table — same access shape `_compute_estimated_cost`
-    uses; no ORM entity exists for the pure join row."""
-    from dora_api.app import db
-    from sqlalchemy import select
-
-    link_table = db.metadata.tables["StockItemProduct"]
-    stmt = select(link_table.c.stock_item_id).where(
-        link_table.c.product_id == product_id
-    )
-    rows = db.session.execute(stmt).all()
-    return [r[0] for r in rows]
-
-
 def get_deal_quality(
     product_id: UUID,
     repository: SqlAlchemyRepository,
@@ -174,21 +161,20 @@ def get_deal_quality(
     if product is None or product.current_offer is None:
         return None
 
+    # The window opens at the household's midnight (R-021). SQLite hands back
+    # naive datetimes, which are stored as UTC.
     today = household_today(repository)
     horizon = datetime.combine(
         today - timedelta(days=window_days),
-        datetime.min.time(), tzinfo=timezone.utc,
+        datetime.min.time(), tzinfo=household_timezone(repository),
     )
-
-    def _as_utc(dt: datetime) -> datetime:
-        return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
 
     current = product.current_offer
     window_prices: list[float] = [current.price_now]
     for h in (product.historic_offers or []):
         if h.price_now is None or h.offered_on is None:
             continue
-        if _as_utc(h.offered_on) >= horizon:
+        if as_utc(h.offered_on) >= horizon:
             window_prices.append(h.price_now)
 
     offer_claims_saving = (
@@ -203,7 +189,8 @@ def get_deal_quality(
     # per-unit basis Buy Verdict reasons over. Unit reconciliation against
     # the product's own unit is pass-through (documented rough heuristic).
     household_unit_paid_prices: list[float] = []
-    stock_item_ids = _linked_stock_item_ids(repository, product_id)
+    link = linked_stock_items(repository, [product_id]).get(product_id)
+    stock_item_ids = [link.stock_item_id] if link else []
     if stock_item_ids:
         observations: list[StockItemPriceObservation] = repository.get(
             StockItemPriceObservation

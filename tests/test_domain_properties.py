@@ -27,7 +27,7 @@ from hypothesis import strategies as st
 
 from dora_api.domain import units
 from dora_api.domain.product_offer import discount_percent
-from dora_api.domain.recipe_cookability import (cookability_state, is_cookable,
+from dora_api.domain.recipe_cookability import (cookability_state,
                                                 missing_count_for,
                                                 missing_stock_item_names_for,
                                                 unlinked_count_for)
@@ -35,7 +35,7 @@ from dora_api.domain.stock_status import (EXPIRING_SOON_WINDOW_DAYS,
                                           LOW_STOCK_SEQUENCE,
                                           OUT_OF_STOCK_SEQUENCE, StockStatus,
                                           effective_expiring_soon_window,
-                                          get_stock_item_unit_cost_at,
+                                          get_stock_item_unit_cost_with_unit_at,
                                           is_low_stock, is_missing,
                                           is_out_of_stock, level_for_status,
                                           needs_restock, status_for)
@@ -107,7 +107,7 @@ def test__cookability__property__optional_ingredients_are_inert(ings, extras):
     ]
     augmented = ings + optional_extras
     assert cookability_state(augmented) == cookability_state(ings)
-    assert is_cookable(augmented) == is_cookable(ings)
+    assert (missing_count_for(augmented) == 0) == (missing_count_for(ings) == 0)
     assert missing_count_for(augmented) == missing_count_for(ings)
     assert unlinked_count_for(augmented) == unlinked_count_for(ings)
     assert missing_stock_item_names_for(augmented) == missing_stock_item_names_for(ings)
@@ -168,7 +168,7 @@ def test__cookability__property__tri_state_agrees_with_bool_when_fully_linked(in
     """When no required ingredient is unlinked, the tri-state answer collapses
     to the legacy boolean predicate."""
     assume(unlinked_count_for(ings) == 0)
-    assert cookability_state(ings) is is_cookable(ings)
+    assert cookability_state(ings) is (missing_count_for(ings) == 0)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -282,24 +282,29 @@ _observations = st.builds(
 )
 
 
+def _unit_cost(observations, when):
+    priced = get_stock_item_unit_cost_with_unit_at(observations, when)
+    return priced.amount if priced is not None else None
+
+
 @given(st.lists(_observations, max_size=8), _observed_ats)
 def test__unit_cost_at__property__observations_after_when_are_invisible(observations, when):
     """`when` is a hard cutoff: the result over the full history equals the
     result over only the at-or-before-`when` slice, and rows with a zero
     measure are inert."""
     visible = [o for o in observations if o.observed_at <= when]
-    assert get_stock_item_unit_cost_at(observations, when) == \
-        get_stock_item_unit_cost_at(visible, None)
+    assert _unit_cost(observations, when) == \
+        _unit_cost(visible, None)
     # None exactly when nothing usable is visible.
     usable = [o for o in visible if o.total_measure]
-    assert (get_stock_item_unit_cost_at(observations, when) is None) == (not usable)
+    assert (_unit_cost(observations, when) is None) == (not usable)
 
 
 @given(st.lists(_observations, max_size=8))
 def test__unit_cost_at__property__result_is_latest_usable_observations_ratio(observations):
     """The returned cost is exactly `total_price / total_measure` of the
     most recent usable (non-zero-measure) observation."""
-    result = get_stock_item_unit_cost_at(observations, None)
+    result = _unit_cost(observations, None)
     usable = [o for o in observations if o.total_measure]
     if not usable:
         assert result is None

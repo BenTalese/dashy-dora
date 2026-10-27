@@ -109,6 +109,7 @@
 </template>
 
 <script lang="ts" setup>
+    import { useSettingsSave } from 'src/composables/useSettingsSave';
     import BaseTooltip from 'src/components/BaseTooltip.vue';
     import BaseButton from 'src/components/BaseButton.vue';
     import ImageEditTile from 'src/components/ImageEditTile.vue';
@@ -124,6 +125,7 @@
     import SettingsPageHeader from 'src/components/settings/SettingsPageHeader.vue';
 
     const $q = useQuasar();
+    const { notifySuccess, notifyError } = useSettingsSave();
     const storesStore = useStoresStore();
     const { stores } = storeToRefs(storesStore);
 
@@ -169,13 +171,9 @@
         saving.value = true;
         try {
             await storesStore.createAsync({ name });
-            $q.notify({ type: 'positive', message: `Added ${name}.` });
+            notifySuccess(`Added ${name}.`);
         } catch (e) {
-            $q.notify({
-                type: 'negative',
-                message: "Couldn't add the store.",
-                caption: toastCaption(e),
-            });
+            notifyError("Couldn't add the store.", e);
         } finally {
             saving.value = false;
         }
@@ -193,13 +191,9 @@
         if (!next || next === store.name) return;
         try {
             await storesStore.updateAsync({ store_id: store.store_id, name: next });
-            $q.notify({ type: 'positive', message: `Updated ${next}.` });
+            notifySuccess(`Updated ${next}.`);
         } catch (e) {
-            $q.notify({
-                type: 'negative',
-                message: "Couldn't update the store.",
-                caption: toastCaption(e),
-            });
+            notifyError("Couldn't update the store.", e);
         }
     }
 
@@ -218,11 +212,7 @@
                 image: image.dataUrl,
             });
         } catch (e) {
-            $q.notify({
-                type: 'negative',
-                message: `Couldn't update ${store.name}'s logo.`,
-                caption: toastCaption(e),
-            });
+            notifyError(`Couldn't update ${store.name}'s logo.`, e);
         } finally {
             imageBusyId.value = null;
         }
@@ -242,11 +232,7 @@
                 clear_image: true,
             });
         } catch (e) {
-            $q.notify({
-                type: 'negative',
-                message: `Couldn't remove ${store.name}'s logo.`,
-                caption: toastCaption(e),
-            });
+            notifyError(`Couldn't remove ${store.name}'s logo.`, e);
         } finally {
             imageBusyId.value = null;
         }
@@ -267,17 +253,10 @@
                         result.items_affected || result.lines_affected
                             ? ` (${result.items_affected} stock item(s) and ${result.lines_affected} shopping line(s) had their store reference cleared.)`
                             : '';
-                    $q.notify({
-                        type: 'positive',
-                        message: `Deleted ${store.name}.${tail}`,
-                    });
+                    notifySuccess(`Deleted ${store.name}.${tail}`);
                 })
                 .catch((e) => {
-                    $q.notify({
-                        type: 'negative',
-                        message: `Couldn't delete ${store.name}.`,
-                        caption: toastCaption(e),
-                    });
+                    notifyError(`Couldn't delete ${store.name}.`, e);
                 });
         });
     }

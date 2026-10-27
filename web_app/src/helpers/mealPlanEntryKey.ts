@@ -3,13 +3,11 @@ import type { MealPlanEntry } from 'src/models/mealPlan';
 /**
  * Stable `v-for` keys for a list of planned meals.
  *
- * **Why not `meal_plan_entry_id`.** `PATCH /meal-plans/{id}` replaces the whole
- * forward portion of a plan on every edit — it deletes the future entries and
- * inserts new rows (`update_meal_plan.py`, and the cook-batch rebuild that sits
- * on top of it depends on that shape). So an entry's database id changes every
- * time *anything* in the week is saved, including a change to a different meal
- * on a different day. Keyed on that id, Vue sees a whole new list and remounts
- * every card.
+ * **Why not `meal_plan_entry_id`.** `PATCH /meal-plans/{id}` keeps a forward
+ * entry's id when the row names it (FU-878 match-and-update), but a row without
+ * one, and anything the cook-batch rebuild re-mints, comes back as a new entry
+ * with a new id. Keyed on that id, Vue would remount any card whose entry the
+ * save re-created.
  *
  * That is invisible until something lives *inside* a card across an edit — and
  * one thing does: the entry menu's servings stepper. Owner report 2026-09-05:

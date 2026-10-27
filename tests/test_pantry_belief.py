@@ -197,14 +197,14 @@ def test__as_date__buckets_a_stored_utc_instant_in_the_household_zone():
     values are stored UTC."""
     from datetime import date as _date, datetime as _dt, timezone as _tz
     from zoneinfo import ZoneInfo as _Zone
-    from dora_api.features.stock_items.pantry_belief import _as_date
+    from dora_api.features.stock_items.pantry_belief import _household_date
 
     sydney = _Zone("Australia/Sydney")
     aware = _dt(2026, 1, 1, 22, 0, tzinfo=_tz.utc)
     naive = _dt(2026, 1, 1, 22, 0)
 
-    assert _as_date(aware, sydney) == _date(2026, 1, 2)
-    assert _as_date(naive, sydney) == _date(2026, 1, 2)
-    assert _as_date(naive, _Zone("UTC")) == _date(2026, 1, 1)
-    assert _as_date(_date(2026, 1, 1), sydney) == _date(2026, 1, 1)
-    assert _as_date(None, sydney) is None
+    assert _household_date(aware, sydney) == _date(2026, 1, 2)
+    assert _household_date(naive, sydney) == _date(2026, 1, 2)
+    assert _household_date(naive, _Zone("UTC")) == _date(2026, 1, 1)
+    assert _household_date(_date(2026, 1, 1), sydney) == _date(2026, 1, 1)
+    assert _household_date(None, sydney) is None

@@ -1,5 +1,5 @@
 import { computed, ref } from 'vue';
-import HealthApiService from 'src/services/api/healthApiService';
+import HealthApiService, { invalidateHealthInfo } from 'src/services/api/healthApiService';
 
 // Install-wide meal-reconcile posture, read from /api/health (owner 2026-08-13).
 // `autoDrain` picks the /meal-plans/reconcile surface:
@@ -43,6 +43,7 @@ function load(): Promise<void> {
 export function refreshReconcilePolicy(): Promise<void> {
     loaded.value = false;
     inflight = null;
+    invalidateHealthInfo();
     return load();
 }
 

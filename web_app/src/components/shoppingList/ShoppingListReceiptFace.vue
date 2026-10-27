@@ -108,8 +108,6 @@
     const props = defineProps<{
         detail: ShoppingListDetail;
         amending: boolean;
-        /** Rendered under the heading — the page owns date formatting. */
-        completedLabel: string | null;
     }>();
 
     const emit = defineEmits<{

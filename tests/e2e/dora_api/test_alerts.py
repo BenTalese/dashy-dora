@@ -86,7 +86,7 @@ def test__alerts__actionable_count_equals_high_plus_medium_in_items(api):
     data = _alerts()
     actionable = sum(1 for a in data["items"] if a["severity"] in ("high", "medium"))
     assert data["actionable_count"] == actionable
-    assert data["fyi_count"] == sum(1 for a in data["items"] if a["severity"] == "low")
+    assert data["low_count"] == sum(1 for a in data["items"] if a["severity"] == "low")
     assert data["snoozed_count"] == len(data["snoozed"])
 
 
@@ -220,7 +220,7 @@ def _assert_count_split_matches_tiers(data: dict) -> None:
     # The canonical C-9.2 invariant: the badge/FYI counts are exactly the
     # per-alert effective-tier tallies — no drift between count and list.
     assert data["actionable_count"] == sum(1 for a in data["items"] if a["tier"] == "actionable")
-    assert data["fyi_count"] == sum(1 for a in data["items"] if a["tier"] == "fyi")
+    assert data["low_count"] == sum(1 for a in data["items"] if a["tier"] == "fyi")
 
 
 def test__alert_prefs__defaults_expose_every_kind_enabled(api):
@@ -256,6 +256,25 @@ def test__alert_prefs__cut_kinds_are_gone(api):
         ).status_code == 400, f"{cut} must be rejected as an unknown kind"
     assert all(a["kind"] not in ("out_of_stock", "low_stock", "stocktake_overdue")
                for a in _alerts()["items"]), "a cut kind is still being emitted"
+
+
+def test__alert_prefs__available_follows_the_evaluator_gates(api):
+    """Settings hides a toggle the install can never fire (finalisation
+    09-R13): price watches need money features; the reconcile nudge is for
+    households that confirm past meals by hand."""
+    try:
+        requests.patch(APP_SETTINGS, json={"money_enabled": False, "auto_drain_past_meals": True})
+        prefs = _prefs()
+        assert prefs["price_drop"]["available"] is False
+        assert prefs["meal_reconcile_overdue"]["available"] is False
+        assert prefs["expired"]["available"] is True
+
+        requests.patch(APP_SETTINGS, json={"money_enabled": True, "auto_drain_past_meals": False})
+        prefs = _prefs()
+        assert prefs["price_drop"]["available"] is True
+        assert prefs["meal_reconcile_overdue"]["available"] is True
+    finally:
+        requests.patch(APP_SETTINGS, json={"money_enabled": False, "auto_drain_past_meals": True})
 
 
 def test__alert_prefs__disabling_a_kind_removes_it_from_list_and_counts(api):

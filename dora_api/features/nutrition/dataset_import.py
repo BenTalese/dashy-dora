@@ -40,10 +40,10 @@ from dora_api.domain.entities.nutrition_food import (
 from dora_api.domain.entities.nutrition_portion import NutritionPortion
 from dora_api.features.help.version_info import GITHUB_URL
 from dora_api.features.nutrition.food_categories import normalise_category
-from dora_api.features.nutrition.nutrients import USDA_NUTRIENT_ATTRS
+from dora_api.features.nutrition.nutrients import USDA_NUTRIENT_ATTRS, to_float
 from dora_api.persistence.field import EntityField as Field
 
-_LOG = logging.getLogger(__name__)
+_LOGGER = logging.getLogger(__name__)
 
 # Release dates are baked into FDC filenames. SR Legacy is frozen ("the final
 # release … will not be updated"), so its URL is stable forever; Foundation
@@ -190,7 +190,7 @@ def _run_import(source: str, url: str) -> None:
     from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 
     try:
-        _LOG.info("Importing nutrition dataset '%s' from %s", source, url)
+        _LOGGER.info("Importing nutrition dataset '%s' from %s", source, url)
         payload = _download(
             url,
             on_progress = lambda done, total: _set(
@@ -217,12 +217,12 @@ def _run_import(source: str, url: str) -> None:
             _replace_dataset(SqlAlchemyRepository(), source, foods, portions)
 
         _set(source, phase="done", error=None)
-        _LOG.info(
+        _LOGGER.info(
             "Imported nutrition dataset '%s': %d foods, %d portions",
             source, len(foods), len(portions),
         )
     except Exception as exc:  # noqa: BLE001 — any failure becomes UI state
-        _LOG.exception("Nutrition dataset import failed for '%s'", source)
+        _LOGGER.exception("Nutrition dataset import failed for '%s'", source)
         message = _friendly_error(str(exc) or exc.__class__.__name__)
         _set(source, phase="error", error=message)
 
@@ -411,7 +411,7 @@ def parse_fdc_csv_zip(payload: bytes, source: str, on_rows=None):  # noqa: ANN00
         food = foods.get(row.get("fdc_id", ""))
         if food is None:
             continue
-        amount = _to_float(row.get("amount"))
+        amount = to_float(row.get("amount"))
         if amount is not None:
             setattr(food, attr, amount)
 
@@ -447,10 +447,10 @@ def _parse_portions(archive: zipfile.ZipFile, foods: Dict[str, NutritionFood]) -
     portions = []
     for row in _rows(archive, portion_member):
         food = foods.get(row.get("fdc_id", ""))
-        gram_weight = _to_float(row.get("gram_weight"))
+        gram_weight = to_float(row.get("gram_weight"))
         if food is None or not gram_weight:
             continue
-        amount = _to_float(row.get("amount")) or 1.0
+        amount = to_float(row.get("amount")) or 1.0
         measure = (
             unit_names.get(row.get("measure_unit_id", ""), "")
             or (row.get("portion_description") or "").strip()
@@ -465,14 +465,6 @@ def _parse_portions(archive: zipfile.ZipFile, foods: Dict[str, NutritionFood]) -
             gram_weight = gram_weight,
         ))
     return portions
-
-
-def _to_float(raw) -> Optional[float]:  # noqa: ANN001
-    try:
-        text = (raw or "").strip()
-        return float(text) if text else None
-    except (TypeError, ValueError):
-        return None
 
 
 def _replace_dataset(repository, source: str, foods, portions) -> None:  # noqa: ANN001

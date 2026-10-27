@@ -8,14 +8,14 @@ import AxiosHttpClient from './axiosHttpClient';
  */
 export type CadenceBand = 'weekly' | 'fortnightly' | 'monthly';
 
-export interface StocktakeQueueItem {
+/** What the queue (`/stocktake/queue`) and a session row (`/stocktake/session`)
+ *  share: one item, its band, and why it sits where it does (05-R36). */
+export interface StocktakeItemBase {
     stock_item_id: string;
     name: string;
     stock_level_name: string | null;
     stock_location_name: string | null;
     cadence_band: CadenceBand;
-    cadence_days: number;
-    last_checked_at: string | null;
     /** Whole days past the resolved band's window. Under Chunk 1's
      *  grace-period rule this is always ≥ 1 for anything in the
      *  queue (0-or-negative rows are filtered server-side). */
@@ -41,6 +41,11 @@ export interface StocktakeQueueItem {
     belief_band: string | null;
     belief_confidence: 'high' | 'medium' | 'low' | null;
     belief_reason: string | null;
+}
+
+export interface StocktakeQueueItem extends StocktakeItemBase {
+    cadence_days: number;
+    last_checked_at: string | null;
 }
 
 export interface StocktakeQueueResponse {
@@ -72,25 +77,14 @@ export interface StocktakeQueueResponse {
  * A Review or Walk row (Chunk 6 / D-4). One shape for both phases — what
  * differs between them is the *affordances*, not the data.
  */
-export interface StocktakeSessionItem {
-    stock_item_id: string;
-    name: string;
+export interface StocktakeSessionItem extends StocktakeItemBase {
     stock_level_id: string | null;
-    stock_level_name: string | null;
-    stock_location_name: string | null;
     /** Root-first path — `["Pantry", "Middle shelf", "Top shelf"]`. Owner
      *  feedback 2026-09-01: the walk is the moment you go and *find* the
      *  thing, and "Top shelf" alone doesn't say which shelf of what. Render
      *  through `formatLocation(…, 'full')`. Empty when the item has no
      *  location. */
     stock_location_breadcrumb: string[];
-    cadence_band: CadenceBand;
-    overdue_days: number;
-    is_essential: boolean;
-    check_rank: 'uncertain' | 'overdue' | 'confident';
-    belief_band: string | null;
-    belief_confidence: 'high' | 'medium' | 'low' | null;
-    belief_reason: string | null;
 }
 
 /** A Sweep row: what left rotation, when, and off the back of what. */

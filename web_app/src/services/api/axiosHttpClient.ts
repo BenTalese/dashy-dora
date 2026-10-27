@@ -2,6 +2,7 @@ import type { Axios, AxiosError, InternalAxiosRequestConfig } from 'axios';
 import axios from 'axios';
 import { Notify } from 'quasar';
 import { getBackendBaseUrl } from 'src/services/api/backendUrl';
+import { parseFilename } from 'src/services/files/downloadHelpers';
 
 class ApiErrorResponse extends Error {
     detail!: string;
@@ -107,6 +108,8 @@ export interface HttpClient {
      *  same session cookie, CSRF seeding and 401 routing — as every other
      *  call, which a bare <img src> or window.open() does NOT get. */
     getBlob(path: string): Promise<Blob>;
+    /** A download: the bytes plus the server's `Content-Disposition` filename. */
+    getFile(path: string): Promise<{ blob: Blob; filename: string | null }>;
     post<TResponse = unknown, TBody = unknown>(path: string, body: TBody): Promise<HttpClientResponse<TResponse>>;
     put<TResponse = unknown, TBody = unknown>(path: string, body: TBody): Promise<HttpClientResponse<TResponse>>;
     patch<TResponse = unknown, TBody = unknown>(path: string, body: TBody): Promise<HttpClientResponse<TResponse>>;
@@ -298,6 +301,20 @@ export default class AxiosHttpClient implements HttpClient {
             // reader (`details.title`, the notify caption) saw nothing. Read it
             // back into JSON before normalising — this is why a failed QR fetch
             // could only ever report its status (FU-648).
+            await this.parseBlobErrorBody(error as AxiosError);
+            return this.handleError(error as AxiosError, 'GET', path);
+        }
+    }
+
+    async getFile(path: string): Promise<{ blob: Blob; filename: string | null }> {
+        try {
+            const response = await this.axios.get<Blob>(path, { responseType: 'blob' });
+            const disposition = response.headers['content-disposition'];
+            return {
+                blob: response.data,
+                filename: parseFilename(typeof disposition === 'string' ? disposition : null),
+            };
+        } catch (error) {
             await this.parseBlobErrorBody(error as AxiosError);
             return this.handleError(error as AxiosError, 'GET', path);
         }

@@ -50,7 +50,7 @@ from cryptography.fernet import Fernet, InvalidToken
 
 
 _ENV_VAR = "DORA_SECRET_ENCRYPTION_KEY"
-_Logger = logging.getLogger(__name__)
+_LOGGER = logging.getLogger(__name__)
 
 
 class EncryptionUnavailable(Exception):
@@ -79,7 +79,7 @@ def _fernet() -> Fernet | None:
         # Bad key format (must be 32-byte url-safe-base64). Log the
         # operator-facing detail; treat as "no key configured" so
         # callers fail-fast rather than papering over a misconfig.
-        _Logger.error(
+        _LOGGER.error(
             "%s is set but invalid (%s). Generate a fresh key with "
             "`python -c 'from cryptography.fernet import Fernet; "
             "print(Fernet.generate_key().decode())'`.",

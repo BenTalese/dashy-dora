@@ -363,10 +363,3 @@ def lagged_window_end(now: datetime) -> datetime:
     """End of the 7-day-lagged window (exclusive)."""
     return now - timedelta(days=DORA_SCORE_TREND_LAG_DAYS)
 
-
-def is_expired_on(item_expiry: date | None, on: date) -> bool:
-    """A stock item is 'expired' for the freshness signal if its
-    ``expiry_date`` is on-or-before ``on``. Items with no expiry_date
-    contribute nothing (excluded from the ratio's denominator by the
-    caller — see ``total_items_with_expiry``)."""
-    return item_expiry is not None and item_expiry <= on

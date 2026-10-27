@@ -393,7 +393,6 @@ def configure_mappings(db: SQLAlchemy):
         Column("product_id", UUIDType, ForeignKey("Product.id", ondelete="CASCADE"), nullable=False),
         Column("threshold_unit_price", Float, nullable=False),
         Column("created_at", DateTime(timezone=True), nullable=False),
-        Column("last_fired_at", DateTime(timezone=True), nullable=True),
     )
 
     audit_event_table = Table(

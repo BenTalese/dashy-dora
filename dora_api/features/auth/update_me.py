@@ -25,6 +25,8 @@ from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 
+_LOGGER = logging.getLogger(__name__)
+
 
 class UpdateMeRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -294,7 +296,6 @@ class UpdateMeHandler:
 @AUTH_ROUTER.route("/me", methods=["PATCH"])
 @has_request_body(UpdateMeRequest)
 def update_me():
-    _Logger = logging.getLogger(__name__)
     _UserIdRaw = session.get(SESSION_USER_ID_KEY)
     if not _UserIdRaw:
         return unauthorized()
@@ -313,5 +314,5 @@ def update_me():
         session.clear()
         return unauthorized()
 
-    _Logger.info(f"Updated profile for user {_UserId}")
+    _LOGGER.info("Updated profile for user %s", _UserId)
     return ok(_Dto)

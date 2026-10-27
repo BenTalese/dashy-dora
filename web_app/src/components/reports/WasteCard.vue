@@ -198,8 +198,6 @@
         background: var(--surface-sunken);
         border-radius: var(--radius-md);
         text-align: center;
-    }
-    .wr-reason {
         border: 1px solid transparent;
         font: inherit;
         color: inherit;

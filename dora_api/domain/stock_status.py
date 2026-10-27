@@ -67,28 +67,6 @@ def effective_expiring_soon_window(app_setting) -> int:  # noqa: ANN001 — duck
     return EXPIRING_SOON_WINDOW_DAYS
 
 
-def get_stock_item_unit_cost_at(observations, when=None):  # noqa: ANN001 — duck-typed observations
-    """The single server-owned per-unit cost for a stock item (R-003).
-    Reshaped for FU-227 chunk 2: reads the folded shape
-    ``total_price / total_measure`` from the most-recent observation at or
-    before ``when`` (default: latest). ``None`` when there's no usable
-    observation.
-
-    Returned value is per-unit in the **logged unit** (e.g. dollars per L if
-    the latest row was "$6 for 2 L"). Mixed-unit history is the caller's
-    problem — for the baseline/median path that requires normalisation, use
-    ``build_your_prices_for_item`` (chunk 4). The two consumers of this
-    function (stock-value report at ``reports.py:225-236`` / FU-216 and recipe
-    cost fallback at ``get_recipes.py:505-519``) treat the number as an
-    opaque per-unit cost and don't need dimension awareness — LC-3 absorbs
-    the small output shift silently (pre-release; no data shim).
-
-    Pure: caller passes already-fetched observations.
-    """
-    priced = get_stock_item_unit_cost_with_unit_at(observations, when)
-    return priced.amount if priced is not None else None
-
-
 @dataclass(frozen=True, slots=True)
 class ObservedUnitCost:
     """A per-unit cost together with the unit it is *per*.
@@ -102,13 +80,17 @@ class ObservedUnitCost:
 
 
 def get_stock_item_unit_cost_with_unit_at(observations, when=None):  # noqa: ANN001 — duck-typed observations
-    """As :func:`get_stock_item_unit_cost_at`, but keeps the unit.
+    """The single server-owned per-unit cost for a stock item (R-003): the
+    folded ``total_price / total_measure`` of the most recent observation at
+    or before ``when`` (default: latest), with the unit it is per. ``None``
+    when there's no usable observation. Pure: the caller passes
+    already-fetched observations.
 
-    Added 2026-08-19: the recipe cost estimator has to know whether "$4.20"
-    means per litre or per bottle before it can multiply an ingredient
-    quantity by it — dropping the unit is what produced a $1590 two-ingredient
-    recipe. The bare-float version above delegates here so the "which
-    observation counts" rule has exactly one owner (R-003).
+    The unit travels with the amount because the recipe cost estimator has to
+    know whether "$4.20" means per litre or per bottle before it multiplies an
+    ingredient quantity by it; dropping it is what produced a $1590
+    two-ingredient recipe. For a normalised baseline across mixed units use
+    ``build_your_prices_for_item``.
     """
     candidates = [
         o for o in observations
@@ -172,7 +154,12 @@ def is_missing(level) -> bool:
     A ``None`` level (no stock record) counts as missing; otherwise out-of-stock
     only — see the module "Missing semantics" note.
     """
-    return level is None or is_out_of_stock(level)
+    return is_missing_sequence(_sequence_of(level))
+
+
+def is_missing_sequence(sequence: Optional[int]) -> bool:
+    """`is_missing` for a recorded level known only by its sequence."""
+    return sequence is None or sequence >= OUT_OF_STOCK_SEQUENCE
 
 
 def level_for_status(levels: Iterable, status: StockStatus):

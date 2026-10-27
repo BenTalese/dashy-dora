@@ -68,7 +68,7 @@
                          can be glanced down instead of read. -->
                     <q-item-label caption class="stocktake-review__believed">
                         <span>Dora thinks</span>
-                        <span :class="tintClassForSequence(beliefSequence(item.belief_band))">
+                        <span :class="tintClassForSequence(sequenceForBand(item.belief_band))">
                             {{ bandWord(item.belief_band) }}
                         </span>
                         <!-- Owner 2026-10-15: "Dora thinks stocked · but is
@@ -104,15 +104,10 @@
 
 <script setup lang="ts">
     import { computed, ref, watch } from 'vue';
-    import { storeToRefs } from 'pinia';
     import BaseButton from 'src/components/BaseButton.vue';
     import { ICONS } from 'src/style/icons';
     import { tintClassForSequence } from 'src/helpers/stockLevelLogic';
-    import {
-        LOW_STOCK_SEQUENCE,
-        OUT_OF_STOCK_SEQUENCE,
-        STOCKED_SEQUENCE,
-    } from 'src/helpers/stockStatus';
+    import { bandForSequence, sequenceForBand } from 'src/helpers/beliefBand';
     import { useStockLevelStore } from 'src/stores/stockLevelStore';
     import type { StocktakeSessionItem } from 'src/services/api/stocktakeApiService';
 
@@ -158,42 +153,19 @@
 
     // The pill carries the tone, so the words inside it are just the level —
     // "it's low" inside an amber pill is the same sentence said twice.
-    const BAND_WORD: Record<string, string> = {
-        out: 'Out',
-        low: 'Low',
-        stocked: 'Stocked',
-    };
     function bandWord(band: string | null): string {
         if (!band) return 'Unchanged';
-        return BAND_WORD[band] ?? band;
+        return band.charAt(0).toUpperCase() + band.slice(1);
     }
 
-    // Belief speaks in bands; colour is keyed to level *sequence* (R-003 — one
-    // colour map, in `stockLevelLogic`). This is the only translation between
-    // the two, and it lives next to the copy it colours.
-    const BAND_SEQUENCE: Record<string, number> = {
-        out: OUT_OF_STOCK_SEQUENCE,
-        low: LOW_STOCK_SEQUENCE,
-        stocked: STOCKED_SEQUENCE,
-    };
-    function beliefSequence(band: string | null): number | null {
-        if (!band) return null;
-        return BAND_SEQUENCE[band] ?? null;
-    }
-
-    // The other direction, for saying a *recorded* level in belief's words.
-    const BAND_BY_SEQUENCE: Record<number, string> = {
-        [STOCKED_SEQUENCE]: 'stocked',
-        [LOW_STOCK_SEQUENCE]: 'low',
-        [OUT_OF_STOCK_SEQUENCE]: 'out',
-    };
-
+    // Belief speaks in bands; colour is keyed to level *sequence*. The
+    // translation lives in `helpers/beliefBand`.
     // The row carries the level's id, not its sequence, so the catalogue
     // resolves it. Renaming a level must not change its colour (FU-050).
-    const { stockLevels } = storeToRefs(useStockLevelStore());
+    const stockLevelStore = useStockLevelStore();
     function levelSequence(levelId: string | null): number | null {
         if (!levelId) return null;
-        return stockLevels.value.find((l) => l.stock_level_id === levelId)?.sequence ?? null;
+        return stockLevelStore.levelById.get(levelId ?? '')?.sequence ?? null;
     }
 
     // Owner, 2026-09-12: the two pills on a row are read as a pair, so they
@@ -203,13 +175,13 @@
     // extra levels (anything off the three canonical sequences) keep their own
     // name, because there's no band word to say instead.
     function recordedWord(item: StocktakeSessionItem): string {
-        const band = BAND_BY_SEQUENCE[levelSequence(item.stock_level_id) ?? -1];
+        const band = bandForSequence(levelSequence(item.stock_level_id));
         return band ? bandWord(band) : (item.stock_level_name ?? '');
     }
 
     /** True when the recorded level falls in the same band Dora believes. */
     function agrees(item: StocktakeSessionItem): boolean {
-        return BAND_BY_SEQUENCE[levelSequence(item.stock_level_id) ?? -1] === item.belief_band;
+        return bandForSequence(levelSequence(item.stock_level_id)) === item.belief_band;
     }
 
     const confirmLabel = computed(() => {

@@ -9,21 +9,38 @@ Two callers in mind:
     relies on are enabled (e.g. money surfaces hide themselves when
     `features.money` is false).
 
-Cheap by design: never touches the DB or external services. The
-schema version is resolved once at module import.
+Cheap by design: one AppSetting read, a Product count and the operational
+config per probe, never an external service. The code-side schema head is
+resolved at import; the DB's applied revision is cached once known.
 """
 import logging
-import os
 from pathlib import Path
+from typing import Callable, TypeVar
 
 from flask import jsonify
 
+from dora_api.domain.stock_status import effective_expiring_soon_window
 from dora_api.domain.entities.app_setting import (
     NUTRITION_MODE_OFF,
     RATING_SCHEME_NONE,
 )
 from dora_api.features.help.version_info import CURRENT_VERSION
 from dora_api.features.routers import HEALTH_ROUTER
+from dora_api.infrastructure.profile import current_profile
+
+_LOGGER = logging.getLogger(__name__)
+
+_T = TypeVar("_T")
+
+
+def _safe(block: str, build: Callable[[], _T], fallback: _T) -> _T:
+    """Run one probe block. The probe must never fail, but a failure must not be
+    silent either: it logs and reports that block's conservative defaults."""
+    try:
+        return build()
+    except Exception as exc:  # noqa: BLE001
+        _LOGGER.warning("health: %s block failed, reporting defaults: %s", block, exc)
+        return fallback
 
 
 def _resolve_schema_head() -> str | None:
@@ -59,17 +76,25 @@ def _resolve_db_schema_version() -> str | None:
     migration-managed, and a *different* value means it's behind/ahead. The
     old response reported only the code head, which actively misled when the
     connected DB was stale."""
+    global _DB_SCHEMA_VERSION
+    if _DB_SCHEMA_VERSION is not None:
+        # Only a deploy changes it, and a deploy restarts the process.
+        return _DB_SCHEMA_VERSION
     try:
         from sqlalchemy import text
 
         from dora_api.app import db
         with db.engine.connect() as conn:
             row = conn.execute(text("SELECT version_num FROM alembic_version")).first()
-            return row[0] if row else None
+            _DB_SCHEMA_VERSION = row[0] if row else None
+            return _DB_SCHEMA_VERSION
     except Exception:
         # No alembic_version table, or a DB hiccup — keep the probe up and
         # report null rather than failing the health check.
         return None
+
+
+_DB_SCHEMA_VERSION: str | None = None
 
 
 def _feature_flags(setting) -> dict[str, bool]:
@@ -141,17 +166,14 @@ def _feature_flags(setting) -> dict[str, bool]:
         "nutrition_mode": NUTRITION_MODE_OFF,
         "nutrition_complex_usable": False,
     }
-    # AppSettings drives every install-wide flag at runtime. Wrapped so a
-    # DB hiccup doesn't take the health probe down with it.
-    try:
+    # AppSettings drives every install-wide flag at runtime.
+    def _resolve() -> dict[str, bool]:
         from dora_api.persistence.sqlalchemy_repository import \
             SqlAlchemyRepository
         repo = SqlAlchemyRepository()
         if setting is not None:
             flags["scanning"] = bool(setting.scanning_enabled)
-            flags["stocktake"] = bool(
-                getattr(setting, "stocktake_enabled", True)
-            )
+            flags["stocktake"] = bool(setting.stocktake_enabled)
             # `buy_verdict` is no longer a health flag — it went per-user on
             # 2026-08-19 (D-12), so the SPA reads it off /auth/me with the rest
             # of the user's display preferences. An install-wide flag here would
@@ -165,9 +187,7 @@ def _feature_flags(setting) -> dict[str, bool]:
             # client has to render a different badge per scheme, not just
             # decide whether to render one (R-003 — the SPA must not re-derive
             # "which scheme" from anything else).
-            flags["nutrition_rating_scheme"] = str(
-                getattr(setting, "nutrition_rating_scheme", RATING_SCHEME_NONE)
-                or RATING_SCHEME_NONE)
+            flags["nutrition_rating_scheme"] = setting.nutrition_rating_scheme or RATING_SCHEME_NONE
             flags["money"] = bool(setting.money_enabled)
             # Nutrition is install-wide now (2026-08-14). `nutrition` keeps its
             # boolean meaning for the many gates that only ask "is it on at
@@ -204,9 +224,10 @@ def _feature_flags(setting) -> dict[str, bool]:
         from dora_api.infrastructure.security.secret_encryption import \
             encryption_available
         flags["secret_encryption_configured"] = bool(encryption_available())
-    except Exception:
-        pass
-    return flags
+        return flags
+
+    # A failure part-way keeps whatever resolved before it, as before.
+    return _safe("features", _resolve, flags)
 
 
 def _locale_policy(setting) -> dict[str, str]:
@@ -215,33 +236,22 @@ def _locale_policy(setting) -> dict[str, str]:
     user's browser needs to render money in the household's chosen currency
     on boot, not just admins. Client wraps these in one
     `Intl.NumberFormat(locale, {style:'currency', currency})` and every
-    money render routes through it (R-003). Wrapped in a try so a DB
-    hiccup doesn't take the probe down — falls back to Dora's AU shipping
-    defaults."""
-    currency = "AUD"
-    locale = "en-AU"
-    # Owner feedback 2026-08-27 — the measurement system rides along here for
-    # the same reason currency does: *every* user's unit dropdowns are built
-    # from it, not just an admin's, so it cannot live on the admin-only
-    # `/app-settings` payload. The client filters its picker vocabulary by
-    # this and never re-derives which units belong to which system (R-003 —
-    # the mapping is `units.UNIT_SYSTEMS`, mirrored into the generated
-    # `units_table.ts`).
-    measurement_system = "metric"
-    try:
-        if setting is not None:  # FU-388 — shared singleton, fetched once by health_check
-            currency = (getattr(setting, "currency", None) or currency).strip() or currency
-            locale = (getattr(setting, "locale", None) or locale).strip() or locale
-            measurement_system = (
-                getattr(setting, "measurement_system", None) or measurement_system
-            ).strip() or measurement_system
-    except Exception:
-        pass
-    return {
-        "currency": currency,
-        "locale": locale,
-        "measurement_system": measurement_system,
-    }
+    money render routes through it (R-003). Falls back to Dora's AU shipping
+    defaults.
+
+    The measurement system rides along for the same reason (owner 2026-08-27):
+    *every* user's unit dropdowns are built from it. The client filters its
+    picker vocabulary by this and never re-derives which units belong to which
+    system (R-003 — the mapping is `units.UNIT_SYSTEMS`, mirrored into the
+    generated `units_table.ts`)."""
+    fallback = {"currency": "AUD", "locale": "en-AU", "measurement_system": "metric"}
+    if setting is None:
+        return fallback
+    return _safe("locale_policy", lambda: {
+        "currency": (setting.currency or "").strip() or fallback["currency"],
+        "locale": (setting.locale or "").strip() or fallback["locale"],
+        "measurement_system": (setting.measurement_system or "").strip() or fallback["measurement_system"],
+    }, fallback)
 
 
 def _image_policy(setting) -> dict[str, int]:
@@ -252,17 +262,14 @@ def _image_policy(setting) -> dict[str, int]:
     Surfaced here (not on `/app-settings`) because it's a public
     policy every logged-in user's browser needs to apply, not admin-
     only configuration; the admin edit path is still the same
-    admin-gated PATCH /app-settings. Wrapped in a try so a DB hiccup
-    doesn't take the health probe down."""
-    quality = 85
-    max_dim = 1920
-    try:
-        if setting is not None:  # FU-388 — shared singleton, fetched once by health_check
-            quality = int(getattr(setting, "image_quality", quality) or quality)
-            max_dim = int(getattr(setting, "image_max_dimension", max_dim) or max_dim)
-    except Exception:
-        pass
-    return {"quality": quality, "max_dimension": max_dim}
+    admin-gated PATCH /app-settings."""
+    fallback = {"quality": 85, "max_dimension": 1920}
+    if setting is None:
+        return fallback
+    return _safe("image_policy", lambda: {
+        "quality": int(setting.image_quality or fallback["quality"]),
+        "max_dimension": int(setting.image_max_dimension or fallback["max_dimension"]),
+    }, fallback)
 
 
 def _cooking_policy(setting) -> dict:
@@ -271,19 +278,17 @@ def _cooking_policy(setting) -> dict:
     admins: cook mode seeds its per-session serving scaler from
     `household_headcount`, and the meal-planner reveals the cook-pool
     affordances when `batch_features_enabled` is on. Both moved off User to
-    AppSetting (a household has one headcount + one cook-style). Wrapped in a
-    try so a DB hiccup doesn't take the probe down — falls back to the
-    unset defaults (no headcount ⇒ recipe servings; fresh cook-style)."""
-    headcount: int | None = None
-    batch = False
-    try:
-        if setting is not None:  # shared singleton, fetched once by health_check
-            _Raw = getattr(setting, "household_headcount", None)
-            headcount = int(_Raw) if _Raw is not None else None
-            batch = bool(getattr(setting, "batch_features_enabled", False))
-    except Exception:
-        pass
-    return {"household_headcount": headcount, "batch_features_enabled": batch}
+    AppSetting (a household has one headcount + one cook-style). Unset
+    defaults: no headcount ⇒ recipe servings; fresh cook-style."""
+    fallback = {"household_headcount": None, "batch_features_enabled": False}
+    if setting is None:
+        return fallback
+    return _safe("cooking_policy", lambda: {
+        "household_headcount": (
+            int(setting.household_headcount) if setting.household_headcount is not None else None
+        ),
+        "batch_features_enabled": bool(setting.batch_features_enabled),
+    }, fallback)
 
 
 def _budget_policy(setting) -> dict:
@@ -291,18 +296,15 @@ def _budget_policy(setting) -> dict:
     `/app-settings`) because every logged-in user's client reads it — the
     dashboard budget card + Settings → Money page — not just admins. Moved off
     User (spend is summed across shared shopping lists, so the target is shared
-    too). `amount` None ⇒ no budget set (value-driven: no amount = off).
-    Wrapped defensively so a read error can't 500 the whole health probe."""
-    amount = None
-    period = "weekly"
-    try:
-        if setting is not None:  # shared singleton, fetched once by health_check
-            raw = getattr(setting, "budget_amount", None)
-            amount = float(raw) if raw is not None and raw > 0 else None
-            period = getattr(setting, "budget_period", None) or "weekly"
-    except Exception:
-        pass
-    return {"amount": amount, "period": period}
+    too). `amount` None ⇒ no budget set (value-driven: no amount = off)."""
+    fallback = {"amount": None, "period": "weekly"}
+    if setting is None:
+        return fallback
+    raw = setting.budget_amount
+    return _safe("budget_policy", lambda: {
+        "amount": float(raw) if raw is not None and raw > 0 else None,
+        "period": setting.budget_period or fallback["period"],
+    }, fallback)
 
 
 def _reconcile_policy(setting) -> dict:
@@ -310,15 +312,17 @@ def _reconcile_policy(setting) -> dict:
     which is admin-gated) because every logged-in user's client needs it to pick
     the right `/meal-plans/reconcile` surface: **auto** ⇒ a read-only log of what
     Dora did; **manual** ⇒ the confirm-each runner (owner 2026-08-13). `auto_drain`
-    defaults True (matches the sweep + AppSetting). Wrapped so a read hiccup can't
-    500 the probe."""
-    auto_drain = True
-    try:
-        if setting is not None:  # shared singleton, fetched once by health_check
-            auto_drain = bool(getattr(setting, "auto_drain_past_meals", True))
-    except Exception:
-        pass
-    return {"auto_drain": auto_drain}
+    defaults True (matches the sweep + AppSetting)."""
+    if setting is None:
+        return {"auto_drain": True}
+    return {"auto_drain": bool(setting.auto_drain_past_meals)}
+
+
+def _alerts_policy(setting) -> dict:
+    """The household's expiring-soon window, for every client (`/app-settings`
+    is admin-gated): Dora's Basic mode names "expiring soon" with the same
+    window the alerts use (finalisation 11-R34; it hard-coded 7 days)."""
+    return {"expiring_soon_window_days": effective_expiring_soon_window(setting)}
 
 
 def _stocktake_policy(setting) -> dict:
@@ -326,15 +330,19 @@ def _stocktake_policy(setting) -> dict:
     which is admin-gated) because every logged-in user's client needs one of
     them: the create-stock-item dialog seeds its Stocktake toggle from
     `new_items_opt_in` so the switch shows the position the item will actually
-    be created in. Defaults True (matches `create_stock_item` + AppSetting).
-    Wrapped so a read hiccup can't 500 the probe."""
-    new_items_opt_in = True
-    try:
-        if setting is not None:  # shared singleton, fetched once by health_check
-            new_items_opt_in = bool(getattr(setting, "stocktake_new_items_opt_in", True))
-    except Exception:
-        pass
-    return {"new_items_opt_in": new_items_opt_in}
+    be created in. Defaults True (matches `create_stock_item` + AppSetting)."""
+    if setting is None:
+        return {"new_items_opt_in": True}
+    return {"new_items_opt_in": bool(setting.stocktake_new_items_opt_in)}
+
+
+def _products_policy(setting) -> dict:
+    """The admin-set Product Search (companion) URL, surfaced here (not on
+    `/app-settings`, which is admin-gated) because every user's nav and the
+    find-a-product buttons open it. Empty string ⇒ not set up."""
+    if setting is None:
+        return {"search_url": ""}
+    return {"search_url": (setting.product_search_url or "").strip()}
 
 
 def _support_channel() -> dict[str, str]:
@@ -353,21 +361,15 @@ def health_check():
     """Single endpoint for both monitoring and client compatibility.
     Mobile/desktop clients can rely on the response shape never
     losing keys — we add, but don't remove."""
-    logging.getLogger(__name__).info("API health check requested.")
+    _LOGGER.debug("API health check requested.")
     # FU-388 — fetch the AppSetting singleton ONCE and thread it through the
     # three DB-backed blocks below. They used to each call
     # get_or_create_app_setting independently → 3 SELECTs of the same one row
     # per probe (and /health is polled by every client). None on DB error, so
     # each block falls back to its conservative defaults exactly as before.
-    setting = None
-    try:
-        from dora_api.features.app_settings.access import \
-            get_or_create_app_setting
-        from dora_api.persistence.sqlalchemy_repository import \
-            SqlAlchemyRepository
-        setting = get_or_create_app_setting(SqlAlchemyRepository())
-    except Exception:
-        setting = None
+    from dora_api.features.app_settings.access import get_or_create_app_setting
+    from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
+    setting = _safe("app_settings", lambda: get_or_create_app_setting(SqlAlchemyRepository()), None)
     return jsonify({
         "ok": True,
         "version": CURRENT_VERSION,
@@ -376,7 +378,7 @@ def health_check():
         # built via create_all and never stamped, or on a read error). Lets
         # diagnosis distinguish code-expectation from DB-reality.
         "schema_version_db": _resolve_db_schema_version(),
-        "profile": (os.environ.get("DORA_ENV") or "development").lower(),
+        "profile": current_profile().value,
         "features": _feature_flags(setting),
         "image_policy": _image_policy(setting),
         "locale_policy": _locale_policy(setting),
@@ -384,5 +386,7 @@ def health_check():
         "budget_policy": _budget_policy(setting),
         "reconcile_policy": _reconcile_policy(setting),
         "stocktake_policy": _stocktake_policy(setting),
+        "alerts_policy": _alerts_policy(setting),
+        "products_policy": _products_policy(setting),
         "support": _support_channel(),
     }), 200

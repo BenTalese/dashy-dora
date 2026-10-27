@@ -1,7 +1,9 @@
 """PATCH /api/app-settings — admin-only edit of install-wide settings.
 
-Only the assistant (BYO-LLM) config lives here for now. Fields are optional;
-only those present in the request body are changed.
+Every install-wide switch the admin pages edit: region and money, alerts and
+stock rules, email and push, image, voice and ingestion settings. Fields are
+optional; only those present in the request body are changed, and each is
+validated before any is written.
 """
 import logging
 import re
@@ -17,12 +19,14 @@ from dora_api.features.app_settings.access import get_or_create_app_setting
 from dora_api.features.app_settings.clock import is_valid_timezone
 from dora_api.features.app_settings.get_app_settings import AppSettingsDto, _to_dto
 from dora_api.features.routers import APP_SETTINGS_ROUTER
-from dora_api.features.users.update_user_as_admin import _require_admin
+from dora_api.features.auth.admin_gate import require_admin
 from dora_api.infrastructure.api_response import bad_request, ok
 from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class UpdateAppSettingsRequest(BaseModel):
@@ -459,13 +463,12 @@ def _validate_backup_storage_path(path_str: str) -> str | None:
 @APP_SETTINGS_ROUTER.route("", methods=["PATCH"])
 @has_request_body(UpdateAppSettingsRequest)
 def update_app_settings():
-    _Logger = logging.getLogger(__name__)
-    _, err = _require_admin()
+    _, err = require_admin()
     if err is not None:
         return err
     _Request: UpdateAppSettingsRequest = get_request_body()
     _Response = UpdateAppSettingsHandler(SqlAlchemyRepository()).handle(_Request)
     if _Response.invalid_reason is not None:
         return bad_request("Invalid settings.", detail=_Response.invalid_reason)
-    _Logger.info("Admin updated app settings (scanning_enabled=%s)", _Response.dto.scanning_enabled)
+    _LOGGER.info("Admin updated app settings (scanning_enabled=%s)", _Response.dto.scanning_enabled)
     return ok(_Response.dto)

@@ -1,9 +1,6 @@
 <template>
-    <div v-if="!currentUser">
-        <q-banner class="dora-bg-sunken" dense>Not signed in.</q-banner>
-    </div>
-
-    <div v-else class="settings-page">
+    <!-- The router guard owns "signed in"; this only waits for the user row. -->
+    <div v-if="currentUser" class="settings-page">
         <SettingsPageHeader title="Account" :icon="ICONS.person" />
 
         <SettingsSection>
@@ -127,9 +124,9 @@
                         type="password"
                         class="col-12 col-sm-4"
                         autocomplete="new-password"
-                        :error="newPassword.length > 0 && newPassword.length < 8"
-                        :error-message="newPassword.length > 0 && newPassword.length < 8
-                            ? 'At least 8 characters' : ''"
+                        :error="newPassword.length > 0 && !passwordLongEnough(newPassword)"
+                        :error-message="newPassword.length > 0 && !passwordLongEnough(newPassword)
+                            ? PASSWORD_HINT : ''"
                     />
                     <q-input
                         v-model="confirmPassword"
@@ -167,13 +164,12 @@
 </template>
 
 <script lang="ts" setup>
+    import { useSettingsSave } from 'src/composables/useSettingsSave';
     import BaseButton from 'src/components/BaseButton.vue';
     import { ICONS } from 'src/style/icons';
     import { storeToRefs } from 'pinia';
-    import { useQuasar } from 'quasar';
     import { useAuthStore } from 'src/stores/authStore';
     import { computed, ref, watch } from 'vue';
-    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import SettingsSection from 'src/components/settings/SettingsSection.vue';
     import SettingsRow from 'src/components/settings/SettingsRow.vue';
     import SettingsPageHeader from 'src/components/settings/SettingsPageHeader.vue';
@@ -182,8 +178,8 @@
     import PresetAvatarPicker from 'src/components/PresetAvatarPicker.vue';
     import type { ProcessedImage } from 'src/services/files/imageService';
     import { useUnsavedChangesGuard } from 'src/composables/useUnsavedChangesGuard';
+    import { PASSWORD_HINT, passwordLongEnough } from 'src/models/password';
 
-    const $q = useQuasar();
     const authStore = useAuthStore();
     const { currentUser } = storeToRefs(authStore);
 
@@ -277,7 +273,7 @@
 
     const passwordValid = computed(
         () => currentPassword.value.length > 0
-            && newPassword.value.length >= 8
+            && passwordLongEnough(newPassword.value)
             && confirmPassword.value === newPassword.value,
     );
 
@@ -301,16 +297,7 @@
     // submit; here an unsaved password edit is real pending work).
     useUnsavedChangesGuard(isDirty);
 
-    function notifySuccess(message: string) {
-        $q.notify({ type: 'positive', message });
-    }
-    function notifyError(message: string, err?: unknown) {
-        $q.notify({
-            type: 'negative',
-            message,
-            caption: toastCaption(err),
-        });
-    }
+    const { notifySuccess, notifyError } = useSettingsSave();
 
     async function onSaveAll() {
         if (!canSave.value) return;
@@ -350,12 +337,6 @@
         padding-bottom: 14px;
         gap: 12px;
     }
-    .settings-divider {
-        border: 0;
-        height: 1px;
-        background: color-mix(in srgb, var(--text-primary) 8%, transparent);
-        margin: 2px 0;
-    }
 
     // The tile itself (circle + hover pencil) lives in ImageEditTile; this
     // only stacks it above the Remove button.
@@ -383,13 +364,12 @@
         bottom: 0;
         display: flex;
         justify-content: flex-end;
-        gap: 10px;
-        margin-top: 8px;
-        padding: 12px 0;
-        background: linear-gradient(
-            to top,
-            var(--surface-base, var(--surface, transparent)) 65%,
-            transparent
-        );
+        gap: var(--space-3);
+        margin-top: var(--space-2);
+        padding: var(--space-3) 0;
+        /* Fades from the page colour so a scrolled field doesn't show through
+           the buttons. Was `--surface-base`, which no theme declares, so it
+           always fell through to transparent. */
+        background: linear-gradient(to top, var(--surface-page) 65%, transparent);
     }
 </style>

@@ -1,5 +1,5 @@
 import { computed, ref } from 'vue';
-import HealthApiService from 'src/services/api/healthApiService';
+import HealthApiService, { invalidateHealthInfo } from 'src/services/api/healthApiService';
 
 // FU-615 — install-wide household cooking config, read from /api/health.
 // Two values, both moved off the per-user record onto the AppSetting
@@ -52,6 +52,7 @@ function load(): Promise<void> {
 export function refreshCookingPolicy(): Promise<void> {
     loaded.value = false;
     inflight = null;
+    invalidateHealthInfo();
     return load();
 }
 

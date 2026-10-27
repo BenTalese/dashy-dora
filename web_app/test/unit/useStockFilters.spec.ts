@@ -434,21 +434,9 @@ describe('migrateStockSort — persisted sorts survive the axis/direction split'
     });
 });
 
-// ── Summaries, counts, and helpers ──────────────────────────────────────
+// ── Options and helpers ──────────────────────────────────────
 
-describe('useStockFilters — summaries and helpers', () => {
-    it('summaryCounts totals low / out / essentials / open across ALL items', () => {
-        const f = makeFilters();
-        expect(f.summaryCounts.value).toEqual({ low: 2, out: 1, essentials: 2, open: 1 });
-    });
-
-    it('countByLevel maps level id → item count', () => {
-        const f = makeFilters();
-        expect(f.countByLevel.value.get('lv-stocked')).toBe(3);
-        expect(f.countByLevel.value.get('lv-low')).toBe(2);
-        expect(f.countByLevel.value.get('lv-out')).toBe(1);
-    });
-
+describe('useStockFilters — options and helpers', () => {
     it('location options render full "parent › child" paths, alphabetically', () => {
         const f = makeFilters();
         expect(f.allLocationOptions.value).toEqual([
@@ -476,17 +464,6 @@ describe('useStockFilters — summaries and helpers', () => {
         f.essentialsOnly.value = true;
         f.cartFilter.value = 'on_list';
         expect(f.activeFilterCount.value).toBe(3);
-    });
-
-    it('toggleLevelFilter sets, then clears on the same id', () => {
-        const f = makeFilters();
-        f.toggleLevelFilter('lv-low');
-        expect(f.levelFilter.value).toBe('lv-low');
-        f.toggleLevelFilter('lv-low');
-        expect(f.levelFilter.value).toBeNull();
-        f.toggleLevelFilter('lv-low');
-        f.toggleLevelFilter('lv-out');
-        expect(f.levelFilter.value).toBe('lv-out');
     });
 
     it('clearFilters resets every filter and the search box', () => {

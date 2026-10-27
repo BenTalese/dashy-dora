@@ -33,7 +33,7 @@
                  a scale in their head. A ring *is* the scale — 72 out of 100
                  is 72% of the way round, readable before you read the digits.
 
-                 Same SVG idiom as `PantryDonutCard`'s donut, deliberately: one
+                 Same SVG idiom as `StockDonutCard`'s donut, deliberately: one
                  `stroke-dasharray` arc on a 15.915r circle (circumference ≈
                  100, so the array value is literally the percentage), rotated
                  -90deg so it starts at twelve o'clock. Unlike that donut this

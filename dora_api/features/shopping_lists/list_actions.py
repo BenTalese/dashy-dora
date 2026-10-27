@@ -11,11 +11,6 @@ Endpoints:
       The source list keeps its ticked lines. Duplicates on the target
       list are skipped (the per-list "unique stock item" invariant).
 
-  POST /api/shopping-lists/<id>/lines/move-to/<target_id>
-      Same move, but over an explicit set of `line_ids` — the bulk-select
-      bar's "Move to list" action. One request for the whole selection,
-      not one per line (the FU-713/714 shape).
-
   (`/refresh-deals` was removed 2026-09-17. It re-validated each line's
    `selected_product_id` and cleared the ones whose product was no longer
    linked — but the detail read already resolves every line's offer from the
@@ -34,19 +29,17 @@ from dataclasses import dataclass
 from typing import List
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
-
 from dora_api.domain.entities.shopping_list import (ShoppingList,
                                                     ShoppingListLine)
 from dora_api.features.routers import SHOPPING_LIST_ROUTER
 from dora_api.features.shopping_lists._line_anchor import line_anchor_key
 from dora_api.infrastructure.api_response import (business_rule_violation, ok,
                                                   not_found)
-from dora_api.infrastructure.decorators import has_request_body
-from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
+
+_LOGGER = logging.getLogger(__name__)
 
 
 # ───── Move lines → existing list ─────────────────────────────────────────
@@ -62,26 +55,13 @@ class MoveLinesResponse:
 
 
 class MoveLinesHandler:
-    """Moves lines from one list onto another.
-
-    Two callers, one body of rules: "move everything unticked" (the finish
-    flow's offer to carry the leftovers forward) and "move exactly these"
-    (the bulk-select bar). Both need the same duplicate skipping, the same
-    archived-target guard and the same sequence appending, so `line_ids` is
-    a filter on one handler rather than a second near-copy of it — the
-    duplicate-skipping rule is the kind that drifts when it lives twice.
-    """
+    """Moves every unticked line from one list onto another: the finish
+    flow's offer to carry the leftovers forward. (The bulk-select bar's
+    "move exactly these" caller went with the bar; finalisation 03-R23.)"""
     def __init__(self, repository: Repository) -> None:
         self.repository = repository
 
-    def handle(
-        self,
-        source_id: UUID,
-        target_id: UUID,
-        line_ids: List[UUID] | None = None,
-    ) -> MoveLinesResponse:
-        """`line_ids=None` means "every unticked line on the source list";
-        an explicit list moves exactly those, ticked or not."""
+    def handle(self, source_id: UUID, target_id: UUID) -> MoveLinesResponse:
         if source_id == target_id:
             return MoveLinesResponse(same_list=True)
 
@@ -94,21 +74,9 @@ class MoveLinesHandler:
         if target.is_done:
             return MoveLinesResponse(target_archived=True)
 
-        source_filter = EntityField(
-            ShoppingListLine, "shopping_list_id"
-        ).eq(source_id)
-        if line_ids is None:
-            source_filter = source_filter & EntityField(
-                ShoppingListLine, ShoppingListLine.Fields.IS_TICKED
-            ).eq(False)
-        else:
-            # Scoped to the source list on purpose: an id from another list
-            # must not be movable by passing it here.
-            source_filter = source_filter & EntityField(
-                ShoppingListLine, "id"
-            ).in_(list(line_ids))
         movable: List[ShoppingListLine] = self.repository.get(ShoppingListLine).all(
-            source_filter
+            EntityField(ShoppingListLine, "shopping_list_id").eq(source_id)
+            & EntityField(ShoppingListLine, ShoppingListLine.Fields.IS_TICKED).eq(False)
         )
         target_lines: List[ShoppingListLine] = self.repository.get(ShoppingListLine).all(
             EntityField(ShoppingListLine, "shopping_list_id").eq(target_id)
@@ -144,41 +112,12 @@ class MoveLinesHandler:
     "/<uuid:source_id>/move-unticked-to/<uuid:target_id>", methods=["POST"]
 )
 def move_unticked_to(source_id: UUID, target_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _Response = MoveLinesHandler(SqlAlchemyRepository()).handle(source_id, target_id)
     _Error = _move_error_response(_Response, source_id, target_id)
     if _Error is not None:
         return _Error
-    _Logger.info(
+    _LOGGER.info(
         f"Moved {_Response.moved_count} unticked line(s) from {source_id} -> {target_id} "
-        f"({_Response.skipped_duplicates} duplicates skipped)"
-    )
-    return ok({
-        "moved_count": _Response.moved_count,
-        "skipped_duplicates": _Response.skipped_duplicates,
-    })
-
-
-class MoveLinesRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    line_ids: List[UUID] = Field(min_length=1)
-
-
-@SHOPPING_LIST_ROUTER.route(
-    "/<uuid:source_id>/lines/move-to/<uuid:target_id>", methods=["POST"]
-)
-@has_request_body(MoveLinesRequest)
-def move_lines_to(source_id: UUID, target_id: UUID):
-    _Logger = logging.getLogger(__name__)
-    _Request: MoveLinesRequest = get_request_body()
-    _Response = MoveLinesHandler(SqlAlchemyRepository()).handle(
-        source_id, target_id, _Request.line_ids
-    )
-    _Error = _move_error_response(_Response, source_id, target_id)
-    if _Error is not None:
-        return _Error
-    _Logger.info(
-        f"Moved {_Response.moved_count} selected line(s) from {source_id} -> {target_id} "
         f"({_Response.skipped_duplicates} duplicates skipped)"
     )
     return ok({
@@ -231,11 +170,10 @@ class ClearListHandler:
 
 @SHOPPING_LIST_ROUTER.route("/<uuid:shopping_list_id>/clear", methods=["POST"])
 def clear_list(shopping_list_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _Response = ClearListHandler(SqlAlchemyRepository()).handle(shopping_list_id)
     if _Response.not_found:
         return not_found("ShoppingList", shopping_list_id)
-    _Logger.info(f"Cleared {_Response.removed_count} lines from list {shopping_list_id}")
+    _LOGGER.info(f"Cleared {_Response.removed_count} lines from list {shopping_list_id}")
     return ok({"removed_count": _Response.removed_count})
 
 
@@ -281,11 +219,10 @@ class DiscardUntickedHandler:
     "/<uuid:shopping_list_id>/discard-unticked", methods=["POST"]
 )
 def discard_unticked(shopping_list_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _Response = DiscardUntickedHandler(SqlAlchemyRepository()).handle(shopping_list_id)
     if _Response.not_found:
         return not_found("ShoppingList", shopping_list_id)
-    _Logger.info(
+    _LOGGER.info(
         f"Discarded {_Response.removed_count} unticked line(s) from list {shopping_list_id}"
     )
     return ok({"removed_count": _Response.removed_count})

@@ -2,7 +2,6 @@
   "alerts": {
     "keys": [
       "actionable_count",
-      "fyi_count",
       "high_count",
       "items",
       "low_count",
@@ -128,12 +127,14 @@
   },
   "health": {
     "keys": [
+      "alerts_policy",
       "budget_policy",
       "cooking_policy",
       "features",
       "image_policy",
       "locale_policy",
       "ok",
+      "products_policy",
       "profile",
       "reconcile_policy",
       "schema_version",
@@ -256,7 +257,6 @@
       "expiring_ingredient_count",
       "expiring_soonest_date",
       "has_image",
-      "has_step_images",
       "has_structured_steps",
       "inference_hint",
       "inference_stock_item_names",
@@ -338,7 +338,6 @@
       "is_low_stock",
       "is_open",
       "is_out_of_stock",
-      "last_checked_at",
       "linked_product_count",
       "name",
       "needs_attention",
@@ -348,7 +347,6 @@
       "stock_item_id",
       "stock_level_id",
       "stock_level_last_updated",
-      "stock_level_name",
       "stock_level_sequence",
       "stock_location_id"
     ]

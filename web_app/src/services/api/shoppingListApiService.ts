@@ -108,9 +108,6 @@ export type FinishResult = {
     items_restocked: number;
 };
 
-/** Finishing takes no options — every ticked line restocks to Stocked. */
-export type FinishShoppingListCommand = Record<string, never>;
-
 export type QuickAddCandidate = {
     shopping_list_id: string;
     name: string;
@@ -218,13 +215,11 @@ export default class ShoppingListApiService {
     deleteAsync = async (id: string): Promise<void> =>
         await this.httpClient.delete<void>(`/shopping-lists/${id}`);
 
-    finishAsync = async (
-        id: string,
-        command: FinishShoppingListCommand = {},
-    ): Promise<FinishResult> =>
-        await this.httpClient.post<FinishResult, FinishShoppingListCommand>(
+    /** Finishing takes no options: every ticked line restocks to Stocked. */
+    finishAsync = async (id: string): Promise<FinishResult> =>
+        await this.httpClient.post<FinishResult, Record<string, never>>(
             `/shopping-lists/${id}/finish`,
-            command,
+            {},
         );
 
     // `copyAsync` went with copy-to-new-list: the picker's kebab and the Export
@@ -283,7 +278,7 @@ export default class ShoppingListApiService {
             `/shopping-lists/${listId}/lines/by-stock-item/${stockItemId}`,
         );
 
-    quickAddToPrimaryAsync = async (
+    quickAddAsync = async (
         stockItemId: string,
         shoppingListId?: string,
     ): Promise<QuickAddResult> =>
@@ -332,19 +327,6 @@ export default class ShoppingListApiService {
             {},
         );
 
-    /** Bulk-select's "Move to list" — one request for the whole selection.
-     *  Same server rules as `moveUntickedToAsync` (duplicates on the target
-     *  are skipped, archived targets rejected), just over explicit ids. */
-    moveLinesToAsync = async (
-        sourceId: string,
-        targetId: string,
-        lineIds: string[],
-    ): Promise<MoveUntickedResult> =>
-        await this.httpClient.post<MoveUntickedResult, { line_ids: string[] }>(
-            `/shopping-lists/${sourceId}/lines/move-to/${targetId}`,
-            { line_ids: lineIds },
-        );
-
     startShoppingAsync = async (id: string): Promise<void> =>
         await this.httpClient.post<void, Record<string, never>>(
             `/shopping-lists/${id}/start`,
@@ -360,10 +342,6 @@ export default class ShoppingListApiService {
             `/shopping-lists/${id}/back-to-draft`,
             {},
         );
-
-    // `bulkTickAsync` went with the bulk-select bar: its only caller was the
-    // bar's Tick/Untick pair, and ticking is now a shop-mode-only gesture on
-    // one row at a time. The server endpoint still exists — FU-766.
 
     reorderLinesAsync = async (id: string, lineIdsInOrder: string[]): Promise<void> =>
         await this.httpClient.post<void, { line_ids: string[] }>(

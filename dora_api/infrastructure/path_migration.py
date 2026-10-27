@@ -17,7 +17,7 @@ import logging
 import shutil
 from pathlib import Path
 
-_Logger = logging.getLogger(__name__)
+_LOGGER = logging.getLogger(__name__)
 
 
 def migrate_legacy_db(target_db: Path) -> bool:
@@ -34,7 +34,7 @@ def migrate_legacy_db(target_db: Path) -> bool:
         # Target already populated — operator made a deliberate choice;
         # leave the legacy file in place for them to clean up manually
         # rather than risk overwriting newer data.
-        _Logger.warning(
+        _LOGGER.warning(
             "Legacy DB %s exists but target %s is already populated. "
             "Skipping migration; remove the legacy file manually if intended.",
             legacy, target_db,
@@ -42,7 +42,7 @@ def migrate_legacy_db(target_db: Path) -> bool:
         return False
     target_db.parent.mkdir(parents=True, exist_ok=True)
     shutil.move(str(legacy), str(target_db))
-    _Logger.info("Migrated legacy DB %s → %s", legacy, target_db)
+    _LOGGER.info("Migrated legacy DB %s → %s", legacy, target_db)
     return True
 
 
@@ -57,14 +57,14 @@ def migrate_legacy_appsettings(target_path: Path) -> bool:
     if legacy.resolve() == target_path.resolve():
         return False
     if target_path.exists():
-        _Logger.warning(
+        _LOGGER.warning(
             "Legacy appsettings %s exists but target %s is already populated. "
             "Leaving legacy in place.", legacy, target_path,
         )
         return False
     target_path.parent.mkdir(parents=True, exist_ok=True)
     shutil.move(str(legacy), str(target_path))
-    _Logger.info("Migrated legacy appsettings %s → %s", legacy, target_path)
+    _LOGGER.info("Migrated legacy appsettings %s → %s", legacy, target_path)
     return True
 
 
@@ -89,7 +89,7 @@ def migrate_legacy_uploads(uploads_dir: Path) -> int:
         moved += 1
 
     if moved:
-        _Logger.info(
+        _LOGGER.info(
             "Migrated %d staged upload(s) from %s → %s", moved, legacy, uploads_dir,
         )
     try:

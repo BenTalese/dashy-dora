@@ -140,6 +140,7 @@
     import BaseDialog from 'src/components/BaseDialog.vue';
     import { storeToRefs } from 'pinia';
     import { useQuasar } from 'quasar';
+    import { formatDate } from 'src/composables/useDateFormat';
     import MealPlanApiService from 'src/services/api/mealPlanApiService';
     import { needsRestockSequence } from 'src/helpers/stockStatus';
     import RecipeApiService from 'src/services/api/recipeApiService';
@@ -290,7 +291,7 @@
                         };
                     });
                     mealPlanOptions.value = (plansResp.items ?? []).map((p) => ({
-                        label: `${p.name} (${p.entries?.length ?? 0} meals)`,
+                        label: `${p.name ?? `Week of ${formatDate(p.start_date)}`} (${p.entries?.length ?? 0} meals)`,
                         value: p.meal_plan_id,
                     }));
                 } finally {
@@ -300,22 +301,15 @@
         },
     );
 
+    /** One request for the whole set (FU-714's shape); a failed id counts as
+     *  skipped, as it did when this looped per item. */
     async function bulkAddToList(
         listId: string,
         stockItemIds: string[],
     ): Promise<{ added: number; skipped: number }> {
-        let added = 0;
-        let skipped = 0;
-        for (const id of stockItemIds) {
-            try {
-                const result = await api.addLineAsync(listId, { stock_item_id: id });
-                if (result.already_on_list) skipped++;
-                else added++;
-            } catch {
-                skipped++;
-            }
-        }
-        return { added, skipped };
+        if (stockItemIds.length === 0) return { added: 0, skipped: 0 };
+        const result = await api.bulkAddLinesAsync(listId, stockItemIds);
+        return { added: result.added, skipped: result.already_on_list + result.failed_ids.length };
     }
 
     async function submit() {
@@ -356,29 +350,13 @@
         let preSeededSkipped = 0;
         try {
             if (f.startFrom === 'template' && f.templateId) {
-                if (createdNew) {
-                    // Templates' instantiate path creates its own list; we
-                    // already created an empty shell so delete it and let
-                    // instantiate own the result.
-                    await api.deleteAsync(targetListId);
-                    const result = await templateApi.instantiateAsync(f.templateId, {});
-                    targetListId = result.shopping_list_id ?? null;
-                    preSeededAdded = result.line_count;
-                } else if (targetListId) {
-                    // Merge mode — no "merge template" API. Spin up a temp
-                    // list, copy its lines, then delete the temp.
-                    const tmp = await templateApi.instantiateAsync(f.templateId, {});
-                    if (tmp.shopping_list_id) {
-                        const detail = await api.getDetailAsync(tmp.shopping_list_id);
-                        const ids = detail.lines
-                            .map((l) => l.stock_item_id)
-                            .filter((id): id is string => !!id);
-                        const counts = await bulkAddToList(targetListId, ids);
-                        preSeededAdded += counts.added;
-                        preSeededSkipped += counts.skipped;
-                        await api.deleteAsync(tmp.shopping_list_id);
-                    }
-                }
+                // Into the list chosen or just created, so a new list keeps
+                // the name and shop date typed for it (03-R33).
+                const result = await templateApi.instantiateAsync(f.templateId, {
+                    merge_into_list_id: targetListId,
+                });
+                preSeededAdded += result.line_count;
+                preSeededSkipped += result.skipped_count;
             } else if (f.startFrom === 'recipe' && f.recipeId) {
                 const opt = recipeOptions.value.find((r) => r.value === f.recipeId);
                 if (opt && targetListId) {

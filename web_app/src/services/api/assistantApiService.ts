@@ -92,6 +92,10 @@ export type ProviderConfig = {
     has_api_key: boolean;
     verified: boolean;
     verified_at: string | null;
+    /** The endpoint used when the base URL is left empty ('' for Ollama). */
+    default_base_url: string;
+    /** An example model id for the placeholder. */
+    example_model: string;
 };
 
 export type UpdateProviderCommand = {

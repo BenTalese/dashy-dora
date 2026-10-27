@@ -54,6 +54,7 @@
     import ProductApiService from 'src/services/api/productApiService';
     import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import type { Product } from 'src/models/product';
+    import { PACK_COUNT_RULE, parsePackCount } from 'src/helpers/packCount';
 
     const props = defineProps<{
         modelValue: boolean;
@@ -83,9 +84,9 @@
     );
 
     function onSave(): void {
-        const value = count.value;
-        if (value === null || !Number.isInteger(value) || value < 1) {
-            error.value = 'Enter a whole number, 1 or more.';
+        const value = parsePackCount(count.value);
+        if (value === null || value === undefined) {
+            error.value = `Enter ${PACK_COUNT_RULE}.`;
             return;
         }
         void save(value);

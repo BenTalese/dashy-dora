@@ -1,19 +1,6 @@
 <template>
-    <!-- FU-609 / R-036 — app-shell root: <q-page :style-fn> so the full-bleed
-         runner fills the viewport below the header without a hardcoded offset. -->
-    <q-page class="runner-shell" :style-fn="pageStyleFn">
-        <!-- ── Top progress strip ─────────────────────────────────────
-             Same shape as StocktakeRunner: close X, progress bar,
-             (?) help. Empty-queue is a state of the runner, not a
-             separate landing page. -->
-        <div class="runner-topbar">
-            <BaseButton
-                variant="icon"
-                :icon="ICONS.close"
-                color="white"
-                :to="'/meal-plans'"
-                aria-label="Close reconcile"
-            />
+    <RunnerShell close-to="/meal-plans" close-label="Close reconcile" help-topic="Reconcile past meals">
+        <template #topbar>
             <q-linear-progress
                 v-if="hasEntry"
                 :value="progress"
@@ -26,14 +13,7 @@
             <div v-if="hasEntry" class="text-caption dora-text-muted-3 q-mr-sm">
                 {{ resolvedCount }} / {{ initialCount }}
             </div>
-            <BaseButton
-                variant="icon"
-                :icon="ICONS.help_outline"
-                color="white"
-                aria-label="How reconcile works"
-                @click="helpOpen = true"
-            />
-        </div>
+        </template>
 
         <!-- ── Loading ─────────────────────────────────────────────── -->
         <div v-if="loading" class="runner-card-wrap">
@@ -206,42 +186,11 @@
             </q-card-actions>
         </BaseDialog>
 
-        <!-- ── (?) help dialog ─────────────────────────────────────── -->
-        <BaseDialog v-model="helpOpen" title="How reconcile works" closable card-style="min-width: 320px; max-width: 480px">
-            <q-card-section class="runner-help">
-                <p>
-                    Dora walks you through past-day meals from your plan
-                    that haven't been confirmed yet, one at a time,
-                    oldest first. For each entry you have five options:
-                </p>
-                <dl>
-                    <dt>Cooked</dt>
-                    <dd>You made it as planned. The cooked count and pool
-                        are correct.</dd>
-                    <dt>Different portions</dt>
-                    <dd>You made a different amount, say 3 instead of 2.
-                        Dora reflows the pool.</dd>
-                    <dt>Cooked later</dt>
-                    <dd>You made it, but on a later day. Dora records the
-                        date on the receipt.</dd>
-                    <dt>Didn't cook</dt>
-                    <dd>The meal didn't happen. Dora puts the pool back
-                        the way it was.</dd>
-                    <dt>Skip for now</dt>
-                    <dd>Not sure yet. The entry stays in the queue for
-                        next time.</dd>
-                </dl>
-                <p class="dora-text-muted-7">
-                    Whether past-day meals are assumed cooked or stay pending
-                    is set globally in Settings → Admin → System → Meal
-                    reconciliation.
-                </p>
-            </q-card-section>
-        </BaseDialog>
-    </q-page>
+    </RunnerShell>
 </template>
 
 <script lang="ts" setup>
+    import RunnerShell from 'src/components/RunnerShell.vue';
     import { ICONS } from 'src/style/icons';
     import { formatDate as formatLocaleDate } from 'src/composables/useDateFormat';
     import BaseButton from 'src/components/BaseButton.vue';
@@ -261,19 +210,9 @@
     const $q = useQuasar();
     const { entries, loading, submitVerb, reload } = useReconcileQueue();
 
-    // FU-609 / R-036 — app-shell height. QPage hands us the layout's live chrome
-    // `offset` (header, incl. the OfflineBanner when it shows) + viewport
-    // `height`, so the full-bleed runner fills exactly the area below the header
-    // instead of overshooting by a hardcoded 100dvh (which ignored the offset).
-    function pageStyleFn(offset: number, height: number) {
-        return {
-            height: height === 0 ? `calc(100vh - ${offset}px)` : `${height - offset}px`,
-        };
-    }
 
     const index = ref(0);
     const busy = ref(false);
-    const helpOpen = ref(false);
     const adjustOpen = ref(false);
     const adjustServings = ref<number>(0);
     const laterOpen = ref(false);
@@ -375,26 +314,7 @@
 </script>
 
 <style scoped lang="scss">
-    // Shape mirrors StocktakeRunner.vue — same shell, same rem-based
-    // typography, same warm accent. Colour flips to brand-primary
-    // (reconcile is a meal-plan surface, not a stock surface).
-    .runner-shell {
-        /* FU-609 / R-036 — height comes from the <q-page :style-fn> (viewport −
-           live layout offset); no hardcoded 100dvh (which ignored the header). */
-        background: var(--surface-page);
-        display: flex;
-        flex-direction: column;
-    }
-
-    .runner-topbar {
-        display: flex;
-        align-items: center;
-        padding: 0.5rem 0.75rem;
-        background: var(--brand-primary);
-        color: var(--text-on-primary);
-        min-height: 3rem;
-    }
-
+    // The shell and its brand-primary strip live in RunnerShell.vue.
     .runner-card-wrap {
         flex: 1 1 auto;
         display: flex;
@@ -431,16 +351,4 @@
         text-align: right;
     }
 
-    .runner-help dl {
-        margin: 0.75rem 0;
-    }
-
-    .runner-help dt {
-        font-weight: 600;
-        margin-top: 0.5rem;
-    }
-
-    .runner-help dd {
-        margin: 0 0 0.5rem 0;
-    }
 </style>

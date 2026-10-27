@@ -19,7 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from dora_api.domain.entities.audit_event import SEVERITY_AUDIT
 from dora_api.domain.entities.user import User
 from dora_api.domain.types import EMPTY_UUID
-from dora_api.features.auth.admin_gate import _require_admin
+from dora_api.features.auth.admin_gate import require_admin
 from dora_api.features.routers import USER_ROUTER
 from dora_api.infrastructure.api_response import (business_rule_violation, ok,
                                                   ProblemDetails,
@@ -34,6 +34,8 @@ from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
+
+_LOGGER = logging.getLogger(__name__)
 
 
 # Same 12-char alphanumeric one-time pad as reset_user_password — readable
@@ -109,8 +111,7 @@ class AdminCreateUserHandler:
 @USER_ROUTER.route("", methods=["POST"])
 @has_request_body(AdminCreateUserRequest)
 def admin_create_user():
-    _Logger = logging.getLogger(__name__)
-    _CallerId, err = _require_admin()
+    _CallerId, err = require_admin()
     if err is not None:
         return err
 
@@ -159,7 +160,7 @@ def admin_create_user():
         },
     )
 
-    _Logger.info(
+    _LOGGER.info(
         "Admin %s created user %s (%s, is_admin=%s)",
         _CallerId, _Request.username, _Response.new_user_id, _Request.is_admin,
     )

@@ -22,8 +22,10 @@ from uuid import UUID
 
 from sqlalchemy import delete, select
 
+from dora_api.domain.entities.product import Product
 from dora_api.domain.entities.shopping_list import (
     SHOPPING_LIST_STATUS_DONE, ShoppingList, ShoppingListLine)
+from dora_api.domain.entities.stock_item import StockItem
 from dora_api.infrastructure.ports import Repository
 
 
@@ -100,9 +102,6 @@ def snapshot_line_display_names(repository: Repository, lines) -> None:
     Precedence matches the detail DTO: the stock item names the line when
     there is one, else the product.
     """
-    from dora_api.domain.entities.product import Product
-    from dora_api.domain.entities.stock_item import StockItem
-
     pending = [ln for ln in lines if ln.display_name_snapshot is None]
     if not pending:
         return

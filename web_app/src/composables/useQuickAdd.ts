@@ -5,9 +5,9 @@ import { ref } from 'vue';
 // and reads this state; openQuickAdd() flips it open.
 
 export type QuickAddOptions = {
-    /** Pre-select a stock item (skips straight to the offer/list step). */
+    /** Pre-select a stock item: it is added and the sheet closes. */
     stockItemId?: string | null;
-    /** Pre-select the target list; defaults to the user's primary list. */
+    /** Pre-select the target list; defaults to the inferred quick-add target. */
     listId?: string | null;
 };
 

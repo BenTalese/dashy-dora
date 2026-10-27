@@ -33,7 +33,7 @@ from dora_api.infrastructure.ingestion_auth import (
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 
 
-_Logger = logging.getLogger(__name__)
+_LOGGER = logging.getLogger(__name__)
 
 
 @INGEST_ROUTER.route(
@@ -56,7 +56,7 @@ def ingest_delete_product(product_id: UUID):
     # still hold one from before, or guess; refuse rather than delete.
     target = repository.get(Product).by_id(product_id)
     if target is not None and target.is_custom:
-        _Logger.warning(
+        _LOGGER.warning(
             "Source %s asked to delete custom product %s; refused.", source.id, product_id,
         )
         return forbidden("A hand-entered product can only be removed from Dora itself.")
@@ -64,7 +64,7 @@ def ingest_delete_product(product_id: UUID):
     response = DeleteProductHandler(repository).handle(product_id)
 
     if response.product_not_found:
-        _Logger.warning(
+        _LOGGER.warning(
             "Source %s asked to delete unknown product %s.", source.id, product_id,
         )
         return not_found(Product.__name__, product_id)
@@ -72,5 +72,5 @@ def ingest_delete_product(product_id: UUID):
     stamp_used(source)
     repository.save_changes()
 
-    _Logger.info("Source %s deleted product %s.", source.id, product_id)
+    _LOGGER.info("Source %s deleted product %s.", source.id, product_id)
     return no_content()

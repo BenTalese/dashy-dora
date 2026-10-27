@@ -175,7 +175,7 @@
        box this small reads as nearly solid. The extra 3px of bleed is why
        the swatch needs its own margin below. */
     .stock-row-legend__swatch--uncertain {
-        background: var(--q-positive);
+        background: var(--semantic-positive);
         position: relative;
         margin: 3px;
     }
@@ -203,8 +203,8 @@
         border-left: 6px solid var(--brand-secondary-strong);
     }
     .stock-row-legend__row-swatch--alert {
-        border-color: var(--q-negative);
-        box-shadow: inset 0 0 0 1px var(--q-negative);
+        border-color: var(--semantic-negative);
+        box-shadow: inset 0 0 0 1px var(--semantic-negative);
     }
     .stock-row-legend__row-swatch--dim {
         background: color-mix(in srgb, var(--text-primary) 22%, var(--surface-component));

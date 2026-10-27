@@ -13,7 +13,8 @@ Value-driven: `budget_amount` NULL/≤0 ⇒ the feature is off.
 list whose `completed_at` falls inside the rolling period, using the same
 price-priority ladder the rest of the app uses:
   1. actual_unit_price  (user-entered, P2-02)
-  2. picked_offer_price (offer snapshot at tick time)
+  2. picked_offer_price (offer snapshot; only on lines finished before
+     2026-09-17, nothing writes it since)
   3. — skipped — no price means no contribution rather than a guess.
 
 Cross-list by construction: every completed shop in the period counts,
@@ -39,10 +40,9 @@ import logging
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
-from typing import Any
 from uuid import UUID
 
-from flask import request, session
+from flask import request
 from pydantic import BaseModel, ConfigDict, Field
 
 from dora_api.domain.entities.product_offer import ProductOffer
@@ -56,13 +56,18 @@ from dora_api.domain.entities.app_setting import (ALLOWED_BUDGET_PERIODS,
                                                   BUDGET_PERIOD_MONTHLY,
                                                   BUDGET_PERIOD_WEEKLY)
 from dora_api.features.routers import BUDGET_ROUTER
-from dora_api.features.shopping_lists._line_price import line_paid_unit_price
+from dora_api.features.shopping_lists._line_price import (line_paid_unit_price,
+                                                         spend_lines)
+from dora_api.persistence.aware import as_utc
 from dora_api.infrastructure.api_response import bad_request, ok, unauthorized
 from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
+from dora_api.infrastructure.session_user import current_user_id
+
+_LOGGER = logging.getLogger(__name__)
 
 
 # ── Period boundaries ────────────────────────────────────────────────────
@@ -92,8 +97,6 @@ def period_bounds(today: date, period: str) -> tuple[date, date]:
     return start, end
 
 
-
-
 def _boundary_utc(d: date, tz: ZoneInfo) -> datetime:
     """The household's midnight starting day `d`, as the UTC instant the
     `completed_at` column compares against."""
@@ -101,9 +104,8 @@ def _boundary_utc(d: date, tz: ZoneInfo) -> datetime:
 
 
 def _household_date(completed_at: datetime, tz: ZoneInfo) -> date:
-    """Calendar day of a stored (naive-UTC or aware) instant in the household zone."""
-    aware = completed_at if completed_at.tzinfo else completed_at.replace(tzinfo=timezone.utc)
-    return aware.astimezone(tz).date()
+    """Calendar day of a stored instant in the household zone."""
+    return as_utc(completed_at).astimezone(tz).date()
 
 
 def _budget_amount(setting: AppSetting) -> float | None:
@@ -118,50 +120,61 @@ def _budget_period(setting: AppSetting) -> str:
     return setting.budget_period or BUDGET_PERIOD_WEEKLY
 
 
+@dataclass(frozen=True, slots=True)
+class HouseholdBudget:
+    amount: float
+    period: str
+
+
+def household_budget(repository: SqlAlchemyRepository) -> HouseholdBudget | None:
+    """The household's positive grocery budget, or None when money is off
+    install-wide or no budget is set. Every budget-aware surface reads it here
+    so the cap gate and the displayed figure can't disagree (02-R13)."""
+    setting = get_or_create_app_setting(repository)
+    if not setting.money_enabled:
+        return None
+    amount = _budget_amount(setting)
+    if amount is None:
+        return None
+    return HouseholdBudget(amount=amount, period=_budget_period(setting))
+
+
+def budget_remaining(repository: SqlAlchemyRepository, today: date) -> float | None:
+    """What's left of the period containing `today`, or None when there is no
+    household budget (money off or unset)."""
+    budget = household_budget(repository)
+    if budget is None:
+        return None
+    start, end = period_bounds(today, budget.period)
+    return budget.amount - period_spent(start, end, repository)
+
+
 def period_spent(
     period_start: date,
     period_end: date,
     repository: SqlAlchemyRepository,
 ) -> float:
     """Sum of archived shopping-list lines whose completed_at falls in the
-    half-open window `[period_start, period_end)`. Uses the `_line_price`
-    ladder — actual > picked-offer > drop. Household-wide by construction
+    half-open window `[period_start, period_end)`, read through
+    `_line_price.spend_lines` (actual > picked-offer > drop). Household-wide by construction
     (the schema is single-household): every completed shop in the period
     counts, no matter which list or user it was on.
 
     Only **ticked** lines count. A price on a line is not evidence it was
-    bought: `picked_offer_price` is snapshotted when the line is *added*, so
-    an unticked line with a linked offer carries a price it never cost. Left
+    bought: `picked_offer_price` used to be snapshotted when the line was
+    *added*, so an older unticked line with a linked offer carries a price it
+    never cost. Left
     unfiltered, finishing a list with leftovers billed the whole list to the
     budget and inflated `period_headroom` by the same amount. This mirrors
     `compute_list_totals`' `spent_only` rule, which a done list's own receipt
     has always applied."""
     tz = household_timezone(repository)
-    start_dt = _boundary_utc(period_start, tz)
-    end_dt = _boundary_utc(period_end, tz)
-    archived = repository.get(ShoppingList).all(
-        EntityField(ShoppingList, ShoppingList.Fields.STATUS).eq(SHOPPING_LIST_STATUS_DONE)
-        & EntityField(ShoppingList, ShoppingList.Fields.COMPLETED_AT).gte(start_dt)
-        & EntityField(ShoppingList, ShoppingList.Fields.COMPLETED_AT).lt(end_dt)
+    lines = spend_lines(
+        repository.session,
+        _boundary_utc(period_start, tz),
+        _boundary_utc(period_end, tz),
     )
-    if not archived:
-        return 0.0
-    archived_ids = [l.id for l in archived]
-    lines = repository.get(ShoppingListLine).all(
-        EntityField(ShoppingListLine, ShoppingListLine.Fields.SHOPPING_LIST_ID)
-        .in_(archived_ids)
-        & EntityField(ShoppingListLine, ShoppingListLine.Fields.IS_TICKED).eq(True)
-        & EntityField(ShoppingListLine, ShoppingListLine.Fields.DEFERRED_BY_BUDGET).eq(False)
-    )
-    total = 0.0
-    for line in lines:
-        qty = line.quantity if line.quantity is not None else 1
-        if qty <= 0:
-            continue
-        price = line_paid_unit_price(line)
-        if price is not None:
-            total += price * qty
-    return total
+    return sum(line.spent for line in lines)
 
 
 def period_headroom(
@@ -247,7 +260,7 @@ class GetBudgetStatusHandler:
     def __init__(self, repository: Repository) -> None:
         self.repository = repository
 
-    def handle(self, on_date: date | None = None) -> BudgetStatusDto | None:
+    def handle(self, on_date: date | None = None) -> BudgetStatusDto:
         setting = get_or_create_app_setting(self.repository)
 
         # Compute boundaries even when the feature is off — the dashboard
@@ -290,13 +303,8 @@ class GetBudgetStatusHandler:
                 EntityField(ProductOffer, "_product_id").in_(active_product_ids)
             )
             for offer in offers:
-                # ProductOffer maps `_product_id` as the FK; the entity
-                # exposes `product_id` indirectly via the table column,
-                # so we look at the underscore-prefixed attribute the
-                # mapping installs.
-                pid = getattr(offer, "_product_id", None) or getattr(offer, "product_id", None)
-                if pid is not None:
-                    offer_lookup[pid] = offer
+                # ProductOffer's FK is mapped as `_product_id` (table_mappings).
+                offer_lookup[offer._product_id] = offer
 
         projected_active = 0.0
         for line in active_lines:
@@ -322,20 +330,9 @@ class GetBudgetStatusHandler:
         )
 
 
-def _current_user_id() -> UUID | None:
-    raw = session.get("user_id")
-    if not raw:
-        return None
-    try:
-        return UUID(raw)
-    except (ValueError, TypeError):
-        return None
-
-
 @BUDGET_ROUTER.route("/status", methods=["GET"])
 def get_budget_status():
-    _Logger = logging.getLogger(__name__)
-    user_id = _current_user_id()
+    user_id = current_user_id()
     if user_id is None:
         return unauthorized()
     on_raw = request.args.get("on")
@@ -346,9 +343,7 @@ def get_budget_status():
         except ValueError:
             return bad_request("`on` must be a date (YYYY-MM-DD).")
     dto = GetBudgetStatusHandler(SqlAlchemyRepository()).handle(on_date)
-    if dto is None:
-        return unauthorized()
-    _Logger.debug(
+    _LOGGER.debug(
         "budget status user=%s period=%s spent=%.2f remaining=%s",
         user_id, dto.period, dto.spent,
         f"{dto.remaining:.2f}" if dto.remaining is not None else "n/a",
@@ -373,7 +368,7 @@ class GetBudgetHistoryHandler:
     def __init__(self, repository: Repository) -> None:
         self.repository = repository
 
-    def handle(self, periods: int) -> list[BudgetHistoryRowDto] | None:
+    def handle(self, periods: int) -> list[BudgetHistoryRowDto]:
         setting = get_or_create_app_setting(self.repository)
 
         # R-021 — current period anchored on household-tz today.
@@ -393,48 +388,23 @@ class GetBudgetHistoryHandler:
             # period, regardless of week vs month.
             cursor = start - timedelta(days=1)
 
-        # Earliest start covers the whole range — fetch archived lists
-        # in one go and bucket by period.
         earliest_start, _ = period_bounds(anchors[-1], period)
-        latest_start, latest_end = period_bounds(anchors[0], period)
+        _latest_start, latest_end = period_bounds(anchors[0], period)
         tz = household_timezone(self.repository)
         full_start_dt = _boundary_utc(earliest_start, tz)
         full_end_dt = _boundary_utc(latest_end, tz)
 
-        archived = self.repository.get(ShoppingList).all(
-            EntityField(ShoppingList, ShoppingList.Fields.STATUS).eq(SHOPPING_LIST_STATUS_DONE)
-            & EntityField(ShoppingList, ShoppingList.Fields.COMPLETED_AT).gte(full_start_dt)
-            & EntityField(ShoppingList, ShoppingList.Fields.COMPLETED_AT).lt(full_end_dt)
-        )
-        archived_lookup: dict[UUID, ShoppingList] = {l.id: l for l in archived}
-        lines: list[ShoppingListLine] = []
-        if archived_lookup:
-            # Ticked-only, for the same reason as `period_spent` — history and
-            # the current period must agree on what "spent" means.
-            lines = self.repository.get(ShoppingListLine).all(
-                EntityField(ShoppingListLine, ShoppingListLine.Fields.SHOPPING_LIST_ID)
-                .in_(list(archived_lookup.keys()))
-                & EntityField(ShoppingListLine, ShoppingListLine.Fields.IS_TICKED).eq(True)
-                & EntityField(ShoppingListLine, ShoppingListLine.Fields.DEFERRED_BY_BUDGET).eq(False)
-            )
+        # One read for the whole range, bucketed by household date so history
+        # and the current period agree on what "spent" means.
+        lines = spend_lines(self.repository.session, full_start_dt, full_end_dt)
 
         rows: list[BudgetHistoryRowDto] = []
         for anchor in anchors:
             start, end = period_bounds(anchor, period)
-            window_total = 0.0
-            for line in lines:
-                lst = archived_lookup.get(line.shopping_list_id)
-                if lst is None or lst.completed_at is None:
-                    continue
-                completed_date = _household_date(lst.completed_at, tz)
-                if completed_date < start or completed_date >= end:
-                    continue
-                qty = line.quantity if line.quantity is not None else 1
-                if qty <= 0:
-                    continue
-                price = line_paid_unit_price(line)
-                if price is not None:
-                    window_total += price * qty
+            window_total = sum(
+                line.spent for line in lines
+                if start <= _household_date(line.completed_at, tz) < end
+            )
             rows.append(BudgetHistoryRowDto(
                 period_start=start.isoformat(),
                 period_end=end.isoformat(),
@@ -446,8 +416,7 @@ class GetBudgetHistoryHandler:
 
 @BUDGET_ROUTER.route("/history", methods=["GET"])
 def get_budget_history():
-    from flask import request
-    user_id = _current_user_id()
+    user_id = current_user_id()
     if user_id is None:
         return unauthorized()
     try:
@@ -458,8 +427,6 @@ def get_budget_history():
     # and an open-ended N is an easy DoS surface.
     periods = max(1, min(periods, 26))
     rows = GetBudgetHistoryHandler(SqlAlchemyRepository()).handle(periods)
-    if rows is None:
-        return unauthorized()
     return ok({"rows": rows})
 
 
@@ -489,8 +456,7 @@ class BudgetSettingsDto:
 @BUDGET_ROUTER.route("/settings", methods=["PATCH"])
 @has_request_body(UpdateBudgetSettingsRequest)
 def update_budget_settings():
-    _Logger = logging.getLogger(__name__)
-    if _current_user_id() is None:
+    if current_user_id() is None:
         return unauthorized()
     request: UpdateBudgetSettingsRequest = get_request_body()
     set_fields = request.model_fields_set
@@ -516,7 +482,7 @@ def update_budget_settings():
         setting.budget_period = request.period
     repository.save_changes()
 
-    _Logger.info(
+    _LOGGER.info(
         "Household budget updated (amount=%s period=%s).",
         setting.budget_amount, setting.budget_period,
     )

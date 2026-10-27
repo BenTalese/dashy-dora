@@ -7,8 +7,8 @@
         class="sparkline"
         preserveAspectRatio="none"
     >
-        <polyline :points="polyline" fill="none" :stroke="strokeColour" stroke-width="1.5" />
-        <circle :cx="lastPoint.x" :cy="lastPoint.y" r="2" :fill="strokeColour" />
+        <polyline :points="polyline" fill="none" :style="{ stroke: strokeColour }" stroke-width="1.5" />
+        <circle :cx="lastPoint.x" :cy="lastPoint.y" r="2" :style="{ fill: strokeColour }" />
     </svg>
     <span v-else class="text-caption dora-text-muted">–</span>
 </template>
@@ -31,17 +31,13 @@
     const w = computed(() => props.width ?? 120);
     const h = computed(() => props.height ?? 28);
 
+    // A token reference straight into the SVG paint (R-002): it follows the
+    // theme with no computed-style read and no literal fallback.
     const strokeColour = computed(() => {
         if (props.color) return props.color;
         const first = props.values[0] ?? 0;
         const last = props.values[props.values.length - 1] ?? 0;
-        const token = last <= first ? '--semantic-positive' : '--semantic-negative';
-        if (typeof document === 'undefined') {
-            return last <= first ? 'hsl(140, 50%, 45%)' : 'hsl(7, 75%, 56%)';
-        }
-        return getComputedStyle(document.documentElement)
-            .getPropertyValue(token)
-            .trim() || (last <= first ? 'hsl(140, 50%, 45%)' : 'hsl(7, 75%, 56%)');
+        return last <= first ? 'var(--semantic-positive)' : 'var(--semantic-negative)';
     });
 
     const coords = computed(() => {

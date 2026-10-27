@@ -1,8 +1,7 @@
 import type { Product } from 'src/models/product';
-import type { PriceHistory } from 'src/models/stockItemDetail';
 import type { CreatedResponse } from './axiosHttpClient';
 import AxiosHttpClient from './axiosHttpClient';
-import { FilterOperator, SortOrder, createQueryString, type Page } from './queryStringBuilder';
+import { FilterOperator, SortOrder, createQueryString, fetchAllPages, type Page } from './queryStringBuilder';
 
 export default class ProductApiService {
     private httpClient = new AxiosHttpClient();
@@ -10,8 +9,13 @@ export default class ProductApiService {
     createAsync = async (productToCreate: CreateProductCommand): Promise<CreatedResponse> =>
         await this.httpClient.post<CreatedResponse>('/products', productToCreate);
 
-    getAllAsync = async (): Promise<Page<Product>> =>
-        await this.httpClient.get<Page<Product>>('/products');
+    /** Every saved product, paged: My products, Price history and the list
+     *  page all filter client-side over the store, so one default page of 50
+     *  silently hid product 51 onward. */
+    getAllPagesAsync = async (): Promise<Product[]> =>
+        await fetchAllPages((page, limit) =>
+            this.httpClient.get<Page<Product>>(`/products${createQueryString([], undefined, { page, limit })}`),
+        );
 
     /** Name search, resolved server-side.
      *
@@ -31,13 +35,6 @@ export default class ProductApiService {
             )}`,
         );
 
-    /** Top-N on-special products by discount %, ranked + sliced server-side
-     *  (state-ownership §8.2) so the dashboard needn't download every product. */
-    getBestDealsAsync = async (limit = 3): Promise<Product[]> =>
-        await this.httpClient.get<Product[]>(`/products/best-deals?limit=${limit}`);
-
-    getPriceHistoryAsync = async (productId: string): Promise<PriceHistory> =>
-        await this.httpClient.get<PriceHistory>(`/products/${productId}/price-history`);
 
     /** Hard delete (feedback L197). Takes the product's offers, price history,
      *  alerts, barcode and stock-item link with it; lines on *finished*

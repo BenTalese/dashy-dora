@@ -4,7 +4,7 @@
 // while Skip/Update/seal each map to the right PATCH body. The dialog itself
 // is a thin promise wrapper in useStockItemActions; this pins the contract it
 // feeds without mounting Quasar.
-import { buildOpenTogglePatch, type OpenToggleTarget } from 'src/composables/openToggle';
+import { buildOpenTogglePatch, type OpenToggleTarget } from 'src/helpers/openToggle';
 import { describe, expect, it } from 'vitest';
 
 const sealedItem: OpenToggleTarget = {

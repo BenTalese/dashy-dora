@@ -21,6 +21,9 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
 
+from dora_api.domain.cadence_math import mean_gap_days
+from dora_api.domain.entities.app_setting import (BUDGET_PERIOD_MONTHLY,
+                                                  BUDGET_PERIOD_WEEKLY)
 from dora_api.domain.entities.meal_plan_entry import MealPlanEntry
 from dora_api.domain.entities.recipe_ingredient import RecipeIngredient
 from dora_api.domain.entities.shopping_list import (SHOPPING_LIST_STATUS_DONE,
@@ -116,7 +119,7 @@ def generate_use_soon(repository: SqlAlchemyRepository) -> list[Suggestion]:
             body=f"{item.name} {predicate}.",
             reason=(
                 f"Its recorded expiry date is {item.expiry_date.isoformat()}, "
-                f"which is within the 3-day rescue horizon."
+                f"which is within the {_USE_SOON_HORIZON_DAYS}-day rescue horizon."
             ),
             primary_action={
                 "path": f"/stock/{item.id}",
@@ -131,6 +134,9 @@ def generate_use_soon(repository: SqlAlchemyRepository) -> list[Suggestion]:
 # Single-user query — uses the existing budget handler so the period
 # math stays in one place.
 
+_BUDGET_PERIOD_WORDS = {BUDGET_PERIOD_WEEKLY: "week", BUDGET_PERIOD_MONTHLY: "month"}
+
+
 def generate_over_budget(repository: SqlAlchemyRepository, user_id: UUID | None) -> list[Suggestion]:
     if user_id is None:
         return []
@@ -138,25 +144,24 @@ def generate_over_budget(repository: SqlAlchemyRepository, user_id: UUID | None)
     # features/suggestions and features/budget.
     from dora_api.features.budget.budget import GetBudgetStatusHandler
 
-    dto = GetBudgetStatusHandler(SqlAlchemyRepository()).handle()
-    if dto is None or not dto.enabled or not dto.over_budget or dto.amount is None:
+    dto = GetBudgetStatusHandler(repository).handle()
+    if not dto.enabled or not dto.over_budget or dto.amount is None:
         return []
     over_by = dto.spent - dto.amount
+    period_word = _BUDGET_PERIOD_WORDS.get(dto.period, "period")
+    # Amounts ride the payload only: prose carries no figures, so no currency
+    # symbol is ever baked in server-side (D-006, the buy-verdict precedent).
     return [Suggestion(
         kind=KIND_OVER_BUDGET,
         dedup_key=dto.period_start or "current",
         severity=SEVERITY_HIGH,
-        title="You're over budget this " + dto.period.replace("ly", ""),
-        body=(
-            f"Spent ${dto.spent:.2f} of your ${dto.amount:.2f} target, "
-            f"${over_by:.2f} over."
-        ),
+        title=f"You're over budget this {period_word}",
+        body=f"This {period_word}'s finished shops have gone past the household budget.",
         reason=(
-            f"Spend across archived shopping lists with completed_at in "
-            f"[{dto.period_start}, {dto.period_end}) totals ${dto.spent:.2f}, "
-            f"which exceeds your configured budget of ${dto.amount:.2f}."
+            f"Finished shops this {period_word} add up to more than the "
+            f"{dto.period} budget set in Settings → Budget."
         ),
-        primary_action={"path": "/settings/preferences", "label": "Review budget"},
+        primary_action={"path": "/settings/budget", "label": "Review budget"},
         payload={"amount": dto.amount, "spent": dto.spent, "over_by": round(over_by, 2)},
     )]
 
@@ -210,15 +215,8 @@ def generate_likely_due(repository: SqlAlchemyRepository) -> list[Suggestion]:
         unique_sorted = sorted(set(dates))
         if len(unique_sorted) < _LIKELY_DUE_MIN_SAMPLES:
             continue
-        gaps = [
-            (unique_sorted[i] - unique_sorted[i - 1]).days
-            for i in range(1, len(unique_sorted))
-            if (unique_sorted[i] - unique_sorted[i - 1]).days > 0
-        ]
-        if not gaps:
-            continue
-        avg_gap = sum(gaps) / len(gaps)
-        if avg_gap > _LIKELY_DUE_MAX_GAP_DAYS:
+        avg_gap = mean_gap_days(unique_sorted)
+        if avg_gap is None or avg_gap > _LIKELY_DUE_MAX_GAP_DAYS:
             continue
         last = unique_sorted[-1]
         days_since = (today - last).days
@@ -374,7 +372,8 @@ def generate_pantry_check(
         return []
 
     # ── Compute belief for just the in-play set; ask about the uncertain. ──
-    items = repository.get(StockItem).include(StockItem.Fields.STOCK_LEVEL).all(
+    # Beliefs resolve the recorded level by FK; no include needed (07-R19).
+    items = repository.get(StockItem).all(
         EntityField(StockItem, "id").in_(list(in_play))
     )
     beliefs = gather_beliefs_for_items(repository, items)

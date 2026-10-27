@@ -7,14 +7,6 @@ import { ICONS } from 'src/style/icons';
 // is_archived / is_in_progress boolean pair.
 export type ShoppingListStatus = 'draft' | 'shopping' | 'done';
 
-export function isListDone(status: ShoppingListStatus): boolean {
-    return status === 'done';
-}
-
-export function isListShopping(status: ShoppingListStatus): boolean {
-    return status === 'shopping';
-}
-
 /** The one glyph per list state, shared by the status pill, the rail and the
  *  phone's list picker so the three can't drift (D-013: the state is never
  *  colour alone). */
@@ -104,7 +96,7 @@ export type ShoppingListLine = {
     stock_item_id: string | null;
     product_id: string | null;
     stock_item_name: string;
-    stock_level_name: string | null;
+    /** The put-away dialog groups by it. */
     stock_location_id: string | null;
     stock_location_breadcrumb: string[];
     quantity: number | null;
@@ -116,8 +108,6 @@ export type ShoppingListLine = {
      *  the New list dialog's auto-fill are False: the user picked those
      *  sources. Clears when the user edits the line. */
     is_auto_added: boolean;
-    /** ISO timestamp when the line was added. */
-    added_at: string | null;
     /** P2-02 — actual unit price the shopper typed in (override of the
      *  picked offer's price). `null` = no override; use the offer instead. */
     actual_unit_price: number | null;
@@ -138,11 +128,8 @@ export type ShoppingListLine = {
      *  `planned_store_id`, which is prefilled from this when the line is
      *  added. */
     usual_store_id: string | null;
-    /** FU-227 chunk 5 (D3) — server-resolved per-item price suggestion for
-     *  the till editor + its human source label ("from your last receipt" /
-     *  "from Coles"). `null` when there's nothing to suggest. Display-only;
-     *  seeds the editor and persists on first edit. */
-    prefill_unit_price: number | null;
+    /** Where the till editor's suggestion (`estimated_unit_price`) comes from,
+     *  as a human label ("from your last receipt"), or null. */
     prefill_source_label: string | null;
     offers: LineProductOffer[];
     /** FU-215 — optional PreferredBuy hint on the line + the item's available
@@ -157,27 +144,17 @@ export type ShoppingListLine = {
     /** Chip label frozen at trim time (one of the seven strings in brief §5).
      *  Null on non-deferred lines. */
     deferred_reason: string | null;
-    /** RD-18 (FU-407) — whether the anchoring stock item has any recorded
-     *  substitute. Gates the "Swap with substitute" affordance so it isn't a
-     *  dead-end. False for product-only lines. */
-    has_substitutes: boolean;
     /** The item's group, for the "Order by → Group" sectioning mode.
      *  `null` ⇒ the line falls into the trailing "Unsorted" section. */
     stock_group_id: string | null;
     stock_group_name: string | null;
-    /** Server-resolved money ladder (R-003 — never re-derive this client-side):
-     *  `actual_unit_price` → last actual purchase → chosen offer → nothing.
-     *  History deliberately outranks offers: what you really paid is truer
-     *  than an advertised price, and it means a user with no products at all
-     *  still gets real totals. `estimate_source` names the rung so the UI can
-     *  label the number ("~$5.50, what you last paid") instead of flattening
-     *  every price into one grammar. */
+    /** Server-resolved money ladder (R-003, never re-derive this client-side):
+     *  `actual_unit_price` → the offer the user picked on the row → the last
+     *  actual purchase → nothing. An unpicked offer never prices a line.
+     *  `estimate_source` names the rung so the UI can label the number
+     *  ("~$5.50, what you last paid"). */
     estimated_unit_price: number | null;
     estimate_source: 'actual' | 'historic' | 'offer' | 'none';
-    /** The last actual purchase itself, kept alongside the estimate so the
-     *  price editor can say "you last paid $5.50 at Aldi" even once the user
-     *  has typed an override for this trip. */
-    last_paid_unit_price: number | null;
     last_paid_store_id: string | null;
     last_paid_store_name: string | null;
     /** Server-resolved store ladder: bought-this-trip → **this list's planned
@@ -208,8 +185,8 @@ export type StoreSpend = {
 };
 
 /** Server-owned list-level money/count aggregates (state-ownership Type B).
- *  The client reads these instead of summing `priceOfLine`/`savingsOfLine`
- *  across the lines itself. Per-line display price stays a client concern. */
+ *  The client reads these instead of summing `priceOfLine` across the lines
+ *  itself. Per-line display price stays a client concern. */
 export type ShoppingListTotals = {
     total_price: number;
     remaining_price: number;
@@ -322,20 +299,3 @@ export function priceOfLine(line: ShoppingListLine): number {
     return line.estimated_unit_price * (line.quantity ?? 1);
 }
 
-// Savings vs the line's chosen offer's RRP (price_was). Zero when the offer
-// has no `price_was` recorded or isn't currently discounted. Multiplied by
-// quantity so list-level totals work without re-doing the math.
-//
-// If the user has entered an actual paid price, we use that against the
-// offer's RRP — i.e. they could have saved more (or less) than the offer
-// implied. Falls back to offer.price_now when no override is set.
-export function savingsOfLine(line: ShoppingListLine): number {
-    const offer = chosenOfferFor(line);
-    if (!offer || offer.price_was == null) return 0;
-    const paid = line.actual_unit_price ?? offer.price_now;
-    if (paid == null) return 0;
-    const diff = offer.price_was - paid;
-    if (diff <= 0) return 0;
-    const qty = line.quantity ?? 1;
-    return diff * qty;
-}

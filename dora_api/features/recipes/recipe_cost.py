@@ -39,7 +39,6 @@ a confident wrong number.
 """
 from dataclasses import dataclass
 from typing import Iterable
-from uuid import UUID
 
 from dora_api.domain import units
 from dora_api.domain.entities.stock_item_price_observation import \
@@ -51,6 +50,7 @@ from dora_api.features.nutrition.household_measures import (
     resolve_grams,
 )
 from dora_api.persistence.field import EntityField
+from dora_api.persistence.uuid_key import uuid_key
 
 # Why an ingredient contributed nothing — surfaced per line in the recipe
 # page's expandable cost breakdown, so "why is this estimate low?" is
@@ -144,14 +144,6 @@ def _item_price(
     return pack_price / (float(size_value) * found.factor)
 
 
-def _key(v) -> str:
-    if isinstance(v, UUID):
-        return str(v)
-    if isinstance(v, bytes):
-        return str(UUID(bytes=v))
-    return str(v)
-
-
 def _unit_price_map(repository, stock_item_ids: list) -> tuple[dict, dict]:
     """(offer_unit_price_by_item, observation_unit_cost_by_item) keyed by the
     stringified stock-item id. One offer query + one observation query."""
@@ -211,9 +203,9 @@ def _unit_price_map(repository, stock_item_ids: list) -> tuple[dict, dict]:
         unit_price = UnitPrice(
             amount, unit, _item_price(float(price), size_value, size_unit, pack_count),
         )
-        prev = offer_by_item.get(_key(sid))
+        prev = offer_by_item.get(uuid_key(sid))
         if prev is None or _cheaper(unit_price, prev):
-            offer_by_item[_key(sid)] = unit_price
+            offer_by_item[uuid_key(sid)] = unit_price
 
     # Observation fallback: one query, grouped per item, delegated to the
     # server-owned per-unit cost helper (R-003).
@@ -221,7 +213,7 @@ def _unit_price_map(repository, stock_item_ids: list) -> tuple[dict, dict]:
     for obs in repository.get(StockItemPriceObservation).all(
         EntityField(StockItemPriceObservation, "stock_item_id").in_(stock_item_ids)
     ):
-        obs_by_item.setdefault(_key(obs.stock_item_id), []).append(obs)
+        obs_by_item.setdefault(uuid_key(obs.stock_item_id), []).append(obs)
     obs_cost_by_item: dict[str, UnitPrice] = {}
     for sid_key, obs_list in obs_by_item.items():
         cost = get_stock_item_unit_cost_with_unit_at(obs_list)
@@ -306,10 +298,10 @@ def _price_line(
     # (UNPRICED_NO_QUANTITY); the 1.0 remains only for the direct callers in
     # the tests, and is never how a real line is billed.
     qty = float(ingredient.quantity) if ingredient.quantity is not None else 1.0
-    ing_unit = (getattr(ingredient, "unit", None) or "").strip()
+    ing_unit = (ingredient.unit or "").strip()
     ing_def = units.find_unit(ing_unit) if ing_unit else None
 
-    name = getattr(ingredient, "stock_item_name", None)
+    name = ingredient.stock_item_name
     names = [n for n in (name,) if n]
 
     def by_weight() -> float | None:
@@ -381,14 +373,14 @@ def _line_name(ingredient) -> str:
     """Display name for the breakdown. The batch path is fed entities that
     may not carry the joined stock-item name; the detail path is fed DTOs
     that always do."""
-    return getattr(ingredient, "stock_item_name", None) or "Ingredient"
+    return ingredient.stock_item_name or "Ingredient"
 
 
 def _unpriced_line(ingredient, reason: str, price: UnitPrice | None) -> CostLine:
     return CostLine(
         name=_line_name(ingredient),
         quantity=float(ingredient.quantity) if ingredient.quantity is not None else None,
-        unit=getattr(ingredient, "unit", None),
+        unit=ingredient.unit,
         unit_price=price.amount if price is not None else None,
         priced_unit=price.unit if price is not None else None,
         line_cost=None,
@@ -409,7 +401,7 @@ def _cost_one(
         if ing.stock_item_id is None:
             lines.append(_unpriced_line(ing, UNPRICED_NO_LINK, None))
             continue
-        sid = _key(ing.stock_item_id)
+        sid = uuid_key(ing.stock_item_id)
         unit_price = offer_by_item.get(sid) or obs_cost_by_item.get(sid)
         if unit_price is None:
             lines.append(_unpriced_line(ing, UNPRICED_NO_PRICE, None))
@@ -430,7 +422,7 @@ def _cost_one(
         lines.append(CostLine(
             name=_line_name(ing),
             quantity=float(ing.quantity) if ing.quantity is not None else None,
-            unit=getattr(ing, "unit", None),
+            unit=ing.unit,
             unit_price=unit_price.amount,
             priced_unit=unit_price.unit,
             line_cost=round(line_cost, 2),

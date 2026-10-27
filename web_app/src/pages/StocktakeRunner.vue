@@ -1,7 +1,7 @@
 ﻿<template>
     <!-- FU-609 / R-036 — app-shell root: <q-page :style-fn> so the full-bleed
          runner fills the viewport below the header without a hardcoded offset. -->
-    <q-page class="runner-shell" :style-fn="pageStyleFn">
+    <q-page class="runner-shell" :style-fn="appShellStyleFn">
         <!-- ── Top progress strip ──────────────────────────────────────
              Close X on the left, progress bar with count in the middle,
              (?) help on the right. No separate landing page any more —
@@ -319,7 +319,7 @@
                         :key="level.stock_level_id"
                         clickable
                         v-close-popup
-                        @click="onPickLevel(level.stock_level_id, level.sequence, level.name)"
+                        @click="onPickLevel(level.stock_level_id, level.sequence)"
                     >
                         <q-item-section avatar>
                             <StockLevelDot :sequence="level.sequence" size="14px" />
@@ -344,6 +344,7 @@
 </template>
 
 <script lang="ts" setup>
+    import { appShellStyleFn } from 'src/helpers/appShell';
     import BaseTooltip from 'src/components/BaseTooltip.vue';
     import InfoTip from 'src/components/help/InfoTip.vue';
     import { ICONS } from 'src/style/icons';
@@ -370,10 +371,7 @@
     import { useStockLevelStore } from 'src/stores/stockLevelStore';
     import { useStockItemStore } from 'src/stores/stockItemStore';
     import { colourForSequence } from 'src/helpers/stockLevelLogic';
-    import {
-        LOW_STOCK_SEQUENCE,
-        OUT_OF_STOCK_SEQUENCE,
-    } from 'src/helpers/stockStatus';
+    import { needsRestockSequence } from 'src/helpers/stockStatus';
     import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { useFeatureFlags } from 'src/composables/useFeatureFlags';
 
@@ -387,14 +385,6 @@
     // levels until a hard reload and skipped the auto-add toast.
     const stockItemStore = useStockItemStore();
 
-    // FU-609 / R-036 — app-shell height. QPage hands us the layout's live chrome
-    // `offset` + viewport `height`, so the full-bleed runner fills exactly the
-    // area below the header instead of overshooting by a hardcoded 100vh.
-    function pageStyleFn(offset: number, height: number) {
-        return {
-            height: height === 0 ? `calc(100vh - ${offset}px)` : `${height - offset}px`,
-        };
-    }
     const stockLevelStore = useStockLevelStore();
     const { stockLevels } = storeToRefs(stockLevelStore);
     const shoppingListStore = useShoppingListStore();
@@ -499,21 +489,15 @@
     const currentLevelColour = computed(() => {
         const c = current.value;
         if (!c) return null;
-        const level = stockLevels.value.find((l) => l.stock_level_id === c.stock_level_id);
+        const level = stockLevelStore.levelById.get(c.stock_level_id ?? '');
         return colourForSequence(level?.sequence);
     });
 
     // Belief's own words, matching the level picker's belief header on the
     // stock overview so the phrase a user learns in one place reads the same
     // in the other.
-    const BELIEF_WORD: Record<string, string> = {
-        out: 'out',
-        low: 'low',
-        stocked: 'stocked',
-    };
     function beliefWord(band: string | null): string {
-        if (!band) return 'something has changed';
-        return BELIEF_WORD[band] ?? band;
+        return band ?? 'something has changed';
     }
 
     function bandLabel(band: CadenceBand): string {
@@ -581,11 +565,7 @@
         } finally { busy.value = false; }
     }
 
-    async function onPickLevel(
-        levelId: string,
-        sequence: number,
-        levelName: string,
-    ) {
+    async function onPickLevel(levelId: string, sequence: number) {
         // Two callers now: the walk card's "Change level", and the Sweep
         // phase's "I still keep this" (which is a level-set by design — see
         // `onSweepKeep`). `sweepKeepId` says which, and is cleared either way
@@ -624,8 +604,7 @@
             // SK-7 tracking: this session's Low/Out flips feed the
             // batch add-to-list prompt on the completion screen.
             // Dedupe if the user Changes the same item twice.
-            const isRestockable =
-                sequence >= LOW_STOCK_SEQUENCE || sequence === OUT_OF_STOCK_SEQUENCE;
+            const isRestockable = needsRestockSequence(sequence);
             const existingIdx = restockNeeded.value.findIndex(
                 (r) => r.stock_item_id === stockItemId,
             );
@@ -637,7 +616,6 @@
                 // User flipped it back to Stocked — take it out again.
                 restockNeeded.value.splice(existingIdx, 1);
             }
-            void levelName;
             advance();
         } catch (err) {
             $q.notify({
@@ -678,20 +656,24 @@
         } finally { busy.value = false; }
     }
 
-    function onMute() {
-        if (!current.value) return;
-        const stockItemId = current.value.stock_item_id;
-        const itemName = current.value.name;
-        // Mute is nuclear (persistent, only un-mutable from item
-        // detail) — always confirm before firing.
+    /** Mute is nuclear (persistent, only un-mutable from item detail), so it
+     *  always confirms first; the walk card and the sweep share the wording. */
+    function confirmMute(name: string, onConfirm: () => void) {
         $q.dialog({
-            title: `Mute ${itemName}?`,
+            title: `Mute ${name}?`,
             message:
                 "Dora will stop asking about this item entirely. You can un-mute it later from the item's detail page.",
             cancel: { noCaps: true },
             persistent: false,
-            ok: { label: 'Mute', color: 'negative', unelevated: true },
-        }).onOk(() => {
+            ok: { label: 'Mute', color: 'negative', unelevated: true, noCaps: true },
+        }).onOk(onConfirm);
+    }
+
+    function onMute() {
+        if (!current.value) return;
+        const stockItemId = current.value.stock_item_id;
+        const itemName = current.value.name;
+        confirmMute(itemName, () => {
             void (async () => {
                 busy.value = true;
                 try {
@@ -780,14 +762,7 @@
     }
 
     function onSweepMute(item: StocktakeSweptItem) {
-        $q.dialog({
-            title: `Mute ${item.name}?`,
-            message:
-                "Dora will stop asking about this item entirely. You can un-mute it later from the item's detail page.",
-            cancel: { noCaps: true },
-            persistent: false,
-            ok: { label: 'Mute', color: 'negative', unelevated: true },
-        }).onOk(() => {
+        confirmMute(item.name, () => {
             void (async () => {
                 busy.value = true;
                 try {
@@ -819,7 +794,7 @@
                 'This removes the item and its history for good. If you just want Dora to stop asking about it, mute it instead.',
             cancel: { noCaps: true },
             persistent: false,
-            ok: { label: 'Delete', color: 'negative', unelevated: true },
+            ok: { label: 'Delete', color: 'negative', unelevated: true, noCaps: true },
         }).onOk(() => {
             void (async () => {
                 busy.value = true;
@@ -906,7 +881,7 @@
     }
     .runner-card-wrap {
         flex: 1; display: flex; align-items: center; justify-content: center;
-        padding: 24px;
+        padding: var(--space-6);
     }
     .runner-card {
         max-width: 480px; width: 100%;
@@ -937,7 +912,7 @@
     .runner-belief__head {
         display: flex;
         align-items: center;
-        gap: 4px;
+        gap: var(--space-1);
         font-weight: 600;
     }
 
@@ -945,7 +920,7 @@
        being awkward across sections, so we use a flex row directly. */
     .runner-primary-row {
         display: flex;
-        gap: 8px;
+        gap: var(--space-2);
     }
     .runner-primary {
         min-height: 72px;
@@ -961,28 +936,28 @@
         line-height: 1.15;
     }
     .runner-change-level__level {
-        font-size: var(--text-md, 1rem);
+        font-size: calc(var(--font-size-md) * 1rem);
         font-weight: 600;
     }
     .runner-change-level__hint {
-        font-size: var(--text-xs, 0.75rem);
+        font-size: calc(var(--font-size-xs) * 1rem);
         opacity: 0.85;
     }
     /* Out-of-stock / unknown level → neutral state. Uses theme tokens
        (R-002) rather than a hardcoded grey literal so it tracks dark
        + light themes. */
     .runner-change-level--neutral {
-        background: var(--surface-sunken, rgba(0, 0, 0, 0.12));
+        background: var(--surface-sunken);
         color: var(--text-primary);
     }
     .runner-change-level--neutral:hover {
-        background: var(--surface-hover, rgba(0, 0, 0, 0.18));
+        background: color-mix(in srgb, var(--surface-sunken), var(--text-primary) 8%);
     }
 
     /* Secondary row: three smaller ghost-style actions. */
     .runner-secondary-row {
         display: flex;
-        gap: 8px;
+        gap: var(--space-2);
         padding-top: 0;
     }
 
@@ -990,18 +965,18 @@
     .runner-summary {
         display: flex;
         flex-direction: column;
-        gap: 4px;
+        gap: var(--space-1);
         max-width: 200px;
-        margin: 16px auto 0;
+        margin: var(--space-4) auto 0;
     }
     .runner-summary__row {
         display: flex;
         justify-content: space-between;
         align-items: baseline;
-        gap: 12px;
+        gap: var(--space-3);
     }
     .runner-summary__count {
-        font-size: var(--text-md, 1rem);
+        font-size: calc(var(--font-size-md) * 1rem);
         font-weight: 600;
         min-width: 24px;
         text-align: right;

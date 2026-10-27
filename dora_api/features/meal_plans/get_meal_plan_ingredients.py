@@ -20,6 +20,8 @@ from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 
+_LOGGER = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True, slots=True)
 class MealPlanIngredientDto:
@@ -93,14 +95,16 @@ def aggregate_meal_plan_ingredients(
 
     aggregated: dict[UUID, dict] = {}
     unlinked: List[UnlinkedIngredientDto] = []
+    recipes_by_id = {
+        r.id: r
+        for r in repository
+        .get(Recipe)
+        .include(Recipe.Fields.INGREDIENTS)
+            .then_include(RecipeIngredient.Fields.STOCK_ITEM)
+        .all(EntityField(Recipe, "id").in_(list(recipe_id_to_servings)))
+    }
     for recipe_id, servings in recipe_id_to_servings.items():
-        recipe = (
-            repository
-            .get(Recipe)
-            .include(Recipe.Fields.INGREDIENTS)
-                .then_include(RecipeIngredient.Fields.STOCK_ITEM)
-            .one(EntityField(Recipe, "id").eq(recipe_id))
-        )
+        recipe = recipes_by_id.get(recipe_id)
         if not recipe:
             continue
         recipe_servings = recipe.servings or 1
@@ -266,12 +270,11 @@ class GetMealPlanIngredientsHandler:
 
 @MEAL_PLAN_ROUTER.route("<uuid:meal_plan_id>/ingredients")
 def get_meal_plan_ingredients(meal_plan_id: UUID):
-    _Logger = logging.getLogger(__name__)
     _Handler = GetMealPlanIngredientsHandler(SqlAlchemyRepository())
     _Result = _Handler.handle(meal_plan_id)
     if _Result is None:
         return not_found(MealPlan.__name__, meal_plan_id)
-    _Logger.info(
+    _LOGGER.info(
         f"Meal plan {meal_plan_id} has {len(_Result.items)} aggregated ingredients"
         f" ({len(_Result.unlinked)} unlinked)"
     )

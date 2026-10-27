@@ -10,7 +10,7 @@
          line is the disclosure, and the one-tap action is an icon-only button
          sitting to the RIGHT of the caret, exactly where the belief card's
          chevron ends. Two cards, one idiom. -->
-    <div v-if="verdict" :class="['dora-buy-verdict-card', `is-${verdict.verdict}`]">
+    <div v-if="verdict" :class="['dora-signal-card', 'dora-buy-verdict-card', toneClass]">
         <div class="dora-buy-verdict-card__header">
             <button
                 type="button"
@@ -24,7 +24,7 @@
                 <q-icon
                     :name="ICONS.currency_usd"
                     size="18px"
-                    class="dora-buy-verdict-card__icon"
+                    class="dora-signal-card__icon"
                 />
                 <span class="dora-buy-verdict-card__headline">
                     {{ headline }}
@@ -98,7 +98,7 @@
         <div v-if="verdict.wait_hint" class="dora-buy-verdict-card__wait-hint">
             <div class="row items-center q-mb-xs">
                 <q-icon
-                    :name="ICONS.event_repeat ?? 'mdi-calendar-refresh'"
+                    :name="ICONS.event_repeat"
                     size="18px"
                     class="q-mr-sm"
                 />
@@ -121,8 +121,7 @@
                 </div>
                 <div
                     v-if="reasonDetail(reason)"
-                    class="text-caption dora-text-muted"
-                    style="margin-left: 26px"
+                    class="text-caption dora-text-muted dora-buy-verdict__detail"
                 >
                     {{ reasonDetail(reason) }}
                 </div>
@@ -130,24 +129,7 @@
         </ul>
 
         <div class="text-caption dora-text-muted dora-buy-verdict-card__footer">
-            Based on
-            {{ verdict.data_used.price_samples }} price sample{{
-                verdict.data_used.price_samples === 1 ? '' : 's'
-            }}
-            <!-- Feedback 2026-08-17: the "across N shopping trips" clause is
-                 gone. It read as the denominator of the price samples, which it
-                 isn't — prices arrive from imports, "your prices" entries and
-                 manual edits, none of which are trips — so it implied a
-                 relationship between the two numbers that doesn't exist.
-                 `purchases_last_12mo` is still on the DTO and still feeds the
-                 verdict's own reasoning server-side; it just isn't a footnote
-                 the reader can do anything with. -->
-            <template v-if="verdict.data_used.waste_events_last_12mo > 0">
-                · {{ verdict.data_used.waste_events_last_12mo }} waste event{{
-                    verdict.data_used.waste_events_last_12mo === 1 ? '' : 's'
-                }}
-            </template>
-            (last 12 months).
+            {{ dataUsedLine(verdict.data_used) }}
         </div>
         </div>
     </div>
@@ -157,7 +139,9 @@
     import BaseTooltip from 'src/components/BaseTooltip.vue';
     import AddToListButton from 'src/components/AddToListButton.vue';
     import BaseButton from 'src/components/BaseButton.vue';
-    import { axisIcon, reasonDetail } from 'src/components/stock/buyVerdictDisplay';
+    import {
+        axisIcon, dataUsedLine, headlineFor, reasonDetail,
+    } from 'src/components/stock/buyVerdictDisplay';
     import { formatDate as formatLocaleDate } from 'src/composables/useDateFormat';
     import type { BuyVerdict } from 'src/services/api/buyVerdictApiService';
     import { ICONS } from 'src/style/icons';
@@ -202,21 +186,11 @@
     // the server's `strength` (essential x band, modulated by price + waste) —
     // same axis `stock_attention` ranks shortages on, so the two can't
     // contradict each other about the same item.
-    const BUY_HEADLINE_BY_STRENGTH: Record<number, string> = {
-        3: 'Worth buying now',
-        2: 'Probably worth buying',
-        1: 'Might be worth buying',
+    const headline = computed(() => (props.verdict ? headlineFor(props.verdict, { graded: true }) : ''));
+    const TONE_BY_VERDICT: Record<string, string> = {
+        buy: 'is-positive', wait: 'is-warning', skip: 'is-negative',
     };
-    const headline = computed(() => {
-        if (!props.verdict) return '';
-        if (props.verdict.verdict === 'buy') {
-            return BUY_HEADLINE_BY_STRENGTH[props.verdict.strength]
-                ?? 'Might be worth buying';
-        }
-        if (props.verdict.verdict === 'wait') return 'Might be worth waiting';
-        if (props.verdict.verdict === 'skip') return 'Probably skip';
-        return 'No strong buy signal';
-    });
+    const toneClass = computed(() => (props.verdict ? TONE_BY_VERDICT[props.verdict.verdict] ?? '' : ''));
 
     // Friendly relative-date headline for the P8-06 wait-hint. The full
     // "why" string from the server sits underneath as the sub-caption.
@@ -225,9 +199,8 @@
         if (!hint) return '';
         const target = new Date(`${hint.until}T00:00:00`);
         if (Number.isNaN(target.getTime())) return '';
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const days = Math.round((target.getTime() - today.getTime()) / 86_400_000);
+        // Counted server-side from the household's today (R-021).
+        const days = hint.days_until;
         const dateLabel = formatLocaleDate(target, {
             month: 'short', day: 'numeric',
         });
@@ -243,29 +216,7 @@
 </script>
 
 <style scoped>
-    /* Deliberately the same geometry + token set as `PantryBeliefCard`:
-       one surface, 8px radius, 10px/12px padding, tint in the fill and the
-       border only (never in the text ink — full-strength semantic ink on a
-       soft fill is the D-002 contrast fail). */
-    .dora-buy-verdict-card {
-        border-radius: 8px;
-        padding: 10px 12px;
-        background: var(--surface-sunken);
-        border: 1px solid var(--border-strong);
-        color: var(--text-primary);
-    }
-    .dora-buy-verdict-card.is-buy {
-        background: var(--semantic-positive-soft);
-        border-color: var(--semantic-positive);
-    }
-    .dora-buy-verdict-card.is-wait {
-        background: var(--semantic-warning-soft);
-        border-color: var(--semantic-warning);
-    }
-    .dora-buy-verdict-card.is-skip {
-        background: var(--semantic-negative-soft);
-        border-color: var(--semantic-negative);
-    }
+    /* Shell and tones: `.dora-signal-card` (css/signalCards.scss). */
     .dora-buy-verdict-card__header {
         display: flex;
         align-items: center;
@@ -276,12 +227,12 @@
         display: flex;
         flex-direction: column;
         gap: 8px;
-        font-size: 0.8125rem;
+        font-size: calc(var(--font-size-sm) * 1rem);
         line-height: 1.45;
     }
     .dora-buy-verdict-card__headline {
         font-weight: 600;
-        font-size: 1rem;
+        font-size: calc(var(--font-size-md) * 1rem);
         display: flex;
         flex-direction: column;
         align-items: flex-start;
@@ -334,15 +285,6 @@
         color: inherit;
         cursor: pointer;
     }
-    .dora-buy-verdict-card__icon {
-        flex-shrink: 0;
-        color: var(--text-secondary);
-    }
-    /* Graphical (non-text) glyph, so the semantic hue is legible here in the
-       same way the belief card tints its own icon. */
-    .dora-buy-verdict-card.is-buy  .dora-buy-verdict-card__icon { color: var(--semantic-positive); }
-    .dora-buy-verdict-card.is-wait .dora-buy-verdict-card__icon { color: var(--semantic-warning); }
-    .dora-buy-verdict-card.is-skip .dora-buy-verdict-card__icon { color: var(--semantic-negative); }
 
     /* P8-06 — the wait-hint block sits between header and reasons. It used
        to carry its own warm fill, which on a now-already-warm `wait` card was

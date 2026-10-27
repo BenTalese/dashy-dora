@@ -16,6 +16,9 @@ import logging
 from typing import Any
 from uuid import UUID
 
+from dora_api.features.assistant._name_resolution import (
+    resolve_by_name, stock_item_candidate)
+from dora_api.features.assistant._limits import MAX_CANDIDATES
 from dora_api.domain.entities.shopping_list import ShoppingList
 from dora_api.domain.entities.stock_item import StockItem
 from dora_api.features.shopping_lists.manage_shopping_list_lines import (
@@ -24,20 +27,10 @@ from dora_api.features.shopping_lists.quick_add_target_resolver import \
     resolve_quick_add_target
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 
-_Logger = logging.getLogger(__name__)
+_LOGGER = logging.getLogger(__name__)
 
 # Don't drown the user in options for a vague term. If a fuzzy match returns
 # more than this, ask them to be more specific rather than listing everything.
-_MAX_CANDIDATES = 6
-
-
-def _candidate_dto(item: StockItem) -> dict[str, Any]:
-    return {
-        "stock_item_id": str(item.id),
-        "name": item.name,
-        "location": item.stock_location.name if item.stock_location else None,
-        "stock_level": item.stock_level.name if item.stock_level else None,
-    }
 
 
 def _stock_query(repo: SqlAlchemyRepository):
@@ -51,12 +44,7 @@ def _stock_query(repo: SqlAlchemyRepository):
 
 
 def _match_stock_items(repo: SqlAlchemyRepository, name: str) -> list[StockItem]:
-    """Exact (case-insensitive) name match wins outright; otherwise fall back
-    to a substring match so 'milk' finds 'Full cream milk'."""
-    exact = _stock_query(repo).all(EntityField(StockItem, StockItem.Fields.NAME).eq(name))
-    if exact:
-        return exact
-    return _stock_query(repo).all(EntityField(StockItem, StockItem.Fields.NAME).contains(name))
+    return resolve_by_name(lambda: _stock_query(repo), StockItem, name).matches
 
 
 def _normalise_items(raw_items: Any) -> list[dict[str, Any]]:
@@ -110,7 +98,7 @@ def resolve_add_plan(raw_items: Any) -> dict[str, Any]:
             status = "ready"
         elif len(matches) == 0:
             status = "not_found"
-        elif len(matches) > _MAX_CANDIDATES:
+        elif len(matches) > MAX_CANDIDATES:
             status = "too_many"
         else:
             status = "ambiguous"
@@ -118,7 +106,7 @@ def resolve_add_plan(raw_items: Any) -> dict[str, Any]:
             "query": item["name"],
             "quantity": item["quantity"],
             "status": status,
-            "candidates": [_candidate_dto(m) for m in matches[:_MAX_CANDIDATES]],
+            "candidates": [stock_item_candidate(m) for m in matches[:MAX_CANDIDATES]],
         })
 
     return {
@@ -157,7 +145,7 @@ def commit_add(shopping_list_id: UUID, resolved_items: list[dict[str, Any]]) -> 
             already += 1
         elif response.line_id is not None:
             added += 1
-    _Logger.info(
+    _LOGGER.info(
         "Assistant committed adds to list %s: added=%s already=%s missing=%s",
         shopping_list_id, added, already, missing,
     )

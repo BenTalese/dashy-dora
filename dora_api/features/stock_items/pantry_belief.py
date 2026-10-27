@@ -33,10 +33,11 @@ point is a robust band, not false precision.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
 from uuid import UUID
 
+from dora_api.persistence.aware import as_utc
 from dora_api.domain.cadence_math import mean_gap_days
 from dora_api.domain.entities.consumption_event import ConsumptionEvent
 from dora_api.domain.entities.shopping_list import (SHOPPING_LIST_STATUS_DONE,
@@ -282,7 +283,7 @@ def _cadence_reason(
 # ── Repo gathering ───────────────────────────────────────────────────────
 
 
-def _as_date(value: datetime | date | None, tz: ZoneInfo) -> date | None:
+def _household_date(value: datetime | date | None, tz: ZoneInfo) -> date | None:
     """Calendar day of a stored instant in the household zone (R-021).
 
     Stored timestamps are UTC (naive on SQLite); taking `.date()` of them put
@@ -293,28 +294,31 @@ def _as_date(value: datetime | date | None, tz: ZoneInfo) -> date | None:
     if value is None:
         return None
     if isinstance(value, datetime):
-        aware = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
-        return aware.astimezone(tz).date()
+        return as_utc(value).astimezone(tz).date()
     return value
 
 
 def gather_belief_inputs(repository: SqlAlchemyRepository, item: StockItem) -> BeliefInputs:
     """Gather inputs for a single item (detail-page path)."""
-    beliefs = gather_beliefs_for_items(repository, [item], _return_inputs=True)
-    return beliefs[item.id]
+    return gather_belief_inputs_for_items(repository, [item])[item.id]
 
 
 def gather_beliefs_for_items(
-    repository: SqlAlchemyRepository,
-    items: list[StockItem],
-    *,
-    _return_inputs: bool = False,
-) -> dict:
-    """Compute a belief per item in bulk (overview path), avoiding N+1.
+    repository: SqlAlchemyRepository, items: list[StockItem],
+) -> dict[UUID, PantryBelief]:
+    """A belief per item in bulk (overview path), avoiding N+1."""
+    return {
+        item_id: compute_belief(inputs)
+        for item_id, inputs in gather_belief_inputs_for_items(repository, items).items()
+    }
 
-    Returns ``{stock_item_id: PantryBelief}`` — or, when ``_return_inputs``
-    is set (single-item helper / tests), ``{stock_item_id: BeliefInputs}``.
-    """
+
+def gather_belief_inputs_for_items(
+    repository: SqlAlchemyRepository, items: list[StockItem],
+) -> dict[UUID, BeliefInputs]:
+    """The composer inputs per item, with a fixed number of queries
+    (finalisation 07-R9: was one function returning either shape behind a
+    private flag)."""
     if not items:
         return {}
     today = household_today(repository)
@@ -346,7 +350,7 @@ def gather_beliefs_for_items(
             continue
         if line_paid_unit_price(line) is None:
             continue
-        d = _as_date(completed_at, tz)
+        d = _household_date(completed_at, tz)
         if d is not None:
             purchase_dates_by_item.setdefault(line.stock_item_id, set()).add(d)
 
@@ -356,22 +360,21 @@ def gather_beliefs_for_items(
     )
     consumption_dates_by_item: dict[UUID, list[date]] = {}
     for e in events:
-        d = _as_date(e.occurred_at, tz)
+        d = _household_date(e.occurred_at, tz)
         if d is not None:
             consumption_dates_by_item.setdefault(e.stock_item_id, []).append(d)
 
-    out: dict = {}
+    out: dict[UUID, BeliefInputs] = {}
     for item in items:
-        inputs = BeliefInputs(
+        out[item.id] = BeliefInputs(
             recorded_sequence=(
                 levels_by_item[item.id].sequence
                 if levels_by_item.get(item.id) is not None else None
             ),
-            stock_level_last_updated=_as_date(item.stock_level_last_updated, tz),
-            last_checked_at=_as_date(item.last_checked_at, tz),
+            stock_level_last_updated=_household_date(item.stock_level_last_updated, tz),
+            last_checked_at=_household_date(item.last_checked_at, tz),
             purchase_dates=sorted(purchase_dates_by_item.get(item.id, set())),
             consumption_dates=sorted(consumption_dates_by_item.get(item.id, [])),
             today=today,
         )
-        out[item.id] = inputs if _return_inputs else compute_belief(inputs)
     return out

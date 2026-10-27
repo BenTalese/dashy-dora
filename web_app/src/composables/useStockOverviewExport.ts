@@ -4,13 +4,15 @@
  * by location.
  */
 import { Notify } from 'quasar';
-import { resolveBaseURL } from 'src/services/api/axiosHttpClient';
+import AxiosHttpClient from 'src/services/api/axiosHttpClient';
+import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
 import { describeQrFailure, openQrSheetAsync } from 'src/composables/useQrLabels';
 import { openPrintDocument } from 'src/composables/usePrintDocument';
-import { parseFilename, triggerSave } from 'src/services/files/downloadHelpers';
+import { triggerSave } from 'src/services/files/downloadHelpers';
+
+const http = new AxiosHttpClient();
 
 export function useStockOverviewExport() {
-    const baseUrl = resolveBaseURL();
 
     /** C-1 Chunk 1 / L67 — when `ids` is provided, the server filters the
      *  export to that set so CSV mirrors the on-screen filtered list. An
@@ -22,22 +24,13 @@ export function useStockOverviewExport() {
                 ids !== undefined
                     ? `&ids=${encodeURIComponent(ids.join(','))}`
                     : '';
-            const response = await fetch(
-                `${baseUrl}/stock-items/export?format=csv${idsParam}`,
-                { method: 'GET', credentials: 'include' },
-            );
-            if (!response.ok) throw new Error(`Export failed (${response.status})`);
-            const filename =
-                parseFilename(response.headers.get('content-disposition'))
-                ?? `stock-overview.csv`;
-            const blob = await response.blob();
-            triggerSave(blob, filename);
+            const { blob, filename } = await http.getFile(`/stock-items/export?format=csv${idsParam}`);
+            triggerSave(blob, filename ?? 'stock-overview.csv');
         } catch (err) {
             Notify.create({
                 type: 'negative',
-                
                 message: "Couldn't export the stock overview.",
-                caption: err instanceof Error ? err.message : String(err),
+                caption: toastCaption(err),
             });
         }
     }
@@ -62,7 +55,6 @@ export function useStockOverviewExport() {
         openQrSheetAsync({ layout: 'a4-21up', ids }).catch((err: unknown) => {
             Notify.create({
                 type: 'negative',
-                
                 message: describeQrFailure(err),
             });
         });

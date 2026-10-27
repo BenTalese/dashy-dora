@@ -569,9 +569,8 @@
     import { colourForSequence } from 'src/helpers/stockLevelLogic';
     import { needsCookGuard } from 'src/helpers/cookModeGuard';
     import {
-        DEFAULT_MEAL_SLOTS,
+        DIFFICULTY_OPTIONS,
         DIFFICULTY_RANK,
-        DIFFICULTY_VALUES,
         type Difficulty,
     } from 'src/helpers/recipeVocabulary';
     import { computed, onMounted, ref, watch } from 'vue';
@@ -579,6 +578,11 @@
     import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { useNutritionMode } from 'src/composables/useNutritionMode';
     import { useNutritionRating } from 'src/composables/useNutritionRating';
+    import { newClientId } from 'src/helpers/clientId';
+    import { totalMinutes } from 'src/helpers/recipeTime';
+    import {
+        choiceFilter, listFilter, numberFilter, stateFilter, toggleFilter, useFilterRegistry,
+    } from 'src/composables/useFilterRegistry';
 
     const $q = useQuasar();
     const router = useRouter();
@@ -594,10 +598,12 @@
     const recipeApi = new RecipeApiService();
     const { addStockItemsToList } = useShoppingListActions();
 
-    const { recipes, recipeCollections } = storeToRefs(recipeStore);
+    const { recipes, collectionOptions } = storeToRefs(recipeStore);
     const { stockItems } = storeToRefs(stockItemStore);
-    const { cuisines, categories, dietaryTags, tools } = storeToRefs(recipeVocabStore);
-    const { mealSlotNames } = storeToRefs(mealSlotStore);
+    const {
+        cuisineOptions, categoryOptions, dietaryTagOptions, toolOptions,
+    } = storeToRefs(recipeVocabStore);
+    const { slotNamesOrDefault: TIME_OF_DAY_OPTIONS } = storeToRefs(mealSlotStore);
     // C-cross Chunk 5 — image-display opt-in for recipe surfaces.
     // Phones drop every toolbar label down to its icon — same gate and same
     // reason as Stock Overview (the row was eating a quarter of the screen).
@@ -743,15 +749,6 @@
     // "Kcal" axis added when the nutrition opt-in is on.
     // The sort menu options are computed below; the static list keeps
     // the always-on axes.
-    // time-of-day reads the household meal-slot vocabulary
-    // (MealSlot table), falling back to the seed constant only before the
-    // store's first load.
-    const TIME_OF_DAY_OPTIONS = computed(() =>
-        mealSlotNames.value.length > 0 ? mealSlotNames.value : [...DEFAULT_MEAL_SLOTS],
-    );
-    // §1.7 — difficulty closed vocabulary; mirrors ALLOWED_DIFFICULTY_VALUES
-    // on the server.
-    const DIFFICULTY_OPTIONS = [...DIFFICULTY_VALUES];
 
     // Labels name the axis only — the direction lives on the attached toggle
     // (see SortControl), so no option here says "first" or carries an arrow.
@@ -826,34 +823,16 @@
     // Disclaimer text still comes from the recipe tag catalogue endpoint.
     const tagCatalogue = ref<RecipeTagCatalogue | null>(null);
 
-    // ── Vocabulary options (cuisine / category / dietary) ───────────────
-    const cuisineOptions = computed(() =>
-        cuisines.value.map((c) => ({ label: c.name, value: c.cuisine_id })),
-    );
-    const categoryOptions = computed(() =>
-        categories.value.map((c) => ({ label: c.name, value: c.category_id })),
-    );
-    const dietaryTagOptions = computed(() =>
-        dietaryTags.value.map((t) => ({
-            label: t.name,
-            value: t.dietary_tag_id,
-            category: t.category,
-        })),
-    );
+    // ── Vocabulary options (cuisine / category / dietary / tools) ───────
+    // The tools rail groups its chips under a "Tools" heading.
     const toolFilterOptions = computed(() =>
-        tools.value.map((t) => ({ label: t.name, value: t.tool_id, category: 'Tools' })),
+        toolOptions.value.map((o) => ({ ...o, category: 'Tools' })),
     );
 
     // Cookability is server-owned (§3.2): recipes carry `cookable` /
     // `missing_count` and each ingredient carries `is_missing`. The client
     // reads those fields rather than re-deriving from stock data.
 
-    function totalTime(recipe: Recipe): number | null {
-        if (recipe.prep_time_minutes === null && recipe.cook_time_minutes === null) {
-            return null;
-        }
-        return (recipe.prep_time_minutes ?? 0) + (recipe.cook_time_minutes ?? 0);
-    }
 
 
     // `is_planned` is now server-owned (RecipeDto field,
@@ -880,15 +859,9 @@
         },
     ]);
 
-    // ── Tag (cuisine + category) options ────────────────────────────
-    // Recipes don't have a dedicated `tags` field — we synthesise tags
-    // from the cuisine and category columns since they fill the same
-    // role for filtering.
+    // Collection filter options, plus the "(Uncategorised)" sentinel.
     const collectionOptionsWithNone = computed(() => [
-        ...recipeCollections.value.map((c) => ({
-            label: c.name,
-            value: c.recipe_collection_id,
-        })),
+        ...collectionOptions.value,
         { label: '(Uncategorised)', value: '__none__' },
     ]);
 
@@ -1142,8 +1115,8 @@
                     return d !== 0 ? d : a.name.localeCompare(b.name);
                 }
                 case 'total_time': {
-                    const av = totalTime(a);
-                    const bv = totalTime(b);
+                    const av = totalMinutes(a.prep_time_minutes, a.cook_time_minutes);
+                    const bv = totalMinutes(b.prep_time_minutes, b.cook_time_minutes);
                     if (av === null && bv === null) return a.name.localeCompare(b.name);
                     if (av === null) return 1;
                     if (bv === null) return -1;
@@ -1215,60 +1188,35 @@
     // collection travels on each card's meta line (`useRecipeDisplay`) and
     // the Collection dropdown below is how you narrow to one.
 
-    const hasAnyFilter = computed(
-        () =>
-            searchText.value !== ''
-            || favouritesOnly.value
-            || cookableNowOnly.value
-            || inStockOnly.value
-            || plannedFilterState.value !== 'off'
-            || expiringOnly.value
-            || (mealCountMin.value !== null && Number.isFinite(mealCountMin.value))
-            || (servesMin.value !== null && Number.isFinite(servesMin.value))
-            || (kcalMax.value !== null && Number.isFinite(kcalMax.value))
-            || (ratingMin.value !== null && Number.isFinite(ratingMin.value))
-            || collectionFilter.value !== null
-            || cuisineFilter.value !== null
-            || categoryFilter.value !== null
-            || timeOfDayFilter.value !== null
-            || difficultyFilter.value !== null
-            || (ingredientsMax.value !== null && Number.isFinite(ingredientsMax.value))
-            || usesStockItemIds.value.length > 0
-            || excludesStockItemIds.value.length > 0
-            || dietaryTagsInclude.value.length > 0
-            || dietaryTagsExclude.value.length > 0
-            || toolsInclude.value.length > 0
-            || toolsExclude.value.length > 0,
-    );
-
-    // Active-filter count for the FilterBar badge (excludes the search box,
-    // which lives separately in the header and has its own clear affordance,
-    // and excludes the sort axis, which is a presentation choice).
-    const activeFilterCount = computed(() => {
-        let n = 0;
-        if (favouritesOnly.value) n++;
-        if (cookableNowOnly.value) n++;
-        if (inStockOnly.value) n++;
-        if (plannedFilterState.value !== 'off') n++;
-        if (expiringOnly.value) n++;
-        if (mealCountMin.value !== null && Number.isFinite(mealCountMin.value)) n++;
-        if (servesMin.value !== null && Number.isFinite(servesMin.value)) n++;
-        if (kcalMax.value !== null && Number.isFinite(kcalMax.value)) n++;
-        if (ratingMin.value !== null && Number.isFinite(ratingMin.value)) n++;
-        if (collectionFilter.value !== null) n++;
-        if (cuisineFilter.value !== null) n++;
-        if (categoryFilter.value !== null) n++;
-        if (timeOfDayFilter.value !== null) n++;
-        if (difficultyFilter.value !== null) n++;
-        if (ingredientsMax.value !== null && Number.isFinite(ingredientsMax.value)) n++;
-        if (usesStockItemIds.value.length > 0) n++;
-        if (excludesStockItemIds.value.length > 0) n++;
-        if (dietaryTagsInclude.value.length > 0) n++;
-        if (dietaryTagsExclude.value.length > 0) n++;
-        if (toolsInclude.value.length > 0) n++;
-        if (toolsExclude.value.length > 0) n++;
-        return n;
-    });
+    // Every filter, declared once: the badge count, the "anything filtered?"
+    // check and Clear all read this list. The search box sits in the header
+    // with its own clear, and the sort axis is presentation, so neither is a
+    // filter here.
+    const filterRegistry = useFilterRegistry([
+        toggleFilter(favouritesOnly),
+        toggleFilter(cookableNowOnly),
+        toggleFilter(inStockOnly),
+        stateFilter(plannedFilterState, 'off'),
+        toggleFilter(expiringOnly),
+        numberFilter(mealCountMin),
+        numberFilter(servesMin),
+        numberFilter(kcalMax),
+        numberFilter(ratingMin),
+        choiceFilter(collectionFilter),
+        choiceFilter(cuisineFilter),
+        choiceFilter(categoryFilter),
+        choiceFilter(timeOfDayFilter),
+        choiceFilter(difficultyFilter),
+        numberFilter(ingredientsMax),
+        listFilter(usesStockItemIds),
+        listFilter(excludesStockItemIds),
+        listFilter(dietaryTagsInclude),
+        listFilter(dietaryTagsExclude),
+        listFilter(toolsInclude),
+        listFilter(toolsExclude),
+    ]);
+    const activeFilterCount = filterRegistry.activeCount;
+    const hasAnyFilter = computed(() => searchText.value !== '' || activeFilterCount.value > 0);
 
     // 2026-08-20 owner call — the panel opens iff something is filtered, and
     // that state is not remembered across visits. Adopted here from Stock
@@ -1363,27 +1311,7 @@
 
     function clearFilters() {
         searchText.value = '';
-        favouritesOnly.value = false;
-        cookableNowOnly.value = false;
-        inStockOnly.value = false;
-        plannedFilterState.value = 'off';
-        expiringOnly.value = false;
-        mealCountMin.value = null;
-        servesMin.value = null;
-        kcalMax.value = null;
-        ratingMin.value = null;
-        collectionFilter.value = null;
-        cuisineFilter.value = null;
-        categoryFilter.value = null;
-        timeOfDayFilter.value = null;
-        difficultyFilter.value = null;
-        ingredientsMax.value = null;
-        usesStockItemIds.value = [];
-        excludesStockItemIds.value = [];
-        dietaryTagsInclude.value = [];
-        dietaryTagsExclude.value = [];
-        toolsInclude.value = [];
-        toolsExclude.value = [];
+        filterRegistry.clearAll();
     }
 
     // ── Recipe actions ──────────────────────────────────────────────
@@ -1464,11 +1392,7 @@
                 ingredients: ingredientPayload,
                 steps: stepsPayload,
             });
-            // CreatedResponse shape: either `recipe_id` on the body or
-            // `id` from the `created()` helper. Cover both.
-            const newId =
-                (created as Record<string, unknown>).recipe_id as string | undefined
-                ?? created.id;
+            const newId = created.recipe_id;
             // Refresh the overview's cache so the new recipe shows up.
             await recipeStore.getRecipesAsync();
 
@@ -1501,13 +1425,6 @@
                 caption: err instanceof Error ? err.message : String(err),
             });
         }
-    }
-
-    function newClientId(): string {
-        if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-            return crypto.randomUUID();
-        }
-        return `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
     }
 
     function onOpenRecipe(recipeId: string) {
@@ -1699,9 +1616,6 @@
 </script>
 
 <style scoped>
-    .full-height {
-        height: 100%;
-    }
     /* ── Toolbar (2026-08-17 feedback) ────────────────────────────────
        Lifted wholesale from `StockOverview.vue` so both list surfaces
        behave identically: desktop = one row (actions left, filter-toggle

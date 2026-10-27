@@ -20,7 +20,7 @@ from dora_api.infrastructure.log_context import (reset_context, set_request_id,
                                                  set_user_id)
 
 
-_Logger = logging.getLogger(__name__)
+_LOGGER = logging.getLogger(__name__)
 MIDDLEWARE = Blueprint('MIDDLEWARE', __name__)
 
 
@@ -80,13 +80,13 @@ def handle_incoming_request():
     g.request_started_at = time.perf_counter()
     g.request_id = request_id
 
-    if _Logger.isEnabledFor(logging.INFO):
-        _Logger.info(
+    if _LOGGER.isEnabledFor(logging.INFO):
+        _LOGGER.info(
             "→ %s %s",
             request.method,
             request.path,
         )
-    if _Logger.isEnabledFor(logging.DEBUG):
+    if _LOGGER.isEnabledFor(logging.DEBUG):
         audit_incoming_request()
 
     # CORS preflights are anonymous by design — flask-cors handles them and
@@ -208,9 +208,9 @@ def stamp_request_id(response):
     request_id = getattr(g, "request_id", None)
     if request_id:
         response.headers["X-Request-Id"] = request_id
-    if started is not None and _Logger.isEnabledFor(logging.INFO):
+    if started is not None and _LOGGER.isEnabledFor(logging.INFO):
         duration_ms = (time.perf_counter() - started) * 1000.0
-        _Logger.info(
+        _LOGGER.info(
             "← %d %s %s (%.1fms)",
             response.status_code,
             request.method,
@@ -303,15 +303,15 @@ def redact_sensitive(value):
 
 
 def audit_incoming_request():
-    _Logger.debug(
+    _LOGGER.debug(
         "Incoming request | method=%s path=%s endpoint=%s ip=%s",
         request.method,
         request.path,
         request.endpoint,
         request.remote_addr,
     )
-    if request.is_json and _Logger.isEnabledFor(logging.DEBUG):
-        _Logger.debug("body: %s", redact_sensitive(request.get_json(silent=True)))
+    if request.is_json and _LOGGER.isEnabledFor(logging.DEBUG):
+        _LOGGER.debug("body: %s", redact_sensitive(request.get_json(silent=True)))
 
 
 def deserialise_web_request(request_endpoint: str):

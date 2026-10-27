@@ -22,7 +22,6 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
-from flask import session
 from pydantic import BaseModel, ConfigDict
 
 from dora_api.domain.entities.meal_plan import MealPlan
@@ -36,7 +35,6 @@ from dora_api.domain.entities.stock_level import StockLevel
 from dora_api.domain.entities.stock_location import StockLocation
 from dora_api.domain.entities.user import User
 from dora_api.features.app_settings.clock import household_today
-from dora_api.features.auth.register_user import SESSION_USER_ID_KEY
 from dora_api.features.routers import ONBOARDING_ROUTER
 from dora_api.infrastructure.api_response import (no_content, not_found, ok,
                                                   unauthorized)
@@ -45,6 +43,7 @@ from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
+from dora_api.infrastructure.session_user import current_user_id
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -63,16 +62,6 @@ def _load_seed(name: str) -> list[dict[str, Any]]:
     except json.JSONDecodeError as exc:
         _LOGGER.error("Seed file invalid JSON (%s): %s", name, exc)
         return []
-
-
-def _current_user_id() -> UUID | None:
-    raw = session.get(SESSION_USER_ID_KEY)
-    if not raw:
-        return None
-    try:
-        return UUID(str(raw))
-    except (TypeError, ValueError):
-        return None
 
 
 # ─── State ───────────────────────────────────────────────────────────
@@ -117,7 +106,7 @@ class GetOnboardingStateHandler:
 
 @ONBOARDING_ROUTER.route("/state", methods=["GET"])
 def get_onboarding_state():
-    user_id = _current_user_id()
+    user_id = current_user_id()
     if user_id is None:
         return unauthorized("Sign in to use the onboarding endpoints.")
     repo = SqlAlchemyRepository()
@@ -133,7 +122,7 @@ def get_onboarding_state():
 
 @ONBOARDING_ROUTER.route("/complete", methods=["POST"])
 def complete_onboarding():
-    user_id = _current_user_id()
+    user_id = current_user_id()
     if user_id is None:
         return unauthorized("Sign in to use the onboarding endpoints.")
     repo = SqlAlchemyRepository()
@@ -148,7 +137,7 @@ def complete_onboarding():
 
 @ONBOARDING_ROUTER.route("/restart", methods=["POST"])
 def restart_onboarding():
-    user_id = _current_user_id()
+    user_id = current_user_id()
     if user_id is None:
         return unauthorized("Sign in to use the onboarding endpoints.")
     repo = SqlAlchemyRepository()
@@ -344,7 +333,7 @@ class SeedHandler:
 @ONBOARDING_ROUTER.route("/seed", methods=["POST"])
 @has_request_body(SeedRequest)
 def seed_onboarding():
-    user_id = _current_user_id()
+    user_id = current_user_id()
     if user_id is None:
         return unauthorized("Sign in to use the onboarding endpoints.")
     request: SeedRequest = get_request_body()
@@ -437,7 +426,7 @@ def _starter_packs() -> list[StarterPackDto]:
 
 @ONBOARDING_ROUTER.route("/catalog", methods=["GET"])
 def onboarding_catalog():
-    user_id = _current_user_id()
+    user_id = current_user_id()
     if user_id is None:
         return unauthorized("Sign in to use the onboarding endpoints.")
     groups = [
@@ -546,7 +535,7 @@ class SeedItemsHandler:
 @ONBOARDING_ROUTER.route("/seed-items", methods=["POST"])
 @has_request_body(SeedItemsRequest)
 def seed_items_onboarding():
-    user_id = _current_user_id()
+    user_id = current_user_id()
     if user_id is None:
         return unauthorized("Sign in to use the onboarding endpoints.")
     request: SeedItemsRequest = get_request_body()
@@ -734,7 +723,7 @@ class SeedDemoHandler:
 
 @ONBOARDING_ROUTER.route("/seed-demo", methods=["POST"])
 def seed_demo_onboarding():
-    user_id = _current_user_id()
+    user_id = current_user_id()
     if user_id is None:
         return unauthorized("Sign in to use the onboarding endpoints.")
     result = SeedDemoHandler(SqlAlchemyRepository()).handle()

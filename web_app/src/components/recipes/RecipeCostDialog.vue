@@ -23,9 +23,9 @@
                     <span class="rcost__k">Estimated total</span>
                     <span class="rcost__v">{{ total !== null ? formatMoney(total) : '–' }}</span>
                 </div>
-                <div v-if="perServing !== null" class="rcost__total">
+                <div v-if="props.perServing !== null" class="rcost__total">
                     <span class="rcost__k">Per serving</span>
-                    <span class="rcost__v">{{ formatMoney(perServing) }}</span>
+                    <span class="rcost__v">{{ formatMoney(props.perServing) }}</span>
                 </div>
             </div>
 
@@ -119,7 +119,8 @@
         total: number | null;
         pricedCount: number;
         totalCount: number;
-        servings: number | null;
+        /** Server-derived per-serving cost (R-003); null without servings. */
+        perServing: number | null;
     }>();
 
     const emit = defineEmits<{ (e: 'update:modelValue', value: boolean): void }>();
@@ -129,11 +130,6 @@
         set: (v) => emit('update:modelValue', v),
     });
 
-    /** Display math only — the estimate itself is server-owned (R-003). */
-    const perServing = computed(() => {
-        if (props.total === null || !props.servings || props.servings <= 0) return null;
-        return props.total / props.servings;
-    });
 
     type PricedLine = RecipeCostLine & { key: string };
 
@@ -181,9 +177,9 @@
     const coverageLabel = computed(
         () => `Priced ${props.pricedCount} of ${props.totalCount} ingredients`);
 
-    /** The phrasing lives on the client (the server ships reasons, not copy) —
-     *  same split as the page's `costLineReason`, grouped so a recipe with
-     *  eight unlinked rows reads as one sentence rather than eight. */
+    /** The server ships reason ids; this map is the only copy of their
+     *  wording, grouped so a recipe with eight unlinked rows reads as one
+     *  sentence rather than eight. */
     const REASON_TITLES: Record<RecipeCostUnpricedReason, string> = {
         no_link: 'Not linked to a pantry item',
         no_price: 'No price recorded yet',
@@ -224,7 +220,7 @@
     }
     .rcost__total { display: flex; flex-direction: column; gap: 2px; }
     .rcost__k {
-        font-size: var(--font-size-xs, 0.6875rem);
+        font-size: calc(var(--font-size-xs) * 1rem);
         font-weight: 700;
         letter-spacing: 0.07em;
         text-transform: uppercase;
@@ -253,7 +249,7 @@
 
     .rcost__body { max-height: 52vh; overflow-y: auto; }
     .rcost__listhead {
-        font-size: var(--font-size-xs, 0.6875rem);
+        font-size: calc(var(--font-size-xs) * 1rem);
         font-weight: 700;
         letter-spacing: 0.06em;
         text-transform: uppercase;
@@ -309,7 +305,7 @@
 
     .rcost__grouphead {
         margin-top: var(--space-4, 16px);
-        font-size: var(--font-size-xs, 0.6875rem);
+        font-size: calc(var(--font-size-xs) * 1rem);
         font-weight: 700;
         letter-spacing: 0.06em;
         text-transform: uppercase;

@@ -1,7 +1,7 @@
 // FU-520 workstream 1 — unit coverage for the shopping-list model helpers.
 //
 // `cartStateFor` drives the cart button's colour/behaviour on every stock row
-// in the app; `chosenOfferFor` / `priceOfLine` / `savingsOfLine` are the
+// in the app; `chosenOfferFor` / `priceOfLine` are the
 // per-line display math the charter's state-ownership rule explicitly leaves
 // on the client (list-level totals are server-owned). The offer-fallback and
 // actual-price-override rules are the tricky parts — pin them.
@@ -12,10 +12,7 @@ import { describe, expect, it } from 'vitest';
 import {
     cartStateFor,
     chosenOfferFor,
-    isListDone,
-    isListShopping,
     priceOfLine,
-    savingsOfLine,
     type LineProductOffer,
     type Membership,
     type ShoppingListLine,
@@ -46,7 +43,6 @@ function line(overrides: Partial<ShoppingListLine> = {}): ShoppingListLine {
         stock_item_id: 'si-1',
         product_id: null,
         stock_item_name: 'Milk',
-        stock_level_name: null,
         stock_location_id: null,
         stock_location_breadcrumb: [],
         quantity: 1,
@@ -54,24 +50,20 @@ function line(overrides: Partial<ShoppingListLine> = {}): ShoppingListLine {
         selected_product_id: null,
         sequence: 0,
         is_auto_added: false,
-        added_at: null,
         actual_unit_price: null,
         purchased_store_id: null,
         purchased_store_name: null,
         planned_store_id: null,
         usual_store_id: null,
         planned_store_name: null,
-        prefill_unit_price: null,
         prefill_source_label: null,
         offers: [],
         deferred_by_budget: false,
         deferred_reason: null,
-        has_substitutes: false,
         stock_group_id: null,
         stock_group_name: null,
         estimated_unit_price: null,
         estimate_source: 'none',
-        last_paid_unit_price: null,
         last_paid_store_id: null,
         last_paid_store_name: null,
         resolved_store_id: null,
@@ -93,23 +85,7 @@ function membership(
     };
 }
 
-// ── Status helpers ──────────────────────────────────────────────────────
-
-describe('shopping-list status helpers', () => {
-    it('isListDone is true only for "done"', () => {
-        expect(isListDone('done')).toBe(true);
-        expect(isListDone('draft')).toBe(false);
-        expect(isListDone('shopping')).toBe(false);
-    });
-
-    it('isListShopping is true only for "shopping"', () => {
-        expect(isListShopping('shopping')).toBe(true);
-        expect(isListShopping('draft')).toBe(false);
-        expect(isListShopping('done')).toBe(false);
-    });
-});
-
-// ── cartStateFor ────────────────────────────────────────────────────────
+// ── cartStateFor ─────────────────────────────────────────────────────────
 
 describe('cartStateFor — cart-button state from membership', () => {
     it('is "none" without an item id or membership payload', () => {
@@ -218,43 +194,5 @@ describe('priceOfLine — per-line display price', () => {
             offers: [offer({ price_now: 99 })],
         });
         expect(priceOfLine(l)).toBe(6);
-    });
-});
-
-// ── savingsOfLine ───────────────────────────────────────────────────────
-
-describe('savingsOfLine — savings vs the chosen offer RRP', () => {
-    it('is the (RRP − paid) × quantity for a discounted offer', () => {
-        const l = line({
-            quantity: 2,
-            offers: [offer({ price_now: 3, price_was: 4 })],
-        });
-        expect(savingsOfLine(l)).toBe(2);
-    });
-
-    it('is zero when the offer has no recorded RRP', () => {
-        const l = line({ offers: [offer({ price_now: 3, price_was: null })] });
-        expect(savingsOfLine(l)).toBe(0);
-    });
-
-    it('is zero when the offer is not actually discounted', () => {
-        const l = line({ offers: [offer({ price_now: 4, price_was: 4 })] });
-        expect(savingsOfLine(l)).toBe(0);
-        const dearer = line({ offers: [offer({ price_now: 5, price_was: 4 })] });
-        expect(savingsOfLine(dearer)).toBe(0);
-    });
-
-    it('uses the user-entered actual price against the RRP when present', () => {
-        // Paid less than the advertised special → bigger saving.
-        const l = line({
-            quantity: 1,
-            actual_unit_price: 2.5,
-            offers: [offer({ price_now: 3, price_was: 4 })],
-        });
-        expect(savingsOfLine(l)).toBe(1.5);
-    });
-
-    it('is zero with no offers (nothing to compare against)', () => {
-        expect(savingsOfLine(line({ actual_unit_price: 2 }))).toBe(0);
     });
 });

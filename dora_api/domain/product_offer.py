@@ -1,9 +1,9 @@
 """Product-offer pricing rules (server side).
 
 `discount_percent` is the server's single source for "how good is this deal",
-used to rank the dashboard's best-deals query. Mirrors the client
-`discountPercent` (scrapedProductOfferLogic.ts): the client keeps its copy for
-*display* (the accepted Type-C carve-out), the server owns the *ranking*.
+used to rank the weekly deals email and the price-history card. Mirrors the
+client `discountPercent` (`helpers/offerLogic.ts`): the client keeps its copy
+for *display* (the accepted Type-C carve-out), the server owns the *ranking*.
 """
 from __future__ import annotations
 

@@ -60,7 +60,7 @@
     // budget input prefix follows the install currency symbol.
     const { currencySymbol } = useMoney();
     // Money is a single install-wide concern now — no per-user layer.
-    const { installEnabled: moneyInstallEnabled } = useMoneyEnabled();
+    const { moneyEnabled: moneyInstallEnabled } = useMoneyEnabled();
 
     // Household budget (install-wide, moved off User). Read from /api/health
     // via the shared composable; written via the any-user budget endpoint.
@@ -122,8 +122,8 @@
 <style scoped lang="scss">
     .settings-page { display: flex; flex-direction: column; }
     .settings-page__note {
-        font-size: 0.8125rem;
+        font-size: calc(var(--font-size-sm) * 1rem);
         line-height: 1.4;
-        margin-top: 4px;
+        margin-top: var(--space-1);
     }
 </style>

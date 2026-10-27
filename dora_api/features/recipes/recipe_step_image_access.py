@@ -10,7 +10,6 @@ serves raw).
 from the request (mirrors `replace_steps_for_recipe`).
 """
 from dataclasses import dataclass
-from typing import Iterable
 from uuid import UUID, uuid4
 
 from sqlalchemy import select
@@ -36,26 +35,6 @@ class StepImageWrite:
 
 def _step_image_table():
     return db.metadata.tables["RecipeStepImage"]
-
-
-def has_step_images(recipe_id: UUID) -> bool:
-    table = _step_image_table()
-    row = db.session.execute(
-        select(table.c.id).where(table.c.recipe_id == recipe_id).limit(1)
-    ).first()
-    return row is not None
-
-
-def has_step_images_for_recipes(recipe_ids: Iterable[UUID]) -> set[UUID]:
-    """Bulk variant — returns the subset of input ids that own >= 1 image."""
-    ids = list(recipe_ids)
-    if not ids:
-        return set()
-    table = _step_image_table()
-    rows = db.session.execute(
-        select(table.c.recipe_id.distinct()).where(table.c.recipe_id.in_(ids))
-    ).all()
-    return {row[0] for row in rows}
 
 
 def get_step_image_metadata_for_recipe(recipe_id: UUID) -> list[dict]:

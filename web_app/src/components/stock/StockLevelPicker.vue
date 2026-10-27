@@ -112,13 +112,13 @@
 
     const levelName = computed(() => {
         if (!props.levelId) return '';
-        return stockLevels.value.find((l) => l.stock_level_id === props.levelId)?.name ?? '';
+        return stockLevelStore.levelById.get(props.levelId ?? '')?.name ?? '';
     });
 
     const levelSequence = computed<number | null>(() => {
         if (typeof props.sequence === 'number') return props.sequence;
         if (!props.levelId) return null;
-        return stockLevels.value.find((l) => l.stock_level_id === props.levelId)?.sequence ?? null;
+        return stockLevelStore.levelById.get(props.levelId ?? '')?.sequence ?? null;
     });
 
     const textLabel = computed(() => (levelName.value ? `Level: ${levelName.value}` : 'Set level'));

@@ -53,7 +53,7 @@
                 >
                     <BaseTooltip v-if="$q.screen.lt.sm">Show &amp; order cards</BaseTooltip>
                     <q-menu anchor="bottom right" self="top right" transition-show="jump-down" transition-hide="jump-up">
-                        <q-list dense style="min-width: 300px">
+                        <q-list dense class="dashboard-cards-menu">
                             <q-item-label header>Show & order cards</q-item-label>
                             <!-- One flat list since the owner cut the zones
                                  (2026-09-04): reorder now spans every card
@@ -324,7 +324,7 @@
                 :class="cardCol('stock_items')"
                 :style="{ order: cardCssOrder('stock_items') }"
             >
-                <PantryDonutCard
+                <StockDonutCard
                     :total="summary.stock_items.total"
                     :in-stock="stockInStockCount"
                     :low="summary.stock_items.low_stock"
@@ -440,12 +440,10 @@
 <script lang="ts" setup>
     import BaseTooltip from 'src/components/BaseTooltip.vue';
     import { ICONS } from 'src/style/icons';
-    // FU-820 — `formatRelativeDay` and the local-ISO parse now come from the
-    // shared date authority (D-006/R-003). The page's own copies parsed
-    // `YYYY-MM-DD` with `new Date(iso)`, i.e. as UTC midnight, so every relative
-    // day was off by one west of Greenwich.
-    import { formatRelativeDay } from 'src/composables/useDateFormat';
-    import { parseLocalIso } from 'src/helpers/weekDates';
+    // FU-820 — dates come from the shared date authority (D-006/R-003); the
+    // page's own copies parsed `YYYY-MM-DD` as UTC midnight.
+    import { formatDate, formatRelativeDay } from 'src/composables/useDateFormat';
+    import { buildCalendarCells } from 'src/helpers/dashboardCalendar';
     import FadeTransition from 'src/components/transitions/FadeTransition.vue';
     import AppSkeleton from 'src/components/AppSkeleton.vue';
     import BaseButton from 'src/components/BaseButton.vue';
@@ -457,9 +455,9 @@
     import BudgetCard from 'src/components/dashboard/BudgetCard.vue';
     import PriceDropsCard from 'src/components/dashboard/PriceDropsCard.vue';
     import RestockRadarCard from 'src/components/dashboard/RestockRadarCard.vue';
-    import PantryDonutCard, {
+    import StockDonutCard, {
         type DonutSegment,
-    } from 'src/components/dashboard/PantryDonutCard.vue';
+    } from 'src/components/dashboard/StockDonutCard.vue';
     import NextToCookCard from 'src/components/dashboard/NextToCookCard.vue';
     import UseItUpCard from 'src/components/dashboard/UseItUpCard.vue';
     import WhatsComingCard, {
@@ -512,17 +510,13 @@
     import { useRouter } from 'vue-router';
     // FU-824 — reactive token reads for the SVG donut (see `stockSegments`).
     import { paletteToken } from 'src/composables/useThemePalette';
+    import { useSlotLoader } from 'src/composables/useSlotLoader';
     // FU-631 #3 — column classes that never leave a card beside dead air.
-    import { CARD_COL_HALF, zoneColClasses } from 'src/helpers/dashboardGrid';
+    import { CARD_COL_HALF } from 'src/helpers/dashboardGrid';
     // FU-830 — the card registry, extracted so its default-visible count (a
     // decision §2.2 owns) can be held by a test rather than by nothing.
-    import {
-        CARD_DEFS,
-        type CardId,
-    } from 'src/helpers/dashboardCards';
-    import {
-        KNOWN_CARD_IDS, baseHiddenSet, defaultOrder, parseLayout, type DashLayout,
-    } from 'src/helpers/dashboardLayout';
+    import type { CardId } from 'src/helpers/dashboardCards';
+    import { useCardLayout } from 'src/composables/useCardLayout';
 
     // FU-821 — every money render goes through `formatMoney`, including the
     // tweened <AnimatedNumber> ones (via its `format` prop). The old
@@ -637,11 +631,8 @@
     // reassures — Honesty inverted, eleven times (`DASHBOARD_PAGE_REVIEW.md`
     // §4.7 / finding 10).
     //
-    // So each slot now records whether it failed, and its card renders
-    // <CardLoadError> instead of "nothing here yet". Kept as one id-keyed set
-    // rather than a per-slot `error` ref beside each data ref: the cards need
-    // "did *this* slot fail" and the banner needs "did *anything* fail", and one
-    // structure answers both without eleven more refs to keep in step (R-003).
+    // So each slot now records whether it failed (`useSlotLoader`), and its
+    // card renders <CardLoadError> instead of "nothing here yet".
     type SlotId =
         | 'use_it_up'
         | 'budget'
@@ -649,34 +640,7 @@
         | 'restock'
         | 'upcoming';
 
-    const slotErrors = ref<Set<SlotId>>(new Set());
-    function slotFailed(id: SlotId): boolean {
-        return slotErrors.value.has(id);
-    }
-    /** Run a slot's fetch, recording success or failure against its id.
-     *
-     *  Still never throws — one bad slot must not take the page down, which is
-     *  what the original blanket catches were protecting. The difference is that
-     *  the failure is now *visible* instead of being laundered into an empty
-     *  state. A later retry that succeeds clears the flag, so the card recovers
-     *  without a reload. */
-    async function loadSlot(id: SlotId, run: () => Promise<void>): Promise<void> {
-        try {
-            await run();
-            if (slotErrors.value.has(id)) {
-                const next = new Set(slotErrors.value);
-                next.delete(id);
-                slotErrors.value = next;
-            }
-        } catch (err) {
-            // Logged, not swallowed: the console is how a self-hosting owner
-            // finds out *which* endpoint is unhappy.
-            console.warn(`dashboard slot "${id}" failed to load`, err);
-            const next = new Set(slotErrors.value);
-            next.add(id);
-            slotErrors.value = next;
-        }
-    }
+    const { slotFailed, loadSlot } = useSlotLoader<SlotId>({ label: 'dashboard slot' });
 
     // Independent slot loaders. Each card surfaces a small chunk of data
     // beyond what the bulk dashboard summary endpoint returns. They live
@@ -728,187 +692,30 @@
     });
 
     // ── Dashboard layout prefs (server-persisted, §2.1) ──────────────────
-    // Card order + hidden set live on the user (`dashboard_layout` JSON) so the
-    // layout survives a cache clear and follows the user across devices. We
-    // render with CSS `order` rather than moving markup — each card keeps its
-    // template position and flexbox sorts them (see `cardCssOrder`).
-    //
-    // The stored `order` array is filtered to known ids on read, which is what
-    // makes the 09-04 card cull a non-event for existing users: a layout naming
-    // `attention` / `draft_shop` / `suggestions` / `spend_trend` /
-    // `pantry_value` / `reconcile_pending` — or the renamed `cookable` and
-    // `primary_list` — simply drops those entries and appends the new cards at
-    // their registry positions.
-    // Layout parsing lives in `helpers/dashboardLayout.ts` so the "insert an
-    // unseen card at its registry position" rule has a spec (finalisation
-    // 08-R7 — this page's comment promised it while the loop appended).
-
-    const cardOrder = ref<CardId[]>(defaultOrder());
-    const hiddenCards = ref<Set<CardId>>(baseHiddenSet());
-
-    function applyLayoutFromUser() {
-        const parsed = parseLayout(currentUser.value?.dashboard_layout ?? null);
-        cardOrder.value = parsed.order;
-        hiddenCards.value = new Set(parsed.hidden);
-    }
-    applyLayoutFromUser();
+    const {
+        applyStored: applyLayoutFromUser, cardRendered, isCardVisible, toggleCard,
+        visibleCardCount, cardCol, cardCssOrder, canMove, moveCard, dropCardOn, menuCards,
+    } = useCardLayout({
+        stored: () => currentUser.value?.dashboard_layout ?? null,
+        persist: (layout) => {
+            void authStore.updateMeAsync({ dashboard_layout: JSON.stringify(layout) });
+        },
+        moneyEnabled: () => moneyEnabled.value,
+        productsEnabled: () => productsEnabled.value,
+    });
     // Reload on user switch (or another device's update landing via refresh).
-    // Our own saves also replace currentUser, but re-applying is idempotent.
     watch(() => currentUser.value?.user_id, applyLayoutFromUser);
 
-    function persistLayout() {
-        const payload: DashLayout = {
-            order: cardOrder.value,
-            hidden: [...hiddenCards.value],
-        };
-        // Fire-and-forget — local refs already reflect the change optimistically;
-        // a failed save just means it isn't remembered.
-        void authStore.updateMeAsync({ dashboard_layout: JSON.stringify(payload) });
-    }
-
-    // A card is *available* unless its feature gate is off — gated-off cards
-    // vanish from both the dashboard and the Cards menu (§2.4 / ADR-005), so we
-    // never offer a dollar widget with money disabled or a product widget to a
-    // user with no products.
-    const CARD_GATE = new Map(CARD_DEFS.map((c) => [c.id, c.gate]));
-    function cardAvailable(id: CardId): boolean {
-        const gate = CARD_GATE.get(id);
-        if (gate === 'money') return moneyEnabled.value;
-        if (gate === 'products') return productsEnabled.value;
-        return true;
-    }
-
-    function isCardVisible(id: CardId): boolean {
-        return KNOWN_CARD_IDS.has(id) && cardAvailable(id) && !hiddenCards.value.has(id);
-    }
-    function toggleCard(id: CardId) {
-        const next = new Set(hiddenCards.value);
-        if (next.has(id)) next.delete(id);
-        else next.add(id);
-        hiddenCards.value = next;
-        persistLayout();
-    }
-    const visibleCardCount = computed(
-        () => CARD_DEFS.filter((c) => isCardVisible(c.id)).length
-    );
-
-    // ── Does this card actually render? (FU-631 #3) ──────────────────────
-    // `isCardVisible` answers "is it registered, gated on, and un-hidden", and
-    // since 2026-09-04 that is the whole answer: `reconcile_pending` was the
-    // only card that additionally vanished on its own *data* (hide-when-empty,
-    // R-029), and it was deleted with the rest of the cull.
-    //
-    // The predicate stays rather than collapsing into `isCardVisible`, because
-    // it is the ONE thing both the template's `v-if` and the column-width maths
-    // consult: if those two ever disagreed, the grid would pair a card that
-    // isn't there and leave the gap it was meant to fill (R-003). The next
-    // hide-when-empty card belongs here, not in a second `v-if` condition at
-    // its call site.
-    function cardRendered(id: CardId): boolean {
-        return isCardVisible(id);
-    }
-
-    // Cards that are full-width by design rather than by parity.
-    //
-    // Currently none: the fortnight calendar used to be the one entry, and
-    // FU-818 merged it into `meal_plan`, which is half-width at both spans — the
-    // grid is 7 columns either way, so 14 days is simply two rows of it. Keeping
-    // the seam (rather than deleting it) because the *next* wide card should
-    // declare itself here instead of hard-coding `col-12` at its call site,
-    // which is how the mixed widths that caused the dead regions got in.
-    const FULL_WIDTH_CARDS: ReadonlySet<CardId> = new Set<CardId>();
-
-    // Column classes per card, so no card is left in a half-width column beside
-    // dead air (D-011 / B4) — see `helpers/dashboardGrid` for the measured
-    // counts and why the parity is per run of consecutive half-width cards.
-    //
-    // One call, not one per zone: with the bands gone (owner, 2026-09-04) the
-    // rendered cards are a single run, which is the case `zoneColClasses` was
-    // always written for — a run is a run whether or not it has a label above
-    // it. The parity fix is now *global*, which is strictly better: an odd
-    // card count used to strand one card per band (up to four gaps on a
-    // default desktop), and can now strand at most one on the whole page.
-    const cardColClasses = computed<Record<string, string>>(() =>
-        zoneColClasses(cardOrder.value.filter(cardRendered), FULL_WIDTH_CARDS),
-    );
-    function cardCol(id: CardId): string {
-        // A card that isn't rendered has no entry; the half default keeps the
-        // binding total rather than resolving to `undefined`.
-        return cardColClasses.value[id] ?? CARD_COL_HALF;
-    }
-
-    // CSS `order` per card = its index in the user's order array. The zone base
-    // (`zoneIndex * 100`) that used to be added here is gone with the zones: a
-    // card no longer belongs to a band it can't leave, so the user's own order
-    // is the whole answer.
-    function cardCssOrder(id: CardId): number {
-        const i = cardOrder.value.indexOf(id);
-        return i === -1 ? CARD_DEFS.findIndex((c) => c.id === id) : i;
-    }
-
-    // Reorder — the tap alternative to drag (C13: drag is the power-user extra,
-    // the tap control is always present + works on mobile). The peer list is now
-    // simply every available card, so a card can be moved anywhere on the page
-    // rather than shuffled inside its band.
-    //
-    // Gated-off cards are excluded, which matters: with money off, `savings` is
-    // still in `cardOrder` but renders nowhere, and including it would make one
-    // press of Move-up look like it did nothing.
-    function orderedAvailableCards(): CardId[] {
-        return cardOrder.value.filter(cardAvailable);
-    }
-    function canMove(id: CardId, dir: 'up' | 'down'): boolean {
-        const peers = orderedAvailableCards();
-        const i = peers.indexOf(id);
-        return dir === 'up' ? i > 0 : i >= 0 && i < peers.length - 1;
-    }
-    function moveCard(id: CardId, dir: 'up' | 'down') {
-        const peers = orderedAvailableCards();
-        const i = peers.indexOf(id);
-        const j = dir === 'up' ? i - 1 : i + 1;
-        if (i < 0 || j < 0 || j >= peers.length) return;
-        const other = peers[j]!;
-        const next = [...cardOrder.value];
-        const oi = next.indexOf(id);
-        const oj = next.indexOf(other);
-        [next[oi], next[oj]] = [next[oj]!, next[oi]!];
-        cardOrder.value = next;
-        persistLayout();
-    }
-
-    // drag-handle reorder for the Cards menu. Sits on top of the existing tap
-    // up/down: drag is the desktop power-user extra; tap is the mobile/keyboard
-    // mandate (C13). `canDropOn` used to refuse a cross-zone drop; with the
-    // zones gone every card may land anywhere, so the only rejection left is
-    // dropping a card on itself (handled in `onDrop`).
-    // `cardDragEnabled` gates the handle on non-touch — `$q.platform.is.mobile`
-    // includes tablets so touch-first surfaces keep the tap path uncluttered.
+    // Drag-handle reorder for the Cards menu: the desktop extra on top of the
+    // tap up/down (C13). Off on touch (`$q.platform.is.mobile` includes
+    // tablets) so touch-first surfaces keep the tap path uncluttered.
     const cardDragEnabled = computed(() => !$q.platform.is.mobile);
     const cardDnd = useDragDropList<CardId>({
         mime: 'application/x-dora-dashboard-card',
         getId: (id) => id,
         canDragStart: () => cardDragEnabled.value,
-        onDrop: ({ id: sourceId }, { id: targetId }) => {
-            if (sourceId === targetId) return;
-            const next = [...cardOrder.value];
-            const fromIdx = next.indexOf(sourceId as CardId);
-            const toIdx = next.indexOf(targetId as CardId);
-            if (fromIdx < 0 || toIdx < 0) return;
-            const [moved] = next.splice(fromIdx, 1);
-            // Insert at the target's *current* index after removal — drop-on
-            // semantics (the dragged row takes the target's slot, the target
-            // shifts toward where the dragged row came from).
-            next.splice(toIdx, 0, moved!);
-            cardOrder.value = next;
-            persistLayout();
-        },
+        onDrop: ({ id: sourceId }, { id: targetId }) => dropCardOn(sourceId as CardId, targetId as CardId),
     });
-
-    // The toggle menu's rows, in display order. Gated-off cards are dropped so
-    // the menu never offers an unavailable one. Flat since the zones went.
-    const menuCards = computed(() =>
-        orderedAvailableCards().map((id) => CARD_DEFS.find((c) => c.id === id)!),
-    );
 
     // ── Derived data for stock donut ─────────────────────────────────────
     const stockInStockCount = computed(() => {
@@ -1010,13 +817,6 @@
     );
 
     // ── Helpers ──────────────────────────────────────────────────────────
-    function isoOf(d: Date): string {
-        // Local date (not UTC) — matches the meal plan's `scheduled_for`.
-        const y = d.getFullYear();
-        const m = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        return `${y}-${m}-${day}`;
-    }
 
     function goTo(path: string) {
         void router.push(path);
@@ -1099,12 +899,6 @@
     // entry, and the tri-state badge logic is easier to follow next to the
     // markup that renders it.
 
-    // FU-819/830 — `loadBestDeals` is gone with the card. That leaves
-    // `productApiService.getBestDealsAsync` and the `/products/best-deals`
-    // endpoint behind it with no caller in the SPA, and the shared
-    // `discountPercent` helper with none either. Both logged as [[FU-838]]
-    // rather than deleted here: R-057 is explicit that a replaced surface's
-    // contracts are an inventory to check, not a casualty list.
 
     // The "Shopping lists" card and its `/dashboard/lists` endpoint were cut on
     // 2026-09-08 (*"useless, axe it"*), taking `shoppingListCards`,
@@ -1223,48 +1017,12 @@
      *  for below — one constant, so the fetch and the grid can't disagree. */
     const CALENDAR_DAYS = 14;
 
-    const DOW_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const calendarCells = computed<CalendarCell[]>(() => {
-        const u = upcoming.value;
-        if (!u) return [];
-        const byDate = new Map(u.dates.map((d) => [d.date, d]));
-        const todayIso = isoOf(new Date());
-        // Shared parser (`helpers/weekDates`) — this page used to declare its own
-        // correct copy here while `formatRelativeDay` a few hundred lines up used
-        // the broken `new Date(iso)` form. One source now (R-003).
-        const start = parseLocalIso(u.start);
-        if (!start) return [];
-        const cells: CalendarCell[] = [];
-        // Never render more than the server sent. `/alerts/upcoming` is asked
-        // for 14 and the card shows 14, but the clamp stays: `u.days` is the
-        // server's word on how many it actually answered with, and building
-        // cells past it would render days with no data as "nothing on".
-        const span = Math.min(CALENDAR_DAYS, u.days);
-        for (let i = 0; i < span; i++) {
-            const d = new Date(start);
-            d.setDate(start.getDate() + i);
-            const iso = isoOf(d);
-            const day = byDate.get(iso);
-            const marks = [
-                day && day.meals.length > 0 ? 'meals' : null,
-                day && day.expiries.length > 0 ? 'expiring items' : null,
-                day && day.shopping.length > 0 ? 'shopping' : null,
-            ].filter(Boolean);
-            cells.push({
-                iso,
-                dayNum: d.getDate(),
-                dow: DOW_LABELS[d.getDay()]!,
-                label:
-                    `${formatRelativeDay(iso)}` +
-                    (marks.length > 0 ? `: ${marks.join(', ')}` : ': nothing on'),
-                isToday: iso === todayIso,
-                hasExpiry: !!day && day.expiries.length > 0,
-                hasShopping: !!day && day.shopping.length > 0,
-                hasMeal: !!day && day.meals.length > 0,
-            });
-        }
-        return cells;
-    });
+    const calendarCells = computed<CalendarCell[]>(() =>
+        buildCalendarCells(upcoming.value, CALENDAR_DAYS, {
+            relativeDay: (iso) => formatRelativeDay(iso),
+            weekdayShort: (day) => formatDate(day, { weekday: 'short' }),
+        }),
+    );
     /** A day is always shown, starting on today (owner, 2026-09-27). Tapping
      *  a day moves the selection; there is no "nothing selected" state to
      *  toggle back into. */
@@ -1362,6 +1120,9 @@
 </script>
 
 <style scoped lang="scss">
+    .dashboard-cards-menu {
+        min-width: 300px;
+    }
     /* ───── Page root ───────────────────────────────────────────────────
        FU-747 / chunk 6: the page-local `--c-*` alias layer that used to be
        declared here is **gone**. It mapped 14 global tokens to page-local
@@ -1503,7 +1264,7 @@
 
     /* ───── Cards ────────────────────────────────────────────────────── */
     .dora-cards {
-        animation: dora-fade-up 0.4s ease-out both;
+        animation: dora-fade-up var(--motion-slow) var(--motion-ease-out) both;
     }
     /* The zone band header and the Cards-menu zone sub-header are gone with
        the zones (owner, 2026-09-04). Their §4.3 rationale — "the zones ARE the
@@ -1586,7 +1347,7 @@
 
     .fade-enter-active,
     .fade-leave-active {
-        transition: opacity 0.25s ease, transform 0.25s ease;
+        transition: opacity var(--motion-normal) var(--motion-ease), transform var(--motion-normal) var(--motion-ease);
     }
     .fade-enter-from,
     .fade-leave-to {
@@ -1607,10 +1368,8 @@
 
     /* Respect the user's motion preference — no animation or transitions. */
     @media (prefers-reduced-motion: reduce) {
-        /* `.dora-card`/`.dora-card-action` motion is handled inside
-           DashboardCard's own reduced-motion rule, and the donut segments' in
-           `PantryDonutCard` — a scoped rule can't reach into a child component
-           anyway, which is why each extracted card carries its own guard. */
+        /* The donut segments' motion is guarded inside the donut card; a
+           scoped rule can't reach into a child component. */
         .dora-cards,
         .fade-enter-active,
         .fade-leave-active {

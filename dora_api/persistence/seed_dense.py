@@ -1664,16 +1664,13 @@ def seed_dense_data(qa_fixtures: bool = False, money_on: bool = True):
         created_at=now - timedelta(days=1),
     ))
 
-    # A price alert on the product with the steepest history, so the explorer's
-    # armed state renders and the "already fired once" branch has a row.
+    # Price watches on two products, so the explorer's watch state renders.
     price_alert_table = db.metadata.tables["PriceAlert"]
     db.session.execute(price_alert_table.insert(), [
         {"id": uuid4(), "user_id": owner.id, "product_id": coffee_farmers.id,
-         "threshold_unit_price": 30.00, "created_at": now - timedelta(days=25),
-         "last_fired_at": None},
+         "threshold_unit_price": 30.00, "created_at": now - timedelta(days=25)},
         {"id": uuid4(), "user_id": owner.id, "product_id": pasta_barilla.id,
-         "threshold_unit_price": 2.00, "created_at": now - timedelta(days=30),
-         "last_fired_at": now - timedelta(days=10)},
+         "threshold_unit_price": 2.00, "created_at": now - timedelta(days=30)},
     ])
     repo.save_changes()
 

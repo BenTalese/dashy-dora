@@ -205,7 +205,7 @@
         {
             title: 'Your pantry',
             caption: 'Stock, expiry, locations',
-            icon: 'inventory_2',
+            icon: ICONS.inventory_2,
             intents: [
                 { name: 'Pantry summary', examples: ["how's my pantry", 'pantry status', 'pantry overview'] },
                 { name: "What's low", examples: ["what's low", 'running out', 'almost out'] },
@@ -272,7 +272,7 @@
 
     type AiTool = { name: string; description: string; examples: string[]; icon: string };
     const aiTools: AiTool[] = [
-        { name: 'search_stock', description: 'Free-form pantry lookup with filters (low only, expiring soon, by location).', examples: ['do I have any milk', "what's in the fridge", 'flagged items'], icon: 'inventory_2' },
+        { name: 'search_stock', description: 'Free-form pantry lookup with filters (low only, expiring soon, by location).', examples: ['do I have any milk', "what's in the fridge", 'flagged items'], icon: ICONS.inventory_2 },
         { name: 'search_products', description: 'Search products across the configured stores.', examples: ['cheese at woolies', 'pasta on special'], icon: ICONS.storefront },
         { name: 'search_recipes', description: 'Direct recipe lookup by name, cuisine, difficulty, or cook time.', examples: ['easy italian dinners under 30 minutes', 'favourite curries'], icon: ICONS.menu_book },
         { name: 'suggest_recipes', description: 'Turns moods like "something spicy" into recipe searches.', examples: ['something cosy for tonight', 'what can I make with what I have'], icon: ICONS.lightbulb },
@@ -285,7 +285,7 @@
         { name: 'recipes_using_item', description: 'Recipes that use a stock item.', examples: ['what can I make with these strawberries', 'recipes using mince'], icon: ICONS.restaurant_menu },
         { name: 'add_to_shopping_list', description: 'Add items to the primary list. Asks back when ambiguous; never auto-creates new stock items.', examples: ['add 3 apples and some milk', 'add bread to the list'], icon: ICONS.add_shopping_cart },
         { name: 'get_alerts', description: 'The bell-icon data: expired / expiring soon / low / out / stocktake overdue. Sortable by severity or kind.', examples: ['what needs attention', "anything urgent", 'show me the high-severity alerts'], icon: ICONS.notifications_active },
-        { name: 'stock_item_detail', description: 'One item\'s level, location, expiry, recipes and list status.', examples: ['tell me about my milk', "how's the cheese looking"], icon: 'inventory_2' },
+        { name: 'stock_item_detail', description: 'One item\'s level, location, expiry, recipes and list status.', examples: ['tell me about my milk', "how's the cheese looking"], icon: ICONS.inventory_2 },
         { name: 'recipe_detail', description: 'One recipe\'s ingredients, stock status, cook time and whether you can make it now.', examples: ['tell me about carbonara', "what's in lasagne", 'how do I make pad thai'], icon: ICONS.menu_book },
         { name: 'shopping_list_contents', description: 'What\'s on a shopping list, ticked and outstanding.', examples: ["what's on my list", "what's outstanding on the woolies list"], icon: ICONS.list_alt },
         { name: 'meal_detail', description: 'A meal\'s constituent recipes and their cook times.', examples: ['what recipes are in the Sunday roast meal', 'tell me about taco night'], icon: ICONS.restaurant },

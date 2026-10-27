@@ -85,6 +85,7 @@
     import type { ProcessedImage } from 'src/services/files/imageService';
     import { NO_STEP_IMAGES_COPY } from 'src/components/recipes/recipeStepImageEditorTypes';
     import type { EditableStepImage } from 'src/components/recipes/recipeStepImageEditorTypes';
+    import { newClientId } from 'src/helpers/clientId';
 
     const props = defineProps<{
         modelValue: EditableStepImage[];
@@ -104,13 +105,6 @@
     const addVerb = computed(() =>
         props.modelValue.length === 0 ? 'Add images' : 'Add more',
     );
-
-    function newClientId(): string {
-        if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-            return crypto.randomUUID();
-        }
-        return `tmp-${Math.random().toString(36).slice(2)}-${Date.now()}`;
-    }
 
     // ImageSourcePicker emits one `pick` per file in order, so we buffer
     // into a transient queue and flush after processing settles. The cap

@@ -10,8 +10,8 @@
          The pill matches the size used by the previous MerchantLogo so
          existing layouts don't reflow. -->
     <img
-        v-if="previewSrc || (resolvedHasImage && imageUrl)"
-        :src="previewSrc || imageUrl"
+        v-if="previewSrc || imageSrc"
+        :src="previewSrc || imageSrc || undefined"
         :alt="name"
         class="dora-logo-image"
         :class="{ 'dora-logo--inline': inline }"
@@ -30,7 +30,7 @@
 </template>
 
 <script lang="ts" setup>
-    import { resolveBaseURL } from 'src/services/api/axiosHttpClient';
+    import { useAuthedImage } from 'src/composables/useAuthedImage';
     import { hashSwatch } from 'src/style/storeSwatch';
     import { useStoresStore } from 'src/stores/storesStore';
     import { computed } from 'vue';
@@ -101,13 +101,10 @@
         return trimmed[0]!.toUpperCase();
     });
 
-    const imageUrl = computed(() => {
+    // Fetched through the HTTP client, never a bare <img> at the API (R-045).
+    const imageSrc = useAuthedImage(() => {
         const id = props.storeId ?? known.value?.store_id;
-        if (!id) return '';
-        // Cache-bust query param: not strictly necessary (the route already
-        // sends Cache-Control: no-cache) but it matches the stock-item
-        // image pattern (FU-125) for consistency.
-        return `${resolveBaseURL()}/stores/${id}/image`;
+        return resolvedHasImage.value && id ? `/stores/${encodeURIComponent(id)}/image` : null;
     });
 </script>
 

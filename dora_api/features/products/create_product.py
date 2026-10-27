@@ -9,7 +9,8 @@ from dora_api.domain.entities.store import Store
 from dora_api.domain.entities.product import Product
 from dora_api.domain.entities.product_offer import ProductOffer
 from dora_api.domain.types import EMPTY_UUID
-from dora_api.features.ingestion.offer_mapping import (OfferOutcome,
+from dora_api.features.ingestion.offer_mapping import (OFFER_SOURCE_MANUAL,
+                                                       OfferOutcome,
                                                        apply_offer_to_product)
 from dora_api.features.products.get_products import get_products
 from dora_api.features.routers import PRODUCT_ROUTER
@@ -19,6 +20,9 @@ from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
+from dora_api.features.stores.find_store import find_store_by_name
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class CreateProductRequest(BaseModel):
@@ -57,9 +61,7 @@ class CreateProductRequest(BaseModel):
 # the manual product-add reuses the C-10 shared
 # `apply_offer_to_product` so duplicates append a historic point + move
 # `current_offer` (one offer-append path across `/api/products` and
-# `/api/ingest`). Source string is `"manual"` to distinguish from
-# ingest-provenance points.
-_MANUAL_SOURCE = "manual"
+# `/api/ingest`), stamped `OFFER_SOURCE_MANUAL`.
 
 
 @dataclass(slots=True)
@@ -82,15 +84,9 @@ class CreateProductHandler:
         # strict no-auto-create. Stores are user-curated (managed
         # in Settings → Stores); the manual product-add path must reject
         # unknown store names, mirroring what `/api/ingest` already does via
-        # the quarantine queue (FU-190). Case-insensitive trimmed match to
-        # mirror `CreateStoreHandler`'s duplicate-detection semantics so
-        # callers aren't surprised by casing.
-        _NormalisedName = request.store_name.strip().lower()
-        _Store: Store | None = next(
-            (s for s in self.repository.get(Store).all()
-             if s.name.strip().lower() == _NormalisedName),
-            None,
-        )
+        # the quarantine queue (FU-190). The same trimmed, case-insensitive
+        # match store create/rename use, so callers aren't surprised by casing.
+        _Store: Store | None = find_store_by_name(self.repository, request.store_name)
         if _Store is None:
             return CreateProductResponse(store_not_found=True)
 
@@ -113,7 +109,7 @@ class CreateProductHandler:
                 price_now=request.price_now,
                 price_was=request.price_was or request.price_now,
                 observed_at=observed_at,
-                source=_MANUAL_SOURCE,
+                source=OFFER_SOURCE_MANUAL,
             )
             self.repository.save_changes()
             return CreateProductResponse(
@@ -151,6 +147,16 @@ class CreateProductHandler:
 
         self.repository.add(_Offer)
         self.repository.add(_NewProduct)
+        # The first price is an observation too, as on the ingest path: the
+        # history holds every price seen, so a later edit has a prior to beat.
+        apply_offer_to_product(
+            self.repository,
+            _NewProduct,
+            price_now=_Offer.price_now,
+            price_was=_Offer.price_was,
+            observed_at=observed_at,
+            source=OFFER_SOURCE_MANUAL,
+        )
         self.repository.save_changes()
 
         return CreateProductResponse(
@@ -163,13 +169,12 @@ class CreateProductHandler:
 @PRODUCT_ROUTER.route("", methods=["POST"])
 @has_request_body(CreateProductRequest)
 def create_product():
-    _Logger = logging.getLogger(__name__)
     _Handler = CreateProductHandler(SqlAlchemyRepository())
     _Request: CreateProductRequest = get_request_body()
     _Response = _Handler.handle(_Request)
 
     if _Response.store_not_found:
-        _Logger.warning(
+        _LOGGER.warning(
             f"Rejected product create — unknown store '{_Request.store_name}'."
         )
         return business_rule_violation(
@@ -178,13 +183,13 @@ def create_product():
         )
 
     if _Response.created:
-        _Logger.info(f"Created product {_Response.product_id}")
+        _LOGGER.info(f"Created product {_Response.product_id}")
     elif _Response.offer_appended:
-        _Logger.info(
+        _LOGGER.info(
             f"Appended new offer to existing product {_Response.product_id}"
         )
     else:
-        _Logger.info(
+        _LOGGER.info(
             f"Existing product {_Response.product_id} already has this offer; no-op."
         )
 

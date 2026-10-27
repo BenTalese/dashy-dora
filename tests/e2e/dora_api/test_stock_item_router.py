@@ -28,7 +28,6 @@ EXPECTED_KEYS = {
     'name',
     'stock_item_id',
     'stock_level_id',
-    'stock_level_name',
     'stock_level_sequence',
     'is_out_of_stock',
     'is_low_stock',
@@ -40,7 +39,6 @@ EXPECTED_KEYS = {
     'is_essential',
     'is_open',
     'opened_on',
-    'last_checked_at',
     'needs_attention',
     'attention_severity',
     'attention_kinds',
@@ -813,13 +811,12 @@ def test__get_stock_item_detail__exposes_stock_group_keys(api):
     _Detail = requests.get(f'{base_route}/{_AnyItem["stock_item_id"]}/detail').json()
 
     assert 'stock_group_id' in _Detail
-    assert 'stock_group_name' in _Detail
 
 
 def test__get_stock_item_detail__null_stock_group_serialises_as_null(api, stock_level_id):
-    # An item created without a stock group must return null on both DTO
-    # fields — the detail page reads these to render the inline picker's
-    # "Set group" empty state.
+    # An item created without a stock group must return a null id — the
+    # detail page reads it to render the inline picker's "Set group" empty
+    # state.
     _Created = requests.post(base_route, json=CreateStockItemRequest(
         name='C1b1 Detail Group Null',
         stock_level_id=stock_level_id,
@@ -828,7 +825,6 @@ def test__get_stock_item_detail__null_stock_group_serialises_as_null(api, stock_
     _Detail = requests.get(f'{base_route}/{_Created["stock_item_id"]}/detail').json()
 
     assert _Detail['stock_group_id'] is None
-    assert _Detail['stock_group_name'] is None
 
 
 def test__get_stock_item_detail__stock_group_roundtrips_via_patch(api, stock_level_id):
@@ -842,14 +838,12 @@ def test__get_stock_item_detail__stock_group_roundtrips_via_patch(api, stock_lev
     _Groups = requests.get('http://localhost:5170/api/stock-groups').json()
     assert _Groups, "seed DB has at least one stock group"
     _GroupId = _Groups[0]['stock_group_id']
-    _GroupName = _Groups[0]['name']
 
     assert requests.patch(
         f'{base_route}/{_ItemId}', json={'stock_group_id': _GroupId},
     ).status_code == 204
     _DetailWithGroup = requests.get(f'{base_route}/{_ItemId}/detail').json()
     assert _DetailWithGroup['stock_group_id'] == _GroupId
-    assert _DetailWithGroup['stock_group_name'] == _GroupName
 
     # Null clears it back to "no group set".
     assert requests.patch(
@@ -857,7 +851,6 @@ def test__get_stock_item_detail__stock_group_roundtrips_via_patch(api, stock_lev
     ).status_code == 204
     _DetailCleared = requests.get(f'{base_route}/{_ItemId}/detail').json()
     assert _DetailCleared['stock_group_id'] is None
-    assert _DetailCleared['stock_group_name'] is None
 
 
 def test__get_stock_item_detail__stock_location_roundtrips_via_patch(api, stock_level_id, stock_location_id):

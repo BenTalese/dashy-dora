@@ -91,7 +91,6 @@ def test__purchase_event__unpriced_no_store_line_still_surfaces(api):
     events = _detail(item)["purchase_events"]
     assert len(events) == 1
     assert events[0]["actual_unit_price"] is None
-    assert events[0]["store_id"] is None
     assert events[0]["store_name"] is None
 
 
@@ -108,7 +107,6 @@ def test__purchase_event__store_resolved_to_name(api):
 
     events = _detail(item)["purchase_events"]
     assert len(events) == 1
-    assert events[0]["store_id"] == store["store_id"]
     assert events[0]["store_name"] == store["name"]
 
 
@@ -178,6 +176,30 @@ def test__cook_event__zero_meal_cook_records_nothing(api):
     recipe_id = _new_recipe_with_ingredient(item)
 
     resp = requests.post(f"{RECIPES}/{recipe_id}/cook", json={"meals_cooked": 0})
-    assert resp.status_code == 204, resp.text
+    assert resp.status_code == 200, resp.text
 
     assert _detail(item)["cook_events"] == []
+
+
+# ── Level history (finalisation 06-R3) ───────────────────────────────
+
+def test__level_history__carries_the_level_sequence_not_just_its_name(api):
+    """The timeline reads "restocked" / "dropped" off the sequence; it used to
+    regex the level's name, which a household can rename."""
+    levels = sorted(requests.get(f"{BASE}/stock-levels").json()["items"], key=lambda l: l["sequence"])
+    created = requests.post(STOCK_ITEMS, json={
+        "name": f"histfeed-{uuid.uuid4().hex[:8]}", "stock_level_id": levels[0]["stock_level_id"],
+    })
+    assert created.status_code == 201, created.text
+    item_id = created.json()["stock_item_id"]
+    assert requests.patch(
+        f"{STOCK_ITEMS}/{item_id}", json={"stock_level_id": levels[-1]["stock_level_id"]},
+    ).status_code in (200, 204)
+
+    history = _detail(item_id)["level_history"]
+    sequence_by_name = {l["name"]: l["sequence"] for l in levels}
+    assert history
+    for change in history:
+        assert "stock_level_id" not in change
+        assert change["stock_level_sequence"] == sequence_by_name[change["stock_level_name"]]
+    assert levels[-1]["sequence"] in {c["stock_level_sequence"] for c in history}

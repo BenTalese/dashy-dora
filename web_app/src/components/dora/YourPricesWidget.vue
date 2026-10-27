@@ -7,14 +7,9 @@
 
         LC-2 — source-blind UI: never says "8 observations · 3 offers"; the
         count line reads "Based on N prices" so the user doesn't have to
-        ask what counts in vs out. The products-on offers sidecar (chunk 4
-        wires it) is a separate section, never folded into baseline math
-        or count chrome.
-
-        Chunk 3 reads `your_prices == null` (placeholder) and renders the
-        empty state. Chunk 4 lights up the baseline-ready shape. The
-        [Full history] button is disabled until chunk 6 wires the
-        bottom-sheet.
+        ask what counts in vs out. The products-on offers sidecar is a
+        separate section, never folded into baseline math or count chrome.
+        `your_prices == null` renders the empty state.
     -->
     <!-- Owner 2026-10-15: same place, better dressed. The actions moved up
          into the header, the usual price became the card's figure, and the

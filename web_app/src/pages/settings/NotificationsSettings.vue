@@ -1,9 +1,6 @@
 <template>
-    <div v-if="!currentUser">
-        <q-banner class="dora-bg-sunken" dense>Not signed in.</q-banner>
-    </div>
-
-    <div v-else class="settings-page">
+    <!-- The router guard owns "signed in"; this only waits for the user row. -->
+    <div v-if="currentUser" class="settings-page">
         <SettingsPageHeader title="Notifications" :icon="ICONS.notifications" />
 
         <!--
@@ -264,7 +261,7 @@
     import { useAuthStore } from 'src/stores/authStore';
     import { useFeatureFlags } from 'src/composables/useFeatureFlags';
     import { usePushSubscription } from 'src/composables/usePushSubscription';
-    import { computed, ref, watch } from 'vue';
+    import { computed, onMounted, ref, watch } from 'vue';
     import { useSettingsSave } from 'src/composables/useSettingsSave';
     import SettingsSection from 'src/components/settings/SettingsSection.vue';
     import SettingsRow from 'src/components/settings/SettingsRow.vue';
@@ -278,13 +275,11 @@
     import BaseTooltip from 'src/components/BaseTooltip.vue';
     import { formatMoney } from 'src/composables/useMoney';
     import { useMoneyEnabled } from 'src/composables/useMoneyEnabled';
-    import { useReconcilePolicy } from 'src/composables/useReconcilePolicy';
     import AlertKindAvatar from 'src/components/AlertKindAvatar.vue';
     import { kindTheme, type AlertKind } from 'src/models/alert';
     import { useAlertPrefsStore } from 'src/stores/alertPrefsStore';
     import { useAlertStore } from 'src/stores/alertStore';
     import PriceHistoryApiService, { type PriceAlert } from 'src/services/api/priceHistoryApiService';
-    import { onMounted } from 'vue';
 
     const authStore = useAuthStore();
     const { currentUser } = storeToRefs(authStore);
@@ -381,7 +376,6 @@
     const alertPrefsStore = useAlertPrefsStore();
     const alertStore = useAlertStore();
     const { moneyEnabled } = useMoneyEnabled();
-    const { autoDrain } = useReconcilePolicy();
 
     const discardOptions = [
         { value: 7, label: '7 days' },
@@ -390,18 +384,12 @@
         { value: null, label: 'Never' },
     ];
 
-    /** The kinds worth a toggle on this install. The reconcile nudge only
-     *  exists when meals aren't reconciled automatically, and a price watch
-     *  only fires with money features on, so their toggles follow suit. */
-    const visiblePrefs = computed(() => alertPrefsStore.prefs.filter((p) => {
-        if (p.kind === 'meal_reconcile_overdue') return !autoDrain.value;
-        if (p.kind === 'price_drop') return moneyEnabled.value;
-        return true;
-    }));
+    /** The kinds worth a toggle on this install (server decides). */
+    const visiblePrefs = computed(() => alertPrefsStore.prefs.filter((p) => p.available));
 
     function kindLabel(kind: AlertKind): string {
         const theme = kindTheme(kind);
-        return theme ? theme.charAt(0).toUpperCase() + theme.slice(1) : kind;
+        return theme.charAt(0).toUpperCase() + theme.slice(1);
     }
 
     const prefBusy = ref<Set<string>>(new Set());
@@ -483,9 +471,9 @@
         max-width: 100%;
     }
     .settings-page__note {
-        font-size: 0.8125rem;
+        font-size: calc(var(--font-size-sm) * 1rem);
         line-height: 1.4;
-        margin-top: 4px;
+        margin-top: var(--space-1);
     }
     .settings-page__subhead {
         margin-top: var(--space-3);
@@ -496,11 +484,5 @@
     .watch-list {
         border: 1px solid var(--border-default);
         border-radius: var(--radius-md);
-    }
-    .settings-divider {
-        border: 0;
-        height: 1px;
-        background: color-mix(in srgb, var(--text-primary) 8%, transparent);
-        margin: 0;
     }
 </style>
