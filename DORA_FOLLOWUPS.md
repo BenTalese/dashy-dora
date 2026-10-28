@@ -39,6 +39,17 @@ long session summary. Distinct from the other logs:
 
 ---
 
+## [OPEN] FU-951 — Put a (?) HelpHint beside the headings the help drafts named
+- **Raised:** 2026-10-29 (help redesign; the drafts' "Chip:" rows in `HELP_CONTENT.md`)
+- **Type:** follow-up (D-015)
+- **What:** Only six surfaces carry a `HelpHint` today (Substitutes, QR label, Barcodes, the two runners, Assistant
+  settings). The drafts name ~20 more headings that should open their guide: recipe page (Add and edit, Ingredients,
+  Method, Versions, Meals prepared, Estimated cost, Nutrition), planner rail, cook mode header, backup / import / API access
+  headers, About → Install as an app, the Region page, the stock-locations header. `HelpHint topic="<title>"` resolves via
+  the landing's deep-link (`resolveDeepLink`), so each is one line; the spec's `DEEP_LINKED_TITLES` list grows with them.
+- **Why deferred:** a placement pass across ~15 files that wants a look at each header's density (phones especially).
+- **Recommended resolution:** opportunistic, surface by surface; or one short unit once the owner has walked the new Help.
+
 ## [OPEN] FU-950 — Stock-item detail leftovers from the finalisation review: BuyVerdictCard's own disclosure, bulk deal quality
 - **Raised:** 2026-10-27 (finalisation 06-R21, 06-R13; Stage 2 close-gate)
 - **Type:** leftover (R-001 / efficiency)
@@ -119,6 +130,7 @@ long session summary. Distinct from the other logs:
   (5)/(6) are owner calls.
 - **Recommended resolution:** (1)+(2) together after 20-D4; (3) with FU-934's page splits; (4) opportunistic; (5)/(6)
   owner.
+- **2026-10-29:** **20-D4 is decided and built** (one page per topic + Common questions + screenshot slot; see the worklog). The help corpus is now data in `web_app/src/help/helpContent.ts` (`HELP_TOPICS`), so item (1)'s `app_help(topic)` tool has a source to read; item (2) is moot — `DoraHelpPage.vue` is deleted and the Dora topic holds the user-facing copy without a tool list.
 
 ## [OPEN] FU-945 — `ConsumptionEvent.from_sequence` / `to_sequence` are written but never read
 - **Raised:** 2026-10-24 (finalisation 07-R10, 07-D2)

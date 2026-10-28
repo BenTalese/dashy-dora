@@ -1,6 +1,6 @@
 ﻿# Dashy Dora — Project State
 
-**Last reviewed: 2026-10-27 (finalisation Stage 2 closed — units 1–30 landed, `FINALISATION_COVERAGE.md` Applied ✅ on all 20 chunks, FU-929 resolved; everything not executed is a named FU or an owner decision; units 7–30 owe a browser / operator pass; the tree is uncommitted on top of `8e842389`).**
+**Last reviewed: 2026-10-29 (Help area rebuilt on the 20-D4 decision: 141 guides, 14 topic pages, 16 screenshots; finalisation Stage 2 closed — units 1–30 landed, `FINALISATION_COVERAGE.md` Applied ✅ on all 20 chunks, FU-929 resolved; everything not executed is a named FU or an owner decision; units 7–30 owe a browser / operator pass; the tree is uncommitted on top of `8e842389`).**
 workstreams, and what needs your attention. This is *not* a changelog;
 shipped-work history lives in `CHANGELOG.md` + `DORA_WORKLOG.md`.
 
@@ -117,7 +117,7 @@ tests every gate has been run around (**FU-762**).
 
 The same report lists about 80 more findings, not yet triaged into FUs.
 
-**🟡 Finalisation Stage 1 is complete (2026-10-23) — decisions that gate Stage 2:** **20-D4** Help information architecture (one page per group + FAQ group + screenshot slot) before the 100 drafted entries land; **11-D1** `app_help(topic)` tool vs growing the in-prompt guide; **13-D4** text-size range (75–150 % asked, 85–140 % shipped); **16-D1 (=FU-919)** keep or cut the name-based store mapping; **19-D1** default compose boots production with Secure cookies off (banner every boot); **19-D4 (=FU-640)** 4xx logging / container log level; **20-D2** toast placement tiers; **18-D2** multi-format export (recommend won't-do). Full list: `FINALISATION_REVIEW.md §0`. **Stage 2 is closed (2026-10-27, units 1–30; FU-929 resolved)** — every chunk's execute list landed or is a named FU; the whole of it (units 7–30) still wants your eyes in the running app, per `DORA_VERIFY.md`, and **none of it is committed**.
+**🟡 Finalisation Stage 1 is complete (2026-10-23) — decisions that gate Stage 2:** ~~**20-D4** Help IA~~ (decided and built 2026-10-29: one page per topic, search, Common questions, screenshots); **11-D1** `app_help(topic)` tool vs growing the in-prompt guide; **13-D4** text-size range (75–150 % asked, 85–140 % shipped); **16-D1 (=FU-919)** keep or cut the name-based store mapping; **19-D1** default compose boots production with Secure cookies off (banner every boot); **19-D4 (=FU-640)** 4xx logging / container log level; **20-D2** toast placement tiers; **18-D2** multi-format export (recommend won't-do). Full list: `FINALISATION_REVIEW.md §0`. **Stage 2 is closed (2026-10-27, units 1–30; FU-929 resolved)** — every chunk's execute list landed or is a named FU; the whole of it (units 7–30) still wants your eyes in the running app, per `DORA_VERIFY.md`, and **none of it is committed**.
 
 **The products program is COMPLETE and has nothing open** — all eight batches, all four decisions closed (2026-09-08). 
 
@@ -315,7 +315,7 @@ IMPL_PLAN_*); INV prompts produced their reports.
 | Doc | Type | State | Purpose/Notes | Evidence |
 |---|---|---|---|---|
 | FINALISATION_REVIEW | Senior review record | 🟡 active | 729 `NN-Rk` findings across 20 chunks; §0 = cross-chunk consolidation + Stage-2 opening order + owner decisions | Assembled 2026-10-23 from `finalisation/CHUNK_*`; FU-929 |
-| HELP_CONTENT | Help drafts | 🔵 designed-not-built | 100 help entries + DoraBot deltas, per surface | Assembled 2026-10-23; landing gated on 20-D4 (Help IA) + 11-D1 |
+| HELP_CONTENT | Help drafts | ✅ landed 2026-10-29 | 100 help entries + DoraBot deltas, per surface | Built as `web_app/src/help/helpContent.ts` (166 guides, 14 topics, 17 screenshots); DoraBot half → FU-946; was gated on 20-D4 (Help IA) + 11-D1 |
 | HANDROLLED_VS_LIBRARIES | Library audit | ✅ Stage 1 done | 127 verdicts (6 replace/wrap) — PLAN §7 DoD step 5 | Assembled 2026-10-23 from each chunk's §C9 |
 | finalisation/CHUNK_01…20 | Per-chunk analyses | ✅ Stage 1 / 🟡 Stage 2 (1–5, 7, 8, 11 ✅) | FST · help · review · tests · §E · §F per surface | 20 files, 2026-10-23 |
 | DASHBOARD_PAGE_REVIEW | PO+eng review | ✅ all 6 chunks built | The dashboard as a **drift audit**, not a design pass — the surface was designed properly (`IMPL_PLAN_DASHBOARD_REBUILD`, 7 phases) and it is the plan's *structural* commitments that lapsed: curated 8-card default → 13 of 17; DoD "monolith is gone" → 3,258 lines. Also re-opens feedback D2 (dark mode) and L254 (money opt-in) | Written 2026-09-02; 13 FUs (817-829); all 8 §8 decisions closed. All 6 chunks shipped 2026-09-02 — both structural commitments met and the design-rule sweep done (FU-828/829/830/840 resolved). Spin-offs still open: FU-835/837/838/839/841 |

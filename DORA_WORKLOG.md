@@ -41,7 +41,52 @@ next.
 
 ---
 
-## 2026-10-24 (latest): **Finalisation Stage 2 continued — units 12+ (chunks 9, 10 and the cross-chunk sweeps)**
+## 2026-10-29 (latest): **Help area redesigned (20-D4 decided), the drafted guides landed, screenshots captured**
+
+**Status: done. Nothing committed (commit only when asked).**
+
+**Owner ask (2026-10-29):** *"the finalisation plan is complete? I deployed it and don't see any difference to the help
+page"* → the help track had been gated on 20-D4 and never shipped. Then: *"redesign the help area completely to look
+modern, polished and aesthetic; not verbose; ignore the current layout; take screenshots of the running app yourself for
+the guides, crop them, rounded borders."*
+
+**Decision taken (20-D4):** one page per topic (`/help/:group`), a landing with search across every guide, a Common
+questions list from the question-shaped titles, and a screenshot slot per guide (the review's own recommendation). The
+`/help?q=<title>` deep-link contract the (?) chips and runners use is kept: the landing resolves an exact or unique title
+match straight to `/help/<topic>?e=<slug>` and opens that guide.
+
+**What landed**
+- **Content:** `web_app/src/help/helpContent.ts` — 14 topics, 166 guides, condensed from `HELP_CONTENT.md`'s 100 drafts
+  plus the 28 old entries. Each guide is one summary sentence plus at most one line each for *How*, *Setting* (a real route)
+  and *Note*; D-014 voice, D-025 (no em dashes). The old `DoraHelpPage.vue` (hand-maintained tool lists, 13 of 40 stale)
+  is deleted; its useful parts are the *Dora* topic (16 guides incl. the faces grid). `/help/dora` still resolves (topic slug).
+- **Pages / components:** `HelpPage.vue` (landing: mascot hero, search, topic grid, Common questions, two doors),
+  `HelpTopicPage.vue`, `HelpChangelogPage.vue` (`/help/whats-new`; renders the changelog's headings and bullets as text),
+  `HelpAboutPage.vue` (`/help/about`; version pill, update note, support copy, Report an issue); `components/help/`
+  `HelpShell`, `HelpTopicCard`, `HelpEntryCard`, `HelpShot` (rounded, hairline, card lift), `HelpLegend` (the live
+  `StockRowLegend` + the rules dialog), `HelpFaces`. Tokens only; whole-card targets; focus rings; phone layout.
+- **Screenshots:** 17 PNGs under `web_app/src/assets/help/` (bundled via `helpImages.ts` glob; a missing file renders no
+  figure), captured from the seeded dense household at 1280×2× light Pesto with a scratchpad Playwright script, each
+  cropped to the surface (rows, panel, dialog, or the page column). Dora's chat and hint were closed first after the first
+  pass bled them into seven shots.
+- **Wiring:** routes (`help`, `help/whats-new`, `help/about`, `help/:group`); `doraIntents` "changelog tab" → `/help/whats-new`;
+  the food-fact card and the tabs are gone from Help (the endpoint stays for Dora's chat).
+- **Tests:** `test/unit/helpContent.spec.ts` ×6 — unique slugs, the five deep-linked titles + the partial "Dora thinks"
+  resolve to one guide, every `path`/`setting.path` is a real route, no em dashes / summaries ≤ 45 words, search, every named
+  screenshot exists. vitest 796 passed / 83 files; vue-tsc + `npm run lint` clean.
+- **Not done (deliberately):** the DoraBot corpus rewrite (11-D1 / FU-946 item 1) — the help corpus now exists as data
+  (`HELP_TOPICS`), so an `app_help(topic)` tool can read it; that is FU-946's next step. HelpHint chips on more surfaces
+  (the drafts' "Chip:" rows) — the (?) placement sweep is its own unit (FU-951).
+
+**Verification:** driven in the built SPA against the seeded backend on :5171 (Playwright, Chrome): landing, topic with
+a deep-linked open guide, `?q=Substitutes` resolving, search, What's new, About, the Dora faces grid, phone width, dark
+mode; no console errors. Browser-verify items for the owner in `DORA_VERIFY.md`.
+
+**Next up:** owner walks the Help area once (VERIFY); FU-946's `app_help` tool over `HELP_TOPICS`; FU-951 chip placement.
+
+---
+
+## 2026-10-24: **Finalisation Stage 2 continued — units 12+ (chunks 9, 10 and the cross-chunk sweeps)**
 
 **Status: in progress (owner away; long-running solo session on the Linux box). Nothing committed (commit only when asked).**
 Picked up from the 2026-10-23 entry below: the WIP commit `6030db0b` holds units 1–11. Baseline on this box before any

@@ -5,6 +5,14 @@ semver — major bumps signal schema or breaking-config changes.
 
 ## [Unreleased]
 
+### Changed
+- **Help has been rebuilt (2026-10-29).** One page per topic, a search over
+  every guide, a Common questions list, and short guides that say what a
+  thing does, where to find it, which setting controls it and the one thing
+  to know. Most guides carry a cropped screenshot of the real screen. What's
+  new and About are their own pages. The (?) chips around the app open the
+  guide they name directly.
+
 ### Fixed
 - **Finalisation sweep, Stage 2 (2026-10-23).** The first pass over the
   finalisation review's verified bugs:

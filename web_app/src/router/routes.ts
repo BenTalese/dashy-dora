@@ -89,11 +89,13 @@ const routes: RouteRecordRaw[] = [
             { path: 'price-history', component: () => import('pages/PriceHistoryPage.vue'), meta: { title: 'Price History' } },
             { path: 'my-products', component: () => import('pages/MyProductsPage.vue'), meta: { title: 'My Products' } },
             { path: 'help', component: () => import('pages/HelpPage.vue'), meta: { title: 'Help' } },
+            { path: 'help/whats-new', component: () => import('pages/HelpChangelogPage.vue'), meta: { title: "What's new" } },
+            { path: 'help/about', component: () => import('pages/HelpAboutPage.vue'), meta: { title: 'About' } },
             // The alerts page was removed 2026-10-15 (owner): the bell panel
             // is the whole surface and the per-kind toggles live in Settings →
             // Notifications. Old links open the bell instead.
             { path: 'alerts', redirect: { path: '/', query: { alerts: 'open' } } },
-            { path: 'help/dora', component: () => import('pages/DoraHelpPage.vue'), meta: { title: 'About Dora' } },
+            { path: 'help/:group', component: () => import('pages/HelpTopicPage.vue'), meta: { title: 'Help' } },
             // A8 + 2026-06-12 migration — recipe routes all live under
             // `/cookbook` (the cookbook is the page; a recipe is an
             // item in it). Legacy `/recipes*` redirects were retired

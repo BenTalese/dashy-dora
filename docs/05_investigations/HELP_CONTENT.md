@@ -2,7 +2,7 @@
 
 **Assembled 2026-10-23** from the twenty chunk files (track **Help** = each chunk's §B). **100 entry drafts** in the §3.2 shape (group · what it does · when it fires · what controls it · what it costs / might get wrong · related · chip placement · source), plus per-surface DoraBot `APP_OVERVIEW` deltas (B3). Each chunk's B1 records what `HelpPage.vue`, the `(?)` chips and `app_knowledge.py` said at analysis time and which lines were stale.
 
-**Before these land:** the Help page's information architecture needs the owner's call (CHUNK_20 **20-D4** — one page per group, a FAQ group from the question-shaped titles, an optional screenshot slot per entry), and 11-D1 decides whether DoraBot reads the corpus through an `app_help(topic)` tool or a grown `APP_OVERVIEW`. Invisibility rule (PROPOSAL_INGESTION_API): no entry names a scraper, companion or producer.
+**Landed 2026-10-29** as `web_app/src/help/helpContent.ts` (condensed: one sentence + How / Setting / Note per guide; the "Chip:" rows are FU-951). This file is the long-form source the guides were cut from. **Before these landed:** the Help page's information architecture needed the owner's call (CHUNK_20 **20-D4** — one page per group, a FAQ group from the question-shaped titles, an optional screenshot slot per entry), and 11-D1 decides whether DoraBot reads the corpus through an `app_help(topic)` tool or a grown `APP_OVERVIEW`. Invisibility rule (PROPOSAL_INGESTION_API): no entry names a scraper, companion or producer.
 
 ---
 

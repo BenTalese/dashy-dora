@@ -22,6 +22,15 @@ top-to-bottom.
 
 ---
 
+## Help area redesign, browser-verify owed (2026-10-29)
+- [ ] Help: the landing shows the mascot, the search box, 14 topic cards (each with a count), Common questions and the two doors; nothing overflows at 375px.
+- [ ] Help → Stock: guides open one at a time with a chevron; "Reading a stock row" shows the live legend and the stock-rows screenshot with rounded corners and a hairline.
+- [ ] From a stock item's Substitutes tab, the (?) lands on Help → Stock with the Substitutes guide open and scrolled into view; same for QR label, Barcodes, the stocktake runner's (?), the reconcile runner's (?) and Settings → Assistant's "Learn more".
+- [ ] Help search "budget" lists guides from several topics; clearing the box brings the topics back; the address carries `?q=`.
+- [ ] Help → What's new renders the changelog as cards with bullet lists (no raw `**` or backticks); Help → About shows the version pill and, when configured, Report an issue.
+- [ ] Help → Dora → Her faces shows the eleven mascot tiles; `/help/dora` from the assistant settings page still resolves.
+- [ ] Dark theme: topic cards, guide cards and screenshots read correctly (hairline visible, no white flash); keyboard focus rings on cards and crumbs.
+
 ## Finalisation Stage 2 — unit 30 (cross-cutting sweeps), browser-verify owed (2026-10-27) — origin FU-929
 - [ ] Any delete (a recipe, a store, a shopping list, a template, a stock item from the stocktake sweep): the dialog shows a flat Cancel and a red filled OK; Escape and a backdrop tap cancel; the delete only happens on OK.
 - [ ] Settings → Kitchen setup → Stores / Locations / a vocabulary page: "New …" asks for a name in a text prompt; an empty answer does nothing; the rename prompt is pre-filled.

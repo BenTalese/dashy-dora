@@ -68,7 +68,6 @@ const KNOWN_UNDECLARED = [
     '--surface-default',
     '--surface-muted',     // RecipeNutriScore.vue:99
     '--surface-raised',    // StockItemDetailPage.vue:2788
-    '--text-sm',           // HelpPage.vue:686
     '--text-warning',
     '--font-mono',         // ApiAccessSettings.vue:542
     '--overlay-pressed',   // ShoppingListDetail.vue:3009

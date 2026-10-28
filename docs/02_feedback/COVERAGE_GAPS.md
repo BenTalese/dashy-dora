@@ -97,12 +97,13 @@ Feedback `§DORA BOT` has 6 bullets, scattered across multiple owners:
 Feedback `§HELP` has 5 bullets — all about content (detailed help per
 feature, guides, FAQ, navigability, diagrams). No brief.
 
-- [OPEN] Help content overhaul: detailed per-feature help, guides,
-  FAQ, easy navigability, UI screenshots / diagrams.
+- [COVERED 2026-10-29] Help content overhaul: 166 short guides in 14 topics
+  (one page each), search, Common questions, and cropped screenshots of the
+  running app — `web_app/src/help/helpContent.ts` + the `components/help/`
+  set. Diagrams were not asked for beyond screenshots. The DoraBot corpus half
+  is FU-946.
 
-**Recommended home:** content task, post-launch. Either a dedicated
-`HELP_CONTENT_PLAN.md` proposal or fold into the existing HelpPage
-implementation work.
+**Home:** built (the 20-D4 decision, worklog 2026-10-29).
 
 ### A-5 SETTINGS deferred bullets
 

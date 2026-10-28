@@ -939,7 +939,7 @@ export async function runIntent(
                 // that go stale (finalisation 11-R23).
                 text: `You're on Dashy Dora ${versionInfo?.current ?? 'an unknown version'}. The Help page has the full changelog.${updateBit}`,
                 mood: versionInfo?.updateAvailable ? 'super_excited' : 'excited',
-                navigateTo: { path: '/help', label: 'Open Help (changelog tab)' },
+                navigateTo: { path: '/help/whats-new', label: "Open What's new" },
             };
         }
 
