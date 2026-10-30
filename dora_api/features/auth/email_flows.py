@@ -30,6 +30,7 @@ from dora_api.infrastructure.auth_helpers import (
     build_reset_url, build_verify_url, consume_token, find_active_token,
     hash_password, is_valid_email, issue_token, normalise_email, rate_limit,
     rate_limit_remaining_seconds, revoke_tokens_for_user, try_send,
+    try_send_link_mail,
     validate_password,
 )
 from dora_api.infrastructure.decorators import has_request_body
@@ -106,7 +107,7 @@ def resend_verification():
     user = repo.get(User).one(EntityField(User, User.Fields.EMAIL).eq(email_norm))
     if user is not None and not user.email_verified:
         raw = issue_token(user.id, PURPOSE_VERIFY_EMAIL, VERIFY_EMAIL_TTL)
-        try_send(
+        try_send_link_mail(
             send_email,
             to=email_norm,
             subject="Verify your Dashy Dora account",
@@ -146,7 +147,7 @@ def forgot_password():
     user = repo.get(User).one(EntityField(User, User.Fields.EMAIL).eq(email_norm))
     if user is not None:
         raw = issue_token(user.id, PURPOSE_RESET_PASSWORD, RESET_PASSWORD_TTL)
-        try_send(
+        try_send_link_mail(
             send_email,
             to=email_norm,
             subject="Reset your Dashy Dora password",

@@ -59,12 +59,17 @@ class GetShoppingListsHandler:
 
         counts: dict[UUID, tuple[int, int]] = {}
         # `(shopping_list_id, ticked) -> count` rolled up in one query.
+        # Lines set aside by the budget aren't part of this shop, so they
+        # aren't counted — the same rule as the detail's `totals.line_count`
+        # (FU-966: the rail said 7 where the list's own card said 6).
         rows = session.execute(
             select(
                 ShoppingListLine.shopping_list_id,
                 ShoppingListLine.is_ticked,
                 func.count(),
-            ).group_by(ShoppingListLine.shopping_list_id, ShoppingListLine.is_ticked)
+            )
+            .where(ShoppingListLine.deferred_by_budget.is_(False))
+            .group_by(ShoppingListLine.shopping_list_id, ShoppingListLine.is_ticked)
         ).all()
         for list_id, is_ticked, count in rows:
             total, ticked = counts.get(list_id, (0, 0))

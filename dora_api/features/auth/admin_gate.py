@@ -17,39 +17,23 @@ Returns a `(user_id, error_response)` tuple. `error_response` is
 """
 from uuid import UUID
 
-from flask import session
-
-from dora_api.domain.entities.user import User
-from dora_api.infrastructure.session_user import SESSION_USER_ID_KEY
+from dora_api.infrastructure.session_user import (SESSION_DEACTIVATED,
+                                                  resolve_session_user)
 from dora_api.infrastructure.api_response import forbidden, unauthorized
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 
 
 def require_admin() -> tuple[UUID | None, object]:
-    _UserIdRaw = session.get(SESSION_USER_ID_KEY)
-    if not _UserIdRaw:
-        return None, unauthorized()
-    try:
-        _UserId = UUID(_UserIdRaw)
-    except (ValueError, TypeError):
-        session.clear()
-        return None, unauthorized()
-
-    repository = SqlAlchemyRepository()
-    me: User | None = repository.get(User).by_id(_UserId)
+    # The shared session rule (SEC-4): missing, deleted, deactivated and
+    # stale-after-password-change cookies all fail here exactly as they do
+    # in the middleware and `/auth/me`.
+    me, reason = resolve_session_user(SqlAlchemyRepository())
     if me is None:
-        session.clear()
+        if reason == SESSION_DEACTIVATED:
+            return None, unauthorized(
+                "This account has been deactivated. Ask an admin to switch it back on."
+            )
         return None, unauthorized()
-    # A deactivated account keeps its cookie until `get_me` next runs, so the
-    # admin gate re-checks rather than trusting the session. This closes the
-    # admin half only; the general "any authenticated route" half needs the
-    # shared session→User resolver tracked as FU-654 (see FU-655).
-    if not me.is_active:
-        session.clear()
-        return None, unauthorized(
-            "This account has been deactivated. Ask an admin to switch it back on."
-        )
     if not me.is_admin:
         return None, forbidden("Admin role required.")
-    return _UserId, None
-
+    return me.id, None

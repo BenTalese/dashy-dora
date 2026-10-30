@@ -144,6 +144,28 @@
             </li>
         </ul>
 
+        <!-- SEC-3: sign-ups are closed by default; this page is where
+             accounts come from otherwise, so the switch lives beside them. -->
+        <SettingsSection>
+            <template #title>Sign-ups</template>
+            <SettingsRow inline>
+                <template #label>
+                    Let people create their own account
+                    <InfoTip label="Sign-ups">
+                        Shows "Need an account? Register" on the sign-in page, so anyone
+                        who can reach this Dora can make an account and see the
+                        household's kitchen. Leave it off and add people here
+                        instead.
+                    </InfoTip>
+                </template>
+                <q-toggle
+                    :model-value="signUps.registration_enabled"
+                    :disable="!signUpsReady"
+                    @update:model-value="onSignUpsToggle"
+                />
+            </SettingsRow>
+        </SettingsSection>
+
         <q-inner-loading :showing="loading && users.length === 0">
             <AppSpinner size="48px" />
         </q-inner-loading>
@@ -308,12 +330,27 @@
         type AdminUser
     } from 'src/services/api/userAdminApiService';
     import SettingsPageHeader from 'src/components/settings/SettingsPageHeader.vue';
+    import SettingsSection from 'src/components/settings/SettingsSection.vue';
+    import SettingsRow from 'src/components/settings/SettingsRow.vue';
+    import InfoTip from 'src/components/help/InfoTip.vue';
+    import { useAppSettingDrafts } from 'src/composables/useAppSettingDrafts';
     import UserAvatar from 'src/components/UserAvatar.vue';
     import { useAuthStore } from 'src/stores/authStore';
     import { passwordLongEnough } from 'src/models/password';
     import { computed, onMounted, reactive, ref } from 'vue';
     import { describeApiError } from 'src/services/errorHandling/apiErrorHandler';
     import { useConfirm } from 'src/composables/useConfirm';
+
+    const {
+        draft: signUps, ready: signUpsReady, save: saveSignUps,
+    } = useAppSettingDrafts({ registration_enabled: false });
+
+    function onSignUpsToggle(value: boolean) {
+        void saveSignUps(
+            { registration_enabled: value },
+            value ? 'Anyone can now create an account.' : 'Sign-ups closed.',
+        );
+    }
 
 
     const { confirm } = useConfirm();

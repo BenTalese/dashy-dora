@@ -11,7 +11,6 @@
 
 <p align="center">
     <img alt="MIT Licence" src="https://img.shields.io/github/license/BenTalese/dashy-dora?style=flat" />
-    <img alt="Build" src="https://img.shields.io/github/actions/workflow/status/BenTalese/dashy-dora/ci.yml?label=build" />
     <img alt="Latest release" src="https://img.shields.io/github/v/release/BenTalese/dashy-dora" />
     <img alt="Commits since latest release" src="https://img.shields.io/github/commits-since/BenTalese/dashy-dora/latest" />
     <img alt="Made with Vue &amp; Flask" src="https://img.shields.io/badge/stack-Vue%203%20%C2%B7%20Quasar%20%C2%B7%20Flask-42b883" />
@@ -21,14 +20,15 @@
     <a href="#-what-is-dora">What is it?</a> ·
     <a href="#-see-it-in-action">Screenshots</a> ·
     <a href="#-features">Features</a> ·
-    <a href="#-get-started">Get started</a> ·
+    <a href="#-self-host-with-docker">Self-host</a> ·
+    <a href="#-develop-locally">Develop</a> ·
     <a href="#-support-dora">Support</a> ·
     <a href="#-contributing">Contributing</a>
 </p>
 
-> **Status: pre-release.** Dora is being actively finished — it runs well and is
-> feature-rich, but there's no tagged, packaged release yet. You can run it
-> locally or via Docker today (see [Get started](#-get-started)).
+> **Status: first release coming.** Dora runs well and is feature-rich; the first
+> tagged release is being prepared. You can self-host it with Docker today (see
+> [Self-host with Docker](#-self-host-with-docker)).
 
 <br/>
 
@@ -54,22 +54,14 @@ it useful, [donations](#-support-dora) are hugely appreciated but never required
 
 ## 📽️ See it in action
 
-> _GIFs and screenshots are on the way. The placeholders below mark where each
-> one lands — drop the assets into `.github/publication_assets/` and swap the
-> caption for the image._
-
-<!-- GIF: Dashboard overview — .github/publication_assets/dashboard.gif -->
 | | |
 |---|---|
-| **🏠 Dashboard** <br/> _Coming soon_ | **📦 Stock at a glance** <br/> _Coming soon_ |
-| **🍳 Cook mode** <br/> _Coming soon_ | **🛒 Shopping lists** <br/> _Coming soon_ |
-| **📅 Meal plans** <br/> _Coming soon_ | **💬 Ask Dora (assistant)** <br/> _Coming soon_ |
+| **🏠 Dashboard** <br/> ![Dashboard](.github/publication_assets/dashboard.png) | **📦 Stock at a glance** <br/> ![Stock](.github/publication_assets/stock-rows.png) |
+| **🍳 Cook mode** <br/> ![Cook mode](.github/publication_assets/cook-mode.png) | **🛒 Shopping lists** <br/> ![Shopping list](.github/publication_assets/shopping-list.png) |
+| **📅 Meal plans** <br/> ![Meal plan](.github/publication_assets/meal-plan.png) | **💬 Ask Dora (assistant)** <br/> ![Ask Dora](.github/publication_assets/dora-chat.png) |
 
-<!--
-    When adding a real asset, replace a cell with:
-    ![Dashboard](.github/publication_assets/dashboard.gif)
-    Keep them trimmed (< ~5 MB) so the README stays quick to load.
--->
+<!-- The same screenshots the in-app Help uses (web_app/src/assets/help/).
+     Keep them trimmed (< ~1 MB each) so the README stays quick to load. -->
 
 <br/>
 
@@ -95,18 +87,80 @@ it useful, [donations](#-support-dora) are hugely appreciated but never required
 
 <br/>
 
-## 🚀 Get started
+## 🏡 Self-host with Docker
 
-Run it locally for development, or spin up the Docker stack (`compose.yml`, SQLite by default) for a
-closer-to-production look. The Docker image and the desktop bundles are built from `Dockerfile` /
-`packaging/`; the Release workflow that publishes them is checked in but currently disabled (see *Releasing*).
+Dora runs as one container (API + web app) on SQLite by default. You need Docker
+Engine with Compose v2, or Docker Desktop.
+
+```bash
+git clone https://github.com/BenTalese/dashy-dora.git
+cd dashy-dora
+cp .env.example .env
+```
+
+Edit `.env` and set the three values production needs:
+
+| Variable | What to put |
+|---|---|
+| `DORA_SECRET_KEY` | A long random string: `python -c "import secrets; print(secrets.token_urlsafe(48))"` |
+| `DORA_CORS_ORIGINS` | The address you'll open Dora on, e.g. `https://dora.example.com` or `http://192.168.1.20:5174` |
+| `ADMIN_BOOTSTRAP_EMAIL` | Your email. Only this address can create the first admin account |
+
+Then build and start it. The build id makes **Settings → About** name the exact
+build you're running:
+
+```bash
+DORA_BUILD_ID=$(git rev-parse --short HEAD) docker compose up -d --build
+```
+
+Open **http://&lt;your-server&gt;:5174**. The first visit opens a one-time
+page that creates the admin account; after that it's gone.
+
+**Data** lives in the named volumes `dora_data`, `dora_cache` and `dora_logs`.
+**Settings → Backup & restore** downloads a full backup; take one before you
+upgrade. To upgrade, `git pull` and run the same `docker compose up -d --build`;
+database migrations run on start.
+
+### Security posture
+
+Dora is built for a household on a home network, or behind a reverse proxy you
+control. It isn't hardened as a public multi-tenant service.
+
+- **Sign-ups are closed.** People only get an account when the admin adds them on
+  **Settings → Users**. You can open self-registration there, but anyone who can
+  reach Dora could then make an account and see your kitchen.
+- **Put it behind HTTPS** if it's reachable from outside your network: use a
+  reverse proxy (Caddy, Traefik, nginx) or a VPN such as Tailscale. Cookies are
+  `Secure` by default. A plain-`http://` LAN install needs
+  `DORA_SECURE_COOKIES=false` in `.env`, or sign-in won't stick.
+- **Behind a proxy**, route `/` to port 5174 and `/api/` to port 5170, set
+  `DORA_TRUSTED_PROXY_HOPS=1`, and publish both ports on localhost only: in
+  `compose.yml`, change `"5170:5170"` to `"127.0.0.1:5170:5170"` (and the same
+  for 5174). Otherwise a client that reaches the API port directly can forge
+  its address.
+- **Password-reset and verify emails** need SMTP *and* a public URL
+  (**Settings → Email**). Links are only ever built from that URL. Until it's
+  set, those mails aren't sent and "Forgot password?" is hidden. An admin can
+  still reset a password on **Settings → Users**.
+- **File ownership:** the API runs as `PUID`/`PGID` (default `1000:1000`, set in
+  `compose.yml`), not root, so files it writes to a bind mount belong to that
+  user.
+
+Found a vulnerability? Please report it privately; see [SECURITY.md](SECURITY.md).
+
+<br/>
+
+## 🛠️ Develop locally
+
+Run the API and the web app from source with hot reload. The Docker image and the
+desktop bundles are built from `Dockerfile` / `packaging/`.
 
 ### Prerequisites
 
 | Tool | Minimum version | Notes |
 |------|----------------|-------|
 | Python | 3.11 | [python.org](https://www.python.org/downloads/) — tick "Add to PATH" on Windows |
-| Node.js | 18 LTS | [nodejs.org](https://nodejs.org) or via nvm / nvm-windows |
+| Node.js | 22 | [nodejs.org](https://nodejs.org) or via nvm / nvm-windows (`@quasar/app-vite` needs 22.22+) |
 | Quasar CLI | latest | `npm install -g @quasar/cli` |
 | Git | any | — |
 
@@ -190,21 +244,8 @@ The SPA opens on **http://localhost:5174** and hot-reloads on file changes.
 
 > If `quasar` is not found: `npm install -g @quasar/cli` then try again.
 
-### 4 — (Optional) Docker — full stack in one command
-
-Requires Docker Desktop (Windows/macOS) or Docker Engine + Compose v2 (Linux).
-
-```bash
-docker compose up --build
-```
-
-Ports exposed:
-- `5170` — dora_api
-- `5174` — SPA (served by nginx)
-
-(The retailer-scraping companion is a separate stack in the sibling `dora-companion` repo; Dora never calls out to it.)
-
-Data is persisted in named Docker volumes (`dora_data`, `dora_cache`, `dora_logs`). Use `docker compose down -v` to clear them.
+The retailer-scraping companion is a separate, optional project (`dora-companion`);
+Dora never calls out to it.
 
 <details>
 <summary><strong>More: quick reference, push notifications, AI assistant, desktop bundles, releasing</strong></summary>
@@ -236,7 +277,7 @@ Alerts that fire while the SPA is closed are delivered via the Web Push protocol
 
 Dora's chat can be backed by a language model — Ollama you host yourself, or OpenAI / Anthropic / Google Gemini via your own API key. AI mode is configured **per account** and is off by default; the no-LLM **Basic** assistant is the default and stays fully useful.
 
-Setup: (1) admin confirms the master switch is on at **Settings → System → AI assistant**; (2) each account that wants AI goes to **Settings → Assistant**, picks a provider, fills in URL/model (Ollama) or API key + model (paid), and turns AI mode on. There's a **Test connection** button. For Ollama, `ollama pull qwen2.5:7b` + `ollama serve` is the canonical setup; the model must be tool-capable (qwen2.5, llama3.1, gpt-oss, etc.).
+Setup: each account that wants AI goes to **Settings → Assistant**, picks a provider, fills in URL/model (Ollama) or API key + model (paid), and turns AI mode on. There's a **Test connection** button. For Ollama, `ollama pull qwen2.5:7b` + `ollama serve` is the canonical setup; the model must be tool-capable (qwen2.5, llama3.1, gpt-oss, etc.).
 
 **Paid providers (one operator step):** set `DORA_SECRET_ENCRYPTION_KEY` (Dora's data-at-rest KEK, shared with SMTP + VAPID) so per-user API keys can be stored encrypted at rest (Ollama doesn't need this):
 ```bash
@@ -281,7 +322,7 @@ Auto-detects Apple Silicon vs Intel. Requires Xcode command-line tools. Data per
 The CI and Release workflows ([.github/workflows/ci.yml](.github/workflows/ci.yml), [release.yml](.github/workflows/release.yml)) are checked in but **commented out** for now (owner policy: GitHub free-tier minutes during rapid development — FU-721). When revived, CI runs frontend lint + typecheck + vitest + build and the `dora_api` pytest suite on every push and PR, and **never publishes anything**. Releases are explicit:
 
 1. Land your changes on `main` and confirm CI is green for that SHA.
-2. Update the `## [Unreleased]` block in `CHANGELOG.md` — whatever sits there becomes the GitHub Release body.
+2. Bump `CURRENT_VERSION` in `dora_api/features/help/version_info.py` — the one version source; the web app reads it at build time — and `web_app/package.json` to match (a test pins the pair). Rename the `## [Unreleased]` block in `CHANGELOG.md` to `## [X.Y.Z] - <date>`; its text becomes the GitHub Release body.
 3. Go to **Actions → Release → Run workflow**, type a version like `v0.3.0`, and run it.
 4. The workflow validates the version, builds the Docker image, pushes to `ghcr.io/bentalese/dashydora:vX.Y.Z` **and** `:latest`, then cuts the GitHub Release. Tick **dry_run** to preview without publishing.
 5. After the release lands, move the `[Unreleased]` heading down and start a fresh section.

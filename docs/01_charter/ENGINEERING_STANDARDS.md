@@ -3006,6 +3006,34 @@ exceptions, which still must be commented) · **Source** (where it was establish
   boolean in migration SQL; an unquoted mixed-case table name in `op.execute`.
 - **Established:** 2026-10-30 (autonomous QA round 2). See ADR-099.
 
+### R-103: A write that replaces a collection from a client's copy names the revision it started from
+- **Rule:** an endpoint that rebuilds a whole collection from a snapshot the client loaded earlier (the planner's
+  `PATCH /meal-plans/<id>` entry list is the case) publishes a server-computed `revision` on the read DTO and accepts
+  `expected_revision` on the write; a mismatch is a **409**, never a silent last-write-wins. The revision is a
+  fingerprint of the stored rows (`plan_revision`), not a counter, so every other writer changes it without having to
+  remember to bump anything. The client reloads and re-applies its one edit on top.
+- **Why:** FU-967 — two devices, or one phone left open on the planner since the morning, each resent the week they
+  had loaded; the later save dropped the other's meals and both got 204.
+- **How to comply:** compute the revision in one function shared by the read DTO and the write handler; make
+  `expected_revision` optional so non-snapshot callers still write; on the client, send it from the copy the edit
+  was built from and recover through the edit queue (R-101) rather than a generic error toast.
+- **Violation signal:** a PATCH/PUT that replaces a list wholesale with no version check; a client that rebuilds a
+  write from a cached copy it never refreshes.
+- **Established:** 2026-10-30 (finish-off, step 2). See ADR-100.
+
+### R-104: A session is valid only while its account is — checked once, on every protected route
+- **Rule:** `infrastructure/session_user.resolve_session_user` is the one answer to "is this cookie still good?":
+  the user exists, is active, and its password hasn't changed since the cookie was minted (`pwd_v`). The middleware
+  runs it for every protected `/api/*` route; `/auth/me` and `require_admin` call the same function. A feature never
+  re-implements the check or trusts `session["user_id"]` on its own.
+- **Why:** SEC-4 — the staleness check lived in `/auth/me` alone, so a password change or reset left every other
+  device's cookie working everywhere else, admin routes included.
+- **How to comply:** read the signed-in user through `current_user_id()` / `resolve_session_user`; add any new
+  invalidation reason (e.g. a session generation counter) inside that function only.
+- **Violation signal:** `session.get("user_id")` compared or parsed outside `session_user.py`; a route-level
+  "is this user still active?" check.
+- **Established:** 2026-10-30 (finish-off, step 1 — security). See ADR-101.
+
 ## ADR process (evaluate every task)
 
 At the end of each work unit, ask: **did this task make or rely on a decision that
@@ -6467,3 +6495,30 @@ A non-binding cookbook of solutions to recurring problems. Not rules — just a
 - **Consequences:** `test__migrations__upgrade_head_runs_on_postgres` still needs `DORA_TEST_POSTGRES_URL` (FU-405);
   until CI runs it, the offline emission is the gate. Downgrades of the two convergence migrations are no-ops
   (allow-listed).
+
+### ADR-100: Snapshot writes carry a revision fingerprint; a stale copy gets a 409 (promotes R-103)
+- **Date / task:** 2026-10-30 (finish-off, step 2 — FU-967)
+- **Status:** accepted
+- **Context:** the planner saves a week by resending its whole forward entry list from the device's loaded copy; two
+  devices silently overwrote each other. Per-entry endpoints are the structural fix but change the planner's write
+  contract throughout.
+- **Decision:** the plan DTO carries `revision` (a hash of the week's stored rows); `PATCH` accepts
+  `expected_revision` and 409s on a mismatch; the client reloads the plans and re-runs the queued edit once.
+- **Alternatives considered:** a `version` counter column (rejected: swaps, reconcile, cook finish and templates
+  would each have to bump it); per-entry endpoints now (deferred: a planner unit of its own, still worth doing for
+  FU-878's id churn); `If-Match` headers (rejected: the body field rides the existing pydantic validation).
+- **Consequences:** the fingerprint is recomputed on every plan read (cheap, rows already loaded); callers that omit
+  `expected_revision` keep last-write-wins, which is right for one-shot server-side writers.
+
+### ADR-101: Session validity is one resolver, run by the middleware (promotes R-104)
+- **Date / task:** 2026-10-30 (finish-off, step 1 — SEC-4)
+- **Status:** accepted
+- **Context:** three places parsed the session (`get_me`, `require_admin`, the middleware's bare "is there a
+  user_id?" check) and only `get_me` applied the password-change staleness rule.
+- **Decision:** `resolve_session_user` owns existence, `is_active` and `pwd_v`; the middleware calls it for every
+  protected route (one primary-key read per request) and clears a failing cookie.
+- **Alternatives considered:** a server-side session store with revocation (rejected for now: cookies are
+  client-side and a self-host install has one process); checking only on mutating routes (rejected: reads leak
+  household data too).
+- **Consequences:** every authenticated request costs one `User` lookup; tests that forge a session for a missing
+  user now get 401 everywhere, not only on `/auth/me`.

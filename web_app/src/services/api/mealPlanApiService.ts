@@ -37,6 +37,9 @@ export type UpdateMealPlanCommand = {
     /** Required when `entries` is an empty array. Without it the backend
      *  rejects the wipe so a UI bug can't accidentally nuke a plan. */
     confirm_clear_entries?: boolean;
+    /** FU-967 — the plan's `revision` this edit was built from; the server
+     *  answers 409 when the week has changed since. */
+    expected_revision?: string;
 };
 
 export default class MealPlanApiService {

@@ -159,3 +159,16 @@ def uuid_bind(value) -> bytes | str:
     else:
         _Uuid = UUID(str(value))
     return str(_Uuid) if IS_POSTGRES else _Uuid.bytes
+
+
+def open_registration() -> None:
+    """Switch self-serve registration on for this test (SEC-3: off by default).
+
+    Goes through the admin client (`requests` is rebound to the signed-in
+    admin by the `api` fixture); the per-test DB rollback closes it again.
+    """
+    resp = requests.patch(
+        "http://localhost:5170/api/app-settings",
+        json={"registration_enabled": True},
+    )
+    assert resp.status_code == 200, resp.text

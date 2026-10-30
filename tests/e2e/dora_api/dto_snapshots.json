@@ -35,6 +35,7 @@
       "piper_bundled_voice_dir",
       "product_search_url",
       "public_url",
+      "registration_enabled",
       "scanning_enabled",
       "smtp_from",
       "smtp_host",
@@ -129,6 +130,7 @@
     "keys": [
       "alerts_policy",
       "budget_policy",
+      "build",
       "cooking_policy",
       "features",
       "image_policy",
@@ -170,6 +172,7 @@
       "estimated_cost",
       "meal_plan_id",
       "name",
+      "revision",
       "start_date"
     ]
   },

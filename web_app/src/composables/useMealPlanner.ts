@@ -21,6 +21,7 @@ import { cartStateFor, type Membership } from 'src/models/shoppingList';
 import BudgetApiService, { type BudgetStatus } from 'src/services/api/budgetApiService';
 import type { MealPlanEntryCommand } from 'src/services/api/mealPlanApiService';
 import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+import { NormalisedApiError } from 'src/services/api/axiosHttpClient';
 import { useMealPlanStore } from 'src/stores/mealPlanStore';
 import { useMealPlanTemplateStore } from 'src/stores/mealPlanTemplateStore';
 import { useMealPlanTemplateSetStore } from 'src/stores/mealPlanTemplateSetStore';
@@ -349,10 +350,27 @@ export function useMealPlanner() {
         });
     }
 
+    // FU-967 — every save names the revision of the copy it was built from.
+    // If another device (or a tab left open since this morning) changed the
+    // week in between, the server answers 409 instead of letting this copy
+    // overwrite that edit. A queued edit is then re-applied once on top of the
+    // reloaded week (see `queuePlanMutation`); anything else is told to retry.
+    class PlanChangedElsewhere extends Error {}
+    let replayingQueuedEdit = false;
+
+    function notifyPlanChangedElsewhere() {
+        $q.notify({
+            type: 'warning',
+            message: 'This week was changed on another device.',
+            caption: "It's been reloaded. Try that again.",
+        });
+    }
+
     async function persistEntries(
         planId: string,
         entries: MealPlanEntryCommand[],
     ): Promise<boolean> {
+        const revision = mealPlans.value.find((p) => p.meal_plan_id === planId)?.revision;
         // The planner's edits are explicit, so set the clear flag when an
         // action empties the future-entries list. The backend treats an
         // unflagged [] as a probable bug and refuses.
@@ -361,10 +379,23 @@ export function useMealPlanner() {
                 meal_plan_id: planId,
                 entries: dissolveOrphanCookKeys(entries),
                 ...(entries.length === 0 ? { confirm_clear_entries: true } : {}),
+                ...(revision ? { expected_revision: revision } : {}),
             });
             await refreshAfterMutation();
             return true;
         } catch (err) {
+            if (err instanceof NormalisedApiError && err.status === 409) {
+                try {
+                    await mealPlanStore.getMealPlansAsync();
+                    await refreshAfterMutation();
+                } catch (reloadErr) {
+                    notifyPlanError(reloadErr);
+                    return false;
+                }
+                if (replayingQueuedEdit) throw new PlanChangedElsewhere();
+                notifyPlanChangedElsewhere();
+                return false;
+            }
             notifyPlanError(err);
             return false;
         }
@@ -374,9 +405,31 @@ export function useMealPlanner() {
     // in flight at once both start from the same snapshot and the later write
     // drops the earlier one (rapid ± taps lost a serving). Run them one after
     // another, each building from the plan the previous one refreshed.
+    //
+    // Each step rebuilds from the current plan, which is also what makes a
+    // FU-967 conflict cheap to recover from: reload the week, run the step
+    // again, and the one edit lands on top of the other device's.
     let planMutationChain: Promise<unknown> = Promise.resolve();
     function queuePlanMutation(fn: () => Promise<void>): Promise<void> {
-        const run = planMutationChain.then(fn, fn);
+        const step = async () => {
+            replayingQueuedEdit = true;
+            try {
+                try {
+                    await fn();
+                } catch (err) {
+                    if (!(err instanceof PlanChangedElsewhere)) throw err;
+                    try {
+                        await fn();
+                    } catch (again) {
+                        if (!(again instanceof PlanChangedElsewhere)) throw again;
+                        notifyPlanChangedElsewhere();
+                    }
+                }
+            } finally {
+                replayingQueuedEdit = false;
+            }
+        };
+        const run = planMutationChain.then(step, step);
         planMutationChain = run.catch(() => undefined);
         return run;
     }

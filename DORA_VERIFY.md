@@ -22,19 +22,16 @@ top-to-bottom.
 
 ---
 
+## Security: sign-ups, sessions, reset links (2026-10-30) — origin FU-928
+- [ ] ⚠️ Operator: after the next deploy, confirm the production install's public URL is set (Settings → Email) if you use password-reset mail; without it reset mails are skipped and "Forgot password?" is hidden.
+
+## Release prep: build id + PUID/PGID (2026-10-30) — origin FU-861, FU-964
+- [ ] ⚠️ Operator: `DORA_BUILD_ID=$(git rev-parse --short HEAD) docker compose up -d --build`, then confirm the boot log says "dora_api will run as uid=1000 gid=1000", `docker exec dashy_dora ps -o user,cmd` shows gunicorn not running as root, and the API can still write (upload a recipe photo, take a backup).
+- [ ] Open Settings → About → Technical details on that deploy: Build reads `v0.7.0 · <sha>` with "Quote this when reporting a problem.", and `/api/health` shows the same `build`.
+- [ ] On an existing install whose volumes were written as root, confirm the first boot after this change chowns them and nothing reports a permission error.
+
 ## Autonomous QA round 3, browser-verify owed (2026-10-30)
 Driven by the agent on the seeded backend: 35 journey assertions (cart button, level picker, expiry +7d/clear, log a price, inline rename, favourite, meals pool, print tab, cook mode to finish, shop start/tick/finish, Dora "what's expiring", "/" search, new item + delete, budget save, dark theme), a two-device concurrency run, a fresh-install walk, offline mode, a Pacific/Pago_Pago household vs a Sydney device, a 2000-item pantry. The items below were fixed from a code read and want one look.
-- [ ] Shopping list print (draft with logged prices, and a done list): prices and the total match the app's card; picked lines are ticked; "Set aside to fit the budget" lists deferred lines; under a de-DE household money reads "7,99 €".
-- [ ] Recipe print for Sunday Ragu: sections and numbered steps with hints and timers; Weekend Focaccia prints its step photos; a recipe with an unlinked "Coconut milk" line prints the name.
-- [ ] Meal-plan print for a week with a cook batch: all seven days, "Cook (batch of N)" on the cook day and "Leftovers" after.
-- [ ] Stock CSV opened in Excel: "Crème brûlée" reads correctly; the filename carries today's date before 10 am.
-- [ ] Settings → Admin → Audit log: times match the wall clock (they were UTC shown as local); "1 event" / "N events".
-- [ ] Region set to en-US + America/New_York: the planner's mini calendar is headed OCTOBER, not SEPTEMBER. Region de-DE: Reports read "+200,4 %", the planner reads "Mo Di Mi".
-- [ ] Household timezone set a day behind the device (Pacific/Pago_Pago from Sydney): the dashboard strip's first day reads "Today" (not "Yesterday") and Next to cook's day label agrees with the planner.
-- [ ] Finish a shop that restocks a recipe's missing ingredient, open the cookbook: the recipe reads cookable without a reload. Ask Dora to "mark milk as out" with Stock open behind the chat: the row changes at once.
-- [ ] Dashboard donut → "3 out" with a search already typed on Stock: the list shows only the out items; Back does not re-apply the filter.
-- [ ] Stock search "full cream": only Full Cream Milk, not every "full" and every "cream".
-- [ ] A done list: "Add item" is not offered; the API refuses a line with a clear message.
 - [ ] Weekly deals email on an install with SMTP but no public URL: the job logs a warning and sends nothing; Settings → Email could surface `public_url_configured` (frontend not yet done, FU-969).
 
 ## Autonomous QA round 2, browser-verify owed (2026-10-30)

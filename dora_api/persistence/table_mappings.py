@@ -97,6 +97,7 @@ def configure_mappings(db: SQLAlchemy):
         # AI mode is per-user only — no install-wide master kill-switch.
         # Per-user URL / model / provider / API key live on the User table.
         Column("scanning_enabled", Boolean, nullable=False, server_default=false()),
+        Column("registration_enabled", Boolean, nullable=False, server_default=false()),
         Column("nutrition_rating_scheme", String(32), nullable=False, server_default="none"),
         # buy-verdict oracle. Defaults on because it's pure-personal;
         # admin can turn off from Settings → System.

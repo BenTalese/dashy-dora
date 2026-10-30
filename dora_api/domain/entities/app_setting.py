@@ -82,6 +82,12 @@ class AppSetting(BaseEntity):
     # call 2026-08-12 — "allow users to use AI if they wish"). Per-user
     # URL / model / provider / API key live on User (see entity below).
     scanning_enabled: bool = False
+    # SEC-3 — whether the login page offers "Create account" and
+    # `POST /auth/register` accepts anyone who asks. Off by default: on a
+    # household install the admin creates each account (Users page); an open
+    # door on an install reachable through a reverse proxy let any visitor
+    # sign in to the household's data.
+    registration_enabled: bool = False
     # Owner ask 2026-08-27 — which front-of-pack rating goes on recipes.
     #
     # Started life as `health_star_rating_enabled`, a bool. It became a picker
@@ -315,6 +321,7 @@ class AppSetting(BaseEntity):
 
     class Fields(BaseEntity.Fields):
         SCANNING_ENABLED = "scanning_enabled"
+        REGISTRATION_ENABLED = "registration_enabled"
         NUTRITION_RATING_SCHEME = "nutrition_rating_scheme"
         MONEY_ENABLED = "money_enabled"
         NUTRITION_MODE = "nutrition_mode"

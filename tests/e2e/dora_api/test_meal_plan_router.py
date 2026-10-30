@@ -363,6 +363,52 @@ def test__update_meal_plan__ResendingEntryIds__KeepsThemAndEditsInPlace(api):
     }
 
 
+def test__update_meal_plan__StaleRevision__Is409AndKeepsTheOtherDevicesMeal(api):
+    """FU-967 — two devices load the same week; the first adds a meal, the
+    second saves from its older copy. The second write is refused rather
+    than silently dropping the first device's meal."""
+    _Today = _household_today()
+    _Slot = _slot_names()[0]
+    _RecipeA = _make_recipe("MealPlan Rev A")
+    _Plan = _make_plan(entries=[
+        {"recipe_id": _RecipeA, "scheduled_for": _Today.isoformat(), "slot": _Slot},
+    ])
+    _Loaded = _by_id(_Plan["meal_plan_id"])
+    _Revision = _Loaded["revision"]
+    assert _Revision
+    _Kept = {
+        "meal_plan_entry_id": _Loaded["entries"][0]["meal_plan_entry_id"],
+        "recipe_id": _RecipeA, "scheduled_for": _Today.isoformat(), "slot": _Slot,
+    }
+    _Laptop = _make_recipe("MealPlan Rev Laptop")
+    _Phone = _make_recipe("MealPlan Rev Phone")
+    _Url = f"{MEAL_PLANS}/{_Plan['meal_plan_id']}"
+
+    _First = requests.patch(_Url, json={"expected_revision": _Revision, "entries": [
+        _Kept,
+        {"recipe_id": _Laptop, "scheduled_for": (_Today + timedelta(days=1)).isoformat(), "slot": _Slot},
+    ]})
+    assert _First.status_code == 204, _First.text
+
+    _Second = requests.patch(_Url, json={"expected_revision": _Revision, "entries": [
+        _Kept,
+        {"recipe_id": _Phone, "scheduled_for": (_Today + timedelta(days=2)).isoformat(), "slot": _Slot},
+    ]})
+    assert_problem(_Second, 409)
+
+    _After = _by_id(_Plan["meal_plan_id"])
+    assert {e["recipe_id"] for e in _After["entries"]} == {_RecipeA, _Laptop}
+    assert _After["revision"] != _Revision
+
+
+def test__update_meal_plan__NoExpectedRevision__StillWrites(api):
+    _Plan = _make_plan()
+    _Response = requests.patch(
+        f"{MEAL_PLANS}/{_Plan['meal_plan_id']}", json={"name": "Renamed"},
+    )
+    assert _Response.status_code == 204
+
+
 def test__update_meal_plan__SameEntryIdTwice__SecondRowIsANewEntry(api):
     _Today = _household_today()
     _Slot = _slot_names()[0]

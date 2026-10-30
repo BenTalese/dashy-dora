@@ -363,8 +363,11 @@ def compute_suggestions(
     candidates: List[RecipeSwapCandidate] = []
     if projected_over:
         planned_recipe_ids = {e.recipe_id for e in plan_dto.entries}
+        # A cook-batch day can't be swapped on its own (FU-956), so it is
+        # never offered; its cost still counts toward the week above.
         candidates = rank_recipe_swaps(
-            week_entries, recipes_by_id, cost_by_id, planned_recipe_ids,
+            [e for e in week_entries if e.cook_batch_id is None],
+            recipes_by_id, cost_by_id, planned_recipe_ids,
         )
     total_saved = round(sum(c.saved for c in candidates), 2)
 
@@ -499,6 +502,9 @@ def compute_lighter_alternatives(
     }
     if nutrition_mode(get_or_create_app_setting(repository)) == NUTRITION_MODE_OFF:
         return empty
+    # One day of a cook batch can't take a different recipe (FU-956).
+    if entry.cook_batch_id is not None:
+        return empty
 
     recipes = load_all_recipe_dtos(repository)
     recipes_by_id = {r.recipe_id: r for r in recipes}
@@ -571,6 +577,16 @@ def apply_swap(meal_plan_id: UUID):
         return not_found(MealPlanEntry.__name__, request.entry_id)
     if entry.consumed_at is not None:
         return business_rule_violation("That meal has already been cooked, so it can't be swapped.")
+    # FU-956 (owner, 2026-10-30): a cook batch is one recipe cooked once and
+    # eaten over several days, so changing one day's recipe would leave the
+    # batch mixing recipes (the rule `validate_cook_groups` enforces on every
+    # plan save) and its `CookBatch.recipe_id` pointing at the old one.
+    if entry.cook_batch_id is not None:
+        return business_rule_violation(
+            "That meal is one day of a cook batch, so it can't be swapped on "
+            "its own. Take it out of the batch first, or change the whole cook "
+            "in the planner."
+        )
 
     from_recipe_id = entry.recipe.id if entry.recipe else None
     if (

@@ -22,6 +22,8 @@ _LOGGER = logging.getLogger(__name__)
 @dataclass(frozen=True, slots=True)
 class AppSettingsDto:
     scanning_enabled: bool
+    # SEC-3 — self-serve "Create account" on the login page.
+    registration_enabled: bool
     nutrition_rating_scheme: str
     # buy-verdict oracle toggle.
     # C-cross Chunk 1 — install-wide feature flags (proposal §2.6).
@@ -96,6 +98,7 @@ class AppSettingsDto:
 def _to_dto(setting) -> AppSettingsDto:  # noqa: ANN001 — duck-typed AppSetting
     return AppSettingsDto(
         scanning_enabled=bool(setting.scanning_enabled),
+        registration_enabled=bool(setting.registration_enabled),
         nutrition_rating_scheme=str(
             setting.nutrition_rating_scheme
             or RATING_SCHEME_NONE),

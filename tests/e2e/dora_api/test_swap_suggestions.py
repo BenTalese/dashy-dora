@@ -131,6 +131,35 @@ def test__apply_swap__stale_expected_from_recipe__conflicts(api):
         requests.delete(f"{MEAL_PLANS}/{plan_id}")
 
 
+def test__apply_swap__CookBatchDay__Refused(api):
+    """FU-956 (owner, 2026-10-30) — one day of a cook batch can't take a
+    different recipe; the batch would mix recipes."""
+    recipe_a, recipe_b = _two_recipe_ids()
+    _set_money(True)
+    today = _today()
+    created = requests.post(MEAL_PLANS, json={
+        "start_date": today.isoformat(),
+        "entries": [
+            {"recipe_id": recipe_a, "scheduled_for": today.isoformat(),
+             "servings": 2, "slot": "Dinner", "cook_key": "b"},
+            {"recipe_id": recipe_a, "scheduled_for": date.fromordinal(today.toordinal() + 1).isoformat(),
+             "servings": 2, "slot": "Dinner", "cook_key": "b"},
+        ],
+    })
+    assert created.status_code in (200, 201), created.text
+    plan_id = created.json()["meal_plan_id"]
+    try:
+        entry = _plan_entries(plan_id)[0]
+        assert entry["cook_batch_id"] is not None
+        resp = requests.post(f"{MEAL_PLANS}/{plan_id}/apply-swap", json={
+            "kind": "recipe", "entry_id": entry["meal_plan_entry_id"], "to_recipe_id": recipe_b,
+        })
+        assert resp.status_code == 422, resp.text
+        assert {e["recipe_id"] for e in _plan_entries(plan_id)} == {recipe_a}
+    finally:
+        requests.delete(f"{MEAL_PLANS}/{plan_id}")
+
+
 def test__apply_swap__money_off__rejected(api):
     recipe_a, recipe_b = _two_recipe_ids()
     _set_money(True)

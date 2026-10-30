@@ -10,6 +10,111 @@ resolutions go at the **top**.
 
 ---
 
+## [RESOLVED] FU-861 — Technical details → Build has no real build number
+- **Raised:** 2026-09-03 (owner feedback batch — settings/About)
+- **Type:** follow-up
+- **What:** About → Technical details renders `buildLabel` under a caption that
+  admits *"Versioning isn't tagged in this fork yet."* The owner asked for a real
+  build number there — the point of the row is that a bug report can name the
+  exact artifact it came from, and a placeholder can't do that.
+- **Why deferred:** it isn't a UI change. It needs a decision about where the
+  version comes from (a git tag/describe, the package version, a CI-stamped
+  build id) and a way to get it into both the SPA bundle and the Flask API so the
+  two can't disagree — which touches the build/packaging pipeline, not this page.
+- **Recommended resolution:** later during Phase 4 (open-source release), where
+  tagging a version is on the critical path anyway.
+- **State:** 2026-10-30 — `version_info.CURRENT_VERSION` is the one source; `quasar.config.ts` reads it at build time with `DORA_BUILD_ID` (or the checkout's git short sha); `/api/health.build`; About shows `vX · sha` and flags a server/bundle mismatch; package.json pinned to the same version by `test__spa_package_version__matches_current_version`. Docker check in DORA_VERIFY "Release prep".
+
+## [RESOLVED] FU-964 — Security items from the 2026-10-30 review that need an owner call (beyond FU-928's SEC-2/3/4)
+- **Raised:** 2026-10-30 (autonomous QA round 2, defensive security review)
+- **Type:** finding (needs a call)
+- **What:** fixed in this round: per-username login throttle, login timing, change-password rate limit, logo
+  decompression bomb, TTS bounds, push-subscription takeover + https-only, CORS `*` refused, CSV formula guard,
+  client-log context cap, LIKE escaping, `web_url` scheme check, provider base-URL scheme check, compose
+  `DORA_SECURE_COOKIES` default, nginx headers. Still open and each a product/deploy decision: **(1)** `PATCH /auth/me`
+  changes the email without the current password and marks it verified (a stolen session becomes a permanent takeover
+  via forgot-password) — require `current_password`, don't auto-verify; **(2)** bootstrap-admin is count-then-insert, so
+  two parallel first POSTs can both become admin, and `ADMIN_BOOTSTRAP_EMAIL` is guessable — a boot-printed one-time
+  setup token; **(3)** `/api/health` tells anonymous callers the budget, headcount, feature flags and schema version —
+  keep only `status` public; **(4)** an ingestion key can delete any product, not only ones it ingested; **(5)**
+  login/register are CSRF-exempt (login CSRF) — an Origin/Referer check closes it but the Capacitor shell sends
+  `capacitor://`; **(6)** the container runs as root, `PUID`/`PGID` unused; **(7)** push endpoints must be https now but
+  may still name a private host; **(8)** compose publishes `5170:5170` on every interface — with
+  `DORA_TRUSTED_PROXY_HOPS>0` a direct client can forge `X-Forwarded-For` (comment added; `127.0.0.1:5170` is the fix
+  but changes the owner's deploy). Also: a non-admin member can `PATCH /budget/settings` (household-shared per R-038 —
+  confirm that is intended).
+- **Why deferred:** each changes a contract the owner has to stand behind (auth flow, deploy shape, companion scope).
+- **Recommended resolution:** owner, alongside FU-928; (1) and (3) are an hour each once decided.
+- **Owner decision (2026-10-30):** a self-hosted household install sits behind a home network or a reverse
+  proxy with a handful of users, so **(1), (2), (3), (4), (5) and (7) are accepted risk** — not building them.
+  **(6)** (run as `PUID`/`PGID`, not root) is kept as self-host polish for release prep (step 4 of the finish-off
+  plan); **(8)** gets a line in the README's deploy/security-posture section. Close this FU when (6) and (8) land.
+- **State:** 2026-10-30 — owner: (1)(2)(3)(4)(5)(7) accepted risk for a self-hosted household install. (6) built: `startup.sh` drops the API to PUID:PGID via setpriv after chowning the data/cache/log dirs. (8) documented in the README "Security posture" section. Operator check in DORA_VERIFY "Release prep".
+
+## [RESOLVED] FU-967 — Two devices editing the same planner week: the whole-plan PATCH silently drops the other device's change
+- **Raised:** 2026-10-30 (autonomous QA round 3, two-device concurrency run)
+- **Type:** finding (needs a design call)
+- **What:** `PATCH /meal-plans/<id>` replaces the entry list wholesale (FU-878). Two devices that each read the week,
+  add one meal and save at the same moment both get 204 and the week ends with **one** meal — the later write's
+  snapshot wins, with no error on either device (proven live: 2 adds → 1 entry). The same shape applies to any
+  two-device edit of one week (servings, cook day, template apply vs a manual add). Shopping lists are per-line and
+  survived the same test (two devices ticking different lines kept both). Options: (a) optimistic concurrency —
+  the plan DTO carries `updated_at`/`version`, the PATCH sends it back as `If-Match`, a mismatch is a 409 the SPA
+  resolves by refetching and replaying the one change; (b) per-entry endpoints (add/remove/patch one entry) so the
+  planner stops rebuilding the list client-side (also closes FU-878's id churn and FU-953's queue coverage).
+- **Why deferred:** both change the planner's write contract; (b) is the structural fix the finalisation review
+  wanted but is a unit of its own.
+- **Recommended resolution:** owner picks (a) as a cheap guard now, (b) as the real fix later during the next
+  planner unit.
+- **State:** 2026-10-30 — owner: fix now. `plan_revision` fingerprint on the plan DTO, `expected_revision` on PATCH → 409; the planner reloads and replays the queued edit once (R-103 / ADR-100). Per-entry endpoints remain a possible later planner unit (FU-878).
+
+## [RESOLVED] FU-966 — Draft list counts disagree between the rail (7) and the overview card (6) while a line is set aside by budget
+- **Raised:** 2026-10-30 (autonomous QA round 3, journey screenshots)
+- **Type:** finding (same family as FU-958)
+- **What:** after the 2026-10-29 fix the overview card counts only the active lines the shop will show, while the
+  rail's badge and the "N items" summary come from the server's `line_count`, which includes `deferred_by_budget`
+  lines — so the same list reads "6" on the card and "7" in the rail. Whichever way FU-958 is decided, one count
+  rule has to live on the server and feed both (R-003 / R-041).
+- **Why deferred:** depends on the FU-958 decision.
+- **Recommended resolution:** with FU-958.
+- **State:** 2026-10-30 — one rule: lines set aside by the budget are not counted. The rail summary query now skips `deferred_by_budget`, matching the detail `totals.line_count` the card reflects. Test `test__rail_count__SetAsideLine__NotCounted`.
+
+## [RESOLVED] FU-958 — Finish dialog counts deferred lines the shopper never sees; the server's leftover endpoints act on them too
+- **Raised:** 2026-10-29 (autonomous QA sweep)
+- **Type:** finding (needs a call)
+- **What:** `ShoppingListDetail.untickedCount` counts every unticked line including `deferred_by_budget` ones, so after
+  ticking everything the run face shows, the finish dialog still says "N items aren't ticked". Making it count from
+  `baseLines` alone would be wrong, though: `move-unticked-to` and `discard-unticked` (`list_actions.py`) select by
+  `is_ticked == False` only, so they move / discard deferred lines as well, and the dialog's count would then under-state
+  what the server is about to do.
+- **Why deferred:** a product decision — are trimmed-off lines "leftovers" to carry to the next list (then the dialog
+  should *say* so), or are they outside the shop (then the two endpoints should skip them and the count comes from
+  `baseLines`)?
+- **Recommended resolution:** owner call; then one small unit across the page and `list_actions.py`.
+- **State:** 2026-10-30 — owner: set-aside lines are leftovers. Move/discard keep acting on them; a moved line arrives as an ordinary line (`deferred_by_budget` cleared); the finish dialog says "including N set aside for the budget".
+
+## [RESOLVED] FU-957 — Renaming a meal slot leaves entries and recipes under the old name
+- **Raised:** 2026-10-29 (autonomous QA sweep)
+- **Type:** finding (needs a call)
+- **What:** `manage_meal_slots.py` rename changes `MealSlot.name` only; `MealPlanEntry.slot` and `Recipe.time_of_day`
+  are free-text copies. Renaming "Dinner" to "Tea" shows Tea with `usage_count` 0 and every existing dinner entry
+  carries an off-vocabulary label, so it no longer lands in a known planner row. Deletion is documented as non-cascading;
+  rename is not documented either way.
+- **Why deferred:** may be intended (a rename as a "new slot"); if not, it is one `UPDATE … WHERE slot = :old` on each of
+  the two tables inside the same transaction.
+- **Recommended resolution:** owner call; if cascade, pair with a pinning test in `test_meal_slot_router.py`.
+- **State:** 2026-10-30 — owner default accepted: a rename cascades to `MealPlanEntry.slot`, `MealPlanTemplateEntry.slot` and `Recipe.time_of_day` in the same transaction (`_relabel_slot_uses`); delete stays non-cascading. Test `test_rename_carries_planned_meals_with_it`.
+
+## [RESOLVED] FU-956 — Swapping one day's recipe inside a cook batch breaks the batch invariant
+- **Raised:** 2026-10-29 (autonomous QA sweep)
+- **Type:** finding (needs a call)
+- **What:** `swap_suggestions.apply_swap` accepts an entry that carries a `cook_batch_id` and changes its recipe only,
+  so the batch mixes recipes (the single-recipe rule `validate_cook_groups` enforces on PATCH) and `CookBatch.recipe_id`
+  goes stale.
+- **Why deferred:** the right behaviour is a design choice — refuse the swap on a batch member, or swap every member.
+- **Recommended resolution:** owner call; small either way.
+- **State:** 2026-10-30 — owner default accepted: refuse. `apply_swap` 422s on a cook-batch day with an explanation; budget suggestions and lighter alternatives no longer offer batch days. Test `test__apply_swap__CookBatchDay__Refused`.
+
 ## [RESOLVED] FU-929 — Finalisation Stage 1: 729 review findings across 20 chunks await Stage-2 execution (umbrella)
 - **Raised:** 2026-10-23 (finalisation overnight run; register at `docs/05_investigations/FINALISATION_REVIEW.md`, per-chunk files under `docs/05_investigations/finalisation/`)
 - **Type:** finding (umbrella — same shape as FU-928)

@@ -6,7 +6,7 @@ Endpoints:
   GET    /api/meal-slots          — list all (with usage count), ordered
   POST   /api/meal-slots          — create (case-insensitive dup-check)
   PATCH  /api/meal-slots/reorder  — bulk set sequences
-  PATCH  /api/meal-slots/<id>     — rename
+  PATCH  /api/meal-slots/<id>     — rename (cascades to the label copies, FU-957)
   DELETE /api/meal-slots/<id>     — delete (NO cascade: MealPlanEntry.slot /
                                     Recipe.time_of_day keep their label string)
 """
@@ -16,7 +16,7 @@ from typing import List
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 
 from dora_api.app import db
 from dora_api.domain.entities.meal_plan_entry import MealPlanEntry
@@ -203,9 +203,33 @@ class UpdateMealSlotHandler:
         for s in self.repository.get(MealSlot).all():
             if s.id != meal_slot_id and s.name.strip().lower() == normalised:
                 return UpdateMealSlotResponse(duplicate=True)
+        previous = slot.name
         slot.name = target
+        if previous != target:
+            _relabel_slot_uses(previous, target)
         self.repository.save_changes()
         return UpdateMealSlotResponse()
+
+
+def _relabel_slot_uses(previous: str, target: str) -> None:
+    """A rename carries the slot's meals with it (owner, 2026-10-30, FU-957).
+
+    Slots aren't FKs: planned meals, template meals and a recipe's usual time
+    of day each hold a copy of the label. Renaming "Dinner" to "Tea" without
+    these left every dinner on a label the planner no longer has a row for.
+    Delete stays non-cascading — that one is about keeping history, not
+    following a new name. Same transaction as the rename (the caller saves).
+    R-005 carve-out: a bulk UPDATE the generic repository has no port for.
+    """
+    tables = db.metadata.tables
+    for column in (
+        tables["MealPlanEntry"].c.slot,
+        tables["MealPlanTemplateEntry"].c.slot,
+        tables["Recipe"].c.time_of_day,
+    ):
+        db.session.execute(
+            update(column.table).where(column == previous).values({column.name: target})
+        )
 
 
 @MEAL_SLOT_ROUTER.route("/<uuid:meal_slot_id>", methods=["PATCH"])

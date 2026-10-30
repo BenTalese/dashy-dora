@@ -943,7 +943,7 @@ export const HELP_TOPICS: HelpTopic[] = [
             {
                 slug: 'sign-in-register',
                 title: 'Signing in and creating an account',
-                summary: 'A username and password. Register creates an account with a password of 8 or more characters. New accounts are never admins.',
+                summary: 'A username and password. An admin adds new people on Settings → Users. If the admin has switched on sign-ups there, the sign-in page also offers "Need an account?". Passwords are 8 or more characters, and new accounts are never admins.',
                 note: 'A failed sign-in never says which half was wrong.',
             },
             {

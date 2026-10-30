@@ -16,6 +16,7 @@ from dora_api.domain.entities.recipe_ingredient import RecipeIngredient
 from dora_api.domain.entities.stock_item import StockItem
 from dora_api.domain.recipe_cookability import missing_count_for, unlinked_count_for
 from dora_api.features.app_settings.access import get_or_create_app_setting, money_features_enabled
+from dora_api.features.meal_plans.plan_revision import plan_revision
 from dora_api.features.meal_plans.planned_meals import upcoming_planned_meals
 from dora_api.features.nutrition.recipe_rollup import (
     effective_kcal_per_serving,
@@ -222,6 +223,9 @@ class MealPlanDto:
     estimated_cost: float | None = None
     cost_counted_meals: int = 0
     cost_total_meals: int = 0
+    # FU-967 — the week as it stands; a save sends it back as
+    # `expected_revision` and is refused if another device changed the week.
+    revision: str = ""
 
     @classmethod
     def from_entity(cls, plan: MealPlan) -> 'MealPlanDto':
@@ -231,6 +235,7 @@ class MealPlanDto:
             name = plan.name,
             start_date = plan.start_date,
             entries = _apply_cook_batch_view(entries),
+            revision = plan_revision(plan),
         )
 
 

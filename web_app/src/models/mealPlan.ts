@@ -110,6 +110,10 @@ export type MealPlan = {
     estimated_cost: number | null;
     cost_counted_meals: number;
     cost_total_meals: number;
+    /** FU-967 — fingerprint of the week as the server holds it. Sent back as
+     *  `expected_revision` on a save so a stale copy can't overwrite another
+     *  device's edit. */
+    revision: string;
 };
 
 export type MealPlanIngredient = {

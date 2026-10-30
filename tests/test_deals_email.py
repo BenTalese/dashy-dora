@@ -232,8 +232,9 @@ def test__public_url_ready__needs_a_public_url_outside_a_request(monkeypatch):
     monkeypatch.setattr(job, "resolved_operational_config", lambda: SimpleNamespace(public_url=""))
     with app.app_context():
         assert job.public_url_ready() is False
+    # SEC-2: a request's Origin header no longer stands in for the URL.
     with app.test_request_context(headers={"Origin": "https://dora.example"}):
-        assert job.public_url_ready() is True
+        assert job.public_url_ready() is False
     monkeypatch.setattr(
         job, "resolved_operational_config",
         lambda: SimpleNamespace(public_url="https://dora.example"),

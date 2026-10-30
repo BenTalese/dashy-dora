@@ -9,8 +9,8 @@ All five new auth endpoints reuse this module:
   - Public URL resolution so verification / reset links work for whatever
     deployment surface is in use — PWA on https://, a self-hosted desktop
     Electron app on file://-loaded code, or a mobile shell pointing at
-    https://. Resolved from `AppSetting.public_url` with request-derived
-    fallbacks (see `public_base_url`).
+    https://. Resolved from `AppSetting.public_url` only — never from
+    request headers (SEC-2; see `public_base_url`).
 
 Tokens live in a single `AuthToken` table keyed by purpose, hashed at
 rest (SHA-256). The raw token only appears in the outbound email. Token
@@ -256,32 +256,39 @@ def revoke_tokens_for_user(user_id: UUID, purpose: str) -> None:
 
 # ── Public URL resolution ──────────────────────────────────────────────
 
-def public_base_url() -> str:
-    """Where the SPA lives on the public internet. Used to build the
-    URL embedded in verify-email / reset-password emails.
+_DEV_PUBLIC_URL = "http://localhost:5174"
 
-    Resolution order:
-      1. `AppSetting.public_url` (edited from Settings → Admin → System).
-      2. Origin header on the current request (the SPA POSTing to the
-         API is the most reliable dev fallback).
-      3. http://localhost:5174 (Quasar's default dev port).
-    """
+
+def configured_public_url() -> str:
+    """`AppSetting.public_url` (Settings → Email), or "" when unset."""
     try:
-        from dora_api.features.app_settings.operational_config import \
-            resolved_operational_config
+        from dora_api.features.app_settings.operational_config import             resolved_operational_config
         explicit = resolved_operational_config().public_url
     except Exception:
         explicit = ""
-    if explicit:
-        return explicit.rstrip("/")
-    try:
-        origin = request.headers.get("Origin")
-        if origin:
-            return origin.rstrip("/")
-    except RuntimeError:
-        # Outside a request context (e.g. scheduler) — fall through.
-        pass
-    return "http://localhost:5174"
+    return (explicit or "").strip().rstrip("/")
+
+
+def public_base_url() -> str:
+    """Where the SPA lives. Used to build the URL embedded in verify-email /
+    reset-password emails and every other e-mailed link.
+
+    The configured public URL, else Quasar's dev address. Never a request
+    header (SEC-2): the old `Origin` fallback let anyone who could reach the
+    API ask for a reset link to someone else's account and have the real
+    token mailed inside a link to their own host. `Host` is no better — both
+    are whatever the caller sends. A production install without a public URL
+    therefore can't mail links at all (`can_mail_links`).
+    """
+    return configured_public_url() or _DEV_PUBLIC_URL
+
+
+def can_mail_links() -> bool:
+    """Whether a mail built now carries links that go somewhere real: a
+    configured public URL, or a development / test run where the localhost
+    default is the right answer."""
+    from dora_api.infrastructure.profile import is_production
+    return bool(configured_public_url()) or not is_production()
 
 
 def spa_deep_link(route_path: str) -> str:
@@ -441,6 +448,20 @@ def try_send(send_fn, *args, **kwargs) -> None:
         _LOGGER.warning("auth email send failed: %s", exc)
 
 
+def try_send_link_mail(send_fn, *args, **kwargs) -> None:
+    """`try_send` for a mail whose point is a link (verify, reset). On a
+    production install with no public URL the link could only point at
+    localhost, so the mail is skipped with a warning naming the setting;
+    the caller's response is unchanged, so this reveals nothing either."""
+    if not can_mail_links():
+        _LOGGER.warning(
+            "auth email not sent: set the public URL (Settings → Email) so "
+            "Dora can put a working link in it"
+        )
+        return
+    try_send(send_fn, *args, **kwargs)
+
+
 # Re-export so callers don't have to know the underlying entity layout.
 __all__ = [
     "MIN_PASSWORD_LENGTH", "PASSWORD_RULES_DOC", "validate_password",
@@ -449,7 +470,7 @@ __all__ = [
     "VERIFY_EMAIL_TTL", "RESET_PASSWORD_TTL",
     "issue_token", "find_active_token", "consume_token",
     "revoke_tokens_for_user",
-    "public_base_url", "spa_deep_link", "build_verify_url", "build_reset_url",
+    "public_base_url", "configured_public_url", "can_mail_links", "spa_deep_link", "build_verify_url", "build_reset_url",
     "rate_limit", "rate_limit_remaining_seconds", "rate_limit_reset",
-    "try_send",
+    "try_send", "try_send_link_mail",
 ]

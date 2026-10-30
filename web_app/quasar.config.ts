@@ -2,6 +2,34 @@
 // https://v2.quasar.dev/quasar-cli-vite/quasar-config-file
 
 import { defineConfig } from '#q-app/wrappers';
+import { execSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+// FU-861 — one version for the bundle and the API: read it from the Python
+// constant rather than keeping a second copy here. The build runs from
+// `web_app/` (npm scripts and the Dockerfile's WORKDIR alike).
+function doraVersion(): string {
+    const source = readFileSync(
+        resolve(process.cwd(), '../dora_api/features/help/version_info.py'), 'utf8',
+    );
+    const match = /^CURRENT_VERSION\s*=\s*"([^"]+)"/m.exec(source);
+    if (!match?.[1]) throw new Error('CURRENT_VERSION not found in version_info.py');
+    return match[1];
+}
+
+// The exact artifact: `DORA_BUILD_ID` when the image/packaging build passes
+// one (no `.git` in a Docker context), else this checkout's short sha.
+function doraBuildId(): string {
+    const stamped = (process.env.DORA_BUILD_ID ?? '').trim();
+    if (stamped) return stamped;
+    try {
+        return execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] })
+            .toString().trim();
+    } catch {
+        return '';
+    }
+}
 
 // `defineConfig` is over-strict about pwa.extendManifestJson typing —
 // our generic `Record<string, unknown>` callback signature isn't
@@ -121,7 +149,10 @@ export default defineConfig((ctx): any => {
 
             // publicPath: '/',
             // analyze: true,
-            // env: {},
+            env: {
+                DORA_VERSION: doraVersion(),
+                DORA_BUILD_ID: doraBuildId(),
+            },
             // rawDefine: {}
             // ignorePublicFolder: true,
             // minify: false,

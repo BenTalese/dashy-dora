@@ -77,7 +77,10 @@
     const reportHref = computed(() =>
         supportHref(channel.value, {
             subject: `[Dora] Bug, v${versionInfo.value?.current_version ?? 'unknown'}`,
-            body: `\n\n---\nDora ${versionInfo.value?.current_version ?? 'unknown'} · ${route.path}`,
+            // FU-861 — the bundle's build id names the exact artifact.
+            body: `\n\n---\nDora ${versionInfo.value?.current_version ?? 'unknown'}${
+                process.env.DORA_BUILD_ID ? ` (${process.env.DORA_BUILD_ID})` : ''
+            } · ${route.path}`,
         }),
     );
 

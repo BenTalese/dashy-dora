@@ -43,6 +43,7 @@ import requests
 
 from dora_api.app import app
 from dora_api.infrastructure.middleware import PUBLIC_ENDPOINTS
+from tests.support import open_registration
 
 BASE = "http://localhost:5170"
 _REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -234,6 +235,7 @@ def _register_non_admin(session: requests.Session) -> None:
             if key[0] in ("auth.register", "auth.login"):
                 del auth_helpers._buckets[key]
 
+    open_registration()
     username = f"sweep-nonadmin-{uuid.uuid4().hex[:8]}"
     response = session.post(f"{BASE}/api/auth/register", json={
         "username": username,

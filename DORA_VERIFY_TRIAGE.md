@@ -145,6 +145,17 @@ device packs for hardware items.
 
 ---
 
+## Verified live — finish-off walk A: security, planner/list decisions, QA round 3 (2026-10-30)
+Seeded backend on 127.0.0.1:5181 + scratch Playwright (Chrome). Deleted from DORA_VERIFY on pass:
+- Sign-in page signed out shows no "Need an account?"; capabilities `registration_enabled:false`.
+- Users → Sign-ups on → button appears, `walker` registered and landed on `#/welcome`; off again → gone.
+- Two contexts, password changed on one → the other's next nav went to `#/login?redirect=%2Fcookbook`; the changer stayed in.
+- Two devices on one week: B got PATCH 409 → 204 and both meals are on Sunday (API + screen).
+- Finish with a set-aside line: "6 items aren't ticked, including 1 set aside for the budget."; moved lines `deferred_by_budget=false`.
+- Slot Snack → Nibbles: entry relabelled, planner row "Nibbles / Weekend Focaccia".
+- QA r3: shopping-list print totals match cards (incl. de-DE 61,97 €); recipe print sections/steps/tips/timers/5 step photos/"Coconut milk"; meal-plan print 7 days + "Cook (batch of 3)" + Leftovers; CSV BOM + "Crème brûlée" + household-date filename (Pago Pago); audit log household-zone times + "(1 event)"; en-US/NY "OCTOBER 2026", de-DE "MO DI MI" + "+200,4 %"; Pago Pago "Today" + Next to cook agrees; cookbook cookable after restock without reload; donut → Out filter clears the typed search; "full cream" → 1 item; done list Add item disabled + 422 on POST lines and bulk-add.
+Left in DORA_VERIFY: production public-URL check and deals mail (operator); "mark milk as out" needs an AI provider.
+
 ## Verified live — Reports chunk 3, the restructure (2026-09-02)
 
 Driven on the dense seed at :5171 (throwaway backend + built SPA + a scratchpad

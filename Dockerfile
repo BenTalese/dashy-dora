@@ -68,6 +68,13 @@ RUN python packaging/fetch_default_voice.py \
 # install prompt or offline cache that FU-336 added — the mode flip never
 # reached the Dockerfile (finalisation 19-R1). The `test -f` lines make the
 # image fail to build, loudly, if that ever regresses.
+#
+# FU-861 — the build id (git short sha) is passed in, because `.git` isn't in
+# the build context (see compose.yml `args`). It is stamped into the SPA bundle
+# here and kept as a runtime env var, so About and `/api/health` name the same
+# build. Empty is fine: About then says it's a local build.
+ARG DORA_BUILD_ID=""
+ENV DORA_BUILD_ID=${DORA_BUILD_ID}
 WORKDIR /app/web_app
 RUN npm run build \
     && test -f dist/spa/sw.js \

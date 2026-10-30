@@ -32,6 +32,7 @@ from dora_api.features.routers import AUTH_ROUTER
 from dora_api.infrastructure.api_response import (
     business_rule_violation,
     conflict,
+    forbidden,
     ok,
     validation_failed,
 )
@@ -39,8 +40,9 @@ from dora_api.infrastructure.audit import emit as audit_emit
 from dora_api.infrastructure.auth_helpers import (
     VERIFY_EMAIL_TTL, build_verify_url, hash_password, is_valid_email,
     issue_token, normalise_email, rate_limit, rate_limit_remaining_seconds,
-    try_send, validate_password,
+    try_send_link_mail, validate_password,
 )
+from dora_api.features.app_settings.access import get_or_create_app_setting
 from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.email_sender import render_template, send_email
 from dora_api.infrastructure.utils import get_request_body
@@ -188,6 +190,8 @@ class RegisterUserResponse:
     # the handler level so a direct API caller is told to use the
     # bootstrap endpoint instead.
     bootstrap_required: bool = False
+    # SEC-3 — the install has self-serve registration switched off.
+    registration_closed: bool = False
     verify_token: str | None = None
     verify_user_email: str | None = None
 
@@ -202,6 +206,10 @@ class RegisterUserHandler:
         # not /register.
         if self.repository.get(User).count() == 0:
             return RegisterUserResponse(bootstrap_required=True)
+        # SEC-3: closed unless the admin has opened it. Checked after the
+        # bootstrap branch so a fresh install still points at /setup.
+        if not get_or_create_app_setting(self.repository).registration_enabled:
+            return RegisterUserResponse(registration_closed=True)
 
         username_field = EntityField(User, User.Fields.USERNAME)
         if self.repository.get(User).one(username_field.eq(request.username)):
@@ -283,6 +291,12 @@ def register_user():
             "This installation has no admin account yet. "
             "POST to /api/auth/bootstrap-admin to create the first admin.",
         )
+    if response.registration_closed:
+        _LOGGER.warning("Registration rejected — self-serve registration is off")
+        return forbidden(
+            "This Dora doesn't take new sign-ups. Ask whoever runs it to "
+            "create an account for you."
+        )
     if response.username_taken:
         _LOGGER.warning("Registration rejected — username taken: %s", request_body.username)
         return business_rule_violation(f"Username '{request_body.username}' is already taken.")
@@ -298,7 +312,7 @@ def register_user():
 
     # Fire the verification email (best effort).
     if response.verify_token and response.verify_user_email:
-        try_send(
+        try_send_link_mail(
             send_email,
             to=response.verify_user_email,
             subject="Verify your Dashy Dora account",

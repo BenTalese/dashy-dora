@@ -117,6 +117,32 @@ def test_create_rename_reorder_delete_roundtrip():
     assert "Late Brunch" not in {s["name"] for s in _list()}
 
 
+def test_rename_carries_planned_meals_with_it():
+    """FU-957 (owner, 2026-10-30) — renaming "Elevenses" to "Morning tea"
+    moves the meals planned under it, rather than stranding them on a label
+    the planner no longer has a row for."""
+    slot_id = _create("Elevenses")
+    recipe_id = _a_recipe_id()
+    resp = requests.post(MEAL_PLANS, json={
+        "name": "Rename-cascade plan",
+        "start_date": _future_iso(),
+        "entries": [
+            {"recipe_id": recipe_id, "scheduled_for": _future_iso(), "servings": 1, "slot": "Elevenses"},
+        ],
+    })
+    assert resp.status_code == 201, resp.text
+    plan_id = resp.json()["meal_plan_id"]
+    try:
+        rename = requests.patch(f"{MEAL_SLOTS}/{slot_id}", json={"name": "Morning tea"})
+        assert rename.status_code == 200, rename.text
+        assert [e["slot"] for e in _plan_from_list(plan_id)["entries"]] == ["Morning tea"]
+        counts = {s["name"]: s["usage_count"] for s in _list()}
+        assert counts["Morning tea"] == 1
+    finally:
+        requests.delete(f"{MEAL_PLANS}/{plan_id}")
+        _delete(slot_id)
+
+
 def test_create_rejects_case_insensitive_duplicate():
     resp = requests.post(MEAL_SLOTS, json={"name": "dinner"})
     assert resp.status_code == 422, resp.text

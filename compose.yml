@@ -34,6 +34,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      # FU-861 — names the exact build on About and /api/health:
+      #   DORA_BUILD_ID=$(git rev-parse --short HEAD) docker compose build
+      args:
+        DORA_BUILD_ID: ${DORA_BUILD_ID:-}
     restart: always
 
     # ── Pass the operator's whole .env through ────────────────────────

@@ -345,3 +345,50 @@ def test__update_line__UnknownForeignKeyId__IsNotFound(api, field, entity):
     resp = requests.patch(f"{LISTS}/{list_id}/lines/{line_id}", json={field: missing})
 
     assert_problem(resp, 404, detail=f"{entity} with the ID '{missing}' was not found.")
+
+
+def _defer(line_id: str) -> None:
+    """Mark one line as set aside by the budget, as trim-to-budget would."""
+    from sqlalchemy import text
+
+    from dora_api.app import app, db
+    from tests.support import uuid_bind
+
+    with app.app_context():
+        db.session.execute(
+            text('UPDATE "ShoppingListLine" SET deferred_by_budget = :t WHERE id = :id'),
+            {"t": True, "id": uuid_bind(line_id)},
+        )
+        db.session.commit()
+
+
+def test__rail_count__SetAsideLine__NotCounted(api):
+    """FU-966 — the rail's count and the list's own totals use one rule:
+    lines set aside by the budget aren't part of this shop."""
+    list_id = _make_draft()
+    assert _add_line(list_id, product_id=_make_product()).status_code in (200, 201)
+    assert _add_line(list_id, product_id=_make_product()).status_code in (200, 201)
+    _defer(_lines(list_id)[0]["line_id"])
+
+    summary = next(
+        s for s in requests.get(LISTS).json()
+        if s["shopping_list_id"] == list_id
+    )
+    detail = requests.get(f"{LISTS}/{list_id}").json()
+    assert summary["line_count"] == 1
+    assert detail["totals"]["line_count"] == 1
+
+
+def test__move_unticked__SetAsideLine__ArrivesAsAnOrdinaryLine(api):
+    """FU-958 (owner, 2026-10-30) — set-aside lines are leftovers: they move
+    with the rest and land on the next list as something to buy."""
+    source, target = _make_draft(), _make_draft()
+    assert _add_line(source, product_id=_make_product()).status_code in (200, 201)
+    _defer(_lines(source)[0]["line_id"])
+
+    resp = requests.post(f"{LISTS}/{source}/move-unticked-to/{target}")
+
+    assert resp.status_code == 200, resp.text
+    moved = _lines(target)
+    assert len(moved) == 1
+    assert moved[0]["deferred_by_budget"] is False

@@ -16,6 +16,7 @@ from dora_api.domain.entities.auth_token import (
 from dora_api.infrastructure.auth_helpers import (
     RESET_PASSWORD_TTL, VERIFY_EMAIL_TTL, issue_token,
 )
+from tests.support import open_registration
 
 
 BASE = "http://localhost:5170/api/auth"
@@ -26,6 +27,7 @@ def _fresh_session() -> requests.Session:
 
 
 def _register(s: requests.Session, username: str, password: str, email: str | None = None):
+    open_registration()
     return s.post(f"{BASE}/register", json={
         "username": username, "password": password,
         **({"email": email} if email else {}),
@@ -91,7 +93,73 @@ def test__capabilities__unauthenticated_and_reports_email_state(api):
     response = s.get(f"{BASE}/capabilities")
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body == {"email_sender_configured": False, "demo_mode": False}
+    assert body == {
+        "email_sender_configured": False, "demo_mode": False,
+        "registration_enabled": False,
+    }
+
+
+def test__register__ClosedByDefault__Returns403AndCreatesNoUser(api):
+    """SEC-3 — self-serve registration is off until an admin opens it."""
+    s = _fresh_session()
+    username = f"closed-{uuid.uuid4().hex[:8]}"
+    response = s.post(f"{BASE}/register", json={
+        "username": username, "password": "Abcdefghij1",
+    })
+    assert response.status_code == 403, response.text
+    assert s.get(f"{BASE}/me").status_code == 401
+    login = s.post(f"{BASE}/login", json={
+        "username": username, "password": "Abcdefghij1",
+    })
+    assert login.status_code == 401
+
+
+def test__capabilities__RegistrationOpened__ReportsTrue(api):
+    open_registration()
+    body = _fresh_session().get(f"{BASE}/capabilities").json()
+    assert body["registration_enabled"] is True
+
+
+def test__change_password__OtherDeviceCookie__RejectedOnEveryRoute(api):
+    """SEC-4 — a password change signs every other device out on its next
+    request to any protected route, not only `/auth/me`. The device that
+    made the change stays signed in."""
+    username = f"twodev-{uuid.uuid4().hex[:8]}"
+    phone = _fresh_session()
+    assert _register(phone, username, "Abcdefghij1").status_code == 200
+    laptop = _fresh_session()
+    assert laptop.post(f"{BASE}/login", json={
+        "username": username, "password": "Abcdefghij1",
+    }).status_code == 200
+    assert laptop.get("http://localhost:5170/api/stock-items").status_code == 200
+
+    changed = phone.post(f"{BASE}/me/password", json={
+        "current_password": "Abcdefghij1", "new_password": "Zyxwvutsrq987",
+    })
+    assert changed.status_code in (200, 204), changed.text
+
+    assert laptop.get("http://localhost:5170/api/stock-items").status_code == 401
+    assert laptop.get(f"{BASE}/me").status_code == 401
+    assert phone.get("http://localhost:5170/api/stock-items").status_code == 200
+
+
+def test__deactivated_user__CookieRejectedOnEveryRoute(api):
+    """SEC-4 — switching an account off ends its sessions on every route."""
+    username = f"deact-{uuid.uuid4().hex[:8]}"
+    member = _fresh_session()
+    reg = _register(member, username, "Abcdefghij1")
+    assert reg.status_code == 200
+    assert member.get("http://localhost:5170/api/stock-items").status_code == 200
+    from dora_api.domain.entities.user import User
+    from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
+    with app.app_context():
+        repo = SqlAlchemyRepository()
+        user = repo.get(User).by_id(uuid.UUID(reg.json()["user_id"]))
+        user.is_active = False
+        repo.save_changes()
+    response = member.get("http://localhost:5170/api/stock-items")
+    assert response.status_code == 401
+    assert "deactivated" in response.text
 
 
 def test__bootstrap_required__false_when_users_exist(api):

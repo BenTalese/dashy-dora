@@ -124,8 +124,12 @@ export default class AuthApiService {
      *  SMTP (dry-run only logs the outbound body, which a normal user
      *  can't read), so login-screen surfaces that would only work with
      *  real email (Forgot password?, Resend verification) should hide. */
-    getCapabilitiesAsync = async (): Promise<{ emailSenderConfigured: boolean; demoMode: boolean }> => {
-        const result = await this.httpClient.get<{ email_sender_configured: boolean; demo_mode?: boolean }>(
+    getCapabilitiesAsync = async (): Promise<{
+        emailSenderConfigured: boolean; demoMode: boolean; registrationEnabled: boolean;
+    }> => {
+        const result = await this.httpClient.get<{
+            email_sender_configured: boolean; demo_mode?: boolean; registration_enabled?: boolean;
+        }>(
             '/auth/capabilities',
         );
         return {
@@ -133,6 +137,8 @@ export default class AuthApiService {
             // FU-392 — demo / sellable-showcase mode. Optional-chained so an
             // older backend that predates the flag reads as "not a demo".
             demoMode: result.demo_mode ?? false,
+            // SEC-3 — self-serve sign-up is an admin switch, off by default.
+            registrationEnabled: result.registration_enabled ?? false,
         };
     };
 

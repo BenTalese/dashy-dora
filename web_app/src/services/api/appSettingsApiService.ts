@@ -10,6 +10,8 @@ export type AppSettings = {
     // URL/model/provider/API key live on the User row (see
     // authStore.currentUser.llm_*).
     scanning_enabled: boolean;
+    // SEC-3 — whether the login page offers "Create account". Off by default.
+    registration_enabled: boolean;
     // buy-verdict oracle. Default on (pure-personal feature).
     // C-cross Chunk 1 — install-wide feature flags (proposal §2.6).
     money_enabled: boolean;

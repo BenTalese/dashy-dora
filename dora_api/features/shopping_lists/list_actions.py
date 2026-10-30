@@ -100,6 +100,10 @@ class MoveLinesHandler:
                 continue
             line.shopping_list_id = target_id
             line.sequence = next_sequence
+            # A line set aside by the budget is a leftover like any other
+            # (owner, 2026-10-30, FU-958): it arrives on the next list as
+            # something to buy. That trim was about the old shop's budget.
+            line.deferred_by_budget = False
             target_anchors.add(anchor)
             next_sequence += 1
             moved += 1

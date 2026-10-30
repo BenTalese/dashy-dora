@@ -42,7 +42,7 @@ Related standing docs:
 | Rate limits | ✅ | In-process token-bucket in `auth_helpers.rate_limit()` — used on login (5/min per IP), bootstrap (5/min), verify-email (10/min), resend-verification (1/min per address), assistant `/ask` `/act` `/confirm` (per-user, FU-458). |
 | Password policy | ✅ | NIST SP 800-63B — 8-char min, no composition rules, breach-list reject (~60 top offenders including product-name variants). No admin override. |
 | Anti-enumeration | ✅ | forgot-password + resend-verification return the same shape whether the email is known or not; `try_send` swallows SMTP failures so a "couldn't send" doesn't leak known-address status. |
-| Bootstrap admin | ✅ FU-200 | First-user path is a separate endpoint (`/api/auth/bootstrap-admin`) that 410s once any user exists. Self-registration never grants admin. |
+| Bootstrap admin | ✅ FU-200 | First-user path is a separate endpoint (`/api/auth/bootstrap-admin`) that 410s once any user exists. Self-registration never grants admin, and is itself off by default (SEC-3, 2026-10-30: `AppSetting.registration_enabled`, admin switch on Settings → Users). |
 
 **Accepted** (recorded in `AUTH_ASSISTANT_SECURITY_FINDINGS.md`):
 - **A.5 admin password reset returns plaintext in the response.** Kept as the self-host fallback when SMTP isn't configured; admin is expected to relay out-of-band. Not a bug in the current threat model.

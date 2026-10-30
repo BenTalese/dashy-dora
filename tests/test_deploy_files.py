@@ -48,3 +48,16 @@ def test__dockerignore__excludes_the_frontend_env_but_keeps_its_example():
     assert "web_app/.env" in lines
     assert "web_app/.env.*" in lines
     assert "!web_app/.env.example" in lines
+
+
+def test__spa_package_version__matches_current_version():
+    """FU-861 — the SPA bundle takes its version from `version_info.py` at
+    build time; package.json's own field must not tell a different story."""
+    import json
+    from pathlib import Path
+
+    from dora_api.features.help.version_info import CURRENT_VERSION
+
+    root = Path(__file__).resolve().parents[1]
+    package = json.loads((root / "web_app" / "package.json").read_text(encoding="utf-8"))
+    assert package["version"] == CURRENT_VERSION

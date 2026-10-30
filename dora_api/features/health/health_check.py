@@ -24,7 +24,7 @@ from dora_api.domain.entities.app_setting import (
     NUTRITION_MODE_OFF,
     RATING_SCHEME_NONE,
 )
-from dora_api.features.help.version_info import CURRENT_VERSION
+from dora_api.features.help.version_info import CURRENT_VERSION, build_id
 from dora_api.features.routers import HEALTH_ROUTER
 from dora_api.infrastructure.profile import current_profile
 
@@ -391,6 +391,8 @@ def health_check():
     return jsonify({
         "ok": True,
         "version": CURRENT_VERSION,
+        # FU-861 — which build of that version; None from a source checkout.
+        "build": build_id(),
         "schema_version": _SCHEMA_HEAD,
         # FU-570 — the DB's actual applied revision (None if the DB was
         # built via create_all and never stamped, or on a read error). Lets

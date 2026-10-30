@@ -41,7 +41,75 @@ next.
 
 ---
 
-## 2026-10-30 (latest): **Autonomous QA round 3 — pathways: journeys, documents, regions, two devices, offline, scale**
+## 2026-10-30 (latest): **Finish-off steps 1–2 done, step 4 mostly done, step 3 cut short (FU-971)**
+
+**Status: paused by the owner ("wrap up, continue later"). Uncommitted on top of `f91453f2` (owner hasn't asked for a commit).**
+
+**Owner ask:** *"whats next for this project? lets finish it off"* → five-step plan agreed: (1) security,
+(2) design calls, (3) walk the browser checks, (4) release prep (version number, README, release process, PUID/PGID),
+(5) owner checks FU-965 on prod, then deploys.
+
+**Owner decisions taken this session:**
+- Security posture: a self-hosted household install sits behind a home network / reverse proxy, so FU-964 (1)(2)(3)(4)(5)(7)
+  are **accepted risk**; (6) PUID/PGID goes to release prep, (8) gets a README line. SEC-2/3/4 built (cheap, and SEC-3
+  matters the moment an install is proxied to the internet).
+- FU-967: owner first leaned "ignore (few concurrent users)"; I showed the real trigger is a *stale tab*, not simultaneous
+  saves (the planner rebuilds from its last-loaded copy and never refetches on focus) — built the guard.
+- FU-958: set-aside-by-budget lines are **leftovers carried to the next list**.
+- FU-956 (refuse a swap on a cook-batch day) and FU-957 (slot rename cascades): my stated defaults, not objected to.
+
+**Built:**
+1. **SEC-3** — `AppSetting.registration_enabled` (migration `a8d3e6f1b2c9`, off by default and on upgrade); `register_user`
+   403s while closed; `/auth/capabilities.registration_enabled`; LoginPage hides "Need an account?"; switch on Settings →
+   Users ("Sign-ups"). Help guide `sign-in-register` and `SECURITY_REVIEW.md` updated.
+2. **SEC-4** — `session_user.resolve_session_user` (exists + active + `pwd_v`), run by the middleware on every protected
+   route and by `/auth/me` + `require_admin` (**R-104 / ADR-101**). `GetMeHandler` (dead) removed.
+3. **SEC-2** — `public_base_url()` never reads `Origin`/`Host`; `try_send_link_mail` skips verify/reset mails on a
+   production install with no public URL; `/auth/capabilities.email_sender_configured` also needs `can_mail_links()` so
+   "Forgot password?" hides; the deals mail's `public_url_ready` no longer accepts a request Origin.
+4. **FU-967** — `plan_revision()` fingerprint on `MealPlanDto.revision`; `PATCH /meal-plans` takes `expected_revision`
+   → 409; `useMealPlanner.persistEntries` sends it, reloads on 409, and `queuePlanMutation` replays the edit once
+   (**R-103 / ADR-100**).
+5. **FU-966/958** — rail summary count skips `deferred_by_budget` (same rule as detail totals); move-unticked clears the
+   flag; finish dialog names the set-aside share.
+6. **FU-957** — `_relabel_slot_uses` cascades a rename to plan entries, template entries and `Recipe.time_of_day`.
+7. **FU-956** — `apply_swap` 422s on a batch day; suggestions/lighter-alternatives skip batch days.
+
+**Gates:** full pytest after step 1: **2723 passed** (+7); step-2 suites green (meal plans 53, lists 18, slots 14,
+swaps 26, DTO contracts 27 with snapshot refreshed for `registration_enabled` + `revision`); vitest **861/861**;
+`vue-tsc` + eslint clean on touched files. Full pytest re-run after step 2: **2729 passed**.
+
+**Ledgers:** FU-956/957/958/966/967 → RESOLVED; FU-928 progress note (SEC-2/3/4 fixed); FU-964 owner decision recorded
+(open only for (6) and (8)). DORA_VERIFY: two new sections ("Security: sign-ups, sessions, reset links" and "Planner +
+lists decisions"). CHANGELOG: new `### Security` block + four `### Changed` bullets.
+
+**Process note:** a pytest DTO-snapshot refresh and my heredoc append both wrote CRLF into LF files — normalised with a
+HEAD-comparing script before the close-gate (memory: python-text-mode-writes-crlf).
+
+**Step 4 (release prep), built:** FU-861 — `version_info.CURRENT_VERSION` is the one version source; `quasar.config.ts`
+reads it plus `DORA_BUILD_ID` (or git short sha); `/api/health.build`; About → Build shows `vX · sha` and flags a
+bundle/server mismatch; bug-report mail carries the build; package.json/lock pinned to 0.7.0 with a test. FU-964 (6) —
+`startup.sh` drops the API to PUID:PGID via setpriv (chowns data/cache/logs). README: self-host quick start, security
+posture (closed sign-ups, HTTPS/proxy, port binding = FU-964 (8), reset links need a public URL, PUID/PGID), six real
+screenshots (copied from the help assets), stale lines fixed (AI master switch, Node 22, dead CI badge), Releasing
+steps bump the one version source. FU-861 + FU-964 → RESOLVED; Docker image NOT built (Docker Desktop not running) —
+operator checks in DORA_VERIFY "Release prep".
+
+**Step 3 (browser walks), partial:** five verify-only agents, one seeded backend each. **Walk A done, 0 failures**: 17
+lines deleted (security, planner/list decisions, QA round 3; evidence in DORA_VERIFY_TRIAGE). Walks B–E stopped by the
+owner's wrap-up before reporting → **FU-971** carries the slices, the recipe and the traps (use 127.0.0.1; rebuild in PWA
+mode first — current `dist/spa` is `-m spa`, no service worker). Walk A's side notes → **FU-970**; the Sign-ups tip copy
+was fixed. Gates on the final tree: vitest 861/861, vue-tsc clean.
+
+**Process note:** my CRLF normaliser swept untracked files and corrupted the six new PNGs; re-copied and byte-compared
+(memory updated: skip binaries).
+
+**Next up:** FU-971 — rebuild the SPA (`npm run build`, PWA), re-run walks B–E, fix failures, delete passes. Then ask the
+owner for the release version and whether to commit/tag; owner does FU-965 on prod before deploying.
+
+---
+
+## 2026-10-30: **Autonomous QA round 3 — pathways: journeys, documents, regions, two devices, offline, scale**
 
 **Status: done. Committed and pushed as the round-3 commit (rounds 1+2 went up as `a1d19fea`).**
 

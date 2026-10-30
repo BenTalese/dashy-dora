@@ -5,7 +5,48 @@ semver — major bumps signal schema or breaking-config changes.
 
 ## [Unreleased]
 
+### Security
+- **Sign-ups are closed by default (2026-10-30).** The sign-in page no longer
+  offers "Need an account?" unless an admin switches on *Let people create their
+  own account* on Settings → Users, and the server refuses new sign-ups while it
+  is off. Existing installs are closed too after upgrading; add people on
+  Settings → Users. Before this, anyone who could reach Dora could make an
+  account and see the household's kitchen.
+- **Changing or resetting a password signs out your other devices straight
+  away.** The check used to run only when a device next loaded your profile, so
+  an old cookie kept working everywhere else, admin pages included. A
+  deactivated or deleted account is also signed out on its next request.
+- **Reset and verify links are built only from the public URL** (Settings →
+  Email), never from the address a request claims to come from. A production
+  install without a public URL no longer sends those mails (the server log says
+  why), and the sign-in page hides "Forgot password?" until it can.
+
 ### Changed
+- **About names the exact build (2026-10-30).** Settings → About → Build shows
+  the version and build id (for example `v0.7.0 · 49bef96`). If this tab is
+  running an older bundle than the server, it says so. `/api/health` reports
+  the same `build`, and "Report a bug" includes it.
+- **The container runs the API as `PUID`/`PGID`** (default 1000:1000) instead
+  of root, so files it writes into a bind-mounted folder belong to that user.
+  Set `PUID=0` for the old behaviour.
+- **The README has a self-host quick start and a security posture section,**
+  plus real screenshots.
+- **Two devices can plan the same week (2026-10-30).** Saving a week from a
+  copy that's out of date (another device changed it, or the planner had been
+  open for hours) no longer wipes the other change. Dora reloads the week and
+  applies your edit on top. If that still clashes, it says so.
+- **Renaming a meal slot takes its meals with it.** Renaming "Dinner" to "Tea"
+  now moves planned meals, template meals and recipes' usual time of day to
+  "Tea". Before, they stayed on a label the planner no longer had a row for.
+  Deleting a slot still leaves existing meals as they are.
+- **Lines set aside by the budget are leftovers.** When a list is finished they
+  move or are discarded with the other unticked lines, the finish dialog says
+  how many of them there are, and on the next list they come back as ordinary
+  lines. The list rail's item count now leaves them out, matching the list's
+  own card.
+- **One day of a cook batch can't be swapped on its own.** Budget swap ideas
+  and lighter alternatives no longer offer those days, and a swap is refused
+  with an explanation instead of leaving the batch mixing two recipes.
 - **Help has been rebuilt (2026-10-29).** One page per topic, a search over
   every guide, a Common questions list, and short guides that say what a
   thing does, where to find it, which setting controls it and the one thing

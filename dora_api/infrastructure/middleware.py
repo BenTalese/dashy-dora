@@ -12,7 +12,9 @@ from dora_api.infrastructure.api_response import (ErrorEntry, bad_request,
                                                   forbidden,
                                                   unauthorized)
 from dora_api.infrastructure.profile import env_flag, is_production
-from dora_api.infrastructure.session_user import SESSION_USER_ID_KEY
+from dora_api.infrastructure.session_user import (SESSION_DEACTIVATED,
+                                                  SESSION_USER_ID_KEY,
+                                                  resolve_session_user)
 from dora_api.infrastructure.audit import auto_audit_after_request
 from dora_api.infrastructure.csrf import (csrf_check_passed, ensure_cookie,
                                           request_is_mutating,
@@ -249,8 +251,20 @@ def require_auth_if_protected(endpoint_name: str):
         return None
     if endpoint_name in PUBLIC_ENDPOINTS:
         return None
-    if SESSION_USER_ID_KEY in session:
+    if SESSION_USER_ID_KEY not in session:
+        return unauthorized()
+    # SEC-4: a cookie is only as good as the account behind it. Checked on
+    # every protected route (one primary-key read), so a password change,
+    # reset, deactivation or deletion signs other devices out at once rather
+    # than only when they next call /auth/me.
+    from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
+    user, reason = resolve_session_user(SqlAlchemyRepository())
+    if user is not None:
         return None
+    if reason == SESSION_DEACTIVATED:
+        return unauthorized(
+            "This account has been deactivated. Ask an admin to switch it back on."
+        )
     return unauthorized()
 
 

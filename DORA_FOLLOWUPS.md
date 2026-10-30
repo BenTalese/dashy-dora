@@ -39,6 +39,32 @@ long session summary. Distinct from the other logs:
 
 ---
 
+## [OPEN] FU-971 — Finish-off step 3 cut short: browser-verify walks B–E not done (~165 checks since 10-23)
+- **Raised:** 2026-10-30 (finish-off session; owner asked to wrap up and continue later)
+- **Type:** deferred job
+- **What:** step 3 of the finish-off plan (walk the browser checks, fix what fails, delete what passes) was split
+  into five agent slices. Walk A finished (17 deleted, evidence in `DORA_VERIFY_TRIAGE.md`). Walks B–E were stopped
+  mid-run with no results kept: **B** = "Autonomous QA round 2" + "Autonomous QA sweep (2026-10-29)"; **C** = "Help
+  area redesign" + finalisation units 24–30; **D** = units 16–23; **E** = units 11–14 + units 1–10 (all sections in
+  `DORA_VERIFY.md`). Recipe that worked: one seeded backend per walker
+  (`DORA_DEBUG=true DORA_ALLOW_DESTRUCTIVE=true DORA_DB_PATH=<scratch>/walk.db DORA_API_PORT=518N
+  DORA_SPA_DIR=<repo>/web_app/dist/spa python web_app/e2e/serve.py`), scratch Playwright on Chrome, verify-only
+  agents reporting PASS/FAIL/NEEDS-*; the coordinator fixes and deletes. Traps: use `127.0.0.1`, not `localhost`
+  (another project's Vite answers on `::1`); **rebuild the SPA in PWA mode first (`npm run build`)**. The current
+  `dist/spa` was built with `-m spa`, so it has no service worker and the unit-27 offline checks can't pass.
+- **Recommended resolution:** next session, as the continuation of the finish-off plan; then step 4's open items
+  (pick the release version, tag), then step 5 (owner: FU-965 prod check, deploy).
+
+## [OPEN] FU-970 — Dashboard greeting uses the device's weekday, not the household's
+- **Raised:** 2026-10-30 (finish-off walk A, Pago Pago household on a Sydney device)
+- **Type:** finding (minor)
+- **What:** with the household a day behind the device, the strip and "Next to cook" correctly say Thursday/Today,
+  but the hero greeting said "Friday! You've earned something tasty this weekend." Two smaller notes from the same
+  walk: the Out filter set by the dashboard donut is still applied when Stock is next opened from the nav (persisted
+  filter state; maybe intended); trim-to-budget *preview* POSTs are written to the audit log as `trim_to_budget`.
+- **Recommended resolution:** opportunistic — greeting should read the household day (`locale_policy.timezone`, as
+  the strip does); decide whether previews belong in the audit log.
+
 ## [OPEN] FU-969 — Round-3 leftovers: server-built English date copy, quantity decimals under de-DE, `public_url_configured` in the admin UI, bulk-add to a done list, meal-plan print tests dated 2027
 - **Raised:** 2026-10-30 (autonomous QA round 3)
 - **Type:** leftover
@@ -74,32 +100,6 @@ long session summary. Distinct from the other logs:
 - **Recommended resolution:** when a real companion dataset passes ~500 products; `QVirtualScroll` with a fixed-height
   compact row, or server paging with the existing `fetchAllPages` dropped for that page.
 
-## [OPEN] FU-967 — Two devices editing the same planner week: the whole-plan PATCH silently drops the other device's change
-- **Raised:** 2026-10-30 (autonomous QA round 3, two-device concurrency run)
-- **Type:** finding (needs a design call)
-- **What:** `PATCH /meal-plans/<id>` replaces the entry list wholesale (FU-878). Two devices that each read the week,
-  add one meal and save at the same moment both get 204 and the week ends with **one** meal — the later write's
-  snapshot wins, with no error on either device (proven live: 2 adds → 1 entry). The same shape applies to any
-  two-device edit of one week (servings, cook day, template apply vs a manual add). Shopping lists are per-line and
-  survived the same test (two devices ticking different lines kept both). Options: (a) optimistic concurrency —
-  the plan DTO carries `updated_at`/`version`, the PATCH sends it back as `If-Match`, a mismatch is a 409 the SPA
-  resolves by refetching and replaying the one change; (b) per-entry endpoints (add/remove/patch one entry) so the
-  planner stops rebuilding the list client-side (also closes FU-878's id churn and FU-953's queue coverage).
-- **Why deferred:** both change the planner's write contract; (b) is the structural fix the finalisation review
-  wanted but is a unit of its own.
-- **Recommended resolution:** owner picks (a) as a cheap guard now, (b) as the real fix later during the next
-  planner unit.
-
-## [OPEN] FU-966 — Draft list counts disagree between the rail (7) and the overview card (6) while a line is set aside by budget
-- **Raised:** 2026-10-30 (autonomous QA round 3, journey screenshots)
-- **Type:** finding (same family as FU-958)
-- **What:** after the 2026-10-29 fix the overview card counts only the active lines the shop will show, while the
-  rail's badge and the "N items" summary come from the server's `line_count`, which includes `deferred_by_budget`
-  lines — so the same list reads "6" on the card and "7" in the rail. Whichever way FU-958 is decided, one count
-  rule has to live on the server and feed both (R-003 / R-041).
-- **Why deferred:** depends on the FU-958 decision.
-- **Recommended resolution:** with FU-958.
-
 ## [OPEN] FU-965 — ⚠️ SQLite migrations ran batch rebuilds with foreign keys ON: earlier upgrades may have cascade-deleted child rows in the production DB
 - **Raised:** 2026-10-30 (autonomous QA round 2, migration repair)
 - **Type:** finding (data integrity — owner check)
@@ -115,27 +115,6 @@ long session summary. Distinct from the other logs:
   (`StockItemProduct`), price observations, shopping-list lines, recipe ingredients/steps on the production DB against
   a pre-upgrade backup; the `DORA_VERIFY` operator line names the queries.
 - **Recommended resolution:** **now** — one look at the production DB (or its last backup) before the next deploy.
-
-## [OPEN] FU-964 — Security items from the 2026-10-30 review that need an owner call (beyond FU-928's SEC-2/3/4)
-- **Raised:** 2026-10-30 (autonomous QA round 2, defensive security review)
-- **Type:** finding (needs a call)
-- **What:** fixed in this round: per-username login throttle, login timing, change-password rate limit, logo
-  decompression bomb, TTS bounds, push-subscription takeover + https-only, CORS `*` refused, CSV formula guard,
-  client-log context cap, LIKE escaping, `web_url` scheme check, provider base-URL scheme check, compose
-  `DORA_SECURE_COOKIES` default, nginx headers. Still open and each a product/deploy decision: **(1)** `PATCH /auth/me`
-  changes the email without the current password and marks it verified (a stolen session becomes a permanent takeover
-  via forgot-password) — require `current_password`, don't auto-verify; **(2)** bootstrap-admin is count-then-insert, so
-  two parallel first POSTs can both become admin, and `ADMIN_BOOTSTRAP_EMAIL` is guessable — a boot-printed one-time
-  setup token; **(3)** `/api/health` tells anonymous callers the budget, headcount, feature flags and schema version —
-  keep only `status` public; **(4)** an ingestion key can delete any product, not only ones it ingested; **(5)**
-  login/register are CSRF-exempt (login CSRF) — an Origin/Referer check closes it but the Capacitor shell sends
-  `capacitor://`; **(6)** the container runs as root, `PUID`/`PGID` unused; **(7)** push endpoints must be https now but
-  may still name a private host; **(8)** compose publishes `5170:5170` on every interface — with
-  `DORA_TRUSTED_PROXY_HOPS>0` a direct client can forge `X-Forwarded-For` (comment added; `127.0.0.1:5170` is the fix
-  but changes the owner's deploy). Also: a non-admin member can `PATCH /budget/settings` (household-shared per R-038 —
-  confirm that is intended).
-- **Why deferred:** each changes a contract the owner has to stand behind (auth flow, deploy shape, companion scope).
-- **Recommended resolution:** owner, alongside FU-928; (1) and (3) are an hour each once decided.
 
 ## [OPEN] FU-963 — Accessibility: colour contrast and nested interactive rows (axe-core, 2026-10-30)
 - **Raised:** 2026-10-30 (autonomous QA round 2, axe-core WCAG 2.1 AA at 1280 and 375)
@@ -201,39 +180,6 @@ long session summary. Distinct from the other logs:
   read-only) rather than an obvious bug; (4) is small but touches the auth redirect contract.
 - **Recommended resolution:** (1) with the next auth/notifications unit — it is a privacy issue on shared devices;
   (2)–(4) opportunistic.
-
-## [OPEN] FU-958 — Finish dialog counts deferred lines the shopper never sees; the server's leftover endpoints act on them too
-- **Raised:** 2026-10-29 (autonomous QA sweep)
-- **Type:** finding (needs a call)
-- **What:** `ShoppingListDetail.untickedCount` counts every unticked line including `deferred_by_budget` ones, so after
-  ticking everything the run face shows, the finish dialog still says "N items aren't ticked". Making it count from
-  `baseLines` alone would be wrong, though: `move-unticked-to` and `discard-unticked` (`list_actions.py`) select by
-  `is_ticked == False` only, so they move / discard deferred lines as well, and the dialog's count would then under-state
-  what the server is about to do.
-- **Why deferred:** a product decision — are trimmed-off lines "leftovers" to carry to the next list (then the dialog
-  should *say* so), or are they outside the shop (then the two endpoints should skip them and the count comes from
-  `baseLines`)?
-- **Recommended resolution:** owner call; then one small unit across the page and `list_actions.py`.
-
-## [OPEN] FU-957 — Renaming a meal slot leaves entries and recipes under the old name
-- **Raised:** 2026-10-29 (autonomous QA sweep)
-- **Type:** finding (needs a call)
-- **What:** `manage_meal_slots.py` rename changes `MealSlot.name` only; `MealPlanEntry.slot` and `Recipe.time_of_day`
-  are free-text copies. Renaming "Dinner" to "Tea" shows Tea with `usage_count` 0 and every existing dinner entry
-  carries an off-vocabulary label, so it no longer lands in a known planner row. Deletion is documented as non-cascading;
-  rename is not documented either way.
-- **Why deferred:** may be intended (a rename as a "new slot"); if not, it is one `UPDATE … WHERE slot = :old` on each of
-  the two tables inside the same transaction.
-- **Recommended resolution:** owner call; if cascade, pair with a pinning test in `test_meal_slot_router.py`.
-
-## [OPEN] FU-956 — Swapping one day's recipe inside a cook batch breaks the batch invariant
-- **Raised:** 2026-10-29 (autonomous QA sweep)
-- **Type:** finding (needs a call)
-- **What:** `swap_suggestions.apply_swap` accepts an entry that carries a `cook_batch_id` and changes its recipe only,
-  so the batch mixes recipes (the single-recipe rule `validate_cook_groups` enforces on PATCH) and `CookBatch.recipe_id`
-  goes stale.
-- **Why deferred:** the right behaviour is a design choice — refuse the swap on a batch member, or swap every member.
-- **Recommended resolution:** owner call; small either way.
 
 ## [OPEN] FU-955 — Backup restore: stores are not a section but `saved_products.store_id` is a required FK; self-referencing rows depend on dump order
 - **Raised:** 2026-10-29 (autonomous QA sweep)
@@ -572,6 +518,12 @@ long session summary. Distinct from the other logs:
 - **Recommended resolution:** now / during finalisation. Split into per-surface FUs, or fix in the
   report's suggested order, as the fixing agent picks them up. Tick items in the report as they land.
   QA2-41..44 need owner decisions first.
+- **Progress (2026-10-30):** **SEC-2, SEC-3 and SEC-4 fixed** (QA2-02/03/04). SEC-3: `AppSetting.registration_enabled`
+  (migration `a8d3e6f1b2c9`, off by default and on upgrade), enforced in `register_user`, surfaced through
+  `/auth/capabilities`, admin switch on Settings → Users. SEC-4: one `resolve_session_user` (`infrastructure/session_user.py`)
+  run by the middleware on every protected route, and by `/auth/me` and `require_admin`. SEC-2: `public_base_url()`
+  never reads request headers; link mails skip on a production install without a public URL
+  (`try_send_link_mail`). Tests in `test_auth_flows.py` + `test_auth_link_builders.py`.
 - **Progress (2026-10-24):** **QA2-01 / SEC-1 fixed** — every image route serves through `infrastructure/data_url.py`, which only serves raster image types (`text/html`, SVG etc. read as no image); pinned by `tests/test_data_url.py` + a recipe-route e2e test. Also fixed in the finalisation sweep: QA2-13 budget UTC bounds (12-R2, 2026-10-23). The rest stay open here.
 
 ## [OPEN] FU-926 — `normalise_unit` idempotence property failed once, passed on rerun
@@ -1258,20 +1210,6 @@ long session summary. Distinct from the other logs:
   double-cooked and no ingredient demand changes (the pool model already treats
   a lone entry as its own cook).
 - **Recommended resolution:** later, with any pass over the meal-plan write path.
-
-## [OPEN] FU-861 — Technical details → Build has no real build number
-- **Raised:** 2026-09-03 (owner feedback batch — settings/About)
-- **Type:** follow-up
-- **What:** About → Technical details renders `buildLabel` under a caption that
-  admits *"Versioning isn't tagged in this fork yet."* The owner asked for a real
-  build number there — the point of the row is that a bug report can name the
-  exact artifact it came from, and a placeholder can't do that.
-- **Why deferred:** it isn't a UI change. It needs a decision about where the
-  version comes from (a git tag/describe, the package version, a CI-stamped
-  build id) and a way to get it into both the SPA bundle and the Flask API so the
-  two can't disagree — which touches the build/packaging pipeline, not this page.
-- **Recommended resolution:** later during Phase 4 (open-source release), where
-  tagging a version is on the critical path anyway.
 
 ## [OPEN] FU-859 — Zone/area/section counts no longer distinguish direct from descendant items
 - **Raised:** 2026-09-03 (owner feedback batch — settings/Stock locations)

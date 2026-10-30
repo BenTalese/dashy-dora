@@ -8,6 +8,9 @@ import AxiosHttpClient from './axiosHttpClient';
 export interface HealthInfo {
     ok: boolean;
     version: string;
+    /** FU-861 — git short sha of the server's build; null from a source
+     *  checkout. Optional in the type because older backends won't emit it. */
+    build?: string | null;
     schema_version: string | null;
     profile: string;
     features: {

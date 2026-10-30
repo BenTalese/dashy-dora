@@ -51,3 +51,44 @@ def test__deep_links__never_emit_a_bare_path_route():
         assert "reset-password" not in before_hash, url
         assert "verify-email" not in before_hash, url
         assert "alerts" not in before_hash, url
+
+
+# ── SEC-2: links never come from request headers ────────────────────────
+
+def test__public_base_url__ignores_a_forged_origin_header(monkeypatch):
+    """A caller's `Origin` (or `Host`) must never become the host of a link
+    that carries a reset token."""
+    from dora_api.app import app
+    from dora_api.infrastructure import auth_helpers
+
+    monkeypatch.setattr(auth_helpers, "configured_public_url", lambda: "")
+    with app.test_request_context(
+        headers={"Origin": "https://evil.example", "Host": "evil.example"},
+    ):
+        url = build_reset_url("tok")
+    assert "evil.example" not in url, url
+
+
+def test__public_base_url__uses_the_configured_url(monkeypatch):
+    from dora_api.infrastructure import auth_helpers
+
+    monkeypatch.setattr(
+        auth_helpers, "configured_public_url", lambda: "https://dora.home.example",
+    )
+    assert build_reset_url("tok").startswith("https://dora.home.example/#/")
+
+
+def test__link_mail__production_without_public_url__is_skipped(monkeypatch):
+    from dora_api.infrastructure import auth_helpers, profile
+
+    monkeypatch.setattr(auth_helpers, "configured_public_url", lambda: "")
+    monkeypatch.setattr(profile, "is_production", lambda: True)
+    sent: list[str] = []
+    auth_helpers.try_send_link_mail(lambda **kw: sent.append(kw["to"]), to="a@b.c")
+    assert sent == []
+
+    monkeypatch.setattr(
+        auth_helpers, "configured_public_url", lambda: "https://dora.home.example",
+    )
+    auth_helpers.try_send_link_mail(lambda **kw: sent.append(kw["to"]), to="a@b.c")
+    assert sent == ["a@b.c"]

@@ -34,8 +34,6 @@ import logging
 from datetime import datetime, timezone
 from typing import Callable, List
 
-from flask import has_request_context
-
 from dora_api.app import app
 from dora_api.domain.entities.alert_interaction import AlertInteraction
 from dora_api.domain.entities.user import User
@@ -108,8 +106,7 @@ def send_deals_email(
             if not recipients:
                 return 0
 
-            # Every link in the mail is built on the public URL. A scheduler
-            # tick has no request to borrow an Origin from, so with no
+            # Every link in the mail is built on the public URL. With no
             # `public_url` set `public_base_url()` falls back to the dev
             # server's localhost address and every link is dead on a real
             # deploy. Skip, loudly, and don't stamp the ledger: once the admin
@@ -152,11 +149,9 @@ def send_deals_email(
 
 
 def public_url_ready() -> bool:
-    """Whether a mail built now can carry working links: inside a request the
-    Origin header stands in (`public_base_url`), outside one only an explicit
-    `AppSetting.public_url` will do."""
-    if has_request_context():
-        return True
+    """Whether a mail built now can carry working links: only an explicit
+    `AppSetting.public_url` will do. A request's `Origin` no longer stands in
+    (SEC-2 — it is whatever the caller sends)."""
     return bool((resolved_operational_config().public_url or "").strip())
 
 

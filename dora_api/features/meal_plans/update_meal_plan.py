@@ -14,11 +14,12 @@ from dora_api.features.meal_plans._entry_writes import (
     MealPlanEntryRequest, MealPlanWriteOutcome, apply_to_entry, batch_for,
     check_entries, meal_plan_write_error_response, mint_batches, new_entry,
     resolve_recipes)
+from dora_api.features.meal_plans.plan_revision import plan_revision
 from dora_api.features.meal_slots.slot_validation import (allowed_slot_names,
                                                           get_valid_slot_names)
 from dora_api.features.routers import MEAL_PLAN_ROUTER
-from dora_api.infrastructure.api_response import (bad_request, no_content,
-                                                  not_found)
+from dora_api.infrastructure.api_response import (bad_request, conflict,
+                                                  no_content, not_found)
 from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.field import EntityField
@@ -47,12 +48,18 @@ class UpdateMealPlanRequest(BaseModel):
     # caller can't accidentally nuke a plan by forgetting to populate
     # the array. Past/consumed entries are preserved regardless.
     confirm_clear_entries: bool = False
+    # FU-967 — the plan's `revision` as the caller last loaded it. When sent
+    # and the week has changed since, the write is refused (409) rather than
+    # overwriting another device's edit with a stale copy. Optional so a
+    # caller that isn't editing from a loaded copy can still write.
+    expected_revision: str | None = Field(default = None, max_length = 64)
 
 
 @dataclass(slots=True)
 class UpdateMealPlanResponse(MealPlanWriteOutcome):
     meal_plan_not_found: bool = False
     needs_clear_confirmation: bool = False
+    revision_conflict: bool = False
 
 
 class UpdateMealPlanHandler:
@@ -68,6 +75,9 @@ class UpdateMealPlanHandler:
         )
         if not _Plan:
             return UpdateMealPlanResponse(meal_plan_not_found = True)
+        if (request.expected_revision is not None
+                and request.expected_revision != plan_revision(_Plan)):
+            return UpdateMealPlanResponse(revision_conflict = True)
 
         _SetFields = request.model_fields_set
 
@@ -208,6 +218,12 @@ def update_meal_plan(meal_plan_id: UUID):
 
     if _Response.meal_plan_not_found:
         return not_found(MealPlan.__name__, meal_plan_id)
+
+    if _Response.revision_conflict:
+        return conflict(
+            "This week was changed somewhere else since you opened it. "
+            "Reload it and try again."
+        )
 
     if _Response.needs_clear_confirmation:
         return bad_request(

@@ -19,7 +19,7 @@ from uuid import uuid4
 
 import requests
 
-from tests.support import assert_problem
+from tests.support import assert_problem, open_registration
 
 BASE = "http://localhost:5170/api"
 APP_SETTINGS = f"{BASE}/app-settings"
@@ -41,7 +41,7 @@ def test__app_settings__Anonymous__401OnBothVerbs(api):
 
 
 def test__app_settings__NonAdmin__403OnBothVerbs(api):
-    # Mint a plain user: /register is open once an admin exists, grants
+    # Mint a plain user: /register (opened for this test — SEC-3) grants
     # is_admin=False, and login doesn't require email verification.
     # NB: register from a *fresh* session — /register logs the new user in
     # on whatever cookie jar carried the request, which would hijack the
@@ -49,6 +49,7 @@ def test__app_settings__NonAdmin__403OnBothVerbs(api):
     username = f"peon-{uuid4().hex[:8]}"
     password = f"hunter-{uuid4().hex[:8]}"
     peon = requests.Session()
+    open_registration()
     registered = peon.post(f"{BASE}/auth/register", json={
         "username": username, "password": password,
     })

@@ -211,7 +211,7 @@
                     <q-item-section>
                         <q-item-label>Build</q-item-label>
                         <q-item-label caption>
-                            Versioning isn't tagged in this fork yet.
+                            {{ buildCaption }}
                         </q-item-label>
                     </q-item-section>
                     <q-item-section side>
@@ -264,6 +264,7 @@
     import { formatMoney, formatNumber } from 'src/composables/useMoney';
     import { PRIMARY_DONATION } from 'src/config/donationLinks';
     import { getBackendBaseUrl } from 'src/services/api/backendUrl';
+    import HealthApiService from 'src/services/api/healthApiService';
     import { isNativePlatform } from 'src/helpers/platform';
 
     // Public repo (source-code link). The bug-report target comes from the
@@ -343,6 +344,9 @@
     const formatCount = (n: number) => formatNumber(n, { digits: 0 });
 
     onMounted(async () => {
+        void new HealthApiService().getInfoAsync()
+            .then((info) => { server.value = { version: info.version, build: info.build ?? null }; })
+            .catch(() => { server.value = null; });
         try {
             usage.value = await dashboardApi.getUsageStatsAsync();
         } catch {
@@ -404,7 +408,22 @@
         }, 400);
     }
 
-    const buildLabel = computed(() => (import.meta.env.PROD ? 'production' : 'dev'));
+    // FU-861 — the exact artifact, so a bug report can name it. The bundle's
+    // version and build id are stamped at build time from the same source the
+    // API reads (`version_info.py`); the server's own pair comes off /health,
+    // and a mismatch means this tab is running an older bundle than the server.
+    const bundleVersion = process.env.DORA_VERSION;
+    const bundleBuild = process.env.DORA_BUILD_ID;
+    const buildLabel = `v${bundleVersion}${bundleBuild ? ` · ${bundleBuild}` : ''}`;
+    const server = ref<{ version: string; build: string | null } | null>(null);
+    const buildCaption = computed(() => {
+        const s = server.value;
+        if (s && (s.version !== bundleVersion || (s.build && bundleBuild && s.build !== bundleBuild))) {
+            return `The server is on v${s.version}${s.build ? ` · ${s.build}` : ''}. Reload to update this tab.`;
+        }
+        if (!bundleBuild) return 'A local build — quote the version when reporting a problem.';
+        return 'Quote this when reporting a problem.';
+    });
 </script>
 
 <style scoped lang="scss">

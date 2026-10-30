@@ -1093,7 +1093,10 @@
                         <strong>
                             {{ untickedCount }} item{{ untickedCount === 1 ? '' : 's' }}
                         </strong>
-                        {{ untickedCount === 1 ? "isn't" : "aren't" }} ticked.
+                        {{ untickedCount === 1 ? "isn't" : "aren't" }} ticked<template
+                            v-if="deferredUntickedCount > 0"
+                        >, including {{ deferredUntickedCount }} set aside for the
+                            budget</template>.
                         A finished list is a receipt, so
                         {{ untickedCount === 1 ? 'it' : 'they' }}
                         can't stay on it.
@@ -1809,8 +1812,16 @@
     // and sank ticked rows to the bottom of their group mid-shop; the run face
     // now removes them from view entirely, which is the point of the redesign.
 
+    // Every unticked line, set-aside-by-budget ones included: those are
+    // leftovers that go wherever the rest go (owner, 2026-10-30, FU-958), and
+    // the server's move/discard actions take them too, so the dialog's figure
+    // is what is about to move. It names the set-aside share so the number
+    // doesn't read as more than the run face showed.
     const untickedCount = computed(() =>
         (detail.value?.lines ?? []).filter((l) => !l.is_ticked).length
+    );
+    const deferredUntickedCount = computed(() =>
+        (detail.value?.lines ?? []).filter((l) => !l.is_ticked && l.deferred_by_budget).length
     );
     // The list-level money (`remaining_price`, `total_price`, `total_savings`),
     // the progress percentage and the status pill's label all moved into

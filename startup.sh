@@ -30,6 +30,33 @@ mkdir -p \
     "${DORA_CACHE_DIR:-/app/cache}" \
     "${DORA_LOG_DIR:-/app/logs}"
 
+# ── Run the API as PUID:PGID, not root (FU-964 (6)) ──────────────────
+# compose.yml has always set PUID/PGID (1000:1000 by default) and nothing read
+# them, so the API ran as root and every file it wrote into a bind-mounted
+# folder came out root-owned on the host. Now the writable dirs are handed to
+# that user and the API drops to it; nginx keeps its own (www-data workers).
+# PUID=0 keeps the old behaviour. If the image lacks setpriv the API stays
+# root with a warning rather than failing to boot.
+RUN_AS=()
+if [ "$(id -u)" = "0" ] && [ "${PUID:-0}" != "0" ]; then
+    if command -v setpriv >/dev/null 2>&1; then
+        getent group "${PGID:-$PUID}" >/dev/null || groupadd -g "${PGID:-$PUID}" dora
+        getent passwd "$PUID" >/dev/null \
+            || useradd -u "$PUID" -g "${PGID:-$PUID}" -M -d /app -s /usr/sbin/nologin dora
+        chown -R "$PUID:${PGID:-$PUID}" \
+            "${DORA_DATA_DIR:-/app/data}" \
+            "${DORA_CACHE_DIR:-/app/cache}" \
+            "${DORA_LOG_DIR:-/app/logs}"
+        if [ -n "${DORA_DB_PATH:-}" ] && [ -e "$DORA_DB_PATH" ]; then
+            chown "$PUID:${PGID:-$PUID}" "$DORA_DB_PATH"
+        fi
+        RUN_AS=(setpriv --reuid="$PUID" --regid="${PGID:-$PUID}" --init-groups)
+        echo "[startup] dora_api will run as uid=$PUID gid=${PGID:-$PUID}"
+    else
+        echo "[startup] WARN: setpriv not found; dora_api runs as root (PUID/PGID ignored)"
+    fi
+fi
+
 # ── Python service (background) ──────────────────────────────────────
 # FU-397: production runs a real WSGI server (gunicorn → dora_api.wsgi:app)
 # instead of Flask's dev server. `DORA_API_SERVER=auto` (default) picks
@@ -51,10 +78,10 @@ esac
 
 if [ "$use_gunicorn" = "1" ]; then
     echo "[startup] dora_api via gunicorn (production WSGI, gunicorn.conf.py)"
-    gunicorn -c /app/gunicorn.conf.py dora_api.wsgi:app &
+    "${RUN_AS[@]}" gunicorn -c /app/gunicorn.conf.py dora_api.wsgi:app &
 else
     echo "[startup] dora_api via Flask dev server (DORA_ENV=$DORA_ENV_LC)"
-    python -m dora_api.startup &
+    "${RUN_AS[@]}" python -m dora_api.startup &
 fi
 DAPI_PID=$!
 echo "[startup] dora_api pid=$DAPI_PID"

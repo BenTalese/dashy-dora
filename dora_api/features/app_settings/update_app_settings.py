@@ -33,6 +33,7 @@ class UpdateAppSettingsRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     scanning_enabled: bool | None = None
+    registration_enabled: bool | None = None
     # Closed set; validated in the handler against RATING_SCHEME_VALUES so the
     # rejection message can name the options (R-010 carve-out, as per
     # nutrition_mode).
@@ -144,6 +145,8 @@ class UpdateAppSettingsHandler:
 
         if "scanning_enabled" in set_fields and request.scanning_enabled is not None:
             setting.scanning_enabled = request.scanning_enabled
+        if "registration_enabled" in set_fields and request.registration_enabled is not None:
+            setting.registration_enabled = request.registration_enabled
         if ("nutrition_rating_scheme" in set_fields
                 and request.nutrition_rating_scheme is not None):
             _Scheme = request.nutrition_rating_scheme.strip().lower()

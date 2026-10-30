@@ -57,6 +57,7 @@
         <template #card-foot>
             <div class="login-foot">
                 <AuthButton
+                    v-if="registrationEnabled || mode === 'register'"
                     colour="secondary"
                     :label="mode === 'login' ? 'Need an account? Register' : 'Have an account? Sign in'"
                     @click="toggleMode"
@@ -95,12 +96,16 @@
     // to the server, which a normal user can't read, so surfacing the
     // link would send them into a dead-end loop.
     const emailSenderConfigured = ref(false);
+    // SEC-3 — "Need an account?" only when the admin has opened sign-ups;
+    // otherwise accounts come from Settings → Users.
+    const registrationEnabled = ref(false);
     const authApi = new AuthApiService();
 
     onMounted(async () => {
         try {
             const caps = await authApi.getCapabilitiesAsync();
             emailSenderConfigured.value = caps.emailSenderConfigured;
+            registrationEnabled.value = caps.registrationEnabled;
         } catch {
             // Probe failure defaults to hidden — safer to under-surface
             // a broken link than to promise one that doesn't work.
