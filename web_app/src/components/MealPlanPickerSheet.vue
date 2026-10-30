@@ -22,7 +22,7 @@
                     <template v-else>Pick a recipe</template>
                 </div>
                 <q-space />
-                <BaseButton variant="icon" :icon="ICONS.close" @click="emit('update:modelValue', false)">
+                <BaseButton aria-label="Close" variant="icon" :icon="ICONS.close" @click="emit('update:modelValue', false)">
                     <BaseTooltip>Close</BaseTooltip>
                 </BaseButton>
             </q-card-section>

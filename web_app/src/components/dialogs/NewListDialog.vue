@@ -128,7 +128,7 @@
             <BaseButton
                 :label="form.targetMode === 'new' ? 'Create list' : 'Top up list'"
                 :disable="!canSubmit"
-                :loading="creating || autogenerating"
+                :loading="submitting"
                 @click="submit"
             />
         </template>
@@ -180,8 +180,7 @@
     const { stockItems } = storeToRefs(stockItemStore);
     const { stockLevels } = storeToRefs(stockLevelStore);
 
-    const creating = ref(false);
-    const autogenerating = ref(false);
+    const submitting = ref(false);
     const loadingPickers = ref(false);
     const templateOptions = ref<{ label: string; value: string }[]>([]);
     const recipeOptions = ref<{ label: string; value: string; ingredientIds: string[] }[]>([]);
@@ -264,39 +263,33 @@
             form.source_frequently_added = false;
             form.targetMode = props.presetMergeIntoListId ? 'merge' : 'new';
             form.mergeIntoListId = props.presetMergeIntoListId;
-            if (
-                templateOptions.value.length === 0
-                && recipeOptions.value.length === 0
-                && mealPlanOptions.value.length === 0
-            ) {
-                loadingPickers.value = true;
-                try {
-                    const [templates, recipeList, plansResp] = await Promise.all([
-                        templateApi.getAllAsync().catch(() => []),
-                        recipeApi.getAllPagesAsync().catch(() => []),
-                        mealPlanApi.getAllAsync().catch(() => ({ items: [] })),
-                    ]);
-                    templateOptions.value = templates.map((t) => ({
-                        label: `${t.name} (${t.line_count} item${t.line_count === 1 ? '' : 's'})`,
-                        value: t.template_id,
-                    }));
-                    recipeOptions.value = recipeList.map((r) => {
-                        const ingredientIds = (r.ingredients ?? [])
-                            .map((i) => i.stock_item_id)
-                            .filter((id): id is string => Boolean(id));
-                        return {
-                            label: `${r.name}${ingredientIds.length ? ` (${ingredientIds.length} ingredients)` : ''}`,
-                            value: r.recipe_id,
-                            ingredientIds,
-                        };
-                    });
-                    mealPlanOptions.value = (plansResp.items ?? []).map((p) => ({
-                        label: `${p.name ?? `Week of ${formatDate(p.start_date)}`} (${p.entries?.length ?? 0} meals)`,
-                        value: p.meal_plan_id,
-                    }));
-                } finally {
-                    loadingPickers.value = false;
-                }
+            loadingPickers.value = true;
+            try {
+                const [templates, recipeList, plans] = await Promise.all([
+                    templateApi.getAllAsync().catch(() => []),
+                    recipeApi.getAllPagesAsync().catch(() => []),
+                    mealPlanApi.getAllPagesAsync().catch(() => []),
+                ]);
+                templateOptions.value = templates.map((t) => ({
+                    label: `${t.name} (${t.line_count} item${t.line_count === 1 ? '' : 's'})`,
+                    value: t.template_id,
+                }));
+                recipeOptions.value = recipeList.map((r) => {
+                    const ingredientIds = (r.ingredients ?? [])
+                        .map((i) => i.stock_item_id)
+                        .filter((id): id is string => Boolean(id));
+                    return {
+                        label: `${r.name}${ingredientIds.length ? ` (${ingredientIds.length} ingredients)` : ''}`,
+                        value: r.recipe_id,
+                        ingredientIds,
+                    };
+                });
+                mealPlanOptions.value = plans.map((p) => ({
+                    label: `${p.name ?? `Week of ${formatDate(p.start_date)}`} (${p.entries?.length ?? 0} meals)`,
+                    value: p.meal_plan_id,
+                }));
+            } finally {
+                loadingPickers.value = false;
             }
         },
     );
@@ -312,7 +305,19 @@
         return { added: result.added, skipped: result.already_on_list + result.failed_ids.length };
     }
 
+    // One busy flag for the whole submit: the prefill and auto-fill steps run
+    // after the list exists, so a second tap there would create a second list.
     async function submit() {
+        if (submitting.value) return;
+        submitting.value = true;
+        try {
+            await submitSteps();
+        } finally {
+            submitting.value = false;
+        }
+    }
+
+    async function submitSteps() {
         const f = form;
         const wantsAutoFill =
             f.source_low_or_out
@@ -325,7 +330,6 @@
             if (f.targetMode === 'merge') {
                 targetListId = f.mergeIntoListId;
             } else {
-                creating.value = true;
                 const payload: { name?: string; planned_shop_date?: string | null } = {};
                 if (f.name.trim()) payload.name = f.name.trim();
                 if (f.plannedShopDate) payload.planned_shop_date = f.plannedShopDate;
@@ -339,10 +343,7 @@
                 message: 'Could not create list.',
                 caption: toastCaption(err),
             });
-            creating.value = false;
             return;
-        } finally {
-            creating.value = false;
         }
         if (!targetListId) return;
 
@@ -389,7 +390,6 @@
         let autoSkipped = 0;
         let autoNothingToAdd = false;
         if (wantsAutoFill && targetListId) {
-            autogenerating.value = true;
             try {
                 const result = await api.autoGenerateAsync({
                     merge_into_list_id: targetListId,
@@ -414,8 +414,6 @@
                     message: 'Could not auto-fill from stock.',
                     caption: toastCaption(err),
                 });
-            } finally {
-                autogenerating.value = false;
             }
         }
 

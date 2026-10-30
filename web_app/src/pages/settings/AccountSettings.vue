@@ -64,6 +64,7 @@
                     dense
                     class="account-field"
                     autocomplete="username"
+                    aria-label="Username"
                     :error="usernameDraft.trim().length === 0"
                     :error-message="usernameDraft.trim().length === 0
                         ? 'Username can\'t be empty' : ''"
@@ -83,6 +84,7 @@
                     placeholder="you@example.com"
                     class="account-field"
                     autocomplete="email"
+                    aria-label="Email"
                     :error="emailInvalid"
                     :error-message="emailInvalid ? 'Enter a valid email address' : ''"
                 />
@@ -253,7 +255,7 @@
     });
 
     const usernameUnchanged = computed(
-        () => (currentUser.value?.username ?? '') === usernameDraft.value,
+        () => (currentUser.value?.username ?? '') === usernameDraft.value.trim(),
     );
     const emailUnchanged = computed(
         () => (currentUser.value?.email ?? '') === emailDraft.value.trim(),

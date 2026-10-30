@@ -6,6 +6,8 @@ from uuid import uuid4
 
 import requests
 
+from tests.support import assert_problem
+
 BASE = "http://localhost:5170/api"
 SL_TEMPLATES = f"{BASE}/shopping-list-templates"
 
@@ -68,3 +70,51 @@ def test__list_templates__line_count_matches_the_lines(api):
     finally:
         if template_id:
             requests.delete(f"{SL_TEMPLATES}/{template_id}")
+
+
+def test__create_shopping_list_template__UnknownStockItemId__Is422AndNothingCreated(api):
+    # The FK used to surface as an IntegrityError → 500.
+    name = f"Unknown item tpl {uuid4()}"
+    missing = str(uuid4())
+
+    resp = requests.post(SL_TEMPLATES, json={
+        "name": name, "lines": [{"stock_item_id": missing, "quantity": 1}],
+    })
+
+    assert_problem(resp, 422, field="lines", title="Entity(s) were not found.")
+    assert all(t["name"] != name for t in requests.get(SL_TEMPLATES).json())
+
+
+def test__create_shopping_list_template__RepeatedStockItem__FoldsToOneLine(api):
+    item_id = _a_stock_item_id()
+    resp = requests.post(SL_TEMPLATES, json={
+        "name": f"Dup item tpl {uuid4()}",
+        "lines": [
+            {"stock_item_id": item_id, "quantity": 2},
+            {"stock_item_id": item_id, "quantity": 5},
+        ],
+    })
+    assert resp.status_code == 201, resp.text
+
+    lines = requests.get(f"{SL_TEMPLATES}/{resp.json()['template_id']}").json()["lines"]
+
+    assert len(lines) == 1
+    assert lines[0]["quantity"] == 2
+
+
+def test__create_shopping_list_template__ZeroQuantity__IsKeptAndInstantiatesAsOne(api):
+    # The editor's stepper goes down to 0 ("none yet"); the template keeps it,
+    # and instantiating clamps the list line to the >= 1 a list requires.
+    resp = requests.post(SL_TEMPLATES, json={
+        "name": f"Zero qty tpl {uuid4()}",
+        "lines": [{"stock_item_id": _a_stock_item_id(), "quantity": 0}],
+    })
+    assert resp.status_code == 201, resp.text
+    template_id = resp.json()["template_id"]
+    assert requests.get(f"{SL_TEMPLATES}/{template_id}").json()["lines"][0]["quantity"] == 0
+
+    inst = requests.post(f"{SL_TEMPLATES}/{template_id}/instantiate", json={})
+    assert inst.status_code in (200, 201), inst.text
+    list_id = inst.json()["shopping_list_id"]
+    lines = requests.get(f"http://localhost:5170/api/shopping-lists/{list_id}").json()["lines"]
+    assert [l["quantity"] for l in lines] == [1]

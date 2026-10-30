@@ -43,9 +43,10 @@ export default class ProductApiService {
     deleteAsync = async (productId: string): Promise<void> =>
         await this.httpClient.delete(`/products/${productId}`);
 
-    updateAsync = async (productToUpdate: UpdateProductCommand): Promise<Product> => {
+    /** 204 — the server returns no body; callers refetch if they need the row. */
+    updateAsync = async (productToUpdate: UpdateProductCommand): Promise<void> => {
         const { product_id, ...payload } = productToUpdate;
-        return await this.httpClient.patch<Product>(`/products/${product_id}`, payload);
+        await this.httpClient.patch<void>(`/products/${product_id}`, payload);
     };
 }
 

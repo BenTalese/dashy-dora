@@ -4,6 +4,7 @@ from urllib.error import URLError
 from urllib.request import Request, urlopen
 
 from dora_api.infrastructure.llm.llm_client import (LlmClient, LlmUnavailable,
+                                                 is_provider_down,
                                                  remember_availability,
                                                  remembered_availability)
 
@@ -27,7 +28,7 @@ class OllamaClient(LlmClient):
         # Reachability is remembered per endpoint (`llm_client`), so a chat
         # turn doesn't probe every request and a downed server doesn't stall
         # each one with a fresh timeout.
-        self._availability_key = (type(self).__name__, self._base_url)
+        self._availability_key = (type(self).__name__, self._base_url, self._model)
 
     def is_available(self) -> bool:
         if not self._enabled:
@@ -90,5 +91,6 @@ class OllamaClient(LlmClient):
             with urlopen(req, timeout=self._timeout) as resp:
                 return json.loads(resp.read().decode("utf-8"))
         except (URLError, OSError, ValueError) as exc:
-            remember_availability(self._availability_key, False)
+            if is_provider_down(exc):
+                remember_availability(self._availability_key, False)
             raise LlmUnavailable(f"Ollama request failed: {exc}") from exc

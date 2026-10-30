@@ -395,6 +395,9 @@
             lastSavedCurrency = result.currency;
             await refreshMoneyPolicy();
         } catch (err) {
+            // Roll back to what the server holds (the timezone/system handlers
+            // do the same) — the error line explains why the pick didn't stick.
+            currencyDraft.value = lastSavedCurrency;
             currencyError.value = 'Could not save the currency.';
             $q.notify({
                 type: 'negative', 
@@ -429,6 +432,7 @@
             lastSavedLocale = result.locale;
             await refreshMoneyPolicy();
         } catch (err) {
+            localeDraft.value = lastSavedLocale;
             localeError.value = 'Could not save the language.';
             $q.notify({
                 type: 'negative', 
@@ -642,6 +646,7 @@
     }
 
     async function enableRatingScheme(scheme: 'health_star' | 'nutri_score') {
+        const name = scheme === 'health_star' ? 'Health Star Ratings' : 'Nutri-Score';
         try {
             await settingsStore.saveAsync({ nutrition_rating_scheme: scheme });
             await refreshFlags();
@@ -652,15 +657,13 @@
             useRecipeStore().invalidateRecipes();
             $q.notify({
                 type: 'positive', 
-                message: scheme === 'health_star'
-                    ? 'Health Star Ratings on.'
-                    : 'Nutri-Score on.',
+                message: `${name} on.`,
                 caption: 'They show on recipes once nutrition is set to complex.',
             });
         } catch (err) {
             $q.notify({
                 type: 'negative', 
-                message: "Couldn't turn on Health Star Ratings.",
+                message: `Couldn't turn on ${name}.`,
                 caption: toastCaption(err),
             });
         }

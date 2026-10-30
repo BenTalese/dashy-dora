@@ -22,7 +22,8 @@ export type EditableStepImage = {
      *  the `/recipes/<id>/step-images/<image_id>` URL for hydrated rows. */
     preview_url: string;
     /** The `data:image/jpeg;base64,...` payload to POST on save. Empty
-     *  string for hydrated rows (they round-trip via existing_image_id;
-     *  the save flow only sends rows that have a real data URL). */
+     *  string for hydrated rows — they round-trip by sending their
+     *  existing_image_id in the same `step_images[]` slot, so the server
+     *  keeps the saved image in the new order. */
     data_url: string;
 };

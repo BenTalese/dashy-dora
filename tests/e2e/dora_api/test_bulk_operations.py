@@ -16,6 +16,7 @@ from uuid import uuid4
 import requests
 
 from tests.factories import make_stock_item
+from tests.support import assert_problem
 
 BASE = "http://localhost:5170/api"
 LISTS = f"{BASE}/shopping-lists"
@@ -307,3 +308,28 @@ def test__bulk_remove_by_stock_item__unknown_list_is_404(api):
         json={"stock_item_ids": [sid]},
     )
     assert resp.status_code == 404, resp.text
+
+
+# ───── Reorder lines ──────────────────────────────────────────────────────
+
+def test__reorder_lines__UnknownList__IsNotFound(api):
+    missing = uuid4()
+
+    resp = requests.post(f"{LISTS}/{missing}/lines/reorder", json={"line_ids": []})
+
+    assert_problem(resp, 404, detail=f"ShoppingList with the ID '{missing}' was not found.")
+
+
+def test__reorder_lines__RepeatedLineId__KeepsFirstPosition(api):
+    list_id = _make_draft()
+    for _ in range(2):
+        requests.post(f"{LISTS}/{list_id}/lines", json={"stock_item_id": _make_item()["stock_item_id"]})
+    first, second = (l["line_id"] for l in requests.get(f"{LISTS}/{list_id}").json()["lines"])
+
+    resp = requests.post(f"{LISTS}/{list_id}/lines/reorder",
+                         json={"line_ids": [second, first, second]})
+
+    assert resp.status_code == 204, resp.text
+    by_seq = sorted(requests.get(f"{LISTS}/{list_id}").json()["lines"], key=lambda l: l["sequence"])
+    assert [l["line_id"] for l in by_seq] == [second, first]
+    assert [l["sequence"] for l in by_seq] == [0, 1]

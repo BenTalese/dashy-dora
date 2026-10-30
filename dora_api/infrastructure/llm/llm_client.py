@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from time import time
+from urllib.error import HTTPError
 
 # A client is built per request, so an availability probe cached on the
 # instance never got reused and every `/ask` paid a network round trip (up to
@@ -18,6 +19,18 @@ def remembered_availability(key: tuple) -> bool | None:
 
 def remember_availability(key: tuple, available: bool) -> None:
     _availability[key] = (time(), available)
+
+
+def is_provider_down(exc: BaseException) -> bool:
+    """Whether a failed chat call means the provider itself is unreachable.
+
+    `HTTPError` subclasses `URLError`, so a 4xx (bad request shape, bad key,
+    unknown model) used to be cached as "unavailable" and the assistant read
+    offline for the whole TTL. Only transport errors and 5xx mark it down; a
+    4xx is a problem with *this* request, not the endpoint."""
+    if isinstance(exc, HTTPError):
+        return exc.code >= 500
+    return True
 
 
 class LlmUnavailable(Exception):

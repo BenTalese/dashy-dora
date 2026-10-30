@@ -238,7 +238,11 @@ class SqlAlchemyQueryBuilder(Generic[TEntity]):
         if options.sort:
             sort_field = self._resolve_field(options.sort.field, field_map)
             column = sort_field._col()
+            # Empty values sort last in both directions. Without an explicit
+            # rule the order is the backend's: SQLite puts NULL first on ASC,
+            # Postgres last, so the same page differed by datastore.
             primary = column.asc() if options.sort.direction == "asc" else column.desc()
+            primary = primary.nulls_last()
             self.query = self.query.order_by(primary, id_column.asc())
         else:
             self.query = self.query.order_by(id_column.asc())

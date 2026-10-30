@@ -120,26 +120,41 @@ def validate_production_requirements(extra: Sequence[str] = ()) -> None:
 
     required = list(PRODUCTION_REQUIRED_VARS) + list(extra)
     missing = [name for name in required if not (os.environ.get(name) or "").strip()]
-    if not missing:
-        return
+    if missing:
+        body = [" Missing:"]
+        body += [f"   - {name}" for name in missing]
+        body += [
+            "",
+            " Fix:  add the missing vars to your .env (or the deploy",
+            " environment) and restart. See .env.example for what each",
+            " var does.",
+            "",
+            " To run in dev mode instead, set DORA_ENV=development.",
+        ]
+        _print_banner(
+            [" DORA_ENV=production but required environment variables are",
+             " missing. Refusing to start."],
+            body,
+        )
+        # Exit non-zero so compose marks the container as failed.
+        sys.exit(1)
 
-    body = [" Missing:"]
-    body += [f"   - {name}" for name in missing]
-    body += [
-        "",
-        " Fix:  add the missing vars to your .env (or the deploy",
-        " environment) and restart. See .env.example for what each",
-        " var does.",
-        "",
-        " To run in dev mode instead, set DORA_ENV=development.",
+    # CORS runs with credentials enabled, so a wildcard origin would let any
+    # website make authenticated calls with a signed-in user's cookie.
+    cors_origins = [
+        origin.strip()
+        for origin in (os.environ.get("DORA_CORS_ORIGINS") or "").split(",")
     ]
-    _print_banner(
-        [" DORA_ENV=production but required environment variables are",
-         " missing. Refusing to start."],
-        body,
-    )
-    # Exit non-zero so compose marks the container as failed.
-    sys.exit(1)
+    if "*" in cors_origins:
+        _print_banner(
+            [" DORA_ENV=production but DORA_CORS_ORIGINS contains \"*\".",
+             " Refusing to start."],
+            [" Credentialed CORS with a wildcard origin lets any website act",
+             " as a signed-in user. List the exact origin(s) the SPA is",
+             " served from instead, e.g.",
+             "   DORA_CORS_ORIGINS=https://dora.example.com"],
+        )
+        sys.exit(1)
 
 
 def warn_if_insecure_cookies_in_production() -> None:

@@ -1,4 +1,5 @@
 import logging
+from collections import Counter
 from logging.config import fileConfig
 
 from flask import current_app
@@ -124,6 +125,25 @@ def run_migrations_online():
     connectable = get_engine()
 
     with connectable.connect() as connection:
+        # SQLite: run the chain with foreign-key enforcement OFF. The app turns
+        # it on for every connection (`_enable_sqlite_foreign_keys`), and with
+        # it on, a batch rebuild's `DROP TABLE <parent>` runs an implicit
+        # DELETE that fires every child's ON DELETE action: CASCADE children
+        # are deleted and SET NULL links are blanked, even though the rows come
+        # straight back in the rebuilt table (R-095). SQLite's own
+        # table-rebuild procedure turns enforcement off first; the PRAGMA is a
+        # no-op inside a transaction, so it has to happen here, before one
+        # opens. `_check_sqlite_foreign_keys` then refuses any upgrade that
+        # left a dangling reference the database did not already have.
+        sqlite = connection.dialect.name == 'sqlite'
+        if sqlite:
+            connection.exec_driver_sql('PRAGMA foreign_keys=OFF')
+            violations_before = _sqlite_foreign_key_violations(connection)
+            head_before = _current_revisions(connection)
+            # Close SQLAlchemy's autobegun transaction: Alembic treats a
+            # connection already in one as externally managed and never
+            # commits the migrations.
+            connection.commit()
         context.configure(
             connection=connection,
             target_metadata=get_metadata(),
@@ -134,8 +154,52 @@ def run_migrations_online():
             **current_app.extensions['migrate'].configure_args
         )
 
-        with context.begin_transaction():
-            context.run_migrations()
+        try:
+            with context.begin_transaction():
+                context.run_migrations()
+                # Only worth the full scan when a revision actually ran: at
+                # head the counts can't have changed, and the scan touches
+                # every FK on every boot otherwise.
+                if sqlite and _revision_applied(connection, head_before):
+                    _check_sqlite_foreign_keys(connection, violations_before)
+        finally:
+            if sqlite:
+                connection.exec_driver_sql('PRAGMA foreign_keys=ON')
+                connection.commit()
+
+
+def _sqlite_foreign_key_violations(connection):
+    """Dangling references, counted per (child table, parent table). Counted
+    rather than keyed by rowid because a batch rebuild may renumber rowids."""
+    rows = connection.exec_driver_sql('PRAGMA foreign_key_check').fetchall()
+    return Counter((row[0], row[2]) for row in rows)
+
+
+def _current_revisions(connection) -> frozenset:
+    try:
+        rows = connection.exec_driver_sql('SELECT version_num FROM alembic_version').fetchall()
+    except Exception:  # noqa: BLE001 — no version table yet (first run)
+        return frozenset()
+    return frozenset(r[0] for r in rows)
+
+
+def _revision_applied(connection, head_before: frozenset) -> bool:
+    return _current_revisions(connection) != head_before
+
+
+def _check_sqlite_foreign_keys(connection, before):
+    """Refuse to finish the boot if this run introduced dangling references.
+    A loud detector, not a rollback: SQLite's DDL is non-transactional in
+    Alembic (`transactional_ddl = False`), so each revision has already
+    committed by the time this runs — the point is that the operator sees
+    the loss on the boot that caused it, with the pre-upgrade backup still
+    fresh, instead of months later. References that predate the run are left
+    alone: they are not this upgrade's doing, and refusing them would strand
+    the install."""
+    introduced = _sqlite_foreign_key_violations(connection) - before
+    if introduced:
+        detail = ', '.join(f'{child} -> {parent}: {n}' for (child, parent), n in sorted(introduced.items()))
+        raise RuntimeError(f'migration left new dangling foreign key references ({detail})')
 
 
 if context.is_offline_mode():

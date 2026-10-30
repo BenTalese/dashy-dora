@@ -1,7 +1,16 @@
 """Stock-overview exports — install-wide CSV + a stocktake-friendly print view.
 
-  GET /api/stock-items/export?format=csv
-  GET /api/stock-items/print-view
+  GET  /api/stock-items/export?format=csv[&ids=a,b,…]
+  POST /api/stock-items/export?format=csv     body {"ids": [...]}
+  GET  /api/stock-items/print-view[?ids=a,b,…]
+  POST /api/stock-items/print-view            body {"ids": [...]}
+
+Why two doors: a filtered selection travels as ids, and ~39 bytes per uuid in
+a query string runs into gunicorn's 8190-byte request-line cap (and nginx's
+8 KB header buffer) at ~200 items — the user saw "Couldn't export…" or a dead
+print tab. The POST door carries the same ids in a JSON body; the GET door
+stays for no-filter / small-selection callers and existing links. Both call
+one handler body (R-051 spirit: one implementation, two doors).
 
 Designed for "take it to the pantry" use — print-view groups by location,
 shows level + expiry, leaves a checkbox column to tick off as the user
@@ -15,11 +24,16 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from flask import Response, render_template_string, request
+from pydantic import BaseModel, ConfigDict, Field
 
 from dora_api.domain.entities.stock_item import StockItem
-from dora_api.features.data.export_shared import PRINT_CSS, PRINT_TOOLBAR
+from dora_api.features.data.export_shared import (
+    PRINT_CSS, PRINT_TOOLBAR, csv_safe_row,
+)
 from dora_api.features.routers import STOCK_ITEM_ROUTER
 from dora_api.infrastructure.api_response import bad_request
+from dora_api.infrastructure.decorators import has_request_body
+from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 
@@ -51,7 +65,7 @@ def _build_csv(items) -> str:
     ])
     for location, group in _group_by_location(items):
         for item in group:
-            writer.writerow([
+            writer.writerow(csv_safe_row([
                 location,
                 item.name,
                 item.stock_level.name if item.stock_level else "",
@@ -59,7 +73,7 @@ def _build_csv(items) -> str:
                 "true" if item.is_essential else "false",
                 "true" if item.is_open else "false",
                 item.notes or "",
-            ])
+            ]))
     return buffer.getvalue()
 
 
@@ -156,15 +170,29 @@ def _parse_ids(raw: str | None) -> list[UUID] | None:
     return out
 
 
-@STOCK_ITEM_ROUTER.route("/export", methods=["GET"])
-def export_stock_overview():
+# Upper bound for a POSTed selection. Generous — a whole real pantry fits many
+# times over — but finite, so a runaway client can't hold a request open
+# rendering an unbounded list. Shared with the QR sheet's POST door.
+MAX_SELECTED_IDS = 5000
+
+
+class StockItemSelectionRequest(BaseModel):
+    """`{"ids": [...]}` — the POST twin of the GET routes' `ids=` param.
+    Same semantics: an empty list is a legitimate "filtered to nothing"
+    selection. Unlike the query-string door, a malformed uuid is a 400 here:
+    the body is built by our own client, so a bad id is a bug to surface."""
+    model_config = ConfigDict(extra="forbid")
+    ids: list[UUID] = Field(max_length=MAX_SELECTED_IDS)
+
+
+def _export_csv_response(ids: list[UUID] | None) -> Response:
     fmt = (request.args.get("format") or "csv").lower()
     if fmt not in ("csv",):
         return bad_request(
             f"Unsupported export format '{fmt}'. Supported: csv. "
             "For PDF, open the print-view and 'Save as PDF' from your browser."
         )
-    items = _all_items(_parse_ids(request.args.get("ids")))
+    items = _all_items(ids)
     body = _build_csv(items)
     today = datetime.now(timezone.utc).date().isoformat()
     filename = f"stock-overview-{today}.csv"
@@ -176,9 +204,8 @@ def export_stock_overview():
     return response
 
 
-@STOCK_ITEM_ROUTER.route("/print-view", methods=["GET"])
-def print_view_stock_overview():
-    items = _all_items(_parse_ids(request.args.get("ids")))
+def _print_view_response(ids: list[UUID] | None) -> Response:
+    items = _all_items(ids)
     generated_at = datetime.now(timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M")
     html = render_template_string(
         _PRINT_TEMPLATE,
@@ -189,3 +216,27 @@ def print_view_stock_overview():
         toolbar=PRINT_TOOLBAR,
     )
     return Response(html, mimetype="text/html; charset=utf-8")
+
+
+@STOCK_ITEM_ROUTER.route("/export", methods=["GET"])
+def export_stock_overview():
+    return _export_csv_response(_parse_ids(request.args.get("ids")))
+
+
+@STOCK_ITEM_ROUTER.route("/export", methods=["POST"])
+@has_request_body(StockItemSelectionRequest)
+def export_stock_overview_selection():
+    _Request: StockItemSelectionRequest = get_request_body()
+    return _export_csv_response(_Request.ids)
+
+
+@STOCK_ITEM_ROUTER.route("/print-view", methods=["GET"])
+def print_view_stock_overview():
+    return _print_view_response(_parse_ids(request.args.get("ids")))
+
+
+@STOCK_ITEM_ROUTER.route("/print-view", methods=["POST"])
+@has_request_body(StockItemSelectionRequest)
+def print_view_stock_overview_selection():
+    _Request: StockItemSelectionRequest = get_request_body()
+    return _print_view_response(_Request.ids)

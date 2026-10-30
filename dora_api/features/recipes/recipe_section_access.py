@@ -88,6 +88,9 @@ def replace_sections_for_recipe(
     the implicit main group; FK is ON DELETE SET NULL)."""
     if any(not (s.name or "").strip() for s in sections):
         raise ValueError("Every section must have a non-empty name.")
+    if len({s.client_id for s in sections}) != len(sections):
+        # Two sections sharing a client_id would collapse onto one row id.
+        raise ValueError("Every section must have a distinct client_id.")
 
     table = _section_table()
     db.session.execute(table.delete().where(table.c.recipe_id == recipe_id))

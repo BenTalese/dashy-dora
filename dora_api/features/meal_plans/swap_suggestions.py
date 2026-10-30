@@ -47,8 +47,7 @@ from dora_api.domain.entities.meal_plan_entry import MealPlanEntry
 from dora_api.domain.entities.meal_plan_swap_ledger import MealPlanSwapLedger
 from dora_api.domain.entities.recipe import Recipe
 from dora_api.features.app_settings.access import money_features_enabled
-from dora_api.features.app_settings.clock import household_today
-from dora_api.features.budget.budget import budget_remaining, household_budget
+from dora_api.features.budget.budget import household_budget, period_headroom
 from dora_api.features.meal_plans.get_meal_plans import GetMealPlansHandler
 from dora_api.features.recipes.all_recipes import load_all_recipe_dtos
 from dora_api.features.recipes.recipe_cost import CostEstimate, estimate_costs_for
@@ -353,10 +352,11 @@ def compute_suggestions(
             priced += 1
     cost_per_week = round(cost_per_week, 2)
 
-    today = household_today(repository)
     budget = household_budget(repository)
     budget_amount = budget.amount if budget is not None else None
-    remaining = budget_remaining(repository, today)
+    # The money left in the period the plan's week falls in, not today's —
+    # planning next week is measured against next week's budget.
+    remaining = period_headroom(plan_dto.start_date, repository)
     projected_over = remaining is not None and cost_per_week > remaining
     overshoot = round(max(0.0, cost_per_week - remaining), 2) if remaining is not None else 0.0
 

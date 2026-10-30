@@ -34,6 +34,7 @@ import os
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from typing import Any
+from uuid import UUID
 
 from flask import Response, request
 from pydantic import BaseModel, ConfigDict, Field
@@ -231,7 +232,8 @@ def _build_auto_mapping(headers: list[str]) -> dict[str, str | None]:
 
 class InspectSpreadsheetRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    upload_id: str
+    # A UUID, validated here: `staged_path` joins it into a filesystem path.
+    upload_id: UUID
     filename: str = Field(min_length=1)
 
 
@@ -247,9 +249,9 @@ class InspectSpreadsheetResponse:
 
 class InspectSpreadsheetHandler:
     def handle(self, request: InspectSpreadsheetRequest) -> InspectSpreadsheetResponse | DataError:
-        path = staged_path(request.upload_id)
+        path = staged_path(str(request.upload_id))
         if not path.exists():
-            return upload_missing(request.upload_id)
+            return upload_missing(str(request.upload_id))
         try:
             sheets = _read_sheets(str(path), request.filename)
         except ValueError as exc:
@@ -346,7 +348,8 @@ class ImportOptions(BaseModel):
 
 class CommitSpreadsheetRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    upload_id: str
+    # A UUID, validated here: `staged_path` joins it into a filesystem path.
+    upload_id: UUID
     filename: str = Field(min_length=1)
     sheet: str = Field(min_length=1)
     column_map: dict[str, str | None]
@@ -372,9 +375,9 @@ class CommitSpreadsheetHandler:
         self.repository = repository
 
     def handle(self, request: CommitSpreadsheetRequest) -> CommitSpreadsheetResponse | DataError:
-        path = staged_path(request.upload_id)
+        path = staged_path(str(request.upload_id))
         if not path.exists():
-            return upload_missing(request.upload_id)
+            return upload_missing(str(request.upload_id))
 
         # ── Read spreadsheet ─────────────────────────────────────────
         try:
@@ -415,6 +418,8 @@ class CommitSpreadsheetHandler:
             if col_name not in header:
                 return invalid(f"Column '{col_name}' is not in sheet '{request.sheet}'.")
 
+        # Every target but `name` is optional: an unmapped one is simply absent
+        # from `column_map`, so the reads below use `.get` (None = unmapped).
         col_index: dict[str, int | None] = {
             target: (header.index(col) if col is not None and col in header else None)
             for target, col in request.column_map.items()
@@ -480,24 +485,26 @@ class CommitSpreadsheetHandler:
                 # Resolve foreign keys.
                 try:
                     stock_level = self._resolve_level(
-                        row, col_index["level"], existing_levels, level_choices,
+                        row, col_index.get("level"), existing_levels, level_choices,
                     )
                     stock_location = self._resolve_location(
-                        row, col_index["location"],
+                        row, col_index.get("location"),
                         existing_location_names, request.options.create_missing_locations,
                     )
                     stock_group = self._resolve_group(
-                        row, col_index["group"],
+                        row, col_index.get("group"),
                         existing_group_names, request.options.create_missing_groups,
                     )
+                    expiry_idx = col_index.get("expiry")
                     expiry = (
-                        _coerce_to_date(row[col_index["expiry"]], day_first=day_first)
-                        if col_index["expiry"] is not None and col_index["expiry"] < len(row)
+                        _coerce_to_date(row[expiry_idx], day_first=day_first)
+                        if expiry_idx is not None and expiry_idx < len(row)
                         else None
                     )
+                    essential_idx = col_index.get("is_essential")
                     is_essential = (
-                        _is_truthy(row[col_index["is_essential"]])
-                        if col_index["is_essential"] is not None and col_index["is_essential"] < len(row)
+                        _is_truthy(row[essential_idx])
+                        if essential_idx is not None and essential_idx < len(row)
                         else False
                     )
                 except _RowError as exc:

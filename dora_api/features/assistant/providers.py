@@ -17,7 +17,7 @@ a selectable Mode until it has actually answered.
 from dataclasses import dataclass
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from dora_api.domain.entities.user import ALLOWED_LLM_PROVIDERS
 from dora_api.domain.entities.user_llm_provider import UserLlmProvider
@@ -27,7 +27,9 @@ from dora_api.infrastructure.api_response import (bad_request,
                                                   unauthorized)
 from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.llm import EncryptionUnavailable, encrypt_api_key
-from dora_api.infrastructure.llm.factory import PROVIDER_DEFAULTS
+from dora_api.infrastructure.llm.factory import (BASE_URL_SCHEME_MESSAGE,
+                                                 PROVIDER_DEFAULTS,
+                                                 is_http_base_url)
 from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
@@ -88,6 +90,13 @@ class UpdateProviderRequest(BaseModel):
     model: str | None = Field(default=None, max_length=255)
     api_key: str | None = Field(default=None, max_length=512)
     clear_api_key: bool = False
+
+    @field_validator("base_url")
+    @classmethod
+    def _http_base_url(cls, value: str | None) -> str | None:
+        if value is not None and value.strip() and not is_http_base_url(value):
+            raise ValueError(BASE_URL_SCHEME_MESSAGE)
+        return value
 
 
 def get_provider_config(

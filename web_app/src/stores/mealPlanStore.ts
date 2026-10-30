@@ -17,8 +17,7 @@ export const useMealPlanStore = defineStore('mealPlan', () => {
     const today: Ref<string | null> = ref(null);
 
     const getMealPlansAsync = async () => {
-        const page = await api.getAllAsync();
-        mealPlans.value = page.items;
+        mealPlans.value = await api.getAllPagesAsync();
     };
 
     const createMealPlanAsync = async (command: CreateMealPlanCommand) => {

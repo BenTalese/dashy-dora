@@ -26,6 +26,7 @@ from dora_api.domain.entities.shopping_list import (SHOPPING_LIST_STATUS_DONE,
                                                     ShoppingList,
                                                     ShoppingListLine)
 from dora_api.domain.entities.stock_item import StockItem
+from dora_api.domain.entities.store import Store
 from dora_api.features.routers import SHOPPING_LIST_ROUTER
 from dora_api.features.shopping_lists._line_defaults import apply_line_defaults
 from dora_api.features.shopping_lists._observation_sync import (
@@ -247,6 +248,9 @@ class UpdateLineRequest(BaseModel):
 @dataclass(slots=True)
 class UpdateLineResponse:
     line_not_found: bool = False
+    # Body ids that name no row — refused up front rather than 500 on the FK.
+    product_not_found: bool = False
+    store_not_found_id: UUID | None = None
 
 
 class UpdateLineHandler:
@@ -266,6 +270,26 @@ class UpdateLineHandler:
             return UpdateLineResponse(line_not_found=True)
 
         set_fields = request.model_fields_set
+        selected_product: Product | None = None
+        if (
+            "selected_product_id" in set_fields
+            and request.selected_product_id is not None
+            and not request.clear_selected_product
+        ):
+            selected_product = self.repository.get(Product).by_id(request.selected_product_id)
+            if selected_product is None:
+                return UpdateLineResponse(product_not_found=True)
+        for store_field, clear_flag in (
+            ("purchased_store_id", request.clear_purchased_store),
+            ("planned_store_id", request.clear_planned_store),
+        ):
+            store_id = getattr(request, store_field)
+            if (
+                store_field in set_fields and store_id is not None and not clear_flag
+                and not self.repository.get(Store).exists(store_id)
+            ):
+                return UpdateLineResponse(store_not_found_id=store_id)
+
         # Track whether the user is editing substantive fields — qty or
         # selected_product. If so, an auto_ provenance flips back to
         # "manual" (the user has taken ownership of the line). Ticking
@@ -301,11 +325,10 @@ class UpdateLineHandler:
             # offer "should overwrite the selected store for the shopping
             # row"). Un-picking leaves the store alone; there is nothing to
             # restore it to that is truer than what is there.
-            product: Product | None = self.repository.get(Product).include(Product.Fields.STORE).by_id(
-                request.selected_product_id
-            )
-            if product is not None:
-                line.planned_store_id = product.store.id
+            #
+            # R-032: read the FK column, not the noload `store` relationship
+            # (it reads None if the Product is already in the session).
+            line.planned_store_id = selected_product._store_id
             user_edited = True
 
         # actual paid price / store. Editing these doesn't clear
@@ -379,6 +402,10 @@ def update_line(shopping_list_id: UUID, line_id: UUID):
     _Response = UpdateLineHandler(SqlAlchemyRepository()).handle(_Request, shopping_list_id, line_id)
     if _Response.line_not_found:
         return not_found("ShoppingListLine", line_id)
+    if _Response.product_not_found:
+        return not_found(Product.__name__, _Request.selected_product_id)
+    if _Response.store_not_found_id is not None:
+        return not_found(Store.__name__, _Response.store_not_found_id)
     _LOGGER.debug(f"Updated line {line_id} on list {shopping_list_id}")
     return no_content()
 

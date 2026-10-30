@@ -180,6 +180,42 @@ def test__update__replaces_and_unlinks_batch(api):
     assert entries[0]["cook_batch_id"] is None
 
 
+def test__update__BatchStraddlingTodayWithOneForwardDay__IsAccepted(api):
+    """The cook day is past (preserved server-side), so the payload carries just
+    one leftover day under the batch's id. That's still a two-day batch — the
+    one-member rule used to reject it and freeze the week."""
+    from sqlalchemy import text
+
+    from dora_api.app import app, db
+    from tests.support import uuid_bind
+
+    today = _household_today()
+    slot = _slot_names()[0]
+    recipe = _make_recipe()
+    plan_id = _create([
+        {"recipe_id": recipe, "scheduled_for": (today + timedelta(days=d)).isoformat(),
+         "servings": 1, "slot": slot, "cook_key": "c1"}
+        for d in (0, 1)
+    ]).json()["meal_plan_id"]
+    entries = _by_id(plan_id)["entries"]
+    cook_day = next(e for e in entries if e["scheduled_for"] == today.isoformat())
+    batch_id = cook_day["cook_batch_id"]
+    with app.app_context(), db.engine.begin() as conn:
+        conn.execute(
+            text('UPDATE "MealPlanEntry" SET scheduled_for = :d WHERE id = :eid'),
+            {"d": (today - timedelta(days=1)).isoformat(),
+             "eid": uuid_bind(cook_day["meal_plan_entry_id"])},
+        )
+
+    patch = requests.patch(f"{MEAL_PLANS}/{plan_id}", json={"entries": [
+        {"recipe_id": recipe, "scheduled_for": (today + timedelta(days=1)).isoformat(),
+         "servings": 1, "slot": slot, "cook_key": batch_id},
+    ]})
+
+    assert patch.status_code == 204, patch.text
+    assert {e["cook_batch_id"] for e in _by_id(plan_id)["entries"]} == {batch_id}
+
+
 # ── demand is batch-invariant (the Σ-yield model): the ingredient demand for a
 #    linked batch equals the demand for the same entries unlinked — cooking once
 #    vs three times buys the same food. Pins that the aggregation ignores linking

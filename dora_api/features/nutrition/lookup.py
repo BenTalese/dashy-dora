@@ -40,7 +40,7 @@ from dora_api.domain.entities.nutrition_food import (
 )
 from dora_api.features.help.version_info import CURRENT_VERSION
 from dora_api.features.nutrition.nutrients import (
-    NUTRIENT_ATTRS, USDA_NUTRIENT_ATTRS, off_values, to_float,
+    NUTRIENT_ATTRS, USDA_NUTRIENT_ATTRS, USDA_NUTRIENT_RANK, off_values, to_float,
 )
 from dora_api.persistence.bool_operation import Or
 from dora_api.persistence.field import EntityField as Field
@@ -449,6 +449,7 @@ def _parse_usda_foods(body: dict) -> List[FoodResult]:
         if not description or fdc_id is None:
             continue
         values = {}
+        ranks: dict = {}
         for nutrient in (food.get("foodNutrients") or []):
             name = (nutrient.get("nutrientName") or "").strip().lower()
             unit = (nutrient.get("unitName") or "").strip().lower()
@@ -458,7 +459,12 @@ def _parse_usda_foods(body: dict) -> List[FoodResult]:
             # Same (name, unit) table the bulk CSV importer matches on.
             attr = USDA_NUTRIENT_ATTRS.get((name, unit))
             if attr:
-                values[attr] = amount
+                # Earliest key in a nutrient's precedence list wins (energy
+                # 1008 over the Atwater rows), whatever order they arrive in.
+                rank = USDA_NUTRIENT_RANK[(name, unit)]
+                if rank <= ranks.get(attr, rank):
+                    values[attr] = amount
+                    ranks[attr] = rank
         if "kcal_per_100g" not in values:
             continue
         results.append(FoodResult(

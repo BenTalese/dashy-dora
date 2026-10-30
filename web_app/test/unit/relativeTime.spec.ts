@@ -78,6 +78,23 @@ describe('relativeTime — shared "N ago" formatter', () => {
 });
 
 describe('relativeTime coarse style', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        // 8am local, built from local parts so the calendar maths holds in any zone.
+        vi.setSystemTime(new Date(2026, 6, 10, 8, 0));
+    });
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it('counts calendar days, not elapsed 24h blocks', () => {
+        const lateLastNight = new Date(2026, 6, 9, 23, 0).toISOString();
+        expect(relativeTime(lateLastNight, { style: 'coarse' })).toBe('yesterday');
+        const earlyToday = new Date(2026, 6, 10, 0, 30).toISOString();
+        expect(relativeTime(earlyToday, { style: 'coarse' })).toBe('today');
+        expect(relativeTime('2026-07-08', { style: 'coarse' })).toBe('2 days ago');
+    });
+
     it('reads in whole days, as prose', () => {
         const ago = (days: number) => new Date(Date.now() - days * 86_400_000 - 1000).toISOString();
         expect(relativeTime(ago(0), { style: 'coarse' })).toBe('today');

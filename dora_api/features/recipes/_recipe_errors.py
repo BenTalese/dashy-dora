@@ -15,7 +15,8 @@ from dora_api.domain.entities.stock_item import StockItem
 from dora_api.infrastructure.api_response import (bad_request,
                                                   business_rule_violation,
                                                   entity_existence_failure,
-                                                  entity_existence_failures)
+                                                  entity_existence_failures,
+                                                  validation_failed)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -30,6 +31,7 @@ class RecipeWriteOutcome:
     invalid_tag_message: str | None = None
     invalid_tool_message: str | None = None
     invalid_step_message: str | None = None
+    invalid_step_image_message: str | None = None
     invalid_section_message: str | None = None
     invalid_vocabulary_message: str | None = None
     invalid_choice_message: str | None = None
@@ -48,6 +50,8 @@ _MESSAGE_CHECKS = (
     ("invalid_tag_message", "recipe tag", bad_request),
     ("invalid_tool_message", "recipe tool", bad_request),
     ("invalid_step_message", "recipe step", bad_request),
+    ("invalid_step_image_message", "recipe step image",
+     lambda message: validation_failed({"step_images": [message]})),
     ("invalid_section_message", "recipe section", bad_request),
     ("invalid_choice_message", "ingredient choice", business_rule_violation),
     ("invalid_vocabulary_message", "recipe vocabulary", bad_request),

@@ -35,10 +35,10 @@
                 </q-item-section>
                 <q-item-section side>
                     <div class="row q-gutter-xs">
-                        <BaseButton variant="icon" :icon="ICONS.edit" @click="onRenameDietaryTag(tag)">
+                        <BaseButton :aria-label="`Rename ${tag.name}`" variant="icon" :icon="ICONS.edit" @click="onRenameDietaryTag(tag)">
                             <BaseTooltip>Rename</BaseTooltip>
                         </BaseButton>
-                        <BaseButton variant="icon" :icon="ICONS.delete_outline" @click="onDeleteDietaryTag(tag)">
+                        <BaseButton :aria-label="`Delete ${tag.name}`" variant="icon" :icon="ICONS.delete_outline" @click="onDeleteDietaryTag(tag)">
                             <BaseTooltip>Delete</BaseTooltip>
                         </BaseButton>
                     </div>
@@ -102,13 +102,17 @@
         }
     }
 
-    async function run(action: () => Promise<unknown>) {
+    /** Returns whether the action landed — a rejected save (e.g. a duplicate
+     *  name) keeps the form dialog open so the input isn't lost. */
+    async function run(action: () => Promise<unknown>): Promise<boolean> {
         busy.value = true;
         try {
             await action();
             await load();
+            return true;
         } catch (err) {
             notifyError('Could not save the change.', err);
+            return false;
         } finally {
             busy.value = false;
         }
@@ -126,12 +130,12 @@
 
     async function onDialogConfirm(payload: { name: string; category: string }) {
         const target = editingTag.value;
-        await run(() =>
+        const saved = await run(() =>
             target
                 ? dietaryTagApi.updateAsync(target.dietary_tag_id, payload)
                 : dietaryTagApi.createAsync(payload),
         );
-        dialogOpen.value = false;
+        if (saved) dialogOpen.value = false;
     }
 
     async function onDeleteDietaryTag(tag: DietaryTag) {

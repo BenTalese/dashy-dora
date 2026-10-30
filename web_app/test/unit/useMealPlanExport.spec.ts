@@ -23,13 +23,13 @@ describe('useMealPlanExport', () => {
     it('fetches the print view through the client, by API path', () => {
         useMealPlanExport().openPrintView('plan-1');
 
-        expect(m.openHtmlDocumentAsync).toHaveBeenCalledWith('/meal-plans/plan-1/print-view', 'Meal plan');
+        expect(m.openHtmlDocumentAsync).toHaveBeenCalledWith('/meal-plans/plan-1/print-view', 'Meal plan', undefined);
     });
 
     it('URL-encodes the plan id', () => {
         useMealPlanExport().openPrintView('a b/c?d');
 
-        expect(m.openHtmlDocumentAsync).toHaveBeenCalledWith('/meal-plans/a%20b%2Fc%3Fd/print-view', 'Meal plan');
+        expect(m.openHtmlDocumentAsync).toHaveBeenCalledWith('/meal-plans/a%20b%2Fc%3Fd/print-view', 'Meal plan', undefined);
     });
 
     it('never builds a window.open URL from the API base', () => {

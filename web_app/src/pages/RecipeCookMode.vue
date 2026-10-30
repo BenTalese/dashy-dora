@@ -786,6 +786,7 @@
     import type { StockItem } from 'src/models/stockItem';
     import type { Substitute } from 'src/models/stockItemDetail';
     import RecipeApiService from 'src/services/api/recipeApiService';
+    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import StockItemApiService from 'src/services/api/stockItemApiService';
     import { useAuthStore } from 'src/stores/authStore';
     import { useLocationStore } from 'src/stores/locationStore';
@@ -1440,11 +1441,18 @@
         // (stock_item_id === null) can't participate in the finish flow
         // (no stock item to decrement). They're skipped here; the cook
         // still succeeds for the linked ingredients.
+        //
+        // One row per stock item: the same item used twice, or a swap onto
+        // an item the recipe already uses, would otherwise give two pickers
+        // writing the same level (and a duplicate v-for key). First wins.
         const rows: FinishRow[] = [];
+        const seen = new Set<string>();
         for (const ing of recipe.value?.ingredients ?? []) {
             if (ing.stock_item_id === null) continue;
             const swap = sessionSwaps.value.get(ing.stock_item_id);
             const targetId = swap?.substituteId ?? ing.stock_item_id;
+            if (seen.has(targetId)) continue;
+            seen.add(targetId);
             const item = stockItemStore.byId.get(targetId);
             const fallbackName = swap?.substituteName ?? ing.stock_item_name ?? ing.raw_text ?? '';
             rows.push({
@@ -1505,7 +1513,24 @@
             let mealsCooked = 0;
             if (recipe.value) {
                 mealsCooked = Math.max(0, Math.floor(finishMealsCooked.value || 0));
-                await recipeStore.cookAsync(recipe.value.recipe_id, mealsCooked);
+                // The POST alone, not `recipeStore.cookAsync`: that one also
+                // refetches the recipe, and a failed refetch after a landed
+                // POST would leave the dialog open for a retry that counts
+                // the cook twice. Only the POST failing keeps it open; the
+                // cookbook list is marked stale and refetches on next visit.
+                let cooked: { available_meals: number };
+                try {
+                    cooked = await recipeApiService.cookAsync(recipe.value.recipe_id, mealsCooked);
+                } catch (err) {
+                    $q.notify({
+                        type: 'negative',
+                        message: "Couldn't record this cook.",
+                        caption: toastCaption(err) || 'Try again in a moment.',
+                    });
+                    return;
+                }
+                recipeStore.setAvailableMeals(recipe.value.recipe_id, cooked.available_meals);
+                recipeStore.invalidateRecipes();
             }
 
             // Celebration. Copy reads off `meals_cooked` per L337 / DEC-5.
@@ -1709,11 +1734,16 @@
             // (only `has_structured_steps`), and cook mode needs structured
             // steps for per-step highlights / hints. Always fetch detail so
             // `recipe.value.steps` is present when the recipe has them.
-            recipe.value = await recipeApiService.getAsync(recipeId);
+            const fresh = await recipeApiService.getAsync(recipeId);
+            // A slow response for a recipe we've since moved off must not
+            // land under the new route's id.
+            if (recipeId !== route.params.id) return;
+            recipe.value = fresh;
         } catch {
+            if (recipeId !== route.params.id) return;
             recipe.value = null;
         } finally {
-            loading.value = false;
+            if (recipeId === route.params.id) loading.value = false;
         }
     }
 

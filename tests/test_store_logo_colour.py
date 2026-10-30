@@ -102,3 +102,54 @@ def test__dominant_colour__UndecodableImage__ReturnsNone():
     # A well-formed data URL whose payload isn't an image. Must not raise —
     # a broken logo still has to let the store save.
     assert dominant_colour(b"data:image/png;base64,bm90LWFuLWltYWdl") is None
+
+
+def _png_declaring(width: int, height: int) -> bytes:
+    """A tiny real PNG whose IHDR is rewritten to *declare* a huge canvas —
+    the decompression-bomb shape, without allocating anything on disk."""
+    import struct
+    import zlib
+
+    buffer = io.BytesIO()
+    Image.new("RGB", (8, 8), (23, 140, 60)).save(buffer, format="PNG")
+    data = bytearray(buffer.getvalue())
+    # Signature (8) + length (4) + b"IHDR" (4) → width/height at 16..24.
+    assert data[12:16] == b"IHDR"
+    data[16:24] = struct.pack(">II", width, height)
+    crc = zlib.crc32(bytes(data[12:29])) & 0xFFFFFFFF
+    data[29:33] = struct.pack(">I", crc)
+    encoded = base64.b64encode(bytes(data)).decode()
+    return f"data:image/png;base64,{encoded}".encode("utf-8")
+
+
+def test__dominant_colour__OversizedDeclaredCanvas__SkipsBeforeDecoding(monkeypatch):
+    """Security review: a logo declaring 5000x5000 must be refused on its
+    header alone — no pixel decode, no RGBA conversion — and return None so
+    the store save still succeeds."""
+    big = _png_declaring(5000, 5000)
+    bomb = _png_declaring(13000, 13000)
+    decoded: list[str] = []
+    real_load = Image.Image.load
+    real_convert = Image.Image.convert
+
+    def _spy_load(self, *a, **k):
+        decoded.append("load")
+        return real_load(self, *a, **k)
+
+    def _spy_convert(self, *a, **k):
+        decoded.append("convert")
+        return real_convert(self, *a, **k)
+
+    monkeypatch.setattr(Image.Image, "load", _spy_load)
+    monkeypatch.setattr(Image.Image, "convert", _spy_convert)
+    assert dominant_colour(big) is None
+    assert dominant_colour(bomb) is None
+    assert decoded == []
+
+
+def test__dominant_colour__AnyCall__CapsPillowMaxImagePixels():
+    from dora_api.features.stores import _logo_colour
+
+    dominant_colour(_logo((23, 140, 60)))
+    assert Image.MAX_IMAGE_PIXELS is not None
+    assert Image.MAX_IMAGE_PIXELS <= _logo_colour._PILLOW_MAX_IMAGE_PIXELS

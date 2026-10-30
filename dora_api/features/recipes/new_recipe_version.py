@@ -14,11 +14,12 @@ Allocations stay per-recipe (user picks which version they want when
 scheduling a meal-plan entry); no version-aware allocation logic.
 """
 import logging
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from dora_api.app import db
 from dora_api.domain.entities.recipe import Recipe
@@ -50,6 +51,9 @@ from dora_api.infrastructure.ports import Repository
 
 _LOGGER = logging.getLogger(__name__)
 
+# The " (vN)" suffix new-version appends to a recipe name.
+_VERSION_SUFFIX = re.compile(r" \(v(\d+)\)$")
+
 
 @dataclass(slots=True)
 class NewRecipeVersionResponse:
@@ -66,10 +70,11 @@ class NewRecipeVersionHandler:
             self.repository
             .get(Recipe)
             .include(Recipe.Fields.INGREDIENTS)
-            # cuisine + category are noload now; the clone below
-            # reads both off `source`, so eager-load them.
+            # cuisine, category + collection are noload; the clone below
+            # reads all three off `source`, so eager-load them (R-032).
             .include(Recipe.Fields.CUISINE)
             .include(Recipe.Fields.CATEGORY)
+            .include(Recipe.Fields.RECIPE_COLLECTION)
             .one(EntityField(Recipe, "id").eq(source_id))
         )
         if source is None:
@@ -83,15 +88,11 @@ class NewRecipeVersionHandler:
         if group_id is None:
             group_id = uuid4()
             source.version_group_id = group_id
-            # Flush the back-fill so `_sibling_count` (a Core SELECT) counts
-            # the source as a group member. Without it the first version of a
-            # singleton counted 0 siblings → "(v1)", while the second (source
-            # now visibly grouped) counted 1 → "(v3)": the sequence skipped v2
-            # entirely. Flushing makes it v2, v3, v4… (FU-589).
+            # Flush the back-fill so `_next_version_name` (a Core SELECT)
+            # sees the source as a group member (FU-589).
             self.repository.flush()
 
-        sibling_count = self._sibling_count(group_id)
-        copy_name = f"{source.name} (v{sibling_count + 1})"
+        copy_name = self._next_version_name(source.name, group_id)
 
         # Clone ingredients first — the new recipe + its step links need
         # them inserted before the recipe save, so build them, add() each
@@ -271,12 +272,31 @@ class NewRecipeVersionHandler:
         self.repository.save_changes()
         return NewRecipeVersionResponse(new_recipe_id=new_recipe.id)
 
-    def _sibling_count(self, group_id: UUID) -> int:
+    def _next_version_name(self, source_name: str, group_id: UUID) -> str:
+        """`"<base> (vN)"` where `<base>` is the source name minus any
+        trailing `(vN)` (so versioning a version doesn't stack suffixes) and N
+        is one past the highest number already used in the group (the
+        unnumbered original counts as v1). Counting siblings instead reused a
+        number after a sibling was deleted. Skips forward past any name that is
+        already taken, since recipe names are unique."""
+        base = _VERSION_SUFFIX.sub("", source_name)
+        # Case-insensitive on both legs: recipe-name uniqueness is
+        # (`EntityField.eq` folds case), so a sibling renamed only in case still
+        # counts and "pasta (v3)" blocks "Pasta (v3)".
+        numbered = re.compile(re.escape(base) + _VERSION_SUFFIX.pattern, re.IGNORECASE)
         table = db.metadata.tables["Recipe"]
-        rows = db.session.execute(
-            select(table.c.id).where(table.c.version_group_id == group_id)
-        ).all()
-        return len(rows)
+        group_names = db.session.execute(
+            select(table.c.name).where(table.c.version_group_id == group_id)
+        ).scalars().all()
+        highest = max(
+            [1] + [int(m.group(1)) for name in group_names if (m := numbered.fullmatch(name))]
+        )
+        number = highest + 1
+        while db.session.execute(
+            select(table.c.id).where(func.lower(table.c.name) == f"{base} (v{number})".lower())
+        ).first() is not None:
+            number += 1
+        return f"{base} (v{number})"
 
 
 @RECIPE_ROUTER.route("<uuid:recipe_id>/new-version", methods=["POST"])

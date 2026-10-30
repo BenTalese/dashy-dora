@@ -29,10 +29,17 @@
                             :key="p.product_id"
                             removable
                             dense
-                            :color="seriesColour(i)"
-                            text-color="white"
                             @remove="toggleSelect(p.product_id)"
                         >
+                            <!-- The series colour rides on a swatch, as on the
+                                 comparison cards: QChip's `color` prop takes a
+                                 palette name, not the resolved hex this is, and
+                                 a neutral chip keeps the name's contrast
+                                 independent of the ramp hue. -->
+                            <span
+                                class="series-swatch q-mr-xs"
+                                :style="{ background: seriesColour(i) }"
+                            />
                             {{ p.name }}
                         </q-chip>
                     </div>
@@ -50,6 +57,7 @@
                         >
                             <q-item-section avatar>
                                 <q-checkbox
+                                    :aria-label="`Compare ${p.name}`"
                                     :model-value="selectedIds.includes(p.product_id)"
                                     :disable="
                                         !selectedIds.includes(p.product_id)
@@ -388,12 +396,17 @@
         return Math.max(0, Math.round(pct));
     }
 
+    // Overlapping fetches (quick chip toggles) must not resolve last-wins:
+    // only the newest request may write `series`.
+    let seriesRequest = 0;
     async function refreshSeries() {
+        const token = ++seriesRequest;
         if (selectedIds.value.length === 0) { series.value = []; return; }
         try {
             const result = await historyApi.seriesAsync(selectedIds.value, range.value);
-            series.value = result.series;
+            if (token === seriesRequest) series.value = result.series;
         } catch (err) {
+            if (token !== seriesRequest) return;
             $q.notify({
                 type: 'negative', 
                 message: "Couldn't load price history.",
@@ -425,7 +438,17 @@
     watch([selectedIds, range], () => { void refreshSeries(); });
 
     onMounted(async () => {
-        await productStore.getProductsAsync();
+        // A failed product load must not strand the rest of mount (alerts,
+        // chart sizing) — say so and carry on.
+        try {
+            await productStore.getProductsAsync();
+        } catch (err) {
+            $q.notify({
+                type: 'negative',
+                message: "Couldn't load your products.",
+                caption: err instanceof Error ? err.message : String(err),
+            });
+        }
         // Deep-link: ?product_id=<id> pre-selects; the watch above fetches.
         const preselect = (route.query.product_id as string | undefined) ?? null;
         if (preselect && productById.value.has(preselect)) {

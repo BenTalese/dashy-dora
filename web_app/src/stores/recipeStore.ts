@@ -46,8 +46,8 @@ export const useRecipeStore = defineStore('recipe', () => {
         });
 
     const getRecipeCollectionsAsync = () =>
-        recipeCollectionApiService.getAllAsync().then((page) => {
-            recipeCollections.value = [...page.items].sort((a, b) => collator.compare(a.name, b.name));
+        recipeCollectionApiService.getAllPagesAsync().then((items) => {
+            recipeCollections.value = [...items].sort((a, b) => collator.compare(a.name, b.name));
             collectionsHydrated = true;
         });
 
@@ -101,6 +101,9 @@ export const useRecipeStore = defineStore('recipe', () => {
         } else {
             recipes.value.push(updated);
         }
+        // A rename moves the row; consumers that read store order (the
+        // planner's entry menu, Dora's chat) expect it kept sorted.
+        recipes.value.sort((a, b) => collator.compare(a.name, b.name));
     };
 
     const deleteRecipeAsync = async (recipeId: string) => {
@@ -111,11 +114,12 @@ export const useRecipeStore = defineStore('recipe', () => {
     const toggleFavouriteAsync = async (recipe: Recipe) =>
         updateRecipeAsync({ recipe_id: recipe.recipe_id, is_favourite: !recipe.is_favourite });
 
-    const cookAsync = async (recipeId: string, mealsCooked: number) => {
-        await recipeApiService.cookAsync(recipeId, mealsCooked);
-        const updated = await recipeApiService.getAsync(recipeId);
+    /** Patch one row's prepared-meal pool from a response that already
+     *  carries it (cook mode's POST), so surfaces reading the list don't
+     *  show the old count until the next refetch. */
+    const setAvailableMeals = (recipeId: string, availableMeals: number) => {
         const idx = recipes.value.findIndex((r) => r.recipe_id === recipeId);
-        if (idx >= 0) recipes.value[idx] = updated;
+        if (idx >= 0) recipes.value[idx] = { ...recipes.value[idx]!, available_meals: availableMeals };
     };
 
     const adjustMealsAsync = async (recipeId: string, delta: number) => {
@@ -162,7 +166,7 @@ export const useRecipeStore = defineStore('recipe', () => {
         updateRecipeAsync,
         deleteRecipeAsync,
         toggleFavouriteAsync,
-        cookAsync,
+        setAvailableMeals,
         adjustMealsAsync,
         createRecipeCollectionAsync,
         updateRecipeCollectionAsync,

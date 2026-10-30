@@ -10,6 +10,7 @@ from dora_api.domain.entities.recipe import Recipe
 from dora_api.domain.entities.recipe_ingredient import RecipeIngredient
 from dora_api.domain.entities.stock_item import StockItem
 from dora_api.domain.stock_status import is_low_stock, is_missing
+from dora_api.domain.units import convert, normalise_unit
 from dora_api.features.app_settings.access import money_features_enabled
 from dora_api.features.recipes.recipe_cost import estimate_cost_for_ingredients
 from dora_api.features.routers import MEAL_PLAN_ROUTER
@@ -82,6 +83,20 @@ class MealPlanIngredientsDto:
     meals_cost: float | None = None
 
 
+_INCOMPATIBLE = object()
+
+
+def _in_unit(quantity: float, unit: str | None, target: str | None):
+    """`quantity` of `unit` expressed in the item's first-seen `target` unit, so
+    500 g + 1 kg totals 1500 g rather than 501. `_INCOMPATIBLE` when the two
+    can't be added (different dimensions, or a unit the table doesn't know).
+    A row or item with no unit adds as-is, as it always did."""
+    if unit is None or target is None or normalise_unit(unit) == normalise_unit(target):
+        return quantity
+    converted = convert(quantity, unit, target)
+    return _INCOMPATIBLE if converted is None else converted
+
+
 def aggregate_meal_plan_ingredients(
     repository, recipe_id_to_servings: dict[UUID, int],
 ) -> MealPlanIngredientsDto:
@@ -138,11 +153,21 @@ def aggregate_meal_plan_ingredients(
                 "unit": ingredient.unit,
                 "used_in_recipe_ids": set(),
                 "is_optional": True,
+                "mixed_units": False,
             })
-            if ingredient.quantity is not None and existing["total_quantity"] is not None:
-                existing["total_quantity"] += ingredient.quantity * scale
-            elif ingredient.quantity is not None:
-                existing["total_quantity"] = ingredient.quantity * scale
+            quantity = (
+                _in_unit(ingredient.quantity * scale, ingredient.unit, existing["unit"])
+                if ingredient.quantity is not None else None
+            )
+            if quantity is _INCOMPATIBLE or existing["mixed_units"]:
+                # 500 g and 2 cups of the same item have no honest single
+                # total; one number in the first row's unit would understate it.
+                existing["mixed_units"] = True
+                existing["total_quantity"] = None
+            elif quantity is not None and existing["total_quantity"] is not None:
+                existing["total_quantity"] += quantity
+            elif quantity is not None:
+                existing["total_quantity"] = quantity
             if existing["unit"] is None:
                 existing["unit"] = ingredient.unit
             existing["used_in_recipe_ids"].add(recipe_id)

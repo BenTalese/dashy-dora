@@ -32,7 +32,7 @@ from dora_api.features.routers import PRICE_HISTORY_ROUTER
 from dora_api.features.stock_items.your_prices import (
     build_product_observation_series, build_your_prices_for_product)
 from dora_api.infrastructure.api_response import (bad_request, no_content,
-                                                  not_found, ok)
+                                                  not_found, ok, unauthorized)
 from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.field import EntityField
@@ -218,7 +218,7 @@ class CreatePriceAlertRequest(BaseModel):
 def create_price_alert():
     user_id = current_user_id()
     if user_id is None:
-        return bad_request("Not signed in.")
+        return unauthorized()
     body: CreatePriceAlertRequest = get_request_body()
 
     repo = SqlAlchemyRepository()
@@ -255,7 +255,7 @@ def create_price_alert():
 def list_price_alerts():
     user_id = current_user_id()
     if user_id is None:
-        return bad_request("Not signed in.")
+        return unauthorized()
     # R-005 carve-out: a three-table projection (watch + product + store) for
     # one list; core SQL is portable to Postgres and SQLite alike.
     alert_table = db.metadata.tables["PriceAlert"]
@@ -295,7 +295,7 @@ def delete_price_alert(alert_id: UUID):
     # R-033: uuid converter parses the id at the routing edge (FU-544).
     user_id = current_user_id()
     if user_id is None:
-        return bad_request("Not signed in.")
+        return unauthorized()
     repo = SqlAlchemyRepository()
     # Scope by user so one account can't delete another's alerts.
     alert = repo.get(PriceAlert).one(

@@ -232,6 +232,7 @@
                                         <BaseTooltip>Servings</BaseTooltip>
                                     </NumberStepper>
                                     <BaseButton
+                                        :aria-label="`Remove ${entry.recipe_name}`"
                                         variant="icon" dense
                                         :icon="ICONS.delete_outline"
                                         @click="removeEntry(entry)"
@@ -495,6 +496,7 @@
     import type { MealPlanEntryCommand } from 'src/services/api/mealPlanApiService';
     import type { Recipe } from 'src/models/recipe';
     import MealPlanApiService from 'src/services/api/mealPlanApiService';
+    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { useQuasar } from 'quasar';
     import { computed, ref, watch } from 'vue';
 
@@ -689,8 +691,14 @@
     // Money renders through the formatting authority (R-003 / D-006 /
     // FU-043) — this was the one hand-rolled `$x.xx` left (finalisation 20-R5).
     const money = formatMoney;
+    // Request token: the preview is re-asked on every edit, so only the newest
+    // answer may write it — and an emptied list must not be refilled by a late
+    // response for the list it used to be.
+    let previewSeq = 0;
     async function refreshPreview() {
+        const req = ++previewSeq;
         if (proposed.value.length === 0) {
+            previewLoading.value = false;
             previewIngredients.value = [];
             previewUnlinked.value = [];
             previewLowCount.value = 0;
@@ -704,14 +712,24 @@
             const payload = await api.previewIngredientsAsync(
                 proposed.value.map((e) => ({ recipe_id: e.recipe_id, servings: e.servings })),
             );
+            if (req !== previewSeq) return;
             previewIngredients.value = payload.items;
             previewUnlinked.value = payload.unlinked;
             previewLowCount.value = payload.low_count;
             previewOutCount.value = payload.out_count;
             previewToBuyCost.value = payload.to_buy_cost;
             previewMealsCost.value = payload.meals_cost;
+        } catch (err) {
+            // Its own failure, not the build's: the plan is built and editable;
+            // only the buy-list preview beside it is missing.
+            if (req !== previewSeq) return;
+            $q.notify({
+                type: 'negative',
+                message: "Couldn't work out the shopping for this plan.",
+                caption: toastCaption(err),
+            });
         } finally {
-            previewLoading.value = false;
+            if (req === previewSeq) previewLoading.value = false;
         }
     }
     // Recompute the buy list whenever the reviewed set changes (recipe or
@@ -740,6 +758,7 @@
     async function generate() {
         if (!canGenerate.value) return;
         generatingProposal.value = true;
+        let built = false;
         try {
             const res = await api.autoBuildAsync({
                 days: [...selectedDays.value],
@@ -754,7 +773,7 @@
             lastBuildRequested.value = res.days_used.length * res.slots_used.length;
             lastBuildPlaced.value = res.entries.length;
             step.value = 2;
-            await refreshPreview();
+            built = true;
         } catch {
             // Stay on the Guide step; the axios layer already normalised the
             // error — surface a friendly toast rather than crashing the dialog.
@@ -765,6 +784,10 @@
         } finally {
             generatingProposal.value = false;
         }
+        // Outside the build's try: `refreshPreview` reports its own failure, so
+        // a preview hiccup never reads as "Couldn't build a plan" over a plan
+        // that was built.
+        if (built) await refreshPreview();
     }
 
     // ── Review-step editing ─────────────────────────────────────────────────

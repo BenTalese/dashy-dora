@@ -23,8 +23,8 @@ export const useStoresStore = defineStore('stores', () => {
     const collator = { compare: (a: string, b: string) => nameCollator().compare(a, b) };
 
     const listAsync = (): Promise<void> =>
-        storesApiService.listAsync().then((page) => {
-            stores.value = [...page.items].sort((a, b) =>
+        storesApiService.listAllAsync().then((items) => {
+            stores.value = [...items].sort((a, b) =>
                 collator.compare(a.name, b.name),
             );
             hydrated = true;

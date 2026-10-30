@@ -36,6 +36,9 @@ export function useAuthedImage(path: () => string | null): Ref<string | null> {
         try {
             const blob = await http.getBlob(target);
             if (inFlightFor !== target) return;
+            // A→B→A in quick succession leaves two fetches for A that both
+            // pass the check above; the second must not orphan the first's URL.
+            release();
             src.value = URL.createObjectURL(blob);
         } catch {
             // A missing image is not worth a toast; the caller's fallback shows.

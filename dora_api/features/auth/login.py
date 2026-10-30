@@ -1,5 +1,7 @@
 import logging
+import secrets
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 from flask import session
 from pydantic import BaseModel, ConfigDict, Field
@@ -15,16 +17,33 @@ from dora_api.domain.entities.audit_event import SEVERITY_AUDIT, SEVERITY_WARN
 from dora_api.infrastructure.api_response import ok, unauthorized
 from dora_api.infrastructure.audit import emit as audit_emit
 from dora_api.infrastructure.auth_helpers import (
-    rate_limit, rate_limit_remaining_seconds,
+    hash_password, rate_limit, rate_limit_remaining_seconds, rate_limit_reset,
 )
 from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.utils import get_request_body
+from dora_api.persistence.aware import as_utc
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 from dora_api.infrastructure.api_response import too_many_requests
 
 _LOGGER = logging.getLogger(__name__)
+
+# Per-IP burst limit (pre-existing) plus a per-username limit that does NOT
+# depend on the client IP — behind a misconfigured proxy, or with a forged
+# `X-Forwarded-For` sent straight to the API port, the IP bucket rotates
+# freely, so the username bucket is what actually caps password guessing
+# against one account (NIST SP 800-63B §5.2.2 throttling).
+_LOGIN_IP_SCOPE = "auth.login"
+_LOGIN_IP_MAX_PER_MINUTE = 5
+_LOGIN_USER_SCOPE = "auth.login.user"
+_LOGIN_USER_MAX = 10
+_LOGIN_USER_WINDOW_SECONDS = 15 * 60
+
+# Verified against on the unknown-username path so a miss costs the same
+# scrypt work as a wrong password — otherwise response timing reveals which
+# usernames exist. Random throwaway secret; computed once at import.
+_DUMMY_PASSWORD_HASH = hash_password(secrets.token_urlsafe(32))
 
 
 class LoginRequest(BaseModel):
@@ -52,6 +71,8 @@ class LoginHandler:
         _UsernameField = EntityField(User, User.Fields.USERNAME)
         _User: User | None = self.repository.get(User).one(_UsernameField.eq(request.username))
         if not _User or not _User.password_hash:
+            # Equalise timing with the wrong-password path (anti-enumeration).
+            check_password_hash(_DUMMY_PASSWORD_HASH, request.password)
             return LoginResponse(user = None)
         if not check_password_hash(_User.password_hash, request.password):
             return LoginResponse(user = None)
@@ -63,11 +84,27 @@ class LoginHandler:
 @AUTH_ROUTER.route("/login", methods=["POST"])
 @has_request_body(LoginRequest)
 def login():
-    if not rate_limit("auth.login", max_per_minute=5):
-        return too_many_requests(rate_limit_remaining_seconds("auth.login", 5))
-    _Handler = LoginHandler(SqlAlchemyRepository())
+    if not rate_limit(_LOGIN_IP_SCOPE, max_per_minute=_LOGIN_IP_MAX_PER_MINUTE):
+        return too_many_requests(
+            rate_limit_remaining_seconds(_LOGIN_IP_SCOPE, _LOGIN_IP_MAX_PER_MINUTE)
+        )
     _Request: LoginRequest = get_request_body()
+    _UserSubject = _Request.username.strip().lower()
+    # The per-username bucket counts guesses, not a lockout: when it is
+    # exhausted the password is still verified and a correct one is admitted,
+    # so an attacker spraying someone's username can't lock them out — only
+    # wrong passwords are refused early.
+    _UserBudgetExhausted = not rate_limit(
+        _LOGIN_USER_SCOPE, _LOGIN_USER_MAX, subject=_UserSubject,
+        window_seconds=_LOGIN_USER_WINDOW_SECONDS,
+    )
+    _Handler = LoginHandler(SqlAlchemyRepository())
     _Response = _Handler.handle(_Request)
+    if _UserBudgetExhausted and _Response.user is None:
+        return too_many_requests(rate_limit_remaining_seconds(
+            _LOGIN_USER_SCOPE, _LOGIN_USER_MAX, subject=_UserSubject,
+            window_seconds=_LOGIN_USER_WINDOW_SECONDS,
+        ))
 
     if _Response.deactivated:
         _LOGGER.warning("Login refused for deactivated account '%s'", _Request.username)
@@ -90,12 +127,17 @@ def login():
         # Intentionally generic so we don't leak whether the user exists.
         return unauthorized("Invalid username or password.")
 
+    # Proven password → the per-username budget only tracks failed guesses.
+    rate_limit_reset(_LOGIN_USER_SCOPE, subject=_UserSubject)
     session.clear()
     session[SESSION_USER_ID_KEY] = str(_Response.user.id)
-    # Snapshot the user's current password_changed_at into the session
-    # so get_me can detect a stale cookie after a reset.
-    if _Response.user.password_changed_at is not None:
-        session[SESSION_PWD_V_KEY] = _Response.user.password_changed_at.isoformat()
+    # Snapshot the user's current password_changed_at into the session so
+    # get_me can detect a stale cookie after a reset. Always stamped: a user
+    # who has never changed their password gets "now", so a later reset still
+    # invalidates this session.
+    session[SESSION_PWD_V_KEY] = (
+        as_utc(_Response.user.password_changed_at) or datetime.now(timezone.utc)
+    ).isoformat()
     session.permanent = True
 
     _LOGGER.info("Login success for %s (%s)", _Response.user.username, _Response.user.id)

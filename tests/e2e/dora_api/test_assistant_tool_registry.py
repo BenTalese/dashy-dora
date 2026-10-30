@@ -261,3 +261,59 @@ def test__recipes_using_item__finds_the_recipe_from_its_ingredient(api):
     finally:
         requests.delete(f"{BASE}/recipes/{recipe}")
         requests.delete(f"{BASE}/stock-items/{item}")
+
+
+def test__commit_plan_meal_for_date__PlanWithPastDayAndBatch__AddsKeepingIdsAndBatch(api):
+    """The commit used to resend every unconsumed entry — a past one tripped
+    "Can't plan a meal in the past" — and dropped ids and cook keys, so every
+    forward entry was re-created and its batch lost."""
+    from datetime import date, timedelta
+    from uuid import uuid4
+
+    from sqlalchemy import text
+
+    from dora_api.app import db
+    from tests.support import uuid_bind
+
+    meal_plans = f"{BASE}/meal-plans"
+    today = date.fromisoformat(requests.get(f"{meal_plans}/today").json()["today"])
+    slot = requests.get(f"{BASE}/meal-slots").json()[0]["name"]
+    recipe_id = requests.post(f"{BASE}/recipes", json={"name": f"Assistant plan {uuid4().hex[:8]}"}).json()["recipe_id"]
+    previous = requests.get(f"{BASE}/app-settings").json()["auto_drain_past_meals"]
+    requests.patch(f"{BASE}/app-settings", json={"auto_drain_past_meals": False})
+    try:
+        plan = requests.post(meal_plans, json={"start_date": today.isoformat(), "entries": [
+            {"recipe_id": recipe_id, "scheduled_for": today.isoformat(), "slot": slot},
+            {"recipe_id": recipe_id, "scheduled_for": (today + timedelta(days=1)).isoformat(),
+             "slot": slot, "cook_key": "b"},
+            {"recipe_id": recipe_id, "scheduled_for": (today + timedelta(days=2)).isoformat(),
+             "slot": slot, "cook_key": "b"},
+        ]}).json()
+        past_entry = next(e for e in plan["entries"] if e["cook_batch_id"] is None)
+        with app.app_context(), db.engine.begin() as conn:
+            conn.execute(
+                text('UPDATE "MealPlanEntry" SET scheduled_for = :d WHERE id = :eid'),
+                {"d": (today - timedelta(days=1)).isoformat(), "eid": uuid_bind(past_entry["meal_plan_entry_id"])},
+            )
+        forward_before = {
+            e["meal_plan_entry_id"]: e["cook_batch_id"]
+            for e in plan["entries"] if e["cook_batch_id"] is not None
+        }
+
+        with app.test_request_context():
+            result = confirm_actions.commit_plan_meal_for_date({
+                "meal_plan_id": plan["meal_plan_id"], "recipe_id": recipe_id,
+                "meal_name": "x", "scheduled_for": (today + timedelta(days=3)).isoformat(),
+                "slot": slot, "servings": 1,
+            })
+    finally:
+        requests.patch(f"{BASE}/app-settings", json={"auto_drain_past_meals": previous})
+
+    assert result["ok"] is True, result
+    after = requests.get(f"{meal_plans}?filter=meal_plan_id:eq:{plan['meal_plan_id']}").json()["items"][0]
+    by_id = {e["meal_plan_entry_id"]: e for e in after["entries"]}
+    assert len(after["entries"]) == 4
+    assert past_entry["meal_plan_entry_id"] in by_id
+    assert set(forward_before) <= set(by_id)
+    assert len({by_id[i]["cook_batch_id"] for i in forward_before}) == 1
+    assert by_id[next(iter(forward_before))]["cook_batch_id"] is not None

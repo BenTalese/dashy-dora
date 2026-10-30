@@ -370,8 +370,13 @@ export default defineConfig((ctx): any => {
                         // Dora API — NetworkFirst with a 5 s timeout so a
                         // slow backend doesn't pin the UI; falls back to
                         // the cached GET response when offline.
-                        urlPattern: ({ url }: { url: URL }) =>
-                            url.pathname.startsWith('/api/'),
+                        // Requests made with `cache: 'no-store'` (the
+                        // `/api/health` reachability probe in
+                        // `useNetworkStatus`) are left to the network: a
+                        // cached health answer reported "Back online" while
+                        // the server was gone.
+                        urlPattern: ({ url, request }: { url: URL; request: Request }) =>
+                            url.pathname.startsWith('/api/') && request.cache !== 'no-store',
                         handler: 'NetworkFirst',
                         method: 'GET',
                         options: {

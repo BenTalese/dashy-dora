@@ -2,7 +2,7 @@
     <div class="mobile-focus">
         <!-- Week nav -->
         <div class="mobile-focus__weeknav">
-            <BaseButton variant="icon" :icon="ICONS.arrow_back" @click="goPrevWeek">
+            <BaseButton aria-label="Previous week" variant="icon" :icon="ICONS.arrow_back" @click="goPrevWeek">
                 <BaseTooltip>Previous week</BaseTooltip>
             </BaseButton>
             <!-- Owner 2026-09-13 — the same heading voice the desktop toolbar
@@ -16,7 +16,7 @@
                     <span v-if="plannedCount > 0">{{ plannedCount }} planned</span>
                 </div>
             </div>
-            <BaseButton variant="icon" :icon="ICONS.arrow_forward" @click="goNextWeek">
+            <BaseButton aria-label="Next week" variant="icon" :icon="ICONS.arrow_forward" @click="goNextWeek">
                 <BaseTooltip>Next week</BaseTooltip>
             </BaseButton>
             <!-- Owner feedback 2026-09-03 — *"mobile view is missing some

@@ -21,6 +21,7 @@
                     Click me whenever you're lost or want a tip.
                 </div>
                 <BaseButton
+                    aria-label="Dismiss tip"
                     variant="icon"
                     size="sm"
                     :icon="ICONS.close"

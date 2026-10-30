@@ -80,6 +80,7 @@ from dora_api.features.stock_items._level_access import resolve_levels_by_item
 from dora_api.features.stock_items.planned_demand import gather_planned_demand
 from dora_api.infrastructure.api_response import ok
 from dora_api.infrastructure.ports import Repository
+from dora_api.persistence.aware import as_utc
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 
 _LOGGER = logging.getLogger(__name__)
@@ -139,10 +140,9 @@ class GetRestockRadarHandler:
         # reads as "no level recorded" — the trap `_level_access.py` closes.
         levels = resolve_levels_by_item(self.repository, items)
 
-        # Naive UTC, matching `stock_level_last_updated`'s stored form.
-        cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(
-            days=MAX_AGE_DAYS,
-        )
+        # Aware; each stored instant goes through `as_utc` before comparing
+        # (R-098) — SQLite reads it back naive, Postgres aware.
+        cutoff = datetime.now(timezone.utc) - timedelta(days=MAX_AGE_DAYS)
 
         # `recorded_by_item` is what lets `gather_planned_demand` grade urgency;
         # we don't read the urgency here (every row is already low or out, so it
@@ -174,13 +174,14 @@ class GetRestockRadarHandler:
                 band = "low"
             else:
                 continue
-            if item.stock_level_last_updated < cutoff:
+            changed_at = as_utc(item.stock_level_last_updated)
+            if changed_at < cutoff:
                 continue
             planned = demand.get(item.id)
             rows.append(RestockRow(
                 stock_item_id=item.id,
                 name=item.name,
-                changed_at=item.stock_level_last_updated,
+                changed_at=changed_at,
                 is_essential=bool(item.is_essential),
                 level_sequence=level.sequence,
                 level_name=level.name,

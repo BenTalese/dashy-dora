@@ -105,7 +105,9 @@ class GetIngestableProductsHandler:
                 # at worst have it matched against something else entirely.
                 product_table.c.is_custom.is_(False),
             )
-            .order_by(product_table.c.name)
+            # `id` breaks name ties: same-named products (one per store) made
+            # the order unstable, so offset paging skipped or repeated rows.
+            .order_by(product_table.c.name, product_table.c.id)
             .limit(limit)
             .offset(offset)
         ).mappings().all()

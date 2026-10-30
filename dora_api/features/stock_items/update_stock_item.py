@@ -7,6 +7,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from dora_api.domain.entities.app_setting import AppSetting
+from dora_api.domain.entities.nutrition_food import NutritionFood
 from dora_api.domain.entities.consumption_event import (
     CONSUMPTION_SOURCE_COOK, CONSUMPTION_SOURCE_MANUAL,
     CONSUMPTION_SOURCE_WASTE, ConsumptionEvent,
@@ -17,6 +18,7 @@ from dora_api.domain.entities.stock_item import StockItem
 from dora_api.domain.entities.stock_level import StockLevel
 from dora_api.domain.entities.stock_level_change import StockLevelChange
 from dora_api.domain.entities.stock_location import StockLocation
+from dora_api.domain.entities.store import Store
 from dora_api.domain.stock_status import needs_restock
 from dora_api.features.app_settings.access import get_or_create_app_setting
 from dora_api.features.app_settings.clock import household_today
@@ -111,6 +113,8 @@ class UpdateStockItemResponse:  # noqa: D401
     stock_level_not_found: bool = False
     stock_location_not_found: bool = False
     stock_group_not_found: bool = False
+    usual_store_not_found: bool = False
+    nutrition_food_not_found: bool = False
     # When the auto-add hook fires (FU-511: driven by AppSetting.auto_add_mode
     # + this item's is_essential), the API needs to know so it can surface an
     # undoable "Tomato Soup auto-added to <list>" notification. None when no
@@ -232,22 +236,23 @@ class UpdateStockItemHandler:
         if "is_essential" in _SetFields and request.is_essential is not None:
             _StockItem.is_essential = request.is_essential
 
-        # usual store hint. Clear flag wins over a present-but-None.
-        # We don't validate the target Store exists here: the FK has SET NULL
-        # ondelete, so a stale id silently degrades; the SPA picker only
-        # surfaces actual rows so the bad-write path requires hand-crafting.
+        # usual store hint. Clear flag wins over a present-but-None. The
+        # target must exist — the FK would otherwise 500 at commit.
         if request.clear_usual_store:
             _StockItem.usual_store_id = None
         elif "usual_store_id" in _SetFields and request.usual_store_id is not None:
+            if not self.repository.get(Store).exists(request.usual_store_id):
+                return UpdateStockItemResponse(usual_store_not_found=True)
             _StockItem.usual_store_id = request.usual_store_id
 
-        # Nutrition food link — same clear-flag pattern, and the same reasoning
-        # about not re-validating the target: the FK is SET NULL ondelete, so a
-        # dataset re-import that drops the row leaves the item unlinked rather
-        # than broken.
+        # Nutrition food link — same clear-flag pattern and existence check.
+        # (The FK is SET NULL ondelete, so a dataset re-import that drops the
+        # row later leaves the item unlinked rather than broken.)
         if request.clear_nutrition_food:
             _StockItem.nutrition_food_id = None
         elif "nutrition_food_id" in _SetFields and request.nutrition_food_id is not None:
+            if not self.repository.get(NutritionFood).exists(request.nutrition_food_id):
+                return UpdateStockItemResponse(nutrition_food_not_found=True)
             _StockItem.nutrition_food_id = request.nutrition_food_id
 
         # Linking a food and ignoring the item are mutually exclusive answers to
@@ -464,6 +469,14 @@ def update_stock_item(stock_item_id: UUID):
         _LOGGER.warning(f"Stock group not found: {_Request.stock_group_id}")
         return entity_existence_failure(
             StockGroup.__name__, "stock_group_id", _Request.stock_group_id,
+        )
+
+    if _Response.usual_store_not_found:
+        return entity_existence_failure(Store.__name__, "usual_store_id", _Request.usual_store_id)
+
+    if _Response.nutrition_food_not_found:
+        return entity_existence_failure(
+            NutritionFood.__name__, "nutrition_food_id", _Request.nutrition_food_id,
         )
 
     _LOGGER.info(f"Successfully updated stock item with ID: {stock_item_id}")

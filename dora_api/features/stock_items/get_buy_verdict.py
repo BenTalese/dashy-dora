@@ -825,6 +825,10 @@ def gather_verdict_inputs_for_items(
         item_lines = lines_by_item.get(item.id, [])
         samples: list[tuple[float, datetime]] = []
         for line in item_lines:
+            # R-061 — only a bought line is a purchase: ticked, and not
+            # deferred by trim-to-budget (same rule as `spend_lines`).
+            if not line.is_ticked or line.deferred_by_budget:
+                continue
             completed_at = completed_lookup.get(line.shopping_list_id)
             if completed_at is None:
                 continue
@@ -917,6 +921,6 @@ def get_buy_verdict(stock_item_id: UUID):
     _LOGGER.debug(
         "buy-verdict %s → %s/%s (%d reasons, %d price samples, %d waste events)",
         stock_item_id, verdict.verdict, verdict.confidence,
-        len(verdict.reasons), inputs.purchases_12mo, inputs.waste_events_12mo,
+        len(verdict.reasons), len(inputs.price_samples), inputs.waste_events_12mo,
     )
     return ok(verdict)

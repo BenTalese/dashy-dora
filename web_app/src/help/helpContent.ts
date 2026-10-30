@@ -59,8 +59,8 @@ const NUTRITION: HelpSetting = { label: 'Admin → Nutrition', path: '/settings/
 const COOKING: HelpSetting = { label: 'Admin → Cooking', path: '/settings/admin/system/cooking' };
 const STOCK_ADMIN: HelpSetting = { label: 'Admin → Stock', path: '/settings/admin/system/stock' };
 const STOCKTAKE_ADMIN: HelpSetting = { label: 'Admin → Stocktake', path: '/settings/admin/system/stocktake' };
-const ALERTS_ADMIN: HelpSetting = { label: 'Admin → Alert thresholds', path: '/settings/admin/system/alerts' };
-const REGION: HelpSetting = { label: 'Admin → Region', path: '/settings/admin/system/region' };
+const ALERTS_ADMIN: HelpSetting = { label: 'Admin → Expiring-soon window', path: '/settings/admin/system/alerts' };
+const REGION: HelpSetting = { label: 'Admin → Region & locale', path: '/settings/admin/system/region' };
 const RECONCILE: HelpSetting = { label: 'Admin → Meal reconciliation', path: '/settings/admin/system/meal-reconcile' };
 
 export const HELP_TOPICS: HelpTopic[] = [

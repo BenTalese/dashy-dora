@@ -50,6 +50,8 @@ class Nutrient:
     # USDA `(nutrient name, unit)` pairs, lowercased. More than one because
     # sources disagree: Foundation and SR Legacy name the sugar row differently,
     # and the bulk CSV writes micrograms as `UG` where the live API sends `µg`.
+    # Listed in precedence order: when a food carries more than one, the
+    # earliest key's value wins (see `USDA_NUTRIENT_RANK`).
     usda_keys: Tuple[Tuple[str, str], ...]
     # Open Food Facts `nutriments` key, when OFF carries the value.
     off_key: Optional[str] = None
@@ -77,7 +79,14 @@ class Nutrient:
 NUTRIENTS: Tuple[Nutrient, ...] = (
     Nutrient(
         attr="kcal_per_100g", label="Energy", unit="kcal",
-        usda_keys=(("energy", "kcal"),),
+        # Nutrient 1008 first. Recent Foundation releases carry energy for
+        # many foods only as the Atwater rows (2047 / 2048, kcal); without
+        # them those foods had no energy and were dropped as unusable.
+        usda_keys=(
+            ("energy", "kcal"),
+            ("energy (atwater general factors)", "kcal"),
+            ("energy (atwater specific factors)", "kcal"),
+        ),
         off_key="energy-kcal_100g", decimals=0,
     ),
     Nutrient(
@@ -220,6 +229,15 @@ USDA_NUTRIENT_ATTRS: Dict[Tuple[str, str], str] = {
     key: nutrient.attr
     for nutrient in NUTRIENTS
     for key in nutrient.usda_keys
+}
+
+# Same keys → precedence within their attribute (0 = preferred). A food that
+# carries both "Energy" and an Atwater energy row keeps the "Energy" one,
+# whichever order the rows arrive in.
+USDA_NUTRIENT_RANK: Dict[Tuple[str, str], int] = {
+    key: rank
+    for nutrient in NUTRIENTS
+    for rank, key in enumerate(nutrient.usda_keys)
 }
 
 

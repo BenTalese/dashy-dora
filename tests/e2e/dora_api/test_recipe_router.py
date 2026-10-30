@@ -792,3 +792,141 @@ def test__get_recipe_image__a_non_image_mimetype_is_never_served(api):
     image = requests.get(f"http://localhost:5170/api/recipes/{resp.json()['recipe_id']}/image")
     assert image.status_code == 404
     assert "text/html" not in image.headers.get("Content-Type", "")
+
+
+#region ---------------- step images: keep-by-id on PATCH ----------------
+
+# Three distinct tiny "images" — the bytes endpoint decodes the base64
+# payload, so each is told apart by its served body.
+_IMG_A = "data:image/png;base64,QUFBQQ=="
+_IMG_B = "data:image/png;base64,QkJCQg=="
+_IMG_C = "data:image/png;base64,Q0NDQw=="
+
+
+def _step_image_ids(recipe_id: str) -> list[str]:
+    return [img["image_id"] for img in _detail(recipe_id)["step_images"]]
+
+
+def _step_image_bodies(recipe_id: str) -> list[bytes]:
+    return [
+        requests.get(f"{RECIPES}/{recipe_id}/step-images/{image_id}").content
+        for image_id in _step_image_ids(recipe_id)
+    ]
+
+
+def test__update_recipe__StepImagesReorderedById__KeepsBytesInNewOrder(api):
+    _Recipe = _make_recipe("Step Img Reorder", steps_mode="image", step_images=[_IMG_A, _IMG_B])
+    _First, _Second = _step_image_ids(_Recipe["recipe_id"])
+
+    _Response = requests.patch(
+        f"{RECIPES}/{_Recipe['recipe_id']}", json={"step_images": [_Second, _First]},
+    )
+
+    assert _Response.status_code == 204, _Response.text
+    assert _step_image_bodies(_Recipe["recipe_id"]) == [b"BBBB", b"AAAA"]
+
+
+def test__update_recipe__StepImagesMixKeptAndNew__KeepsSavedAndAddsNew(api):
+    _Recipe = _make_recipe("Step Img Mix", steps_mode="image", step_images=[_IMG_A, _IMG_B])
+    _First, _ = _step_image_ids(_Recipe["recipe_id"])
+
+    _Response = requests.patch(
+        f"{RECIPES}/{_Recipe['recipe_id']}", json={"step_images": [_IMG_C, _First]},
+    )
+
+    assert _Response.status_code == 204, _Response.text
+    assert _step_image_bodies(_Recipe["recipe_id"]) == [b"CCCC", b"AAAA"]
+
+
+def test__update_recipe__StepImageIdFromAnotherRecipe__IsValidationFailureAndNothingChanges(api):
+    _Other = _make_recipe("Step Img Other", steps_mode="image", step_images=[_IMG_C])
+    _Recipe = _make_recipe("Step Img Foreign", steps_mode="image", step_images=[_IMG_A])
+    (_ForeignId,) = _step_image_ids(_Other["recipe_id"])
+
+    _Response = requests.patch(
+        f"{RECIPES}/{_Recipe['recipe_id']}", json={"step_images": [_ForeignId]},
+    )
+
+    assert_problem(_Response, 422, field="step_images", title="Validation failed.")
+    assert _step_image_bodies(_Recipe["recipe_id"]) == [b"AAAA"]
+
+#endregion step images
+
+
+#region ---------------- write-path validation ----------------
+
+
+@pytest.mark.parametrize(
+    "field, value",
+    [("cook_time_minutes", -1), ("prep_time_minutes", -1), ("servings", 0)],
+)
+def test__update_recipe__OutOfRangeNumber__IsBadRequest(api, field, value):
+    # PATCH carries the same bounds as create.
+    _Recipe = _make_recipe("Patch Bounds")
+
+    _Response = requests.patch(f"{RECIPES}/{_Recipe['recipe_id']}", json={field: value})
+
+    assert_problem(_Response, 400, field=field)
+
+
+def test__create_recipe__UnknownStepsMode__IsBadRequest(api):
+    # Was silently coerced to "freeform"; PATCH already rejected it.
+    _Response = requests.post(RECIPES, json={
+        "name": f"Bad Mode {uuid4().hex[:8]}", "steps_mode": "carousel",
+    })
+
+    assert_problem(_Response, 400, title="Invalid steps_mode 'carousel'")
+
+
+def test__create_recipe__DuplicateStepClientId__IsBadRequest(api):
+    # Both steps collapsed onto one generated id → PK IntegrityError (500).
+    _Response = requests.post(RECIPES, json={
+        "name": f"Dup Step {uuid4().hex[:8]}", "steps_mode": "structured",
+        "steps": [
+            {"client_id": "s1", "sequence": 0, "text": "One."},
+            {"client_id": "s1", "sequence": 1, "text": "Two."},
+        ],
+    })
+
+    assert_problem(_Response, 400)
+
+
+def test__create_recipe__DuplicateSectionClientId__IsBadRequest(api):
+    _Response = requests.post(RECIPES, json={
+        "name": f"Dup Section {uuid4().hex[:8]}",
+        "sections": [
+            {"client_id": "a", "sequence": 0, "name": "Sauce"},
+            {"client_id": "a", "sequence": 1, "name": "Garnish"},
+        ],
+    })
+
+    assert_problem(_Response, 400)
+
+
+def test__create_recipe__StepRepeatsAnIngredientLink__StoresOneLink(api):
+    _Response = requests.post(RECIPES, json={
+        "name": f"Dup Link {uuid4().hex[:8]}", "steps_mode": "structured",
+        "ingredients": [{"raw_text": "bread", "client_id": "i1"}],
+        "steps": [{
+            "client_id": "s1", "sequence": 0, "text": "Slice.",
+            "ingredient_client_ids": ["i1", "i1"],
+        }],
+    })
+    assert _Response.status_code == 201, _Response.text
+
+    _Step = _detail(_Response.json()["recipe_id"])["steps"][0]
+
+    assert len(_Step["ingredient_ids"]) == 1
+
+
+def test__get_recipes__TagsIncludeHasAnUnknownTag__MatchesNothing(api):
+    # An unresolved tag used to be dropped, widening "vegan AND <unknown>"
+    # to "vegan".
+    _TagId = requests.get(f"{RECIPES}/tags").json()["tags"][0]["value"]
+    _Recipe = _make_recipe("Tagged", dietary_tag_ids=[_TagId])
+    _ById = f"filter=recipe_id:eq:{_Recipe['recipe_id']}"
+
+    assert len(_list_items(f"?{_ById}&tags_include={_TagId}")) == 1
+    assert _list_items(f"?{_ById}&tags_include={_TagId},no-such-tag-{uuid4().hex[:6]}") == []
+
+#endregion write-path validation

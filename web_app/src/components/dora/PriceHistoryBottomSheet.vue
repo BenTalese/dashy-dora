@@ -107,14 +107,22 @@
         if (next !== chartWidth.value) chartWidth.value = next;
     }
 
+    // R-101 — each open (and each close) bumps this, so a slow response for
+    // the item the sheet was showing before can't paint into the one open now.
+    let loadSeq = 0;
+
     async function load(): Promise<void> {
+        const req = ++loadSeq;
         loading.value = true;
         try {
-            history.value = await stockItemApi.getPriceHistoryAsync(props.stockItemId);
+            const result = await stockItemApi.getPriceHistoryAsync(props.stockItemId);
+            if (req !== loadSeq) return;
+            history.value = result;
         } catch {
+            if (req !== loadSeq) return;
             history.value = null;
         } finally {
-            loading.value = false;
+            if (req === loadSeq) loading.value = false;
         }
         await nextTick();
         measure();
@@ -132,6 +140,7 @@
         (open) => {
             if (open && props.stockItemId) void load();
             if (!open) {
+                loadSeq += 1;
                 resizeObserver?.disconnect();
                 resizeObserver = null;
             }

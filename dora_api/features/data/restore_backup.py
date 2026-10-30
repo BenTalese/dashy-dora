@@ -21,6 +21,7 @@ import json
 import logging
 import os
 from typing import Any
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import insert, select
@@ -35,6 +36,7 @@ from dora_api.features.data.restore_shared import (
     CHILD_AUTO_INCLUDE,
     DUPLICATE_KEY_BY_BACKUP_KEY,
     HARD_FK_PULL_IN,
+    REMAP_ON_DUPLICATE,
     REQUIRED_FKS,
     RESTORE_ORDER,
     SECTION_BY_BACKUP_KEY,
@@ -65,6 +67,13 @@ def _join_table_sections() -> list[str]:
         key for key, table_name in TABLE_NAME_BY_BACKUP_KEY.items()
         if len(primary_key_columns(db.metadata.tables[table_name])) > 1
     ]
+
+
+def _is_blank_key(dup_key: Any) -> bool:
+    """A duplicate key built from an empty name (e.g. the planner's nameless
+    meal plans) collides with every other nameless row, so it identifies no
+    single row to re-point children at."""
+    return dup_key == "" or (isinstance(dup_key, tuple) and "" in dup_key)
 
 
 def validate_fk_maps() -> None:
@@ -114,7 +123,8 @@ class RestoreBackupRequest(BaseModel):
     # via /api/data/uploads/* — the canonical path for the SPA now that
     # chunked-resumable uploads are the default.
     backup: dict[str, Any] | None = None
-    upload_id: str | None = None
+    # A UUID, validated here: `staged_path` joins it into a filesystem path.
+    upload_id: UUID | None = None
     # Per-section list of selected IDs (or composite PK tuples encoded as
     # comma-joined strings for the m2m tables). Only consulted in "partial".
     selection: dict[str, list[str]] = Field(default_factory=dict)
@@ -162,7 +172,9 @@ class RestoreBackupHandler:
 
         # ── Existing DB state for duplicate + FK checks ───────────────
         existing_pks: dict[str, set] = {}
-        existing_dup_keys: dict[str, set] = {}
+        # duplicate key → the existing row's PK, or None when several existing
+        # rows share the key (no single row to point a child at).
+        existing_dup_keys: dict[str, dict[Any, str | None]] = {}
         for backup_key, table_name in TABLE_NAME_BY_BACKUP_KEY.items():
             table = db.metadata.tables[table_name]
             pk_cols = primary_key_columns(table)
@@ -180,10 +192,16 @@ class RestoreBackupHandler:
                 key_fn = DUPLICATE_KEY_BY_BACKUP_KEY[backup_key]
                 column_names = [c.name for c in table.columns]
                 existing_rows = db.session.execute(select(table)).all()
-                existing_dup_keys[backup_key] = {
-                    key_fn({col: r[idx] for idx, col in enumerate(column_names)})
-                    for r in existing_rows
-                }
+                by_dup_key: dict[Any, str | None] = {}
+                for r in existing_rows:
+                    existing_row = {col: r[idx] for idx, col in enumerate(column_names)}
+                    dup_key = key_fn(existing_row)
+                    existing_pk = composite_key(existing_row, pk_cols)
+                    by_dup_key[dup_key] = (
+                        None if dup_key in by_dup_key or len(existing_pk) != 1
+                        else existing_pk[0]
+                    )
+                existing_dup_keys[backup_key] = by_dup_key
 
         # ── Build the selection set per section ───────────────────────
         # In "all_skip_duplicates" mode the selection is "everything";
@@ -278,6 +296,10 @@ class RestoreBackupHandler:
         # FK-target tracker: union of pre-existing PKs and freshly-inserted
         # ones. Lets a later row find an earlier sibling without round-tripping.
         present_pks: dict[str, set] = {k: set(v) for k, v in existing_pks.items()}
+        # Backup PK → existing PK for rows skipped as duplicates (same name,
+        # different id), so their children re-point at the row that stayed
+        # instead of having the FK nulled or the row dropped.
+        remapped_pks: dict[str, dict[str, str]] = {k: {} for k in TABLE_NAME_BY_BACKUP_KEY}
 
         try:
             for backup_key in RESTORE_ORDER:
@@ -296,20 +318,43 @@ class RestoreBackupHandler:
                         continue
                     if backup_key in DUPLICATE_KEY_BY_BACKUP_KEY:
                         key_fn = DUPLICATE_KEY_BY_BACKUP_KEY[backup_key]
-                        if key_fn(row) in existing_dup_keys[backup_key]:
+                        dup_key = key_fn(row)
+                        if dup_key in existing_dup_keys[backup_key]:
+                            existing_pk = existing_dup_keys[backup_key][dup_key]
+                            if (
+                                backup_key in REMAP_ON_DUPLICATE
+                                and existing_pk is not None
+                                and not _is_blank_key(dup_key)
+                            ):
+                                remapped_pks[backup_key][pk[0]] = existing_pk
                             skipped[backup_key] += 1
                             continue
 
                     decoded, row_warnings, skip_row = self._decode_row(
-                        backup_key, table, row, present_pks
+                        backup_key, table, row, present_pks, remapped_pks
                     )
                     warnings.extend(row_warnings)
                     if skip_row:
                         skipped[backup_key] += 1
                         continue
 
+                    # A join row's PK is its FKs, so a remap can turn it into a
+                    # pair that already exists — re-key it after decoding and
+                    # skip the collision instead of tripping the PK.
+                    decoded_pk = composite_key(decoded, pk_cols)
+                    if decoded_pk != pk and decoded_pk in present_pks[backup_key]:
+                        skipped[backup_key] += 1
+                        continue
+                    if backup_key == "product_stock_item_links" and self._product_already_linked(
+                        table, decoded, present_pks[backup_key]
+                    ):
+                        # UNIQUE(product_id): the remapped product is linked to
+                        # another item already.
+                        skipped[backup_key] += 1
+                        continue
+
                     db.session.execute(insert(table).values(**decoded))
-                    present_pks[backup_key].add(pk)
+                    present_pks[backup_key].add(decoded_pk)
                     created[backup_key] += 1
 
             db.session.commit()
@@ -332,9 +377,9 @@ class RestoreBackupHandler:
             return req.backup, None
         if req.upload_id is None:
             return None, invalid("Either 'backup' or 'upload_id' is required.")
-        path = staged_path(req.upload_id)
+        path = staged_path(str(req.upload_id))
         if not path.exists():
-            return None, upload_missing(req.upload_id)
+            return None, upload_missing(str(req.upload_id))
         try:
             with open(path, "rb") as fh:
                 doc = json.load(fh)
@@ -361,12 +406,18 @@ class RestoreBackupHandler:
         target_table_name = next(iter(col.foreign_keys)).column.table.name
         return BACKUP_KEY_BY_TABLE_NAME.get(target_table_name)
 
+    @staticmethod
+    def _product_already_linked(table, decoded: dict[str, Any], present: set) -> bool:
+        product_id = str(decoded.get("product_id"))
+        return any(pk[1] == product_id for pk in present if len(pk) == 2)
+
     def _decode_row(
         self,
         backup_key: str,
         table,
         row: dict[str, Any],
         present_pks: dict[str, set],
+        remapped_pks: dict[str, dict[str, str]],
     ) -> tuple[dict[str, Any], list[str], bool]:
         """Returns (decoded_row, warnings, skip_row)."""
         decoded: dict[str, Any] = {}
@@ -377,12 +428,20 @@ class RestoreBackupHandler:
                 # Never restore excluded columns (e.g. password hashes), even
                 # if a malformed backup somehow carries them.
                 continue
+            if col.name not in row:
+                # An older backup predates this column: leave it out of the
+                # INSERT so its server/column default applies, rather than an
+                # explicit NULL that a NOT NULL default column rejects.
+                continue
             raw = row.get(col.name)
             value = decode_value(raw, col.type)
 
             # FK resolution
             target_key = self._resolve_fk_target(backup_key, col.name)
             if target_key is not None and value is not None:
+                remapped = remapped_pks.get(target_key, {}).get(str(value))
+                if remapped is not None:
+                    value = decode_value(remapped, col.type)
                 target_pk = (str(value),)
                 if target_pk not in present_pks.get(target_key, set()):
                     # Target missing.

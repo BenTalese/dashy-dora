@@ -145,7 +145,8 @@
     );
 
     async function onSubmit() {
-        if (!form.name.trim()) return;
+        // Enter can resubmit while the first save is in flight.
+        if (saving.value || !form.name.trim()) return;
         saving.value = true;
         resetFormErrors();
         try {

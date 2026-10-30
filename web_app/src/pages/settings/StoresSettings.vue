@@ -71,6 +71,7 @@
                 <q-item-section side>
                     <div class="row q-gutter-xs items-center">
                         <BaseButton
+                            :aria-label="`Remove logo for ${s.name}`"
                             v-if="s.has_image"
                             variant="icon"
                             :icon="ICONS.image_not_supported"
@@ -79,6 +80,7 @@
                             <BaseTooltip>Remove logo</BaseTooltip>
                         </BaseButton>
                         <BaseButton
+                            :aria-label="`Rename ${s.name}`"
                             variant="icon"
                             :icon="ICONS.edit"
                             @click="startRename(s)"
@@ -86,6 +88,7 @@
                             <BaseTooltip>Rename</BaseTooltip>
                         </BaseButton>
                         <BaseButton
+                            :aria-label="`Delete ${s.name}`"
                             variant="icon"
                             :icon="ICONS.delete_outline"
                             @click="onDelete(s)"

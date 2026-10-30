@@ -6,9 +6,10 @@ behavioural gaps the browser checklist called out (DORA_VERIFY Cookbook
 L199 / L200 / L201):
 
 * version numbering — a singleton allocates a `version_group_id` that's
-  back-filled onto the source, the copy is named `(v2)`, and the number
-  reflects **sibling count**, so a third version off the *copy* is `(v4)`
-  (not `(v2)` again) — the "server counts siblings, not parent" rule;
+  back-filled onto the source, the copy is named `(v2)`, and the number is
+  **one past the highest used in the group**, so a third version off the
+  *copy* is `<base> (v4)` (not `(v2)` again, and not `(v2) (v4)`), and a
+  deleted sibling's number is never reused;
 * inheritance — the copy carries the source's scalar fields, ingredients,
   cuisine/category, and starts un-favourited with a fresh id;
 * independence — editing the copy leaves the source untouched.
@@ -73,11 +74,42 @@ def test__new_version__numbering_counts_siblings_not_parent(api):
     assert _by_id(v3_id)["name"] == f"{base_name} (v3)"
     assert _by_id(v3_id)["version_group_id"] == group
 
-    # Version off the COPY: numbered by total siblings (3) → (v4), NOT (v2)
-    # again. Proves the count is over the whole group, not the parent chain.
+    # Version off the COPY: numbered over the whole group → (v4), NOT (v2)
+    # again, and the copy's own "(v2)" suffix is replaced, not stacked.
     v4_id = _new_version(v2_id)
-    assert _by_id(v4_id)["name"].endswith("(v4)")
+    assert _by_id(v4_id)["name"] == f"{base_name} (v4)"
     assert _by_id(v4_id)["version_group_id"] == group
+
+
+def test__new_version__AfterSiblingDeleted__DoesNotReuseANumber(api):
+    base_name = f"Version Gap {uuid4().hex[:8]}"
+    source = requests.post(RECIPES, json={"name": base_name}).json()
+    v2_id = _new_version(source["recipe_id"])
+    _new_version(source["recipe_id"])  # (v3)
+    assert requests.delete(f"{RECIPES}/{v2_id}").status_code == 204
+
+    # Two siblings remain; counting them used to name this "(v3)" again.
+    resp = requests.post(f"{RECIPES}/{source['recipe_id']}/new-version")
+
+    assert resp.status_code in (200, 201), resp.text
+    assert _by_id(resp.json()["recipe_id"])["name"] == f"{base_name} (v4)"
+
+
+def test__new_version__SourceInACollection__CopyKeepsTheCollection(api):
+    # R-032 — `recipe_collection` is noload; the clone read it off an
+    # un-included load, so every new version dropped its collection.
+    collection = requests.post(f"{BASE}/recipe-collections",
+                               json={"name": f"Version Coll {uuid4().hex[:8]}"})
+    assert collection.status_code == 201, collection.text
+    collection_id = collection.json()["recipe_collection_id"]
+    source = requests.post(RECIPES, json={
+        "name": f"Version In Coll {uuid4().hex[:8]}",
+        "recipe_collection_id": collection_id,
+    }).json()
+
+    copy = _by_id(_new_version(source["recipe_id"]))
+
+    assert copy["recipe_collection_id"] == collection_id
 
 
 def test__new_version__inherits_source_content_and_starts_unfavourited(api):

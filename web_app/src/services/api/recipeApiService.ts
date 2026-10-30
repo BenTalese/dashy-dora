@@ -157,8 +157,10 @@ export type UpdateRecipeCommand = {
      *  Omit to leave untouched. */
     steps_mode?: RecipeStepsMode;
     /** PROPOSAL_RECIPE_IMAGE_STEPS — present (even as []) = replace the
-     *  full step image set. Mode flip without this field is
-     *  non-destructive (rows stay in place). */
+     *  full step image set, in order. Each entry is either a new
+     *  `data:image/...` URL or the `image_id` of a saved image on this
+     *  recipe, which the server keeps in that slot. Mode flip without this
+     *  field is non-destructive (rows stay in place). */
     step_images?: string[];
 };
 

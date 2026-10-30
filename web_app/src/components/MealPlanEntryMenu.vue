@@ -9,7 +9,7 @@
          the two hosts render it.
 
          The hosts keep their own `q-menu`-less shells; this IS the menu. -->
-    <q-menu transition-show="jump-down" transition-hide="jump-up">
+    <q-menu transition-show="jump-down" transition-hide="jump-up" @before-show="resyncServings">
         <!-- Owner 2026-09-05 — *"the name doesn't need to be repeated in the
              meal dropdown when you tap/click on an allocated meal slot."* It
              doesn't: the menu opens anchored to the chip that just said it. -->
@@ -40,13 +40,13 @@
                 </q-item-section>
                 <q-item-section side>
                     <NumberStepper
-                        :model-value="entry.servings"
+                        :model-value="shownServings"
                         editable
                         :min="0"
                         decrement-label="One fewer serving"
                         increment-label="One more serving"
                         @click.stop
-                        @update:model-value="(v: number) => emit('adjust', v - entry.servings)"
+                        @update:model-value="onServingsStep"
                     >
                         <BaseTooltip>Servings (0 removes the meal)</BaseTooltip>
                     </NumberStepper>
@@ -128,7 +128,7 @@
     import { supplyTooltip } from 'src/helpers/mealPlanEntryStatus';
     import type { MealPlanEntry } from 'src/models/mealPlan';
     import { useRecipeStore } from 'src/stores/recipeStore';
-    import { computed } from 'vue';
+    import { computed, ref, watch } from 'vue';
 
     const { batchEnabled } = useBatchEnabled();
 
@@ -144,6 +144,22 @@
         (e: 'unlink'): void;
         (e: 'fresh'): void;
     }>();
+
+    // The stepper shows the value the user has stepped to, and each emitted
+    // delta is measured from THAT — not from `entry.servings`, which lags until
+    // the save lands, so two fast taps used to both send "+1 from 1" (the
+    // planner queues the deltas and applies each to the fresh plan).
+    const shownServings = ref(props.entry.servings);
+    watch(() => props.entry.servings, (v) => { shownServings.value = v; });
+    // A failed save (or a cancelled "remove this cook?") leaves `entry.servings`
+    // unchanged, so the watcher never fires — re-read it each time the menu opens.
+    function resyncServings() { shownServings.value = props.entry.servings; }
+    function onServingsStep(v: number) {
+        const delta = v - shownServings.value;
+        if (delta === 0) return;
+        shownServings.value = v;
+        emit('adjust', delta);
+    }
 
     // Only offer the comparison when this meal's own figure can be compared —
     // "lighter than an estimate we don't trust" isn't an answer.

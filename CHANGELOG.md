@@ -14,6 +14,147 @@ semver — major bumps signal schema or breaking-config changes.
   guide they name directly.
 
 ### Fixed
+- **Autonomous QA sweep, round 2 (2026-10-30).** Different angles this time:
+  a fresh-install walk on an empty household, an authorization matrix over
+  every route, fault injection, an accessibility audit, a security review, a
+  Postgres portability audit, and a 2000-item scaling run.
+  - *Dora's chat:* questions that use a data tool ("what's expiring?") work
+    again on OpenAI, Anthropic and Gemini — the second round of the
+    conversation was missing the tool-call id, every hosted provider rejected
+    it, and the assistant then read as unavailable for a minute. A provider
+    error (4xx) no longer marks the provider down. Odd model arguments and a
+    stale confirm payload no longer produce a server error. Testing a draft
+    provider setting no longer marks the saved one as verified.
+  - *Companion:* link-status no longer matches a product at a different store
+    (an unsave could then delete the wrong product); a backdated offer no
+    longer replaces the current price; a timestamp without an offset is
+    rejected rather than stored shifted; product web links must be http(s).
+  - *Deals:* the "fake markdown" check compares prices in the same unit, so a
+    real special on a 1 kg pack no longer reads "poor" against a 500 g price.
+  - *Nutrition:* USDA Foundation foods whose energy is listed only under the
+    Atwater keys are imported instead of dropped.
+  - *Onboarding:* a second household member's Finish no longer re-creates the
+    default groups and locations the admin deleted; clicking the email
+    verification link mid-wizard verifies instead of bouncing to the wizard;
+    the Look & feel step shows the current theme selected.
+  - *Native app:* first run with no server address shows the address page
+    instead of probing an empty URL (which could leave the app stuck between
+    sign-in and setup); the failure message says a home server needs
+    `http://`.
+  - *Stock:* exporting, printing or QR-labelling a large filtered selection
+    works past ~200 items (the ids travel in the request body now).
+  - *Accessibility:* icon buttons, toggles and number fields have names and
+    labels for screen readers; the (?) tips and score bars use valid roles;
+    the main nav is a proper list; scrollable panels are keyboard-reachable;
+    the Settings/Admin toggle and the settings chips meet the 44px touch
+    target on phones.
+  - *Postgres:* `upgrade head` on an empty Postgres database no longer fails
+    (unquoted mixed-case table names, boolean `= 1` updates, a VARCHAR
+    substitute column against a UUID key, two constraint names that never
+    existed on Postgres); the session timezone is pinned to UTC; constraint
+    and index names now match the model; the audit request id is capped.
+  - *Security hardening:* failed logins are throttled per username as well as
+    per address, and unknown usernames take as long as wrong passwords;
+    password changes are rate-limited; a tiny store logo that declares a huge
+    image can't exhaust memory; voice synthesis bounds its inputs; a push
+    subscription can't be reassigned to another user and must be https;
+    CSV exports neutralise spreadsheet formulas; search patterns treat `%`
+    and `_` literally; the SPA host sends nosniff / frame / referrer headers;
+    a `*` CORS origin refuses to boot in production.
+  - *Empty cookbook:* says "No recipes yet" instead of "No recipes match the
+    current filters".
+- **Upgrade note (compose):** `DORA_SECURE_COOKIES` no longer defaults to
+  `false` in `compose.yml`; the production profile decides. A plain-http
+  install must set `DORA_SECURE_COOKIES=false` in `.env` to keep logging in.
+
+### Fixed
+- **Autonomous QA sweep (2026-10-29).** Several review passes (static reads of
+  every backend feature and SPA surface, a frontend/backend contract audit, a
+  522-request API sweep, and route crawls at desktop and phone width) followed
+  by fixes. The two worst were regressions from the finalisation commit:
+  - *Fresh install:* the first-admin setup (`/setup`) failed with a server
+    error on every attempt (two helpers had been dropped from the module's
+    imports). A new install can be set up again.
+  - *Backup restore and spreadsheet import:* every chunked upload was rejected
+    ("Missing or malformed upload_id") because the shared HTTP client sent the
+    form as JSON. Restoring from a file and importing a spreadsheet work again.
+  - *Recipes:* editing a photo-method recipe no longer deletes its saved step
+    photos on save (adding, removing or reordering one used to wipe the rest);
+    switching between a recipe's versions now asks about unsaved edits; a new
+    version keeps its collection and gets the next free "(vN)" name instead
+    of a duplicate; the "expiring" cookbook filter shows nothing (not
+    everything) when no recipe matches; a cook that fails to record keeps the
+    finish dialog open, and one that succeeds can't be counted twice.
+  - *Cook mode:* saying "next" twice no longer jumps three steps (earlier
+    voice commands were replayed); restarting a finished timer counts down
+    instead of finishing at once; a recipe that uses the same item twice gets
+    one row in the finish dialog.
+  - *Stock:* moving an item to "no location" actually clears it; a level
+    change that fails to save reverts on screen (it used to stay on the new
+    level); linking a product already linked to another item is a clear
+    message instead of a server error; an item expiring today no longer flips
+    to "Expired" mid-morning (the date was read as UTC); "Add missing" from a
+    recipe card on the item page adds every missing item, not just the first;
+    the item page and its QR label can't show a different item's data after a
+    fast switch; the stocktake summary shows after a review-only run.
+  - *Shopping lists:* the lists page no longer says "No shopping lists yet"
+    while another surface is still loading them (or after a successful retry);
+    a budget banner dismissed on one list stays dismissed only on that list;
+    assigning a location in Put away no longer flashes the page and loses the
+    group ticks; Undo on a tick always acts on the list it was made on; a
+    template's Use button can't create two lists; finishing a list twice no
+    longer re-stocks every ticked item; progress on the overview card counts
+    only the lines the shop shows; receipt photos load through the
+    authenticated client (they were blank on a split-host or native install).
+  - *Meal plans:* "Skip for now" in the reconcile runner moves to the next
+    meal (it used to show the same meal again and keep counting); the runner
+    walks the whole backlog, not just the first 30; "Different portions" opens
+    with the planned servings; rapid taps on the servings stepper no longer
+    lose a tap; week navigation can't show another week's ingredients,
+    budget, suggestions or swap Undo; a plan with more than 50 weeks no longer
+    loses weeks (and then created duplicates); applying a template to the
+    current week keeps the past days that weren't cooked (they were deleted
+    with their reconcile entries); the plan's budget check uses the planned
+    week's period, not today's; ingredient totals convert units (500 g + 1 kg
+    is 1.5 kg, not 501 g); a cook batch that straddles today is accepted;
+    the trend arrow on the Dora Score compares like with like; "Budget fully
+    spent" reads correctly at exactly zero.
+  - *Reports and price history:* switching ranges quickly can't mix numbers
+    from two ranges; the selected-product chips show their series colour;
+    price-history alert endpoints return 401 (not 400) when signed out.
+  - *Dashboard:* the restock radar no longer errors on Postgres (naive vs
+    aware timestamps).
+  - *Buy verdict and pantry belief:* a priced line that was never ticked no
+    longer counts as a purchase (R-061); trim-to-budget sees meal-plan demand
+    again (its guards had never fired); a partly unknown tag filter returns no
+    recipes rather than all the matching ones.
+  - *Settings:* a rejected nutrition, currency or locale save rolls the control
+    back; a halted import can be retried after fixing the mapping; a failed
+    dietary-tag save keeps the dialog open; the Assistant page doesn't probe an
+    unsaved URL; trailing spaces in a username don't leave the page "unsaved".
+  - *Admin and ops:* audit retention honours the configured days (the nightly
+    prune always used 365); restoring an older backup no longer fails on
+    columns added since; rows skipped as duplicates on restore keep their
+    children's links (items kept their location and group); upload ids are
+    validated before touching the filesystem; the gunicorn request-line limit
+    is set so large filtered exports, print views and QR sheets don't 400; the
+    auth rate limiter no longer grows without bound.
+  - *Dora:* planning a meal through chat no longer fails when a past day was
+    left uncooked, and it keeps entry ids and cook batches.
+  - *Camera:* closing the scan overlay while the permission prompt is up now
+    releases the camera.
+  - *Keyboard and offline:* Escape leaves cook mode as the cheatsheet says;
+    page shortcuts no longer fire while a menu or dialog has focus (Enter on
+    a row's menu item used to open the item instead); `/` focuses the stock
+    search; the offline banner no longer clears from a cached health probe
+    while the server is actually down; a chunked upload that timed out
+    client-side resumes from where the server got to instead of failing.
+  - *Dora:* "Find substitutes" opens the Substitutes tab; the planner action
+    says what it does ("Open Meal Plans"); quick-adding an item with several
+    linked products asks which list when there is more than one draft rather
+    than guessing; a failed price log or Dismiss all says why.
+
+### Fixed
 - **Finalisation sweep, Stage 2 (2026-10-23).** The first pass over the
   finalisation review's verified bugs:
   - *Backup & restore:* restoring a selection of sections no longer fails

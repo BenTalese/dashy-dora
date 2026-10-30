@@ -277,24 +277,18 @@ def test__update_location__MoveSectionUnderZone__422KindMismatch(api):
     assert_problem(resp, 422, title="Business rule violation.")
 
 
-def test__update_location__ExplicitNullParent__DetachesAreaToRoot(api):
-    # Pinned actual behaviour: PATCH {"parent_id": null} skips the kind
-    # ladder entirely (the mismatch check only runs for a non-null parent),
-    # so an *area* can be detached to root level — the tree then has an
-    # "area" root, which no create path allows. Reported as a finding;
-    # if the API grows a guard here, flip this test to expect 422.
+def test__update_location__ExplicitNullParent__AreaCannotDetachToRoot(api):
+    # PATCH {"parent_id": null} used to skip the kind ladder (the check only
+    # ran for a non-null parent), leaving an "area" root no create path
+    # allows. Only a zone may be a root.
     token = _token()
     zone_id = _make(f"Laundry {token}", "zone")
     area_id = _make(f"Cupboard {token}", "area", zone_id)
 
     resp = requests.patch(f"{LOCATIONS}/{area_id}", json={"parent_id": None})
 
-    assert resp.status_code == 204, resp.text
-    tree = _tree()
-    detached = next((n for n in tree if n["location_id"] == area_id), None)
-    assert detached is not None, "area did not become a tree root"
-    assert detached["kind"] == "area"
-    assert detached["parent_id"] is None
+    assert_problem(resp, 422, title="Business rule violation.")
+    assert _find(_tree(), area_id)["parent_id"] == zone_id
 
 
 def test__update_location__UnknownId__404(api):

@@ -5,7 +5,7 @@ the dev default; before this it printed `/auth/login` bodies — username *and*
 password — into the rotating log file. The redaction is a pure function, so
 it is pinned here without HTTP. The proxy-hop knob is a pure config read.
 """
-from dora_api.infrastructure.middleware import REDACTED, redact_sensitive
+from dora_api.infrastructure.middleware import REDACTED, _request_id, redact_sensitive
 
 
 def test__redact_sensitive__masks_secret_looking_keys_at_any_depth():
@@ -52,3 +52,17 @@ def test__trusted_proxy_hops__defaults_to_zero_and_never_goes_negative(monkeypat
     assert DORA_CONFIG.get_trusted_proxy_hops() == 0
     monkeypatch.setenv("DORA_TRUSTED_PROXY_HOPS", "")
     assert DORA_CONFIG.get_trusted_proxy_hops() == 0
+
+
+def test__request_id__keeps_a_well_formed_caller_id():
+    assert _request_id("  3f2c9a1e-77b0-4c1d-9a8e-2d6f0b1c4e55 ") == "3f2c9a1e-77b0-4c1d-9a8e-2d6f0b1c4e55"
+
+
+def test__request_id__replaces_one_the_audit_column_cannot_hold():
+    """`AuditEvent.request_id` is String(64): Postgres rejects a longer value
+    and the audit insert fails. Odd characters would land in logs and the
+    echoed response header."""
+    too_long = "a" * 65
+    for bad in (too_long, "id with spaces", "<script>", "", None):
+        replaced = _request_id(bad)
+        assert replaced != bad and len(replaced) == 32 and replaced.isalnum()

@@ -13,6 +13,7 @@
 // this one only decides which icon to draw.
 import { formatDate } from 'src/composables/useDateFormat';
 import { ICONS } from 'src/style/icons';
+import { daysFromToday } from 'src/helpers/weekDates';
 
 export type ExpiryTone = 'none' | 'ok' | 'soon' | 'expired';
 
@@ -20,10 +21,13 @@ const SOON_WINDOW_DAYS = 7;
 
 export function expiryToneFor(expiryDate: string | null | undefined): ExpiryTone {
     if (!expiryDate) return 'none';
-    const ms = new Date(expiryDate).getTime();
-    if (Number.isNaN(ms)) return 'none';
-    if (ms < Date.now()) return 'expired';
-    if ((ms - Date.now()) / 86_400_000 <= SOON_WINDOW_DAYS) return 'soon';
+    // Calendar days, not elapsed hours: `new Date('YYYY-MM-DD')` is UTC
+    // midnight, which flipped an item expiring today to "Expired" mid-morning
+    // east of Greenwich. An item is good through its expiry date.
+    const days = daysFromToday(expiryDate.slice(0, 10));
+    if (days === null) return 'none';
+    if (days < 0) return 'expired';
+    if (days <= SOON_WINDOW_DAYS) return 'soon';
     return 'ok';
 }
 

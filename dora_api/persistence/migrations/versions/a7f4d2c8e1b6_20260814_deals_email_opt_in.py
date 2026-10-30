@@ -41,7 +41,10 @@ def upgrade():
             existing_nullable = False,
             server_default = sa.false(),
         )
-    op.execute('UPDATE "User" SET deals_email_enabled = 0')
+    # `sa.false()` renders `0` on SQLite and `false` on Postgres (a boolean
+    # column there rejects the integer literal).
+    user = sa.table('User', sa.column('deals_email_enabled', sa.Boolean()))
+    op.execute(user.update().values(deals_email_enabled=sa.false()))
 
 
 def downgrade():

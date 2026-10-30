@@ -334,6 +334,7 @@
     import { usePantryBeliefs } from 'src/composables/usePantryBeliefs';
     import { useStockItemActions } from 'src/composables/useStockItemActions';
     import { expiryIndicatorFor } from 'src/helpers/expiryIndicator';
+    import { formatDate } from 'src/composables/useDateFormat';
     import { isOutOfStockSequence } from 'src/helpers/stockStatus';
     import type { StockItem } from 'src/models/stockItem';
     import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
@@ -545,7 +546,7 @@
             });
             $q.notify({
                 type: 'positive',
-                message: `Expiry set to ${value}.`,
+                message: `Expiry set to ${formatDate(value)}.`,
             });
         } catch (err) {
             $q.notify({
@@ -616,10 +617,18 @@
 
     // ── Stock-level set ─────────────────────────────────────────────────
     async function onSetLevel(stockLevelId: string) {
-        await stockItemStore.updateStockLevelAsync({
-            stock_item_id: props.item.stock_item_id,
-            stock_level_id: stockLevelId,
-        });
+        try {
+            await stockItemStore.updateStockLevelAsync({
+                stock_item_id: props.item.stock_item_id,
+                stock_level_id: stockLevelId,
+            });
+        } catch (err) {
+            $q.notify({
+                type: 'negative',
+                message: 'Could not update.',
+                caption: toastCaption(err),
+            });
+        }
     }
 
     // ── Mark as wasted (C-waste) ────────────────────────────────────────

@@ -497,7 +497,17 @@
 
     // ── Commit ───────────────────────────────────────────────────────
     async function onCommit() {
-        if (!uploadId.value || !selectedSheet.value || !pickedFile.value) return;
+        if (!selectedSheet.value || !pickedFile.value) return;
+        // A completed (non-halted) commit consumes the staged file server-side,
+        // so a retry after "errors: N" has nothing left to import — say so
+        // rather than no-op'ing silently.
+        if (!uploadId.value) {
+            $q.notify({
+                type: 'warning',
+                message: 'Pick the file again to import it.',
+            });
+            return;
+        }
         if (!columnMap.name) {
             $q.notify({
                 type: 'warning',
@@ -536,9 +546,11 @@
                 rows: body.rows,
             };
             resultOpen.value = true;
-            // The staged file was consumed on success; forget the id so
-            // a later abort doesn't 404 chasing a phantom upload.
-            uploadId.value = null;
+            // A non-halted commit consumes the staged file server-side; forget
+            // the id so a later abort doesn't 404 chasing a phantom upload. A
+            // halted import rolls back and KEEPS the file, so the id stays and
+            // the user can fix the mapping and retry.
+            if (!body.summary.halted) uploadId.value = null;
         } catch (err) {
             result.value = {
                 ok: false,

@@ -139,16 +139,6 @@ def household_budget(repository: SqlAlchemyRepository) -> HouseholdBudget | None
     return HouseholdBudget(amount=amount, period=_budget_period(setting))
 
 
-def budget_remaining(repository: SqlAlchemyRepository, today: date) -> float | None:
-    """What's left of the period containing `today`, or None when there is no
-    household budget (money off or unset)."""
-    budget = household_budget(repository)
-    if budget is None:
-        return None
-    start, end = period_bounds(today, budget.period)
-    return budget.amount - period_spent(start, end, repository)
-
-
 def period_spent(
     period_start: date,
     period_end: date,
@@ -181,20 +171,18 @@ def period_headroom(
     on_date: date,
     repository: SqlAlchemyRepository,
 ) -> float | None:
-    """The trim-to-budget optimiser's single source of truth for "how much
-    money is left in the household budget for a shop dated `on_date`".
-    Returns None when there's no positive household budget (nothing to
-    constrain against). When the shop is scheduled for a future period, we
-    return the *full* budget_amount for that period — no spend has landed
-    yet. When it's in the current or past period, we deduct actual spend so
-    far in that window."""
-    setting = get_or_create_app_setting(repository)
-    amount = _budget_amount(setting)
-    if amount is None:
+    """The single source of truth for "how much money is left in the household
+    budget for the period containing `on_date`" — the trim-to-budget optimiser,
+    the meal-plan swap suggestions and the auto-build cap all read it.
+    Returns None when there's no household budget (money off install-wide, or
+    no positive amount) — the same gate `household_budget` applies. A future
+    period has no spend landed yet, so it returns the full amount; the current
+    or a past period deducts actual spend so far in that window."""
+    budget = household_budget(repository)
+    if budget is None:
         return None
-    start, end = period_bounds(on_date, _budget_period(setting))
-    spent = period_spent(start, end, repository)
-    return amount - spent
+    start, end = period_bounds(on_date, budget.period)
+    return budget.amount - period_spent(start, end, repository)
 
 
 # ── Line-price ladder ────────────────────────────────────────────────────

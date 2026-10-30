@@ -31,6 +31,7 @@ Create Date: 2026-08-28 00:00:00.000000
 """
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy_utils import UUIDType
 
 # revision identifiers, used by Alembic.
 revision = 'b2d9f4a7c3e1'
@@ -41,7 +42,9 @@ depends_on = None
 
 def upgrade():
     with op.batch_alter_table('ShoppingListLine') as batch:
-        batch.add_column(sa.Column('planned_store_id', sa.Uuid(), nullable=True))
+        # UUIDType, as the model declares it (`sa.Uuid` is CHAR(32) on SQLite).
+        # Installs that ran the `sa.Uuid` form are converted by e7a2c5f9b3d1.
+        batch.add_column(sa.Column('planned_store_id', UUIDType(), nullable=True))
         batch.create_foreign_key(
             'fk_shopping_list_line_planned_store',
             'Store', ['planned_store_id'], ['id'], ondelete='SET NULL',

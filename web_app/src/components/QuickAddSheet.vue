@@ -78,6 +78,9 @@
     import BaseDialog from 'src/components/BaseDialog.vue';
     import { useQuickAdd } from 'src/composables/useQuickAdd';
     import { useShoppingListActions } from 'src/composables/useShoppingListActions';
+    import { useStockItemActions } from 'src/composables/useStockItemActions';
+    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+    import { useQuasar } from 'quasar';
     import type { StockItem } from 'src/models/stockItem';
     import ShoppingListApiService, {
         type FrequentlyAddedItem,
@@ -91,6 +94,8 @@
 
     const { isOpen, presetStockItemId, presetListId, closeQuickAdd } = useQuickAdd();
     const { addItems } = useShoppingListActions();
+    const stockItemActions = useStockItemActions();
+    const $q = useQuasar();
 
     const stockItemStore = useStockItemStore();
     const stockLevelStore = useStockLevelStore();
@@ -206,6 +211,21 @@
     // any presets the caller passed to openQuickAdd().
     watch(isOpen, async (nowOpen) => {
         if (!nowOpen) return;
+
+        // A caller that named an item means "add this one" — with no second
+        // step left in this sheet, that is the whole interaction, so the sheet
+        // closes and the add goes through the shared cart path: it asks which
+        // draft when there are several and offers to create one when there are
+        // none, instead of guessing a list here (or closing silently with no
+        // list at all).
+        if (presetStockItemId.value) {
+            const stockItemId = presetStockItemId.value;
+            const listId = presetListId.value;
+            closeQuickAdd();
+            await stockItemActions.addToList(stockItemId, listId);
+            return;
+        }
+
         const loads: Promise<unknown>[] = [];
         loads.push(stockItemStore.ensureLoadedAsync());
         loads.push(stockLevelStore.ensureLoadedAsync());
@@ -222,7 +242,16 @@
                     frequentlyAdded.value = [];
                 }),
         );
-        await Promise.all(loads);
+        try {
+            await Promise.all(loads);
+        } catch (err) {
+            $q.notify({
+                type: 'negative',
+                message: "Couldn't load your items and lists.",
+                caption: toastCaption(err),
+            });
+            return;
+        }
 
         // FU-603 — final fallback prefers a planning *draft* over an
         // in-progress ('shopping') list, so a pantry cart-add doesn't default
@@ -234,19 +263,6 @@
             ?? null;
         targetListId.value =
             presetListId.value ?? quickAddTargetListId.value ?? fallbackListId;
-
-        // A caller that named an item means "add this one" — with no second
-        // step left, that is the whole interaction, so it happens and the
-        // sheet closes rather than opening onto a list the user didn't ask for.
-        if (presetStockItemId.value) {
-            const preset = stockItems.value.find(
-                (i) => i.stock_item_id === presetStockItemId.value,
-            );
-            if (preset) {
-                await addItem(preset);
-                closeQuickAdd();
-            }
-        }
     });
 </script>
 

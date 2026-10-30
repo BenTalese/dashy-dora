@@ -7,7 +7,10 @@ URL; the server stores the encoded bytes; the bytes endpoint decodes +
 serves raw).
 
 `replace_step_images_for_recipe` is the single write path: wipe + re-create
-from the request (mirrors `replace_steps_for_recipe`).
+from the request (mirrors `replace_steps_for_recipe`). A PATCH may name an
+already-saved image by its id instead of re-uploading it;
+`resolve_step_image_entries` turns those ids back into their stored bytes
+*before* the wipe so they survive (in their new position).
 """
 from dataclasses import dataclass
 from uuid import UUID, uuid4
@@ -60,6 +63,50 @@ def get_step_image_bytes(recipe_id: UUID, image_id: UUID) -> bytes | None:
         .where(table.c.recipe_id == recipe_id)
     ).first()
     return row[0] if row else None
+
+
+class UnknownStepImageId(ValueError):
+    """A PATCH entry named a step-image id that isn't one of this recipe's
+    saved images."""
+
+
+def resolve_step_image_entries(
+    recipe_id: UUID, entries: list[str]
+) -> list[StepImageWrite]:
+    """Map the PATCH `step_images` list to ordered writes. Each entry is
+    either a `data:image/...` data URL (new bytes) or the id of an image this
+    recipe already has (keep its bytes). Anything that isn't a valid UUID is
+    passed through as a data URL so `_validate_writes` reports it.
+
+    Raises `UnknownStepImageId` for a well-formed id that doesn't belong to
+    this recipe.
+    """
+    table = _step_image_table()
+    existing = {
+        str(row[0]): row[1]
+        for row in db.session.execute(
+            select(table.c.id, table.c.image).where(table.c.recipe_id == recipe_id)
+        ).all()
+    }
+    writes: list[StepImageWrite] = []
+    for sequence, entry in enumerate(entries):
+        if entry.startswith("data:"):
+            writes.append(StepImageWrite(sequence=sequence, image_data_url=entry))
+            continue
+        try:
+            image_id = str(UUID(entry))
+        except ValueError:
+            writes.append(StepImageWrite(sequence=sequence, image_data_url=entry))
+            continue
+        if image_id not in existing:
+            raise UnknownStepImageId(
+                f"Step image '{entry}' is not one of this recipe's images."
+            )
+        writes.append(StepImageWrite(
+            sequence=sequence,
+            image_data_url=existing[image_id].decode("utf-8"),
+        ))
+    return writes
 
 
 def _validate_writes(writes: list[StepImageWrite]) -> None:

@@ -34,7 +34,7 @@ _LOGGER = logging.getLogger(__name__)
 class StockItemDto:
     name: str
     stock_item_id: UUID
-    stock_level_id: UUID
+    stock_level_id: UUID | None
     # Status keyed to the level's ordinal sequence, plus the server-owned
     # derived predicates — so the client never matches on a level name.
     stock_level_sequence: int | None
@@ -81,7 +81,7 @@ class StockItemDto:
         return StockItemDto(
             name = stock_item.name,
             stock_item_id = stock_item.id,
-            stock_level_id = stock_item.stock_level.id,
+            stock_level_id = level.id if level else None,
             stock_level_sequence = level.sequence if level else None,
             is_out_of_stock = is_out_of_stock(level),
             is_low_stock = is_low_stock(level),

@@ -23,6 +23,7 @@ net in ``AssistantHandler`` already handles that — the user sees the
 rule-based fallback (and, once §7.2 lands, a banner explaining why).
 """
 import logging
+from urllib.parse import urlparse
 
 from dora_api.domain.entities.user import (
     LLM_PROVIDER_ANTHROPIC,
@@ -63,6 +64,22 @@ PROVIDER_DEFAULTS: dict[str, tuple[str, str]] = {
     LLM_PROVIDER_ANTHROPIC: (anthropic_client.DEFAULT_BASE_URL, "claude-3-5-sonnet-20241022"),
     LLM_PROVIDER_GEMINI: (gemini_client.DEFAULT_BASE_URL, "gemini-2.0-flash"),
 }
+
+
+_BASE_URL_SCHEMES = ("http", "https")
+BASE_URL_SCHEME_MESSAGE = "The base URL must be an http:// or https:// address."
+
+
+def is_http_base_url(base_url: str) -> bool:
+    """Provider endpoints are only ever reached over HTTP(S). `urlopen` also
+    honours `file://` (and a `#` fragment swallows the appended API path), so
+    an unchecked base URL turned the probe into a server-side file-existence
+    oracle."""
+    try:
+        parsed = urlparse(base_url.strip())
+    except ValueError:
+        return False
+    return parsed.scheme.lower() in _BASE_URL_SCHEMES and bool(parsed.netloc)
 
 
 def unavailable_client(reason: str) -> LlmClient:
@@ -149,6 +166,8 @@ def build_assistant_client_from_provider(
     """Direct constructor without a User. Used by the per-user probe
     (`assistant/probe_assistant.py`) and by tests so they can build a client
     without hydrating a full row."""
+    if base_url and not is_http_base_url(base_url):
+        return _UnavailableClient(BASE_URL_SCHEME_MESSAGE)
     if provider == LLM_PROVIDER_OLLAMA:
         if not base_url or not model:
             return _UnavailableClient("Ollama needs a base URL and a model.")

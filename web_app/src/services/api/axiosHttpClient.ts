@@ -102,6 +102,17 @@ export type CreatedResponse = { id?: string } & Record<string, unknown>;
 
 export type HttpClientResponse<TResponse> = TResponse;
 
+export interface RequestOptions {
+    /** Overrides the default ceiling for one call that is legitimately slow
+     *  (an 8 MB upload chunk on a slow uplink). */
+    timeoutMs?: number;
+    /** Opt a POST that is really a read (a download or print view whose
+     *  parameters only travel in the body because they'd overflow the
+     *  request line) into the GET retry policy. Only for idempotent calls
+     *  that change nothing server-side — an ordinary write is never retried. */
+    retryAsRead?: true;
+}
+
 export interface HttpClient {
     get<TResponse = unknown>(path: string): Promise<HttpClientResponse<TResponse>>;
     /** Binary GET (QR PNGs, future exports). Same interceptors — and so the
@@ -110,7 +121,10 @@ export interface HttpClient {
     getBlob(path: string): Promise<Blob>;
     /** A download: the bytes plus the server's `Content-Disposition` filename. */
     getFile(path: string): Promise<{ blob: Blob; filename: string | null }>;
-    post<TResponse = unknown, TBody = unknown>(path: string, body: TBody): Promise<HttpClientResponse<TResponse>>;
+    /** `getFile` with a JSON body — for a download whose parameters (a large
+     *  id selection) would overflow the request line as a query string. */
+    postFile<TBody = unknown>(path: string, body: TBody, options?: RequestOptions): Promise<{ blob: Blob; filename: string | null }>;
+    post<TResponse = unknown, TBody = unknown>(path: string, body: TBody, options?: RequestOptions): Promise<HttpClientResponse<TResponse>>;
     put<TResponse = unknown, TBody = unknown>(path: string, body: TBody): Promise<HttpClientResponse<TResponse>>;
     patch<TResponse = unknown, TBody = unknown>(path: string, body: TBody): Promise<HttpClientResponse<TResponse>>;
     delete<TResponse = unknown>(path: string): Promise<HttpClientResponse<TResponse>>;
@@ -144,7 +158,9 @@ function newCorrelationId(): string {
 // and 502/503/504. Never retry POST/PUT/PATCH/DELETE — a write that may
 // already have landed must not be replayed blind. Offline is read-only
 // (2026-08-23), so a failed write is reported to the user, never retried
-// behind their back.
+// behind their back. The one exception is a POST the caller marks
+// `retryAsRead` — a read whose parameters ride in the body — which changes
+// nothing and so is as safe to replay as a GET.
 const RETRYABLE_STATUSES = new Set([502, 503, 504]);
 const MAX_RETRIES = 3;
 // The boot probes retry once, not three times. Three attempts at the full
@@ -153,9 +169,9 @@ const MAX_RETRIES = 3;
 // and it re-enters the same loop.
 const MAX_BOOT_PROBE_RETRIES = 1;
 
-function isRetryable(method: string | undefined, error: AxiosError): boolean {
+function isRetryable(method: string | undefined, error: AxiosError, retryAsRead = false): boolean {
     const m = (method ?? 'get').toLowerCase();
-    if (m !== 'get') return false;
+    if (m !== 'get' && !(retryAsRead && m === 'post')) return false;
     if (!error.response) return true; // network error / no response
     return RETRYABLE_STATUSES.has(error.response.status);
 }
@@ -201,11 +217,21 @@ export function csrfHeader(): Record<string, string> {
     return token ? { 'X-CSRF-Token': token } : {};
 }
 
+// Translate the per-call options into axios config. `__retryAsRead` rides on
+// the config so the response interceptor sees it on every attempt.
+function requestOptionsConfig(options?: RequestOptions): { timeout?: number; __retryAsRead?: boolean } {
+    return {
+        ...(options?.timeoutMs !== undefined ? { timeout: options.timeoutMs } : {}),
+        ...(options?.retryAsRead ? { __retryAsRead: true } : {}),
+    };
+}
+
 // Augment axios's request config with our retry / correlation-id state
 // so the interceptors can pass it across attempts.
 type DoraRequestConfig = InternalAxiosRequestConfig & {
     __retryCount?: number;
     __correlationId?: string;
+    __retryAsRead?: boolean;
 };
 
 export default class AxiosHttpClient implements HttpClient {
@@ -262,7 +288,7 @@ export default class AxiosHttpClient implements HttpClient {
                 }
 
                 // Retry GETs on network errors and 5xx-class transient codes.
-                if (isRetryable(cfg.method, error)) {
+                if (isRetryable(cfg.method, error, cfg.__retryAsRead === true)) {
                     const attempt = (cfg.__retryCount ?? 0) + 1;
                     if (attempt <= retryCeilingFor(cfg.url)) {
                         cfg.__retryCount = attempt;
@@ -317,6 +343,27 @@ export default class AxiosHttpClient implements HttpClient {
         } catch (error) {
             await this.parseBlobErrorBody(error as AxiosError);
             return this.handleError(error as AxiosError, 'GET', path);
+        }
+    }
+
+    async postFile<TBody = unknown>(
+        path: string,
+        body: TBody,
+        options?: RequestOptions,
+    ): Promise<{ blob: Blob; filename: string | null }> {
+        try {
+            const response = await this.axios.post<Blob>(path, body, {
+                responseType: 'blob',
+                ...requestOptionsConfig(options),
+            });
+            const disposition = response.headers['content-disposition'];
+            return {
+                blob: response.data,
+                filename: parseFilename(typeof disposition === 'string' ? disposition : null),
+            };
+        } catch (error) {
+            await this.parseBlobErrorBody(error as AxiosError);
+            return this.handleError(error as AxiosError, 'POST', path);
         }
     }
 
@@ -433,10 +480,20 @@ export default class AxiosHttpClient implements HttpClient {
 
     async post<TResponse = unknown, TBody = unknown>(
         path: string,
-        body: TBody
+        body: TBody,
+        options?: RequestOptions,
     ): Promise<HttpClientResponse<TResponse>> {
         try {
-            return (await this.axios.post<TResponse>(path, body)).data;
+            // The instance-level `Content-Type: application/json` default makes
+            // axios serialise a FormData body as JSON (its defaults transform
+            // runs before the adapter's multipart check), which broke every
+            // chunked upload when the composable moved onto this client. Let
+            // the browser mint the multipart boundary for a form body.
+            const config = {
+                ...(body instanceof FormData ? { headers: { 'Content-Type': 'multipart/form-data' } } : {}),
+                ...requestOptionsConfig(options),
+            };
+            return (await this.axios.post<TResponse>(path, body, config)).data;
         } catch (error) {
             return this.handleError(error as AxiosError, 'POST', path);
         }

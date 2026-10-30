@@ -6,6 +6,7 @@ import requests
 
 AUDIT_URL = "http://localhost:5170/api/audit/events"
 STOCK_GROUPS_URL = "http://localhost:5170/api/stock-groups"
+APP_SETTINGS_URL = "http://localhost:5170/api/app-settings"
 
 
 def _list(**params) -> dict:
@@ -85,42 +86,45 @@ def test__audit__get_returns_single_event(api):
     assert detail["audit_event_id"] == event_id
 
 
-def test__audit_retention__deletes_rows_older_than_cutoff(api):
-    """The retention helper unit-tests in isolation; here we exercise
-    end-to-end that a forcibly-aged row is deleted by the prune call.
+def test__prune_audit_events__RowOlderThanConfiguredRetention__IsDeleted(api):
+    """End-to-end: a forcibly-aged row is deleted by the prune call, against
+    the retention window set in Settings. 100 days old sits inside the 365-day
+    fallback, so it only goes if the job really read the 30-day setting (it
+    used to resolve it outside the app context and always fall back).
     """
     from datetime import datetime, timedelta, timezone
-    import os
     from uuid import uuid4
     from sqlalchemy import insert, select
 
     from dora_api.app import app, db
     from dora_api.features.audit.prune_audit_events import prune_audit_events
 
-    # Force a generous-but-finite retention window so we don't depend
-    # on what the env says.
-    os.environ["DORA_AUDIT_RETENTION_DAYS"] = "30"
+    previous = requests.get(APP_SETTINGS_URL).json()["audit_retention_days"]
+    patched = requests.patch(APP_SETTINGS_URL, json={"audit_retention_days": 30})
+    assert patched.status_code == 200, patched.text
+    try:
+        with app.app_context():
+            table = db.metadata.tables["AuditEvent"]
+            aged = uuid4()
+            db.session.execute(
+                insert(table).values(
+                    id=aged,
+                    occurred_at=datetime.now(timezone.utc) - timedelta(days=100),
+                    source="system",
+                    action="test.retention",
+                    severity="info",
+                ),
+            )
+            db.session.commit()
 
-    with app.app_context():
-        table = db.metadata.tables["AuditEvent"]
-        ancient = uuid4()
-        db.session.execute(
-            insert(table).values(
-                id=ancient,
-                occurred_at=datetime.now(timezone.utc) - timedelta(days=400),
-                source="system",
-                action="test.retention",
-                severity="info",
-            ),
-        )
-        db.session.commit()
+        deleted = prune_audit_events()
+    finally:
+        requests.patch(APP_SETTINGS_URL, json={"audit_retention_days": previous})
 
-    deleted = prune_audit_events()
     assert deleted >= 1
-
     with app.app_context():
         table = db.metadata.tables["AuditEvent"]
         gone = db.session.execute(
-            select(table).where(table.c.id == ancient),
+            select(table).where(table.c.id == aged),
         ).first()
         assert gone is None

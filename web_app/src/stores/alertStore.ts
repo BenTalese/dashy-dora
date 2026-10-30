@@ -32,15 +32,20 @@ export const useAlertStore = defineStore('alert', () => {
     const snoozedCount = computed(() => data.value.snoozed_count);
     const snoozedAlerts = computed<Alert[]>(() => data.value.snoozed);
 
+    // Only the most recent request may write: concurrent refreshes would
+    // otherwise apply whichever response happens to arrive last.
+    let latestRequestId = 0;
     const refreshAsync = async () => {
+        const requestId = ++latestRequestId;
         loading.value = true;
         loadError.value = null;
         try {
-            data.value = await api.getAlertsAsync();
+            const result = await api.getAlertsAsync();
+            if (requestId === latestRequestId) data.value = result;
         } catch (err) {
-            loadError.value = String(err);
+            if (requestId === latestRequestId) loadError.value = String(err);
         } finally {
-            loading.value = false;
+            if (requestId === latestRequestId) loading.value = false;
         }
     };
 

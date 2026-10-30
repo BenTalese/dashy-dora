@@ -65,7 +65,9 @@ class ResolveFoodRequest(BaseModel):
     its ref travel — the values are re-fetched server-side."""
     model_config = ConfigDict(extra="forbid")
     source: str = Field(min_length=1, max_length=32)
-    source_ref: str = Field(min_length=1, max_length=100)
+    # Matches `NutritionFood.source_ref` (`String(64)`); a longer ref can't
+    # name a stored food, and Postgres would 500 on the insert.
+    source_ref: str = Field(min_length=1, max_length=64)
 
 
 def _source_payload():

@@ -71,6 +71,10 @@ class UpdateLocationHandler:
                     location.kind == "area" and parent.kind != "zone"
                 ) or (location.kind == "zone"):
                     return UpdateLocationResponse(parent_kind_mismatch=True)
+            elif location.kind != "zone":
+                # Only a zone may sit at the root; an area/section always
+                # has a parent one rung above it.
+                return UpdateLocationResponse(parent_kind_mismatch=True)
 
             location.parent_id = new_parent_id
 

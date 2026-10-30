@@ -7,8 +7,8 @@ import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
  *  the gesture (R-046), so this must stay a sync entry point. A raw
  *  `window.open(baseUrl + …)` only worked where the browser volunteered the
  *  session cookie — never in the Capacitor shell or a cross-site deploy. */
-export function openPrintDocument(path: string, title: string): void {
-    void openHtmlDocumentAsync(path, title).catch((err) => {
+export function openPrintDocument(path: string, title: string, body?: unknown): void {
+    void openHtmlDocumentAsync(path, title, body).catch((err) => {
         Notify.create(err instanceof PopupBlockedError
             ? {
                 type: 'negative',

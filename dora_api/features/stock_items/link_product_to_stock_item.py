@@ -9,8 +9,10 @@ from dora_api.domain.entities.shopping_list import (SHOPPING_LIST_STATUS_DONE,
                                                     ShoppingList,
                                                     ShoppingListLine)
 from dora_api.domain.entities.stock_item import StockItem
+from dora_api.features.products.product_links import linked_stock_items
 from dora_api.features.routers import STOCK_ITEM_ROUTER
-from dora_api.infrastructure.api_response import (entity_existence_failure,
+from dora_api.infrastructure.api_response import (business_rule_violation,
+                                                  entity_existence_failure,
                                                   no_content, not_found)
 from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.utils import (field_of, get_request_body)
@@ -32,6 +34,8 @@ class LinkProductResponse:
     stock_item_not_found: bool = False
     product_not_found: bool = False
     already_linked: bool = False
+    # Name of the other stock item this product is already linked to.
+    linked_elsewhere_to: str | None = None
 
 
 class LinkProductToStockItemHandler:
@@ -57,6 +61,12 @@ class LinkProductToStockItemHandler:
         existing_ids = {p.id for p in (_StockItem.products or [])}
         if _Product.id in existing_ids:
             return LinkProductResponse(already_linked = True)
+
+        # StockItemProduct is UNIQUE(product_id): a product links to at most
+        # one stock item. Refuse up front rather than 500 on the constraint.
+        _OtherLink = linked_stock_items(self.repository, [_Product.id]).get(_Product.id)
+        if _OtherLink is not None:
+            return LinkProductResponse(linked_elsewhere_to = _OtherLink.name or str(_OtherLink.stock_item_id))
 
         _StockItem.products.append(_Product)
 
@@ -127,6 +137,11 @@ def link_product_to_stock_item(stock_item_id: UUID):
             Product.__name__,
             field_of(LinkProductRequest, 'product_id'),
             _Request.product_id,
+        )
+    if _Response.linked_elsewhere_to is not None:
+        return business_rule_violation(
+            f"This product is already linked to '{_Response.linked_elsewhere_to}'. "
+            "Unlink it there first."
         )
 
     _LOGGER.info(

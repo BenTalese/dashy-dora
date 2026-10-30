@@ -93,18 +93,6 @@ class UpdateMealPlanHandler:
                 _ValidSlots, (_Entry.slot for _Entry in (_Plan.entries or []))
             )
             _Today = household_today(self.repository)
-            # The message names the current vocabulary, not the allowance:
-            # "Allowed: …, Snack" would read as an invitation to keep using a
-            # slot the household has deleted. A forward entry scheduled before
-            # today is a genuine "can't schedule in the past" error: the client
-            # never sends past entries (FU-595, preserved server-side below).
-            _Failure = check_entries(request.entries, _Today, _AllowedSlots, _ValidSlots)
-            if _Failure is not None:
-                return UpdateMealPlanResponse(
-                    invalid_slot_message = _Failure.invalid_slot_message,
-                    invalid_cook_batch_message = _Failure.invalid_cook_batch_message,
-                    has_past_entry = _Failure.has_past_entry,
-                )
 
             # Preserve the immutable past. Past days are read-only, so the
             # client resends only forward-looking entries; anything already
@@ -120,6 +108,27 @@ class UpdateMealPlanHandler:
                 _Entry for _Entry in (_Plan.entries or [])
                 if _Entry.consumed_at is not None or _Entry.scheduled_for < _Today
             ]
+
+            # The message names the current vocabulary, not the allowance:
+            # "Allowed: …, Snack" would read as an invitation to keep using a
+            # slot the household has deleted. A forward entry scheduled before
+            # today is a genuine "can't schedule in the past" error: the client
+            # never sends past entries (FU-595, preserved server-side above).
+            # A batch straddling today keeps its past cook day above, so a
+            # single forward leftover day resent under its id is still valid.
+            _Failure = check_entries(
+                request.entries, _Today, _AllowedSlots, _ValidSlots,
+                preserved_batch_keys = frozenset(
+                    str(_Entry.cook_batch_id) for _Entry in _PreservedExisting
+                    if _Entry.cook_batch_id is not None
+                ),
+            )
+            if _Failure is not None:
+                return UpdateMealPlanResponse(
+                    invalid_slot_message = _Failure.invalid_slot_message,
+                    invalid_cook_batch_message = _Failure.invalid_cook_batch_message,
+                    has_past_entry = _Failure.has_past_entry,
+                )
 
             _RecipeById, _MissingIds = resolve_recipes(self.repository, request.entries)
             if _MissingIds:

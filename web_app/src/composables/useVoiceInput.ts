@@ -34,6 +34,8 @@ type SpeechRecognitionLike = {
 };
 
 type SpeechResultEvent = {
+    /** Index of the first result that changed in this event. */
+    resultIndex: number;
     results: ArrayLike<
         ArrayLike<{ transcript: string }> & { isFinal: boolean }
     >;
@@ -153,10 +155,11 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
         r.onresult = (event) => {
             // Walk the results: emit interim text for the live caption,
             // and fire `onFinal` per final result. Web Speech delivers
-            // a cumulative result list across the session, so we
-            // iterate from 0 and trust `isFinal` to gate emissions.
+            // a cumulative result list across the session, so start at
+            // `resultIndex` (the first changed result) — iterating from 0
+            // re-fired every earlier final command in continuous mode.
             let interim = '';
-            for (let i = 0; i < event.results.length; i++) {
+            for (let i = event.resultIndex; i < event.results.length; i++) {
                 const res = event.results[i];
                 if (!res) continue;
                 const alt = res[0];

@@ -41,6 +41,7 @@
                 v-if="budget.enabled"
                 :value="Math.min(1, budget.spent / (budget.amount || 1))"
                 :color="budget.over_budget ? 'negative' : 'primary'"
+                aria-label="Budget spent so far"
                 class="q-mt-sm"
                 size="8px"
                 rounded

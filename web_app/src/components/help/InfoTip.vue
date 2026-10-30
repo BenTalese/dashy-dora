@@ -11,8 +11,26 @@
         just says the thing inline; reach for HelpHint when the explanation is
         long enough to want its own page.
     -->
-    <span class="info-tip" :aria-label="`More information: ${label}`" tabindex="0">
+    <!-- `role="button"`: it is focusable and opening the tip is its action
+         (on touch, the tap that shows it), and a bare span may not carry an
+         `aria-label` (axe `aria-prohibited-attr`). Being a button, it honours
+         Enter/Space (toggle the tip, Escape closes it), and the tip text is
+         tied to it by `aria-describedby` — the tooltip itself is teleported
+         and only mounted while open, so the description points at a visually
+         hidden copy that is always in the tree. -->
+    <span
+        class="info-tip"
+        role="button"
+        :aria-label="`More information: ${label}`"
+        :aria-describedby="descriptionId"
+        :aria-expanded="open"
+        tabindex="0"
+        @keydown.enter.prevent="toggle"
+        @keydown.space.prevent="toggle"
+        @keydown.esc="open = false"
+    >
         <q-icon :name="ICONS.help_outline" size="18px" />
+        <span :id="descriptionId" class="info-tip__sr"><slot /></span>
         <!-- Owner feedback 2026-09-13: *"the longer tooltip delay is good but
              it's been applied too broadly. For info (?) chips specifically,
              I'd expect those to be instant."* The 500 ms default exists so a
@@ -21,7 +39,11 @@
              else — reading the tip is the only reason to touch it — so there
              is no action for a flash to interfere with, and the dwell is pure
              latency on the one gesture the control is for. -->
+        <!-- `v-model` falls through to the root QTooltip (BaseTooltip has a
+             single root), so hover/focus still drive it as before and the
+             keyboard toggle above shares the same state. -->
         <BaseTooltip
+            v-model="open"
             :delay="0"
             max-width="340px"
             :offset="[0, 6]"
@@ -35,11 +57,19 @@
 <script setup lang="ts">
     import BaseTooltip from 'src/components/BaseTooltip.vue';
     import { ICONS } from 'src/style/icons';
+    import { ref, useId } from 'vue';
 
     defineProps<{
         /** What the tip is about — screen-reader label, never rendered. */
         label: string;
     }>();
+
+    const descriptionId = `info-tip-${useId()}`;
+    const open = ref(false);
+
+    function toggle() {
+        open.value = !open.value;
+    }
 </script>
 
 <style scoped lang="scss">
@@ -64,6 +94,19 @@
         outline: 2px solid var(--ring-focus);
         outline-offset: 1px;
         border-radius: 50%;
+    }
+    /* Visually hidden, still read by assistive tech (no app-wide utility
+       class exists; scoped here until a second consumer appears). */
+    .info-tip__sr {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
     }
     .info-tip__tooltip {
         font-size: 0.8125rem;

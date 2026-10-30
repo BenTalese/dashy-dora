@@ -1,4 +1,21 @@
 <template>
+    <!-- Just-applied undo banner (session-scoped). Outside the over-budget
+         card on purpose: a swap that brings the week under budget unmounts
+         that card, and the Undo must survive exactly that success. -->
+    <q-banner v-if="moneyEnabled && lastLedgerId" dense rounded class="swap-panel__undo q-mb-md">
+        <template #avatar><q-icon :name="ICONS.check" color="positive" /></template>
+        Swap applied.
+        <template #action>
+            <BaseButton
+                variant="secondary"
+                :icon="ICONS.undo"
+                label="Undo"
+                :loading="busy"
+                @click="onUndo"
+            />
+        </template>
+    </q-banner>
+
     <!-- FU-451 — budget-defense recipe swaps. Renders only when money features
          are on AND the week is projected over budget (proposal §6b). -->
     <q-card
@@ -48,20 +65,6 @@
             <strong>{{ formatMoney(suggestions.projected_after_applying_all) }}</strong>
         </div>
 
-        <!-- Just-applied undo banner (session-scoped) -->
-        <q-banner v-if="lastLedgerId" dense class="swap-panel__undo">
-            <template #avatar><q-icon :name="ICONS.check" color="positive" /></template>
-            Swap applied.
-            <template #action>
-                <BaseButton
-                    variant="secondary"
-                    :icon="ICONS.undo"
-                    label="Undo"
-                    :loading="busy"
-                    @click="onUndo"
-                />
-            </template>
-        </q-banner>
 
         <!-- Candidate rows -->
         <q-list v-if="open && suggestions.candidates.length" separator>
@@ -190,15 +193,21 @@
         return formatLocaleDate(d, { weekday: 'long' });
     }
 
+    // Request token: a slower response for the previous plan must not land
+    // over the current one.
+    let loadSeq = 0;
     async function load() {
-        if (!props.mealPlanId || !moneyEnabled.value) {
+        const req = ++loadSeq;
+        const planId = props.mealPlanId;
+        if (!planId || !moneyEnabled.value) {
             suggestions.value = null;
             return;
         }
         try {
-            suggestions.value = await api.getSwapSuggestionsAsync(props.mealPlanId);
+            const result = await api.getSwapSuggestionsAsync(planId);
+            if (req === loadSeq) suggestions.value = result;
         } catch {
-            suggestions.value = null;
+            if (req === loadSeq) suggestions.value = null;
         }
     }
 
@@ -252,7 +261,14 @@
         }
     }
 
-    watch(() => props.mealPlanId, load, { immediate: true });
+    // A different plan: the last swap's Undo and an open preview belong to the
+    // plan just left, so drop them before loading the new one.
+    watch(() => props.mealPlanId, () => {
+        lastLedgerId.value = null;
+        previewOpen.value = false;
+        previewCandidate.value = null;
+        void load();
+    }, { immediate: true });
     watch(moneyEnabled, load);
     // Let the parent force a re-fetch (e.g. after editing the week elsewhere).
     defineExpose({ reload: load });

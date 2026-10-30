@@ -13,6 +13,8 @@ from uuid import uuid4
 
 import requests
 
+from tests.support import assert_problem
+
 BASE = "http://localhost:5170/api"
 
 
@@ -283,3 +285,33 @@ def test__pack_count_must_be_positive_on_update():
     resp = requests.patch(f"{BASE}/products/{product_id}", json={"pack_count": 0})
 
     assert resp.status_code == 400
+
+
+def test__create__web_url_must_be_http_and_strings_fit_their_columns():
+    """`web_url` is rendered as an "Open on store" href, so `javascript:` is
+    refused; and every string is capped at its `String(255)` column (Postgres
+    enforces it — an over-long value used to 500 instead of 400)."""
+    body = {
+        "name": f"Url-{uuid4().hex[:8]}",
+        "store_name": _store_name(),
+        "is_active": True,
+        "is_available": True,
+        "price_now": 3.0,
+        "size": "1kg",
+        "size_unit": "KG",
+        "size_value": 1.0,
+    }
+    for field, value in (
+        ("web_url", "javascript:alert(1)"),
+        ("web_url", "https://example.test/" + "a" * 250),
+        ("name", "n" * 256),
+        ("brand", "b" * 256),
+        ("size", "s" * 256),
+        ("size_unit", "u" * 256),
+        ("merchant_stockcode", "m" * 256),
+    ):
+        assert_problem(requests.post(f"{BASE}/products", json={**body, field: value}),
+                       400, field=field)
+
+    product_id = _create_custom(web_url="https://example.test/mince")
+    assert _fetch(product_id)["web_url"] == "https://example.test/mince"

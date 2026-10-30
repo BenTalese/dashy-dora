@@ -271,14 +271,18 @@
     // does not have.
     async function loadStoreSpend() {
         if (!moneyEnabled.value) { storeSpend.value = null; return; }
+        const r = range.value;
         await loadSlot('storeSpend', async () => {
-            storeSpend.value = await reportsApi.getSpendByStoreAsync(range.value);
+            const data = await reportsApi.getSpendByStoreAsync(r);
+            if (r === range.value) storeSpend.value = data;
         });
     }
     async function loadSpendByCategory() {
         if (!moneyEnabled.value) { spendByCategory.value = null; return; }
+        const r = range.value;
         await loadSlot('spendByCategory', async () => {
-            spendByCategory.value = await reportsApi.getSpendByCategoryAsync(range.value);
+            const data = await reportsApi.getSpendByCategoryAsync(r);
+            if (r === range.value) spendByCategory.value = data;
         });
     }
     async function loadSpendYoY() {
@@ -286,16 +290,20 @@
         // YoY needs a bounded window to compare against the same-length prior
         // window. Blank it on "All time" so the card can explain itself.
         if (range.value === 'all') { spendYoY.value = null; return; }
+        const r = range.value;
         await loadSlot('spendYoY', async () => {
-            spendYoY.value = await reportsApi.getSpendYearOverYearAsync(
-                range.value as YoYReportRange,
+            const data = await reportsApi.getSpendYearOverYearAsync(
+                r as YoYReportRange,
             );
+            if (r === range.value) spendYoY.value = data;
         });
     }
     async function loadSavings() {
         if (!productMoneyEnabled.value) { savings.value = null; return; }
+        const r = range.value;
         await loadSlot('savings', async () => {
-            savings.value = await reportsApi.getSavingsCapturedAsync(range.value);
+            const data = await reportsApi.getSavingsCapturedAsync(r);
+            if (r === range.value) savings.value = data;
         });
     }
     /** The Spend card's retry — all three axes plus its savings support line. */
@@ -306,13 +314,17 @@
     }
 
     async function loadMostBought() {
+        const r = range.value;
         await loadSlot('mostBought', async () => {
-            mostBought.value = await reportsApi.getMostBoughtAsync(range.value);
+            const data = await reportsApi.getMostBoughtAsync(r);
+            if (r === range.value) mostBought.value = data;
         });
     }
     async function loadMealsCooked() {
+        const r = range.value;
         await loadSlot('mealsCooked', async () => {
-            mealsCooked.value = await reportsApi.getMealsCookedAsync(range.value, 10);
+            const data = await reportsApi.getMealsCookedAsync(r, 10);
+            if (r === range.value) mealsCooked.value = data;
         });
     }
 
@@ -322,8 +334,10 @@
     // waste endpoint takes a day count rather than a range token.
     const rangeWindow = ref<RangeWindow | null>(null);
     async function loadRangeWindow() {
+        const r = range.value;
         await loadSlot('rangeWindow', async () => {
-            rangeWindow.value = await reportsApi.getRangeWindowAsync(range.value);
+            const data = await reportsApi.getRangeWindowAsync(r);
+            if (r === range.value) rangeWindow.value = data;
         });
     }
     /** The dates the range covers, always in full ("3 Aug 2026 – 2 Sep
@@ -344,16 +358,28 @@
         // `days` is null for "all time"; the waste report clamps to 365 itself
         // and reports the window it actually used, so a wide number is safe and
         // the card renders whatever came back.
-        const days = rangeWindow.value?.days ?? 3650;
+        const r = range.value;
+        // The window must be THIS range's: if its load failed (or is from the
+        // range just left), fetch it again rather than read another range's
+        // day count.
+        if (rangeWindow.value?.range !== r) await loadRangeWindow();
         await loadSlot('waste', async () => {
-            waste.value = await wasteApi.getInsightsAsync(days);
+            const w = rangeWindow.value;
+            if (w?.range !== r) {
+                if (r !== range.value) return; // superseded — the new range loads its own
+                throw new Error('No date window for this range');
+            }
+            const data = await wasteApi.getInsightsAsync(w.days ?? 3650);
+            if (r === range.value) waste.value = data;
         });
     }
 
     async function loadItemMovers() {
         if (!moneyEnabled.value) { itemMovers.value = null; return; }
+        const r = range.value;
         await loadSlot('itemMovers', async () => {
-            itemMovers.value = await reportsApi.getItemPriceMoversAsync(range.value, 8);
+            const data = await reportsApi.getItemPriceMoversAsync(r, 8);
+            if (r === range.value) itemMovers.value = data;
         });
     }
 
@@ -361,10 +387,16 @@
     // reader can see exactly which parts of the page to trust. A banner over the
     // whole grid said "something here is wrong" without saying what, while the
     // failed card underneath still read as empty.
+    // Each range switch is a new generation; a superseded one stops before
+    // starting its card fetches (each loader also drops a response for a
+    // range the reader has since left).
+    let loadGeneration = 0;
     async function loadAll() {
+        const gen = ++loadGeneration;
         // The window first: `loadWaste` needs its `days`, and it is the one
         // fetch the rest depend on rather than merely sit beside.
         await loadRangeWindow();
+        if (gen !== loadGeneration) return;
         await Promise.all([
             loadStoreSpend(),
             loadSpendByCategory(),

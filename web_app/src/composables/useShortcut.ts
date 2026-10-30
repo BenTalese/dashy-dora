@@ -40,6 +40,20 @@ function isTypingTarget(event: KeyboardEvent): boolean {
     return t.isContentEditable;
 }
 
+// Keys typed inside an open menu or dialog belong to that overlay: Enter on a
+// row's overflow item must pick the item, not open the row behind it, and the
+// arrows must move through the menu, not the list.
+const OVERLAY_SELECTOR = '.q-menu, .q-dialog, [role="menu"], [role="listbox"]';
+// Enter / Space on these already activate the element natively.
+const ACTIVATABLE_SELECTOR = 'a, button, [role="button"], [role="menuitem"], [role="option"]';
+
+function belongsToFocusedControl(event: KeyboardEvent, token: string): boolean {
+    const t = event.target;
+    if (!(t instanceof Element)) return false;
+    if (t.closest(OVERLAY_SELECTOR)) return true;
+    return (token === 'enter' || token === 'space') && t.closest(ACTIVATABLE_SELECTOR) !== null;
+}
+
 function tokenFor(event: KeyboardEvent): string {
     if (event.key === ' ') return 'space';
     return event.key.toLowerCase();
@@ -66,15 +80,26 @@ function findMatch(keys: string, typing: boolean): RegisteredShortcut | null {
 function handleKeydown(event: KeyboardEvent): void {
     // We own plain keys (+Shift for '?'). Leave modifier combos alone.
     if (event.ctrlKey || event.metaKey || event.altKey) return;
+    // Something nearer the target already handled this key.
+    if (event.defaultPrevented) return;
 
     const typing = isTypingTarget(event);
     const token = tokenFor(event);
+    if (belongsToFocusedControl(event, token)) return;
 
     if (token === 'escape') {
         clearSequence();
         if (cheatsheetOpen.value) {
             event.preventDefault();
             cheatsheetOpen.value = false;
+            return;
+        }
+        // The cheatsheet wasn't open, so Escape is free for a registered
+        // shortcut (cook mode's "Exit cook mode").
+        const escapeMatch = findMatch('escape', typing);
+        if (escapeMatch) {
+            event.preventDefault();
+            escapeMatch.handler(event);
         }
         return;
     }

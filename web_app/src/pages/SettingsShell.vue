@@ -430,6 +430,13 @@
         background: var(--brand-primary);
         color: var(--text-inverse);
     }
+    /* D-004 — the toggle's buttons run 32px tall at the phone font size; a
+       finger gets the 44px floor. Keyed to the pointer, not the width (R-085). */
+    @media (pointer: coarse) {
+        .settings-shell__mode-btn {
+            min-height: 44px;
+        }
+    }
     .settings-shell__body {
         flex: 1 1 auto;
         min-height: 0; /* required for children's overflow to compute */

@@ -265,7 +265,7 @@ _SIMPLE_CREATE_PROBES: list[Probe] = [
         "brand": "Test", "image": None, "is_active": True, "is_available": True,
         "store_name": "Woolworths", "merchant_stockcode": _u("sku"),
         "name": _u("prod"), "price_now": 4.5, "price_was": 10.5,
-        "size": "500g", "size_unit": "g", "size_value": 5.0, "web_url": "www",
+        "size": "500g", "size_unit": "g", "size_value": 5.0, "web_url": "https://www.example.test",
     }),
 ]
 

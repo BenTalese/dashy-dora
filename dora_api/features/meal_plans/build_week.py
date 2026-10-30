@@ -40,7 +40,7 @@ from dora_api.domain.entities.app_setting import AppSetting
 from dora_api.domain.entities.meal_plan_entry import MealPlanEntry
 from dora_api.features.app_settings.access import money_features_enabled
 from dora_api.features.app_settings.clock import household_today
-from dora_api.features.budget.budget import budget_remaining, household_budget
+from dora_api.features.budget.budget import household_budget, period_headroom
 from dora_api.features.meal_slots.slot_validation import ordered_slot_names
 from dora_api.features.recipes.all_recipes import load_all_recipe_dtos
 from dora_api.features.recipes.get_recipes import count_expiring_ingredients_per_recipe
@@ -553,7 +553,8 @@ def compute_auto_build(
     swapped: set = set()
     money_on = money_features_enabled(repository)
     budget = household_budget(repository)
-    remaining = budget_remaining(repository, today)
+    # Measured against the period the built days start in, not today's.
+    remaining = period_headroom(min(days) if days else today, repository)
     if request.budget_cap and remaining is not None:
         selected_ids = {c.recipe_id for c in selected}
         pool = [c for c in candidates if c.recipe_id not in selected_ids and c.recipe_id not in excluded]

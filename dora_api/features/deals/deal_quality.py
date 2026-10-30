@@ -35,6 +35,7 @@ from dora_api.domain.entities.stock_item_price_observation import \
     StockItemPriceObservation
 from dora_api.features.app_settings.clock import household_timezone, household_today
 from dora_api.features.products.product_links import linked_stock_items
+from dora_api.features.stock_items.your_prices import per_unit_in_canonical
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 
@@ -99,11 +100,12 @@ def compute_deal_quality(
     * ``household_unit_paid_prices`` — the household's per-unit paid prices
       for the product's linked stock item (FU-216 observations). Ground
       truth for "what this actually costs us".
-    * ``current_unit_price`` — the product's current price expressed per-unit
-      (``price_now / size_value``) so the fake-markdown test compares
-      like-for-like against the household unit prices. Falls back to
-      ``current_price`` when a size can't be resolved (pass-through, the same
-      hand-wavy unit reconciliation the recipe-cost estimate documents).
+    * ``current_unit_price`` — the product's current price per canonical unit,
+      on the SAME basis as ``household_unit_paid_prices`` (the caller puts
+      both through ``per_unit_in_canonical`` and keeps only same-dimension
+      observations). ``None`` when the product's size can't be put on that
+      basis — the fake-markdown test then doesn't fire: a pack price against
+      a per-unit median made genuine specials read "poor".
 
     Returns ``None`` when there's no current price or no window history —
     the caller treats that as "no signal", never a fabricated band.
@@ -124,11 +126,10 @@ def compute_deal_quality(
     # has, on the median, paid less than the "special" price recently. No
     # household history ⇒ we can't assert dishonesty, so it's not flagged
     # (Charter P8 — never celebrate a fake, but never invent one either).
-    compare_price = current_unit_price if current_unit_price is not None else current_price
     fake_markdown = False
-    if offer_claims_saving and household_unit_paid_prices:
+    if offer_claims_saving and household_unit_paid_prices and current_unit_price is not None:
         household_median = statistics.median(household_unit_paid_prices)
-        fake_markdown = compare_price >= household_median
+        fake_markdown = current_unit_price >= household_median
 
     return DealQuality(
         lowest_price=round(lowest, 2),
@@ -170,44 +171,78 @@ def get_deal_quality(
     )
 
     current = product.current_offer
-    window_prices: list[float] = [current.price_now]
-    for h in (product.historic_offers or []):
-        if h.price_now is None or h.offered_on is None:
-            continue
-        if as_utc(h.offered_on) >= horizon:
-            window_prices.append(h.price_now)
+    window_prices = window_offer_prices(current, product.historic_offers or [], horizon)
 
     offer_claims_saving = (
         current.price_was is not None and current.price_was > current.price_now
     )
-    current_unit_price = (
-        current.price_now / product.size_value if product.size_value else None
+    product_per_unit = per_unit_in_canonical(
+        total_price=current.price_now,
+        total_measure=product.size_value or 0,
+        unit=product.size_unit or "",
     )
 
-    # Household paid prices for whichever stock items this product links to.
-    # Per-observation unit cost (total_price / total_measure) — the same
-    # per-unit basis Buy Verdict reasons over. Unit reconciliation against
-    # the product's own unit is pass-through (documented rough heuristic).
-    household_unit_paid_prices: list[float] = []
+    # Household paid prices for whichever stock items this product links to,
+    # per canonical unit — the same basis Buy Verdict reasons over.
+    observations: list[StockItemPriceObservation] = []
     link = linked_stock_items(repository, [product_id]).get(product_id)
     stock_item_ids = [link.stock_item_id] if link else []
     if stock_item_ids:
-        observations: list[StockItemPriceObservation] = repository.get(
-            StockItemPriceObservation
-        ).all(
+        observations = repository.get(StockItemPriceObservation).all(
             EntityField(
                 StockItemPriceObservation,
                 StockItemPriceObservation.Fields.STOCK_ITEM_ID,
             ).in_(stock_item_ids)
         )
-        for o in observations:
-            if o.total_measure:
-                household_unit_paid_prices.append(o.total_price / o.total_measure)
 
     return compute_deal_quality(
         current_price=current.price_now,
         offer_claims_saving=offer_claims_saving,
         window_prices=window_prices,
-        household_unit_paid_prices=household_unit_paid_prices,
-        current_unit_price=current_unit_price,
+        household_unit_paid_prices=household_unit_prices_like(product_per_unit, observations),
+        current_unit_price=product_per_unit[0] if product_per_unit else None,
     )
+
+
+def window_offer_prices(current, historic_offers, horizon: datetime) -> list[float]:
+    """The current price plus every historic price inside the window.
+
+    The current offer is also written to history when it lands (the
+    offer-append rule), so the historic row that IS the current offer is
+    skipped — otherwise the current price counted twice and skewed the
+    percentile."""
+    prices: list[float] = [current.price_now]
+    current_at = as_utc(current.offered_on)
+    skipped_current = False
+    for h in historic_offers:
+        if h.price_now is None or h.offered_on is None:
+            continue
+        offered_at = as_utc(h.offered_on)
+        if (not skipped_current and h.price_now == current.price_now
+                and offered_at == current_at):
+            skipped_current = True
+            continue
+        if offered_at >= horizon:
+            prices.append(h.price_now)
+    return prices
+
+
+def household_unit_prices_like(
+    product_per_unit: tuple[float, str] | None, observations,
+) -> list[float]:
+    """The household's per-unit paid prices on the product's canonical unit.
+
+    Each observation is in its own unit; only those that land in the same
+    canonical unit as the product (L / kg / ea) are comparable. No product
+    basis ⇒ nothing is comparable."""
+    if product_per_unit is None:
+        return []
+    _price, canonical = product_per_unit
+    prices: list[float] = []
+    for o in observations:
+        per_unit = per_unit_in_canonical(
+            total_price=o.total_price, total_measure=o.total_measure or 0, unit=o.unit or "",
+        )
+        if per_unit is not None and per_unit[1] == canonical:
+            prices.append(per_unit[0])
+    return prices

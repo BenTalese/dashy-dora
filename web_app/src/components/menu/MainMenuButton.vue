@@ -1,4 +1,8 @@
 <template>
+    <!-- `role="link"` overrides QItem's hard-coded `role="listitem"`: the strip
+         is a row of links, not a list, and a listitem outside a list is an
+         ARIA error (axe `aria-required-parent`) that also hides the link from
+         a screen reader's links rotor. -->
     <q-item
         v-if="href"
         :href="href"
@@ -6,6 +10,7 @@
         rel="noopener"
         :class="{ 'is-expanded': isExpanded }"
         class="dora-mainMenuButton"
+        role="link"
         no-caps
         tag="a"
     >
@@ -26,6 +31,7 @@
         class="dora-mainMenuButton"
         active-class=""
         exact-active-class=""
+        role="link"
         no-caps
     >
         <div class="dora-mainMenuButton-inner column items-center justify-center">

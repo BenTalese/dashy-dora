@@ -144,3 +144,44 @@ def test__apply_swap__money_off__rejected(api):
     finally:
         requests.delete(f"{MEAL_PLANS}/{plan_id}")
         _set_money(True)
+
+
+def test__swap_suggestions__PlanInAFutureWeek__MeasuredAgainstThatWeeksPeriod(api, monkeypatch):
+    """The plan's cost is compared to the money left in the period its week
+    falls in, not today's — planning next week against this week's part-spent
+    budget flagged it over budget spuriously."""
+    from datetime import timedelta
+
+    import dora_api.features.meal_plans.swap_suggestions as swaps
+
+    asked: list[date] = []
+    monkeypatch.setattr(swaps, "period_headroom", lambda on, repo: asked.append(on) or 1000.0)
+    _set_money(True)
+    _set_budget(100.0, "weekly")
+    next_week = _today() + timedelta(days=7)
+    created = requests.post(MEAL_PLANS, json={"start_date": next_week.isoformat()})
+    assert created.status_code == 201, created.text
+
+    resp = requests.get(f"{MEAL_PLANS}/{created.json()['meal_plan_id']}/swap-suggestions")
+
+    assert resp.status_code == 200, resp.text
+    assert asked == [next_week]
+
+
+def test__period_headroom__MoneyFeaturesOff__IsNone(api):
+    """Same gate `household_budget` applies: a stored budget on a money-off
+    install constrains nothing (the trim optimiser read it ungated)."""
+    from dora_api.app import app
+    from dora_api.features.budget.budget import period_headroom
+    from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
+
+    _set_money(True)
+    _set_budget(100.0, "weekly")
+    _set_money(False)
+    try:
+        with app.app_context():
+            headroom = period_headroom(_today(), SqlAlchemyRepository())
+    finally:
+        _set_money(True)
+
+    assert headroom is None

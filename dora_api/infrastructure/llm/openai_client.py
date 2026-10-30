@@ -17,6 +17,7 @@ from urllib.error import URLError
 from urllib.request import Request, urlopen
 
 from dora_api.infrastructure.llm.llm_client import (LlmClient, LlmUnavailable,
+                                                 is_provider_down,
                                                  remember_availability,
                                                  remembered_availability)
 
@@ -39,7 +40,9 @@ class OpenAiClient(LlmClient):
         self._timeout = timeout_seconds
         self._enabled = enabled
         self._base_url = (base_url or DEFAULT_BASE_URL).rstrip("/")
-        self._availability_key = (type(self).__name__, self._base_url, self._api_key)
+        # Model is part of the key: a probe of one model must not vouch for
+        # (or condemn) a different model on the same endpoint.
+        self._availability_key = (type(self).__name__, self._base_url, self._api_key, self._model)
 
     def is_available(self) -> bool:
         if not self._enabled or not self._api_key:
@@ -84,7 +87,7 @@ class OpenAiClient(LlmClient):
 
         payload: dict = {
             "model": self._model,
-            "messages": messages,
+            "messages": _convert_messages(messages),
             "temperature": 0.2,
             "stream": False,
         }
@@ -102,7 +105,8 @@ class OpenAiClient(LlmClient):
             with urlopen(req, timeout=self._timeout) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
         except (URLError, OSError, ValueError) as exc:
-            remember_availability(self._availability_key, False)
+            if is_provider_down(exc):
+                remember_availability(self._availability_key, False)
             raise LlmUnavailable(f"OpenAI request failed: {exc}") from exc
 
         choices = data.get("choices") or []
@@ -117,3 +121,20 @@ class OpenAiClient(LlmClient):
 
     def _headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self._api_key}"}
+
+
+def _convert_messages(messages: list[dict]) -> list[dict]:
+    """Shape tool-result messages for chat-completions: OpenAI requires
+    `tool_call_id` (matching the assistant's `tool_calls[].id`) and does not
+    take the `name` the provider-neutral message also carries for Gemini."""
+    out: list[dict] = []
+    for m in messages:
+        if m.get("role") == "tool":
+            out.append({
+                "role": "tool",
+                "tool_call_id": m.get("tool_call_id") or "",
+                "content": str(m.get("content") or ""),
+            })
+        else:
+            out.append(m)
+    return out

@@ -42,8 +42,15 @@ depends_on = None
 def upgrade():
     # Backfill any prod NULLs before tightening (app default is True). No-op on a
     # fresh from-empty upgrade; matters only for an existing populated install.
-    op.execute('UPDATE "Product" SET is_active = 1 WHERE is_active IS NULL')
-    op.execute('UPDATE "Product" SET is_available = 1 WHERE is_available IS NULL')
+    # `sa.true()` renders `1` on SQLite and `true` on Postgres (a boolean column
+    # there rejects the integer literal).
+    product = sa.table(
+        'Product',
+        sa.column('is_active', sa.Boolean()),
+        sa.column('is_available', sa.Boolean()),
+    )
+    op.execute(product.update().where(product.c.is_active.is_(None)).values(is_active=sa.true()))
+    op.execute(product.update().where(product.c.is_available.is_(None)).values(is_available=sa.true()))
     with op.batch_alter_table('Product') as batch:
         batch.alter_column('is_active', existing_type=sa.Boolean(), nullable=False)
         batch.alter_column('is_available', existing_type=sa.Boolean(), nullable=False)

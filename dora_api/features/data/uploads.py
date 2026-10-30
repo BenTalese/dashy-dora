@@ -81,7 +81,9 @@ def _sweep_stale_uploads() -> None:
             continue
 
 
-def _is_valid_upload_id(upload_id: str) -> bool:
+def is_valid_upload_id(upload_id: str) -> bool:
+    """An upload id is a UUID; anything else must never reach `staged_path`,
+    which joins it into a filesystem path."""
     try:
         UUID(upload_id)
         return True
@@ -138,7 +140,7 @@ def append_chunk():
     upload_id = request.form.get("upload_id", "")
     offset_raw = request.form.get("offset", "")
 
-    if not _is_valid_upload_id(upload_id):
+    if not is_valid_upload_id(upload_id):
         return bad_request("Missing or malformed upload_id.")
     try:
         offset = int(offset_raw)
@@ -207,7 +209,7 @@ def finish_upload():
     if err is not None:
         return err
     _Request: FinishUploadRequest = get_request_body()
-    if not _is_valid_upload_id(_Request.upload_id):
+    if not is_valid_upload_id(_Request.upload_id):
         return bad_request("Malformed upload_id.")
     path = staged_path(_Request.upload_id)
     if not path.exists():
@@ -226,7 +228,7 @@ def abort_upload(upload_id: UUID):
     # R-033: the uuid converter validates + parses the id at the routing edge
     # (a malformed value 404s), which also removes the path-traversal concern
     # on the staged-file name (FU-544). The `/start|/chunk|/finish` routes take
-    # upload_id in the BODY as a str, so `_is_valid_upload_id` stays for them.
+    # upload_id in the BODY as a str, so `is_valid_upload_id` stays for them.
     _, err = require_admin()
     if err is not None:
         return err

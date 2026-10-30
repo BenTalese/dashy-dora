@@ -52,12 +52,13 @@ import logging
 from uuid import UUID
 
 from flask import session
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from dora_api.domain.entities.audit_event import SEVERITY_AUDIT
 from dora_api.domain.entities.user import (ALLOWED_LLM_PROVIDERS,
                                            LLM_PROVIDERS_REQUIRING_API_KEY,
                                            User)
+from dora_api.domain.entities.user_llm_provider import UserLlmProvider
 from dora_api.features.assistant.providers import get_provider_config
 from dora_api.infrastructure.session_user import SESSION_USER_ID_KEY
 from dora_api.features.routers import ASSISTANT_ROUTER
@@ -72,6 +73,8 @@ from dora_api.infrastructure.llm import (EncryptionFailed,
                                          LlmUnavailable,
                                          build_assistant_client_from_provider,
                                          decrypt_api_key)
+from dora_api.infrastructure.llm.factory import (BASE_URL_SCHEME_MESSAGE,
+                                                 is_http_base_url)
 from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
@@ -93,6 +96,15 @@ class ProbeAssistantRequest(BaseModel):
     # saved encrypted blob for paid providers — lets the SPA call
     # probe() repeatedly without re-typing the masked field.
     api_key: str | None = Field(default=None, max_length=512)
+
+    @field_validator("base_url")
+    @classmethod
+    def _http_base_url(cls, value: str | None) -> str | None:
+        # http(s) only — see `is_http_base_url` (file:// probe oracle). The
+        # factory re-checks, which also covers a saved row's base URL.
+        if value is not None and value.strip() and not is_http_base_url(value):
+            raise ValueError(BASE_URL_SCHEME_MESSAGE)
+        return value
 
 
 @dataclass(frozen=True, slots=True)
@@ -131,16 +143,21 @@ class ProbeAssistantHandler:
         # testing a freshly-typed value), fall back to the saved
         # encrypted blob (user is testing what they already saved).
         api_key = ""
+        # What the saved row would probe with, for the "is this the saved
+        # config?" check below. None = unknown (can't decrypt).
+        saved_api_key: str | None = ""
         if provider in LLM_PROVIDERS_REQUIRING_API_KEY:
+            saved_api_key = None
+            if row is not None and row.api_key_encrypted is not None:
+                try:
+                    saved_api_key = decrypt_api_key(row.api_key_encrypted)
+                except (EncryptionUnavailable, EncryptionFailed) as exc:
+                    if not (request.api_key and request.api_key.strip()):
+                        return ProbeAssistantResponse(available=False, reason=str(exc))
             if request.api_key is not None and request.api_key.strip():
                 api_key = request.api_key.strip()
-            elif row is not None and row.api_key_encrypted is not None:
-                try:
-                    api_key = decrypt_api_key(row.api_key_encrypted)
-                except EncryptionUnavailable as exc:
-                    return ProbeAssistantResponse(available=False, reason=str(exc))
-                except EncryptionFailed as exc:
-                    return ProbeAssistantResponse(available=False, reason=str(exc))
+            else:
+                api_key = saved_api_key or ""
             if not api_key:
                 return ProbeAssistantResponse(
                     available=False,
@@ -160,8 +177,11 @@ class ProbeAssistantHandler:
         # Persist the outcome onto the saved row so the Mode picker knows
         # which providers are usable. A successful probe verifies the row;
         # a failure clears the flag (settings drifted or the server went
-        # away). No row yet (pure draft test) → nothing to persist.
-        if row is not None:
+        # away). Only when the probe actually exercised the *saved* config:
+        # a draft that passes must not vouch for different saved values, and
+        # a draft that fails must not un-verify a good saved config. No row
+        # yet (pure draft test) → nothing to persist.
+        if row is not None and _probed_saved_config(row, base_url, model, api_key, saved_api_key):
             row.verified = result.available
             row.verified_at = datetime.now(timezone.utc) if result.available else None
             self.repository.save_changes()
@@ -202,6 +222,18 @@ class ProbeAssistantHandler:
             )
 
         return ProbeAssistantResponse(available=True, models=models)
+
+
+def _probed_saved_config(
+    row: UserLlmProvider, base_url: str | None, model: str, api_key: str,
+    saved_api_key: str | None,
+) -> bool:
+    return (
+        (base_url or None) == (row.base_url or None)
+        and model == (row.model or "")
+        and saved_api_key is not None
+        and api_key == saved_api_key
+    )
 
 
 @ASSISTANT_ROUTER.route("/probe", methods=["POST"])

@@ -8,7 +8,7 @@ from dora_api.features.stock_items.create_stock_item import \
 from dora_api.features.stock_items.update_stock_item import \
     UpdateStockItemRequest
 from tests.e2e.dora_api._error_assertions import domain_err, validation_err
-from tests.support import is_valid_datetime, is_valid_uuid
+from tests.support import assert_problem, is_valid_datetime, is_valid_uuid
 
 #region ---------------- setup ----------------
 
@@ -891,3 +891,81 @@ def test__delete_stock_item__DeletedItemNoLongerReturnedInGetAll(api):
 
 
 #endregion delete_stock_item tests
+
+
+#region ---------------- move_stock_item tests ----------------
+
+
+def test__move_stock_item__ToNullDestination__ClearsLocation(api, stock_level_id, stock_location_id):
+    # R-032: `stock_location` is lazy="noload", so the move-to-unassigned
+    # branch must clear `_stock_location_id` directly or nothing persists.
+    _Created = requests.post(base_route, json=CreateStockItemRequest(
+        name='Move To Unassigned',
+        stock_level_id=stock_level_id,
+        stock_location_id=stock_location_id,
+    ).model_dump(mode="json")).json()
+    _ItemId = _Created["stock_item_id"]
+
+    _Response = requests.patch(
+        f'{base_route}/{_ItemId}/move', json={'destination_location_id': None},
+    )
+
+    assert _Response.status_code == 204
+    assert requests.get(f'{base_route}/{_ItemId}/detail').json()['stock_location_id'] is None
+
+
+#endregion move_stock_item tests
+
+
+#region ---------------- link_product_to_stock_item tests ----------------
+
+
+def test__link_product_to_stock_item__ProductLinkedToAnotherItem__IsBusinessRuleViolationNamingIt(api, stock_level_id):
+    # StockItemProduct is UNIQUE(product_id) — the second link used to 500.
+    _Resp = requests.post('http://localhost:5170/api/products', json={
+        'name': f'Link Once {uuid4().hex[:8]}', 'store_name': 'Woolworths',
+        'merchant_stockcode': f'LNK-{uuid4().hex[:8]}', 'brand': 'Test',
+        'price_now': 2.5, 'is_active': True, 'is_available': True,
+        'size': '1L', 'size_unit': 'L', 'size_value': 1.0,
+    })
+    assert _Resp.status_code == 201, _Resp.text
+    _ProductId = _Resp.headers['location'].rsplit(':', 1)[-1]
+    _First = requests.post(base_route, json={'name': 'Link Owner', 'stock_level_id': stock_level_id}).json()
+    _Second = requests.post(base_route, json={'name': 'Link Poacher', 'stock_level_id': stock_level_id}).json()
+    assert requests.post(
+        f"{base_route}/{_First['stock_item_id']}/products", json={'product_id': _ProductId},
+    ).status_code == 204
+
+    _Response = requests.post(
+        f"{base_route}/{_Second['stock_item_id']}/products", json={'product_id': _ProductId},
+    )
+
+    _Body = assert_problem(_Response, 422, title='Business rule violation.')
+    assert "Link Owner" in _Body['errors'][''][0]['msg']
+
+
+#endregion link_product_to_stock_item tests
+
+
+#region ---------------- unknown FK ids (were 500s) ----------------
+
+
+@pytest.mark.parametrize('field', ['usual_store_id', 'nutrition_food_id'])
+def test__update_stock_item__UnknownForeignKeyId__IsEntityExistenceFailure(api, field):
+    _ItemId = _first('')['stock_item_id']
+
+    _Response = requests.patch(f'{base_route}/{_ItemId}', json={field: str(uuid4())})
+
+    assert_problem(_Response, 422, field=field, title='Entity was not found.')
+
+
+def test__create_stock_item__UnknownUsualStoreId__IsEntityExistenceFailure(api, stock_level_id):
+    _Response = requests.post(base_route, json={
+        'name': 'Unknown Usual Store', 'stock_level_id': stock_level_id,
+        'usual_store_id': str(uuid4()),
+    })
+
+    assert_problem(_Response, 422, field='usual_store_id', title='Entity was not found.')
+
+
+#endregion unknown FK ids

@@ -52,10 +52,13 @@
     import { reactive, ref } from 'vue';
     import { useRouter } from 'vue-router';
     import AuthApiService from 'src/services/api/authApiService';
+    import { useAuthStore } from 'src/stores/authStore';
+    import { refreshDemoMode } from 'src/composables/useDemoMode';
     import { setBackendBaseUrl, getBackendBaseUrl, clearBackendBaseUrl } from 'src/services/api/backendUrl';
 
     const $q = useQuasar();
     const router = useRouter();
+    const authStore = useAuthStore();
 
     const submitting = ref(false);
     const errorMessage = ref<string | null>(null);
@@ -70,19 +73,24 @@
         submitting.value = true;
         errorMessage.value = null;
         try {
-            // Provisionally set the URL so the health probe uses the
-            // normalised form; roll back if the probe fails.
+            // Provisionally set the URL so the probe uses the normalised
+            // form; roll back if anything about the new server fails — the
+            // probe *or* the re-bootstrap — so a bad answer never leaves a
+            // broken address saved while the page says "unreachable".
             const previous = getBackendBaseUrl();
             await setBackendBaseUrl(raw);
             try {
-                // /api/auth/me is the same anonymous-boot probe the auth
-                // store uses on cold-load; `getMeAsync` treats 401 as
-                // "backend answered". Through the shared client (request id,
-                // timeout policy) — not a second bare axios (finalisation 15-R16).
-                await new AuthApiService().getMeAsync();
+                // Shape check, not just a status check: any web server answers
+                // 200, so an address serving an HTML page must not read as
+                // "Connected". Through the shared client (request id, timeout
+                // policy) — not a second bare axios (finalisation 15-R16).
+                if (!(await new AuthApiService().isDoraServerAsync())) {
+                    throw new Error('The server at that address is not Dora.');
+                }
+                // The boot probe and the demo-mode check both ran before any
+                // address existed; ask the new server before routing on.
+                await authStore.rebootstrapAsync();
             } catch (probeErr) {
-                // Roll back the persisted URL so a bad answer doesn't lock
-                // the app into a broken state.
                 if (previous) {
                     await setBackendBaseUrl(previous);
                 } else {
@@ -90,6 +98,7 @@
                 }
                 throw probeErr;
             }
+            void refreshDemoMode();
             $q.notify({
                 type: 'positive', position: 'top',
                 message: 'Connected. Welcome to Dora!',
@@ -98,7 +107,8 @@
             void router.replace('/');
         } catch (err) {
             const message = err instanceof Error ? err.message : 'Could not reach that instance.';
-            errorMessage.value = 'Could not reach that server. Check the URL and your connection.';
+            errorMessage.value = "Couldn't reach that server. Check the address and your connection. "
+                + 'A home server without HTTPS needs http:// at the start.';
             console.warn('BackendSetup probe failed', message);
         } finally {
             submitting.value = false;

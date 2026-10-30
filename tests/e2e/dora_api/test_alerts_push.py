@@ -279,3 +279,88 @@ def test__push_job__no_op_when_no_subscriptions(api):
     sent = send_alerts_push(now=_NOW, _send_push=sender)
     assert sent == 0
     assert calls == []
+
+
+def test__push_subscribe__NonHttpsEndpoint__Is400AndNothingStored(api):
+    from tests.support import assert_problem
+
+    user_id = _me_user_id()
+    for endpoint in (
+        "http://169.254.169.254/latest/meta-data",
+        "ftp://push.example/x",
+        "file:///etc/passwd",
+        "https:///no-host",
+    ):
+        resp = requests.post(f"{BASE}/alerts/push/subscribe", json={
+            "endpoint": endpoint,
+            "keys": {"p256dh": "k", "auth": "a"},
+        })
+        assert_problem(resp, 400, field="endpoint")
+    assert _subscriptions_for(user_id) == []
+
+
+def test__push_subscribe__EndpointOwnedByAnotherUser__IsRefusedNotReassigned(api):
+    from dora_api.domain.entities.user import User
+    from tests.support import assert_problem
+
+    endpoint = f"https://test.push/victim/{uuid.uuid4().hex}"
+    with app.app_context():
+        repo = SqlAlchemyRepository()
+        victim = User(
+            email=None, password_hash=None, send_deals_on_day=0,
+            username=f"victim-{uuid.uuid4().hex[:8]}",
+        )
+        repo.add(victim)
+        repo.save_changes()
+        victim_id = victim.id
+        now = datetime.now(timezone.utc)
+        repo.add(PushSubscription(
+            user_id=victim_id, endpoint=endpoint, p256dh="victim-p256dh",
+            auth="victim-auth", user_agent="victim", created_at=now, last_seen_at=now,
+        ))
+        repo.save_changes()
+
+    resp = requests.post(f"{BASE}/alerts/push/subscribe", json={
+        "endpoint": endpoint,
+        "keys": {"p256dh": "attacker-p256dh", "auth": "attacker-auth"},
+    })
+
+    assert_problem(resp, 422)
+    with app.app_context():
+        row = SqlAlchemyRepository().get(PushSubscription).one(
+            EntityField(PushSubscription, PushSubscription.Fields.ENDPOINT).eq(endpoint)
+        )
+        assert row.user_id == victim_id
+        assert row.p256dh == "victim-p256dh"
+        assert row.auth == "victim-auth"
+
+
+def test__push_subscribe__SameBrowserKeysUnderNewUser__MovesTheRow(api):
+    """A shared device: same browser subscription (endpoint + key pair),
+    now signed in as a different user — that's proof of possession, so the
+    row moves rather than erroring."""
+    from dora_api.domain.entities.user import User
+
+    endpoint = f"https://test.push/shared/{uuid.uuid4().hex}"
+    with app.app_context():
+        repo = SqlAlchemyRepository()
+        previous = User(
+            email=None, password_hash=None, send_deals_on_day=0,
+            username=f"prev-{uuid.uuid4().hex[:8]}",
+        )
+        repo.add(previous)
+        repo.save_changes()
+        now = datetime.now(timezone.utc)
+        repo.add(PushSubscription(
+            user_id=previous.id, endpoint=endpoint, p256dh="shared-p256dh",
+            auth="shared-auth", user_agent="tablet", created_at=now, last_seen_at=now,
+        ))
+        repo.save_changes()
+
+    resp = requests.post(f"{BASE}/alerts/push/subscribe", json={
+        "endpoint": endpoint,
+        "keys": {"p256dh": "shared-p256dh", "auth": "shared-auth"},
+    })
+
+    assert resp.status_code == 204, resp.text
+    assert any(r.endpoint == endpoint for r in _subscriptions_for(_me_user_id()))

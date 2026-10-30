@@ -9,6 +9,9 @@
         </template>
 
         <q-form v-if="!submitted" @submit.prevent="onSubmit" class="q-gutter-y-md">
+            <q-banner v-if="sendFailed" class="dora-bg-sunken" rounded role="alert">
+                Couldn't send that right now. Try again in a moment.
+            </q-banner>
             <q-input
                 v-model="email"
                 type="email"
@@ -43,21 +46,39 @@
     import { ICONS } from 'src/style/icons';
     import { ref } from 'vue';
     import AuthApiService from 'src/services/api/authApiService';
+    import { NormalisedApiError } from 'src/services/api/axiosHttpClient';
 
     const api = new AuthApiService();
     const email = ref('');
     const submitting = ref(false);
     const submitted = ref(false);
+    const sendFailed = ref(false);
+
+    // Anti-enumeration: a 2xx and any 4xx the backend sends (validation)
+    // both land on the same "check your inbox" screen. Only a failure that
+    // says nothing about the address — the request never landed (network),
+    // was throttled (429) or the server broke (5xx) — gets its own message,
+    // and that message is identical for every address, so it leaks nothing.
+    function isTransportFailure(err: unknown): boolean {
+        if (!(err instanceof NormalisedApiError)) return true;
+        return err.isNetworkError || err.status === 429 || err.status >= 500;
+    }
 
     async function onSubmit() {
         submitting.value = true;
+        sendFailed.value = false;
         try {
             await api.forgotPasswordAsync(email.value.trim());
+            submitted.value = true;
+        } catch (err) {
+            console.warn('Forgot-password request failed', err);
+            if (isTransportFailure(err)) {
+                sendFailed.value = true;
+            } else {
+                submitted.value = true;
+            }
         } finally {
             submitting.value = false;
-            // Always pretend success — the backend is already anti-
-            // enumeration; the SPA matches.
-            submitted.value = true;
         }
     }
 </script>

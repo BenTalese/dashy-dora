@@ -229,6 +229,47 @@ def test__create_user__with_a_weak_chosen_password__is_422(api):
     assert "password" in response.json()["errors"]
 
 
+def test__create_user__ChosenPasswordShortOnlyOnceStripped__Is422(api):
+    """Validated after the strip it's stored with: seven characters padded to
+    nine used to pass the 8-character rule and be stored as seven."""
+    response = requests.post(base_route, json={
+        "username": f"probe-{uuid.uuid4().hex[:8]}", "password": " Abcdef1 ",
+    })
+
+    assert response.status_code == 422, response.text
+    assert "password" in response.json()["errors"]
+
+
+def test__login__UserNeverChangedPassword__LaterResetEndsTheSession(api):
+    """Login always stamps the session's password version, and get_me compares
+    it as an instant — so a reset after sign-in signs that device out."""
+    from dora_api.app import app, db
+    from sqlalchemy import text
+    from tests.support import uuid_bind
+
+    username, body = _create_user(password=_STRONG_PW)
+    with app.app_context(), db.engine.begin() as conn:
+        conn.execute(
+            text('UPDATE "User" SET password_changed_at = NULL WHERE id = :id'),
+            {"id": uuid_bind(body["user_id"])},
+        )
+    _reset_login_bucket()
+    device = requests.Session()
+    signed_in = device.post(
+        "http://localhost:5170/api/auth/login",
+        json={"username": username, "password": _STRONG_PW},
+    )
+    assert signed_in.status_code == 200, signed_in.text
+    assert device.get("http://localhost:5170/api/auth/me").status_code == 200
+
+    reset = requests.post(f'{base_route}/{body["user_id"]}/reset-password', json={
+        "password": "Zyxwvutsrq9",
+    })
+    assert reset.status_code == 200, reset.text
+
+    assert device.get("http://localhost:5170/api/auth/me").status_code == 401
+
+
 def test__set_password__with_a_chosen_password__replaces_the_old_one(api):
     username, body = _create_user()
     user_id = body["user_id"]

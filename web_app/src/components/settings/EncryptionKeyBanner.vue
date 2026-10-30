@@ -32,7 +32,7 @@
                 <code>EnvironmentFile</code>, Docker/compose env) and restart
                 Dora. Generate a key below, or from a shell with:
             </p>
-            <code class="enc-banner__cli">python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"</code>
+            <code class="enc-banner__cli" tabindex="0">python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"</code>
 
             <div class="enc-banner__actions">
                 <BaseButton

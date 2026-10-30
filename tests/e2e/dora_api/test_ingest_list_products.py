@@ -155,3 +155,22 @@ def test__list__rejects_nonsense_paging():
     assert requests.get(
         INGEST_PRODUCTS, headers=_auth(key), params={"offset": -1},
     ).status_code == 400
+
+
+def test__list__same_named_products_page_in_a_stable_id_order():
+    """Ordering by `name` alone left same-named products (one per store) in
+    no defined order, so offset paging could skip or repeat one. `id` breaks
+    the tie."""
+    _, key = _mint_source()
+    stores = requests.get(f"{BASE}/stores").json()["items"]
+    name = f"AAA-Twin-{uuid4().hex[:6]}"
+    for store in stores[:3]:
+        resp = requests.post(f"{BASE}/ingest", headers=_auth(key), json={
+            "products": [{"ref": "p0", "name": name, "store_id": store["store_id"]}],
+            "offers": [],
+        })
+        assert resp.status_code == 200, resp.text
+
+    twins = [r["product_id"] for r in _items(key, limit=500) if r["name"] == name]
+    assert len(twins) == len(stores[:3]) >= 2
+    assert twins == sorted(twins)

@@ -22,12 +22,12 @@ describe('useShoppingListExport', () => {
     it('fetches the print view through the client, by API path', () => {
         useShoppingListExport().openPrintView('list-1');
 
-        expect(m.openHtmlDocumentAsync).toHaveBeenCalledWith('/shopping-lists/list-1/print-view', 'Shopping list');
+        expect(m.openHtmlDocumentAsync).toHaveBeenCalledWith('/shopping-lists/list-1/print-view', 'Shopping list', undefined);
     });
 
     it('URL-encodes the list id', () => {
         useShoppingListExport().openPrintView('a b');
 
-        expect(m.openHtmlDocumentAsync).toHaveBeenCalledWith('/shopping-lists/a%20b/print-view', 'Shopping list');
+        expect(m.openHtmlDocumentAsync).toHaveBeenCalledWith('/shopping-lists/a%20b/print-view', 'Shopping list', undefined);
     });
 });

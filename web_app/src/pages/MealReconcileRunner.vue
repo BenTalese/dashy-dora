@@ -16,7 +16,7 @@
         </template>
 
         <!-- ── Loading ─────────────────────────────────────────────── -->
-        <div v-if="loading" class="runner-card-wrap">
+        <div v-if="loading && !current" class="runner-card-wrap">
             <q-spinner color="primary" size="42px" />
         </div>
 
@@ -69,7 +69,7 @@
                             class="col"
                             label="Different portions"
                             :disable="busy"
-                            @click="adjustOpen = true"
+                            @click="openAdjust"
                         />
                         <BaseButton
                             variant="secondary"
@@ -196,7 +196,7 @@
     import BaseButton from 'src/components/BaseButton.vue';
     import BaseDialog from 'src/components/BaseDialog.vue';
     import { useQuasar } from 'quasar';
-    import { computed, onMounted, reactive, ref } from 'vue';
+    import { computed, onMounted, reactive, ref, watch } from 'vue';
     import { useReconcileQueue } from 'src/composables/useReconcileQueue';
     import { useMealPlanStore } from 'src/stores/mealPlanStore';
     import { localTodayIso } from 'src/helpers/weekDates';
@@ -208,7 +208,7 @@
     import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
 
     const $q = useQuasar();
-    const { entries, loading, submitVerb, reload } = useReconcileQueue();
+    const { entries, total, hasMore, loading, submitVerb, fetchNextPage, reload } = useReconcileQueue();
 
 
     const index = ref(0);
@@ -218,9 +218,10 @@
     const laterOpen = ref(false);
     const laterCookedOn = ref<string>('');
 
-    /** Snapshot the initial queue length so the progress bar's
-     *  denominator is stable across the session (each resolved verb
-     *  removes an entry from the live list). */
+    /** Snapshot the server's queue `total` (not the loaded page length —
+     *  the queue pages 30 at a time) so the progress bar's denominator is
+     *  stable across the session (each resolved verb removes an entry from
+     *  the live list). */
     const initialCount = ref(0);
     const resolvedCount = computed(() => Math.min(index.value, initialCount.value));
     const hasEntry = computed(() => index.value < initialCount.value);
@@ -228,11 +229,23 @@
         initialCount.value === 0 ? 0 : resolvedCount.value / initialCount.value,
     );
 
-    /** Because `submitVerb` removes the resolved entry from `entries`,
-     *  the "current" item is always `entries[0]` while there's still
-     *  something in the queue. `index` is a monotonic session counter
-     *  for the progress bar; `current` is what's on screen. */
-    const current = computed<ReconcileEntry | null>(() => entries.value[0] ?? null);
+    /** `submitVerb` removes a resolved entry from `entries`, but keeps a
+     *  skipped (or idempotent) one — so "current" is the first entry not
+     *  skipped this session. `index` is a monotonic session counter for
+     *  the progress bar; `current` is what's on screen. */
+    const skippedIds = reactive(new Set<string>());
+    const current = computed<ReconcileEntry | null>(
+        () => entries.value.find((e) => !skippedIds.has(e.entry_id)) ?? null,
+    );
+    const remainingLoaded = computed(
+        () => entries.value.filter((e) => !skippedIds.has(e.entry_id)).length,
+    );
+
+    // Pull the next page before the loaded entries run dry.
+    const PREFETCH_BELOW = 5;
+    watch(remainingLoaded, (n) => {
+        if (n < PREFETCH_BELOW && hasMore.value && !loading.value) void fetchNextPage();
+    });
 
     const summary = reactive({
         cooked: 0,
@@ -258,8 +271,14 @@
 
     onMounted(async () => {
         await reload();
-        initialCount.value = entries.value.length;
+        initialCount.value = total.value;
+        if (remainingLoaded.value < PREFETCH_BELOW && hasMore.value) void fetchNextPage();
     });
+
+    function openAdjust(): void {
+        adjustServings.value = current.value?.planned_servings ?? 0;
+        adjustOpen.value = true;
+    }
 
     async function onVerb(verb: ReconcileVerb): Promise<void> {
         const c = current.value;
@@ -292,7 +311,10 @@
     async function runVerb(entryId: string, command: ReconcileVerbCommand): Promise<void> {
         busy.value = true;
         try {
-            await submitVerb(entryId, command);
+            const result = await submitVerb(entryId, command);
+            // Skip (and an idempotent replay) leave the entry in the queue;
+            // move past it for the rest of this session.
+            if (command.verb === 'skip' || result.idempotent) skippedIds.add(entryId);
             // Book the outcome for the completion-screen recap.
             if (command.verb === 'cooked') summary.cooked += 1;
             else if (command.verb === 'cooked_adjusted') summary.adjusted += 1;

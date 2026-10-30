@@ -12,7 +12,7 @@
             @retry="emit('retry')"
         />
         <template v-else-if="cells.length > 0">
-            <div class="dora-cal-grid" role="grid">
+            <div class="dora-cal-grid" role="group" aria-label="Days ahead">
                 <button
                     v-for="cell in cells"
                     :key="cell.iso"

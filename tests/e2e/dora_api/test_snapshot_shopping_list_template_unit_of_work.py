@@ -52,6 +52,28 @@ def test__snapshot_shopping_list__product_only_line__is_skipped_and_reported_not
     requests.delete(f"{SL_TEMPLATES}/{body['template_id']}")
 
 
+def test__snapshot_shopping_list__ItemWithPlainAndProductLine__OneTemplateLine(api):
+    # An item on the list as a plain line plus a nested product line used to
+    # snapshot as two template lines for the same item.
+    item_id = requests.post(f"{BASE}/stock-items", json={
+        "name": f"Snap dup {uuid4().hex[:8]}",
+        "stock_level_id": requests.get(f"{BASE}/stock-levels").json()["items"][0]["stock_level_id"],
+    }).json()["stock_item_id"]
+    product_id = _make_product()
+    assert requests.post(f"{BASE}/stock-items/{item_id}/products", json={"product_id": product_id}).status_code == 204
+    src_id = requests.post(LISTS, json={"name": f"Snap dup src {uuid4()}"}).json()["shopping_list_id"]
+    assert requests.post(f"{LISTS}/{src_id}/lines", json={"stock_item_id": item_id}).status_code in (200, 201)
+    assert requests.post(f"{LISTS}/{src_id}/lines", json={"product_id": product_id}).status_code in (200, 201)
+    assert len(requests.get(f"{LISTS}/{src_id}").json()["lines"]) == 2
+
+    resp = requests.post(f"{SL_TEMPLATES}/from-list/{src_id}", json={"include_ticked": True})
+
+    assert resp.status_code in (200, 201), resp.text
+    assert resp.json()["line_count"] == 1
+    lines = requests.get(f"{SL_TEMPLATES}/{resp.json()['template_id']}").json()["lines"]
+    assert [l["stock_item_id"] for l in lines] == [item_id]
+
+
 def test__snapshot_shopping_list__self_labelled_source__names_the_template_from_display_name(api):
     """A self-labelled list has `name=None`; the fallback read "Template from
     None" (finalisation 03-R2)."""

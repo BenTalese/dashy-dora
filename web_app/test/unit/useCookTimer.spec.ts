@@ -56,6 +56,18 @@ describe('useCookTimer', () => {
         expect(onFinish).toHaveBeenCalledTimes(1);
     });
 
+    it('restarting after it finished counts down afresh', () => {
+        const { timer, onFinish } = host();
+        timer.start(3);
+        vi.advanceTimersByTime(5000);
+        timer.start(10);
+        expect(timer.remaining.value).toBe(10);
+        expect(timer.total.value).toBe(10);
+        vi.advanceTimersByTime(4000);
+        expect(timer.remaining.value).toBe(6);
+        expect(onFinish).toHaveBeenCalledTimes(1);
+    });
+
     it('pause holds the remaining time; resume continues from it', () => {
         const { timer } = host();
         timer.start(60);

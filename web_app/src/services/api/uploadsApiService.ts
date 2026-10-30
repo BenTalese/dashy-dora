@@ -4,6 +4,12 @@ import AxiosHttpClient from './axiosHttpClient';
  *  client, so the CSRF header, request id and timeout policy apply — the
  *  composable used to hand-roll each call (FU-571 / FU-716, finalisation
  *  18-R7). */
+// An 8 MB chunk over a slow phone uplink outlasts the client's 30 s default
+// ceiling; a chunk that lands after the client gave up is reconciled by the
+// composable's offset check, but a ceiling that fits the payload avoids the
+// round trip.
+const CHUNK_TIMEOUT_MS = 5 * 60_000;
+
 export default class UploadsApiService {
     private httpClient = new AxiosHttpClient();
 
@@ -17,7 +23,7 @@ export default class UploadsApiService {
         form.append('upload_id', uploadId);
         form.append('offset', String(offset));
         form.append('chunk', chunk);
-        await this.httpClient.post<unknown, FormData>('/data/uploads/chunk', form);
+        await this.httpClient.post<unknown, FormData>('/data/uploads/chunk', form, { timeoutMs: CHUNK_TIMEOUT_MS });
     };
 
     finishAsync = async (uploadId: string): Promise<void> => {

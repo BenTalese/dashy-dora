@@ -65,6 +65,13 @@ app = Flask(__name__)
 app.json = DoraJSONProvider(app)
 app.config['SQLALCHEMY_DATABASE_URI'] = config_manager.get_db_connection_string()
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False  # True has been deprecated and does nothing
+# Postgres: pin every session's time zone to UTC. A naive datetime bound
+# against a `timestamptz` column is read in the session's zone, and the
+# server's default zone is whatever the host was set up with; the app writes
+# and reasons in UTC everywhere (see DoraJSONProvider). SQLite has no session
+# zone, so nothing to set there.
+if app.config['SQLALCHEMY_DATABASE_URI'].startswith('postgresql'):
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {'connect_args': {'options': '-c timezone=UTC'}}
 
 # Session / cookie config. The SECRET_KEY signs the session cookie. Set
 # DORA_SECRET_KEY in the environment for prod; the dev fallback writes a

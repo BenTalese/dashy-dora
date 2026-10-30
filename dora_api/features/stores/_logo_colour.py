@@ -42,6 +42,28 @@ _MIN_VALUE = 40
 # brand colour across dozens of near-identical RGB triples; quantising to
 # 32-step buckets collapses them back into one candidate before counting.
 _BUCKET = 32
+# Decompression-bomb guard. A tiny, highly-compressible PNG can *declare*
+# e.g. 13k x 13k pixels and expand to ~700 MB once decoded — enough to OOM
+# the single API worker, and any member can trigger it on store create/
+# update. `Image.open` only reads the header, so the declared size is
+# checked against this cap BEFORE anything is decoded; an oversized logo
+# just skips colour extraction (the store still saves, hash swatch shown).
+# No real logo comes near 4096 px on a side.
+_MAX_LOGO_DIMENSION = 4096
+# Process-wide Pillow ceiling (defence in depth for any decode path). Pillow
+# warns above this and raises DecompressionBombError above 2x. Its default
+# (~89 MP → error at ~179 MP) lets a 13k x 13k bomb through; 64 MP still
+# admits a 48 MP phone photo elsewhere in the app (recipe step images).
+_PILLOW_MAX_IMAGE_PIXELS = 64_000_000
+
+
+def _cap_pillow_canvas(Image) -> None:
+    """Lower Pillow's process-wide decompression-bomb ceiling once. Stated
+    here (the only module that decodes an untrusted image before sizing it)
+    and applied idempotently, so behaviour doesn't depend on whether a logo
+    has been processed since boot."""
+    if Image.MAX_IMAGE_PIXELS is None or Image.MAX_IMAGE_PIXELS > _PILLOW_MAX_IMAGE_PIXELS:
+        Image.MAX_IMAGE_PIXELS = _PILLOW_MAX_IMAGE_PIXELS
 
 
 def dominant_colour(image_blob: bytes | None) -> str | None:
@@ -62,9 +84,24 @@ def dominant_colour(image_blob: bytes | None) -> str | None:
 
         from PIL import Image
 
+        _cap_pillow_canvas(Image)
+
         with Image.open(io.BytesIO(raw)) as source:
+            # Header-only at this point — refuse oversized canvases before
+            # the pixel data is decoded.
+            width, height = source.size
+            if width > _MAX_LOGO_DIMENSION or height > _MAX_LOGO_DIMENSION:
+                _LOGGER.info(
+                    "Store logo is %sx%s (cap %s); skipping colour extraction.",
+                    width, height, _MAX_LOGO_DIMENSION,
+                )
+                return None
+            # Shrink BEFORE the mode conversion so `convert` only ever
+            # touches a <=64x64 image. `draft` lets JPEG decode at reduced
+            # scale (no-op for other formats).
+            source.draft("RGB", (_SAMPLE_SIZE, _SAMPLE_SIZE))
+            source.thumbnail((_SAMPLE_SIZE, _SAMPLE_SIZE))
             image = source.convert("RGBA")
-            image.thumbnail((_SAMPLE_SIZE, _SAMPLE_SIZE))
             # Raw RGBA bytes rather than `getdata()`, which Pillow has
             # deprecated. Four bytes per pixel, in order.
             pixels = image.tobytes()

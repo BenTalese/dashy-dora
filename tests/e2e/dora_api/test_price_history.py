@@ -110,3 +110,16 @@ def test__price_alerts__zero_threshold__is_422(api):
     })
     # Pydantic gt=0 → 400/422 via the middleware.
     assert response.status_code in (400, 422)
+
+
+def test__price_alerts__NoSessionUser__Returns401(api, monkeypatch):
+    """No signed-in user is an authentication failure (401), not a malformed
+    request (400). The auth gate normally stops this first, so the handler's
+    own check is driven by blanking the session user."""
+    import dora_api.features.price_history.price_history as module
+    from tests.support import assert_problem
+
+    monkeypatch.setattr(module, "current_user_id", lambda: None)
+
+    assert_problem(requests.get(f"{BASE}/alerts"), 401)
+    assert_problem(requests.delete(f"{BASE}/alerts/{uuid.uuid4()}"), 401)

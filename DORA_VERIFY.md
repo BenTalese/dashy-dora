@@ -22,6 +22,39 @@ top-to-bottom.
 
 ---
 
+## Autonomous QA round 2, browser-verify owed (2026-10-30)
+Driven by the agent: fresh install → /setup → wizard → empty-household crawl (clean), a second user's wizard, an authz matrix (anonymous + non-admin over 220 routes), fault injection (1-in-3 / abort / all-500 API reads: no blank pages or stuck spinners), axe-core at 1280/375, query budget on dense + 2000-item seeds, Postgres DDL offline. The items below were fixed from a code read and want one look.
+- [ ] Dora chat with a hosted provider (OpenAI / Anthropic / Gemini): ask "what's expiring?" — a real answer, and Settings → Assistant still reads available afterwards (tool results now carry `tool_call_id`).
+- [ ] Companion: ask link-status for a name Dora holds only at another store — "not in Dora" (it used to match the other store's product, and unsave could delete it).
+- [ ] Onboarding as a second member: Finish does not re-create default groups/locations the admin deleted; the recap shows no stock rows. Register, then open the verify-email link mid-wizard — the page verifies instead of bouncing to /welcome.
+- [ ] Native first run with no saved server: the address page shows (no endless splash); after Connect the app lands on /setup or /login.
+- [ ] Stock: filter to 250+ items → Export CSV, Print view and QR sheet all open (ids are POSTed now); on a phone the Settings/Admin toggle and the settings chips are 44px tall.
+- [ ] Login: six wrong passwords for one username inside a minute → 429 with Retry-After; a correct login afterwards resets it.
+- [ ] Stores: a logo that is a tiny PNG declaring 13000×13000 — the store saves with no brand colour and the server stays up.
+- [ ] Companion: push a backdated offer — the current price stays the newer one.
+- [ ] ⚠️ Operator (SQLite production DB, origin FU-965): against the live `dora.data.db` (or its newest backup) run `SELECT count(*) FROM "StockItemSubstitute"`, `"StockItemProduct"`, `"StockItemPriceObservation"`, `"ShoppingListLine"`, `"RecipeIngredient"`, `"RecipeStep"` and compare with what the app shows / an older backup — a count that is far below what you remember means an earlier upgrade cascade-deleted rows (restore them from the older backup's sections via Backup & restore).
+- [ ] Operator (Postgres): `upgrade head` on an EMPTY Postgres completes (eight revisions were Postgres-broken); `test__migrations__upgrade_head_runs_on_postgres` with `DORA_TEST_POSTGRES_URL` passes; `SHOW timezone` on the app's connection reads UTC.
+- [ ] Operator (compose): a plain-http install now gets Secure cookies by default — set `DORA_SECURE_COOKIES=false` in `.env` if logins fail after upgrading; nginx responses carry nosniff / X-Frame-Options / Referrer-Policy.
+
+## Autonomous QA sweep, browser-verify owed (2026-10-29)
+Driven by the agent against the seeded backend: setup-admin success path (pytest), chunked upload for restore + import, step-image keep/reorder/foreign-id, null move, meal-plan sort, reconcile Skip advancing, route crawls at 1440/375, 522-request API sweep. The items below were fixed from a code read only and want one look each.
+- [ ] Cook mode, voice on (desktop Chrome): say "next" twice — the step advances exactly twice; "start timer" after a finished timer counts down rather than finishing at once.
+- [ ] Recipe page: edit ingredients without saving, click a version sibling — a prompt appears; Stay keeps the edits, Leave discards them.
+- [ ] Recipe page, photo method: reorder two saved photos and add a third, save — all three are there in the new order; delete one and save — the other two remain.
+- [ ] Stock item page (peek): click item A then B before A finishes loading — B's detail and B's QR label show (Scanning tab); "Add missing" on a recipe card with two draft lists — pick a list, every missing item lands on it.
+- [ ] Stock row: set a level while offline — the row reverts to the old level with a "Could not update" toast; set an expiry — the toast shows the locale date, not an ISO string.
+- [ ] Stocktake: a run with review items only — confirm them all; the summary card shows (not "You're all caught up"). Boot with the API down — an error card, not "all caught up".
+- [ ] Shopping lists: with two lists, open the overview while another tab is mid-refresh — it redirects to the next-up list, never "No shopping lists yet"; dismiss the budget banner on list A, open over-budget list B — B's banner shows.
+- [ ] Shopping list (done): Put away → assign a location to an unsorted item — the dialog stays, group ticks survive, no page flash. Receipt photos render on the strip and in zoom.
+- [ ] Templates page: double-tap Use on a card — one list; only that card's button spins.
+- [ ] Meal plans: tap + on an entry's servings three times fast — servings go up by three; arrow week twice fast — the shopping card, budget and "Dora suggests" show the week on screen; apply a swap that brings the week under budget — the Undo banner is still there.
+- [ ] Reconcile runner: with 31+ past meals, Skip through the first page — it keeps going past 30 and ends on "complete" with the right count; "Different portions" opens with the planned servings.
+- [ ] Reports: click All time then 30 days quickly — every card shows 30-day numbers and the window label matches. Price history: selected-product chips carry their series colour swatch.
+- [ ] Settings → Nutrition: with the API down, change the rating scheme — the control reverts and a toast shows. Region: pick USD with the API down — the picker reverts. Import: halt on error → fix mapping → Import runs again.
+- [ ] Scan overlay (scanning on): open it, close it while the camera permission prompt is still up, then allow — the camera light goes off.
+- [ ] Operator (Postgres): `GET /api/dashboard/restock-radar` with a Low item returns 200 (was a naive/aware TypeError). Audit retention set to 30 days — the nightly prune log line names 30.
+- [ ] Operator (gunicorn): filter stock to ~150 items and Export CSV / Print view — 200, not "Bad Request Line".
+
 ## Help area redesign, browser-verify owed (2026-10-29)
 - [ ] Help: the landing shows the mascot, the search box, 14 topic cards (each with a count), Common questions and the two doors; nothing overflows at 375px.
 - [ ] Help → Stock: guides open one at a time with a chevron; "Reading a stock row" shows the live legend and the stock-rows screenshot with rounded corners and a hairline.

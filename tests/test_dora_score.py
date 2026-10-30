@@ -314,6 +314,26 @@ class TestTrend:
         assert out.trend_direction == "flat"
         assert out.trend_delta == 0
 
+    def test__compose_with_trend__BudgetUnscoredInLaggedWindow__UnchangedHouseholdIsFlat(self):
+        # The lagged pass never scores budget. With every shared signal equal,
+        # comparing a 4-component mean to a 3-component one used to swing the
+        # arrow on the budget score alone.
+        current = self._score(budget_over_pct=0.5, waste_event_count=2)
+        lagged = self._score(has_budget=False, budget_over_pct=None, waste_event_count=2)
+        out = compose_with_trend(current, lagged)
+        assert out.trend_delta == 0
+        assert out.trend_direction == "flat"
+        # The displayed composite still includes budget.
+        assert out.composite == current.composite
+
+    def test__compose_with_trend__SharedSignalMoves__DeltaIgnoresOneSidedComponent(self):
+        current = self._score(waste_event_count=0, budget_over_pct=0.9)
+        lagged = self._score(waste_event_count=3, has_budget=False, budget_over_pct=None)
+        out = compose_with_trend(current, lagged)
+        # waste 100 vs 70 over three shared components: (300 - 270) / 3 = 10.
+        assert out.trend_delta == 10
+        assert out.trend_direction == "up"
+
     def test__no_lagged_returns_current_untouched(self):
         current = self._score()
         out = compose_with_trend(current, None)

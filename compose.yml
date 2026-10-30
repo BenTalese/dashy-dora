@@ -74,7 +74,11 @@ services:
       #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
       - DORA_SECRET_ENCRYPTION_KEY=${DORA_SECRET_ENCRYPTION_KEY:-}
       - DORA_CORS_ORIGINS=${DORA_CORS_ORIGINS:-}
-      - DORA_SECURE_COOKIES=${DORA_SECURE_COOKIES:-false}
+      # Empty = let the profile decide (DORA_ENV=production => Secure cookies).
+      # A baked-in `false` here would defeat that fail-closed default. Set
+      # DORA_SECURE_COOKIES=false in .env only for a deliberate plain-HTTP
+      # LAN/VPN install (the boot log warns about it).
+      - DORA_SECURE_COOKIES=${DORA_SECURE_COOKIES:-}
       # Reverse proxies in front of the API (X-Forwarded-For hops to trust).
       # 0 = none. Set 1 behind nginx / Caddy / Traefik / a Cloudflare tunnel.
       - DORA_TRUSTED_PROXY_HOPS=${DORA_TRUSTED_PROXY_HOPS:-0}
@@ -169,6 +173,10 @@ services:
       # means it — this list documents intent, it isn't a lock.
 
     ports:
+      # With DORA_TRUSTED_PROXY_HOPS > 0 the API trusts X-Forwarded-For, so it
+      # must ONLY be reachable through that proxy: a client hitting 5170
+      # directly could forge its IP. In that setup drop this publish (or bind
+      # it to 127.0.0.1:5170:5170) and expose only the proxy.
       - "5170:5170"   # dora_api
       - "5174:5174"   # nginx (SPA)
 

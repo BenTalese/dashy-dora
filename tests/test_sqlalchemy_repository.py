@@ -290,6 +290,13 @@ _OPERATOR_CASES = [
     pytest.param(_NAME.starts_with("fr"), {"Freezer", "fridge"}, id="starts-with-default"),
     pytest.param(_NAME.starts_with("FR"), {"Freezer", "fridge"},
                  id="starts-with-upper-value-still-matches"),
+    # LIKE wildcards in the search text match literally, not as wildcards:
+    # "op_s" would otherwise match "Top Shelf" via `_` = the space.
+    pytest.param(_NAME.contains("%"), set(), id="contains-percent-is-literal"),
+    pytest.param(_NAME.contains("op_s"), set(), id="contains-underscore-is-literal"),
+    pytest.param(_NAME.contains("op s"), {"Top Shelf"}, id="contains-control-literal-space"),
+    pytest.param(_NAME.starts_with("%"), set(), id="starts-with-percent-is-literal"),
+    pytest.param(_NAME.starts_with("_ridge"), set(), id="starts-with-underscore-is-literal"),
 ]
 
 
@@ -453,6 +460,20 @@ def test__paginate__sort_string_desc__reverses_case_insensitive_order(repo):
         _options(sort=SortClause(field="name", direction="desc")), lambda e: e.name)
 
     assert _names(result) == list(reversed(_NOCASE_NAME_ASC))
+
+
+@pytest.mark.parametrize("direction, expected", [
+    # Non-null parents first (by parent id), then the four zones with no
+    # parent, in id order (the tiebreaker).
+    ("asc", ["Top Shelf", "bottom shelf", "Pantry", "fridge", "Freezer", "cellar"]),
+    ("desc", ["bottom shelf", "Top Shelf", "Pantry", "fridge", "Freezer", "cellar"]),
+])
+def test__paginate__sort_nullable_column__puts_nulls_last_both_ways(repo, direction, expected):
+    """NULL placement is pinned, not left to the backend (SQLite puts NULL
+    first on ASC, Postgres last), so a page reads the same on either."""
+    result = repo.get(StockLocation).paginate(
+        _options(sort=SortClause(field="parent_id", direction=direction)), lambda e: e.name)
+    assert _names(result) == expected
 
 
 def test__paginate__sort_via_field_map__resolves_mapped_column(repo):

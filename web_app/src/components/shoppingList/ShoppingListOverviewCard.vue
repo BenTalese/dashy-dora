@@ -43,12 +43,12 @@
                     role="progressbar"
                     :aria-valuenow="tickedCount"
                     :aria-valuemin="0"
-                    :aria-valuemax="detail.lines.length"
-                    :aria-label="`${tickedCount} of ${detail.lines.length} collected`"
+                    :aria-valuemax="lines.length"
+                    :aria-label="`${tickedCount} of ${lines.length} collected`"
                 >
                     <div class="sl-overview__progress-fill" :style="{ width: `${progressPct}%` }" />
                     <span class="sl-overview__progress-text">
-                        {{ tickedCount }}/{{ detail.lines.length }}
+                        {{ tickedCount }}/{{ lines.length }}
                     </span>
                 </div>
 
@@ -339,7 +339,7 @@
         const out: Figure[] = [];
         const money = moneyEnabled.value;
         const totals = props.detail.totals;
-        const count = props.detail.lines.length;
+        const count = props.lines.length;
         const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 
         if (face.value === 'plan') {
@@ -405,10 +405,12 @@
         () => moneyEnabled.value && unpricedCount.value > 0,
     );
 
-    const tickedCount = computed(() => props.detail.lines.filter((l) => l.is_ticked).length);
+    // Active lines only (`props.lines`): a deferred-by-budget line isn't on
+    // the run face, so counting it kept the bar from ever reaching 100%.
+    const tickedCount = computed(() => props.lines.filter((l) => l.is_ticked).length);
     /** Pure display math over server-owned counts — the sanctioned Type-C case. */
     const progressPct = computed(() => {
-        const count = props.detail.lines.length;
+        const count = props.lines.length;
         return count === 0 ? 0 : (tickedCount.value / count) * 100;
     });
 

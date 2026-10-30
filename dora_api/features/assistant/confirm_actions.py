@@ -30,6 +30,7 @@ from dora_api.features.app_settings.access import get_or_create_app_setting
 from dora_api.domain.money import format_money
 from dora_api.features.assistant._limits import MAX_CANDIDATES
 from dora_api.domain.entities.meal_plan import MealPlan
+from dora_api.domain.entities.meal_plan_entry import MealPlanEntry
 from dora_api.domain.entities.recipe import Recipe
 from dora_api.domain.entities.recipe_ingredient import RecipeIngredient
 from dora_api.domain.entities.shopping_list import ShoppingListLine
@@ -537,24 +538,33 @@ def propose_plan_meal_for_date(args: dict) -> dict[str, Any]:
 
 def commit_plan_meal_for_date(payload: dict[str, Any]) -> dict[str, Any]:
     """Append the requested entry to the target plan. UpdateMealPlanHandler
-    rewrites the full entry list, so we fetch the existing entries, append,
-    and submit the merged list."""
+    replaces the plan's forward entries, so we resend the existing forward
+    ones and append. Past and consumed entries are preserved server-side and
+    must not be resent (a past one is refused as "in the past"). Each resent
+    row carries its id, batch and fresh flag, so ids don't churn and cook
+    batches survive the edit."""
     repo = SqlAlchemyRepository()
     plan_id = UUID(payload["meal_plan_id"])
     plan: MealPlan | None = (
-        repo.get(MealPlan).include(MealPlan.Fields.ENTRIES).by_id(plan_id)
+        repo.get(MealPlan)
+        .include(MealPlan.Fields.ENTRIES).then_include(MealPlanEntry.Fields.RECIPE)
+        .by_id(plan_id)
     )
     if plan is None:
         return {"ok": False, "message": "That meal plan doesn't exist anymore."}
+    today = household_today(repo)
     existing = [
         UpdateMealPlanEntryRequest(
+            meal_plan_entry_id=e.id,
             recipe_id=e.recipe.id,
             scheduled_for=e.scheduled_for,
             servings=e.servings,
             slot=e.slot,
+            cook_key=str(e.cook_batch_id) if e.cook_batch_id is not None else None,
+            cook_fresh=e.cook_fresh,
         )
         for e in (plan.entries or [])
-        if e.recipe is not None and e.consumed_at is None
+        if e.recipe is not None and e.consumed_at is None and e.scheduled_for >= today
     ]
     existing.append(UpdateMealPlanEntryRequest(
         recipe_id=UUID(payload["recipe_id"]),
@@ -570,6 +580,9 @@ def commit_plan_meal_for_date(payload: dict[str, Any]) -> dict[str, Any]:
         return {"ok": False, "message": "One of the meals couldn't be found."}
     if response.has_past_entry:
         return {"ok": False, "message": "Can't plan a meal in the past."}
+    if response.invalid_slot_message or response.invalid_cook_batch_message:
+        return {"ok": False,
+                "message": response.invalid_slot_message or response.invalid_cook_batch_message}
     return {
         "ok": True,
         "message": f"Done. {payload['meal_name']} planned for {payload['slot'].lower()} on {payload['scheduled_for']}.",

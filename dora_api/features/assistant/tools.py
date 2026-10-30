@@ -54,6 +54,7 @@ from dora_api.persistence.bool_operation import BoolOperation
 from dora_api.persistence.field import EntityField
 from dora_api.features.app_settings.access import get_or_create_app_setting
 from dora_api.features.app_settings.clock import household_timezone, household_today
+from dora_api.persistence.aware import as_utc
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 
 _LOGGER = logging.getLogger(__name__)
@@ -1298,7 +1299,7 @@ def convert_measurement(args: dict) -> list[dict]:
         return [{"error": "amount must be a number (decimals and fractions OK)"}]
     from_unit = _units.normalise_unit(str(args.get("from_unit") or ""))
     to_unit = _units.normalise_unit(str(args.get("to_unit") or ""))
-    ingredient = (args.get("ingredient") or "").strip().lower() or None
+    ingredient = str(args.get("ingredient") or "").strip().lower() or None
 
     # Gas mark <-> °C / °F.
     if from_unit in _units.GAS_MARK_ALIASES:
@@ -1390,13 +1391,10 @@ def whats_expiring(args: dict) -> list[dict]:
     # household-configured window (not the bare default), so the assistant's
     # answer agrees with alerts + the location heatmap.
     default_window = _resolve_expiring_window(repo)
-    try:
-        horizon_days = int(args.get("within_days", default_window))
-    except (TypeError, ValueError):
-        horizon_days = default_window
+    horizon_days = _bounded_days(args.get("within_days", default_window), default_window)
     # R-021 — expiring lookup boundary uses the household timezone.
     today = household_today(repo)
-    cutoff = today + timedelta(days=max(0, horizon_days))
+    cutoff = today + timedelta(days=horizon_days)
     query = (
         repo.get(StockItem)
         .include(StockItem.Fields.STOCK_LEVEL)
@@ -1506,7 +1504,7 @@ def pantry_health(_args: dict) -> list[dict]:
 
 def meal_plan_for_date(args: dict) -> list[dict]:
     repo = SqlAlchemyRepository()
-    anchor_str = (args.get("date") or "").strip()
+    anchor_str = str(args.get("date") or "").strip()
     # R-021 — when the user says "what's planned" without a date, "today"
     # is the household's today, not the server's.
     fallback_today = household_today(repo)
@@ -1514,10 +1512,7 @@ def meal_plan_for_date(args: dict) -> list[dict]:
         anchor = datetime.strptime(anchor_str, "%Y-%m-%d").date() if anchor_str else fallback_today
     except ValueError:
         anchor = fallback_today
-    try:
-        days_ahead = max(0, int(args.get("days_ahead", 0)))
-    except (TypeError, ValueError):
-        days_ahead = 0
+    days_ahead = _bounded_days(args.get("days_ahead", 0), 0)
     end = anchor + timedelta(days=days_ahead)
 
     query = repo.get(MealPlanEntry).include(MealPlanEntry.Fields.RECIPE)
@@ -1625,8 +1620,8 @@ def get_alerts(args: dict) -> list[dict]:
     the rows in a model-friendly shape (with optional severity/kind filters)."""
     handler = GetAlertsHandler(SqlAlchemyRepository())
     payload = handler.handle()
-    severity = (args.get("severity") or "").strip().lower() or None
-    kind = (args.get("kind") or "").strip().lower() or None
+    severity = str(args.get("severity") or "").strip().lower() or None
+    kind = str(args.get("kind") or "").strip().lower() or None
     rows: list[dict] = []
     for alert in payload.items:
         if severity and alert.severity != severity:
@@ -1991,10 +1986,7 @@ def list_suggestions(_args: dict) -> list[dict]:
 def expiry_rescue(args: dict) -> list[dict]:
     from dora_api.features.waste.waste import GetWasteRescueHandler
 
-    try:
-        horizon = int(args.get("horizon_days", 7))
-    except (TypeError, ValueError):
-        horizon = 7
+    horizon = _bounded_days(args.get("horizon_days", 7), 7)
     dto = GetWasteRescueHandler(SqlAlchemyRepository()).handle(horizon)
     items = [
         {
@@ -2264,9 +2256,7 @@ def purchase_price_stats(args: dict) -> list[dict]:
 
     prices = [s[0] for s in samples]
     avg = sum(prices) / len(prices)
-    samples_sorted_by_date = sorted(
-        samples, key=lambda s: (s[3] or datetime.min), reverse=True,
-    )
+    samples_sorted_by_date = sorted(samples, key=_completed_at_key, reverse=True)
     last_price, _, last_store_name, last_completed_at, last_source, _ = (
         samples_sorted_by_date[0]
     )
@@ -2646,6 +2636,30 @@ _TOOL_NAV: dict[str, dict[str, str]] = {
 
 def is_data_tool(name: str) -> bool:
     return name in _TOOLS
+
+
+_NEVER_COMPLETED = datetime.min.replace(tzinfo=timezone.utc)
+
+
+def _completed_at_key(sample: tuple) -> datetime:
+    """Sort key on a purchase sample's `completed_at` (index 3). Aware floor +
+    `as_utc` (R-098): Postgres returns aware values, SQLite naive, and either
+    against a naive `datetime.min` raised TypeError (a 500 on the tool)."""
+    return as_utc(sample[3]) or _NEVER_COMPLETED
+
+
+# Model-supplied day counts are untrusted; an unbounded one overflowed
+# `timedelta` (or the date it was added to). A year is the widest window any
+# tool question needs.
+_MAX_TOOL_DAYS = 366
+
+
+def _bounded_days(value: Any, default: int) -> int:
+    try:
+        days = int(value)
+    except (TypeError, ValueError, OverflowError):
+        days = default
+    return max(0, min(days, _MAX_TOOL_DAYS))
 
 
 def run_tool(name: str, args: dict) -> list[dict]:

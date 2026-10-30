@@ -1134,6 +1134,83 @@ def test__stock_overview_print_view__returns_html(api):
     assert "Stock overview" in response.text
 
 
+# ── POST doors for large selections ────────────────────────────────────
+# A filtered selection's ids used to travel only in the query string; at ~200
+# uuids that overflows gunicorn's 8190-byte request line. The POST twins carry
+# the same ids in a JSON body and must answer exactly like the GET door.
+
+def _seeded_stock_items(count: int) -> list[dict]:
+    response = requests.get(STOCK_ITEMS_URL)
+    assert response.status_code == 200, response.text
+    items = response.json().get("items") or []
+    assert len(items) >= count, "seed should provide enough stock items"
+    return items[:count]
+
+
+def _selection_padded_past_the_request_line_cap(real_ids: list[str]) -> list[str]:
+    # 400 uuids ≈ 15 KB of `ids=` — well past what a GET can carry. Unknown
+    # ids are skipped, so the result still mirrors only the real selection.
+    return real_ids + [str(uuid.uuid4()) for _ in range(400)]
+
+
+def test__stock_overview_export_csv__post_selection__exports_only_those_items(api):
+    picked, other = _seeded_stock_items(2)
+    ids = _selection_padded_past_the_request_line_cap([picked["stock_item_id"]])
+
+    response = requests.post(f"{STOCK_ITEMS_URL}/export?format=csv", json={"ids": ids})
+
+    assert response.status_code == 200, response.text
+    assert response.headers["Content-Type"].startswith("text/csv")
+    assert "attachment" in response.headers["Content-Disposition"]
+    rows = response.text.splitlines()
+    assert len(rows) == 2  # header + the one real item
+    assert picked["name"] in rows[1]
+    assert other["name"] not in response.text
+
+
+def test__stock_overview_export_csv__post_empty_selection__exports_header_only(api):
+    response = requests.post(f"{STOCK_ITEMS_URL}/export?format=csv", json={"ids": []})
+
+    assert response.status_code == 200, response.text
+    assert len(response.text.splitlines()) == 1
+
+
+def test__stock_overview_export__post_unknown_format__is_400(api):
+    response = requests.post(f"{STOCK_ITEMS_URL}/export?format=pdf", json={"ids": []})
+    assert response.status_code == 400
+
+
+def test__stock_overview_export__post_over_the_id_cap__is_400(api):
+    ids = [str(uuid.uuid4()) for _ in range(5001)]
+    response = requests.post(f"{STOCK_ITEMS_URL}/export?format=csv", json={"ids": ids})
+    assert response.status_code == 400
+
+
+def test__stock_overview_export__post_without_ids__is_400(api):
+    response = requests.post(f"{STOCK_ITEMS_URL}/export?format=csv", json={})
+    assert response.status_code == 400
+
+
+def test__stock_overview_print_view__post_selection__prints_only_those_items(api):
+    picked, other = _seeded_stock_items(2)
+    ids = _selection_padded_past_the_request_line_cap([picked["stock_item_id"]])
+
+    response = requests.post(f"{STOCK_ITEMS_URL}/print-view", json={"ids": ids})
+
+    assert response.status_code == 200, response.text
+    assert response.headers["Content-Type"].startswith("text/html")
+    assert "Stock overview" in response.text
+    assert "1 item(s)" in response.text
+    assert picked["name"] in response.text
+    assert other["name"] not in response.text
+
+
+def test__stock_overview_print_view__post_over_the_id_cap__is_400(api):
+    ids = [str(uuid.uuid4()) for _ in range(5001)]
+    response = requests.post(f"{STOCK_ITEMS_URL}/print-view", json={"ids": ids})
+    assert response.status_code == 400
+
+
 def test__meal_plan_export_csv__endpoint_removed__is_404(api):
     # meal-plan CSV export was removed (a plan is a calendar, not a
     # table); print-view → "Save as PDF" is the export path. The /export route
@@ -1236,3 +1313,149 @@ def test__meal_plan_print_view__slot_columns_follow_household_vocabulary(api):
 # the library now owns "when was
 # the last backup" via `MAX(Backup.created_at)`. The old test that
 # stamped this column on every download lived here; deleted.
+
+
+def test__restore_backup__RowPredatesADefaultedColumn__DefaultApplies(api):
+    """An older backup has no key for a column added since. Inserting it as an
+    explicit NULL overrode the server default and broke the NOT NULL."""
+    _, backup = _create_backup()
+    victim = backup["stock_items"][0]
+    deleted = requests.delete(f"http://localhost:5170/api/stock-items/{victim['id']}")
+    assert deleted.status_code in (200, 204), deleted.text
+    del victim["is_open"]
+
+    response = requests.post(RESTORE_URL, json={
+        "backup": backup,
+        "selection": {"stock_items": [victim["id"]]},
+        "mode": "partial",
+    })
+
+    assert response.status_code == 200, response.text
+    assert response.json()["created"]["stock_items"] == 1
+
+
+def test__restore_backup__ParentSkippedAsDuplicate__ChildKeepsTheExistingParent(api):
+    """A location that exists under the same name but a different id is
+    skipped as a duplicate; the item pointing at the backup's id must be
+    re-pointed at the location that stayed, not nulled."""
+    _, backup = _create_backup()
+    location = next(l for l in backup["stock_locations"] if l.get("parent_id") is None)
+    template_item = backup["stock_items"][0]
+    renamed_location_id = str(uuid.uuid4())
+    new_item_id = str(uuid.uuid4())
+    doc = {
+        "schema_version": backup["schema_version"],
+        "stock_locations": [{**location, "id": renamed_location_id}],
+        "stock_items": [{
+            **template_item,
+            "id": new_item_id,
+            "name": f"Restore remap {uuid.uuid4().hex[:8]}",
+            "stock_location_id": renamed_location_id,
+        }],
+    }
+
+    response = requests.post(RESTORE_URL, json={
+        "backup": doc, "selection": {}, "mode": "all_skip_duplicates",
+    })
+
+    assert response.status_code == 200, response.text
+    assert response.json()["created"]["stock_items"] == 1, response.text
+    from sqlalchemy import text
+
+    from dora_api.app import app, db
+    from tests.support import uuid_bind
+    with app.app_context(), db.engine.connect() as conn:
+        stored = conn.execute(
+            text('SELECT stock_location_id FROM "StockItem" WHERE id = :id'),
+            {"id": uuid_bind(new_item_id)},
+        ).scalar_one()
+    assert str(uuid.UUID(bytes=stored) if isinstance(stored, bytes) else stored) == location["id"]
+
+
+def test__restore_backup__MalformedUploadId__IsBadRequest(api):
+    response = requests.post(RESTORE_URL, json={
+        "upload_id": "../../etc/passwd", "selection": {}, "mode": "all_skip_duplicates",
+    })
+
+    assert response.status_code == 400, response.text
+
+
+def test__inspect_backup__MalformedUploadId__IsBadRequest(api):
+    response = requests.post(INSPECT_URL, json={"upload_id": "../secrets"})
+
+    assert response.status_code == 400, response.text
+
+
+def test__spreadsheet_import__ColumnMapOmitsOptionalTargets__ImportsWithDefaults(api):
+    """Only `name` is required; an omitted target (not mapped to null, just
+    absent) used to KeyError the commit into a 500."""
+    upload_id = _stage_bytes(f"Item\nTestImport-NameOnly-{uuid.uuid4().hex[:6]}\n".encode("utf-8"))
+
+    commit = requests.post(IMPORT_COMMIT_URL, json={
+        "upload_id": upload_id,
+        "filename": "items.csv",
+        "sheet": "items.csv",
+        "column_map": {"name": "Item"},
+    })
+
+    assert commit.status_code == 200, commit.text
+    assert commit.json()["summary"]["created"] == 1
+
+
+def test__restore_backup__RecipeSkippedAsDuplicate__ItsIngredientsAreNotMergedIntoTheExistingRecipe(api):
+    """Only reference parents (locations, groups, vocab, items, products)
+    re-point children on a duplicate skip. An aggregate root such as a recipe
+    must not: a backup recipe with the same name but a new id would otherwise
+    pour its ingredients into the recipe that stayed, duplicating them."""
+    _, backup = _create_backup()
+    recipe = next(r for r in backup["recipes"] if any(
+        i["recipe_id"] == r["id"] for i in backup["recipe_ingredients"]
+    ))
+    ingredients = [i for i in backup["recipe_ingredients"] if i["recipe_id"] == recipe["id"]]
+    renamed_recipe_id = str(uuid.uuid4())
+    doc = {
+        "schema_version": backup["schema_version"],
+        "recipes": [{**recipe, "id": renamed_recipe_id}],
+        "recipe_ingredients": [
+            {**i, "id": str(uuid.uuid4()), "recipe_id": renamed_recipe_id} for i in ingredients
+        ],
+    }
+    before = requests.get(f"http://localhost:5170/api/recipes/{recipe['id']}").json()
+
+    response = requests.post(RESTORE_URL, json={
+        "backup": doc, "selection": {}, "mode": "all_skip_duplicates",
+    })
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["created"]["recipes"] == 0
+    assert body["created"]["recipe_ingredients"] == 0, body
+    after = requests.get(f"http://localhost:5170/api/recipes/{recipe['id']}").json()
+    assert len(after["ingredients"]) == len(before["ingredients"])
+
+
+def test__restore_backup__ProductLinkRemappedOntoAnExistingPair__IsSkippedNotAnError(api):
+    """A product ↔ item link whose item and product both resolve (by name /
+    product key) to rows that are already linked re-keys onto an existing
+    pair after the remap; that is a skip, not a PK / UNIQUE(product_id)
+    violation that rolls the whole restore back."""
+    _, backup = _create_backup()
+    link = backup["product_stock_item_links"][0]
+    item = next(i for i in backup["stock_items"] if i["id"] == link["stock_item_id"])
+    product = next(p for p in backup["saved_products"] if p["id"] == link["product_id"])
+    new_item_id, new_product_id = str(uuid.uuid4()), str(uuid.uuid4())
+    doc = {
+        "schema_version": backup["schema_version"],
+        "saved_products": [{**product, "id": new_product_id}],
+        "stock_items": [{**item, "id": new_item_id}],
+        "product_stock_item_links": [{"stock_item_id": new_item_id, "product_id": new_product_id}],
+    }
+
+    response = requests.post(RESTORE_URL, json={
+        "backup": doc, "selection": {}, "mode": "all_skip_duplicates",
+    })
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["created"]["product_stock_item_links"] == 0, body
+    assert body["skipped"]["product_stock_item_links"] == 1, body

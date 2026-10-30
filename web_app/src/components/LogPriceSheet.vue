@@ -116,6 +116,7 @@
     import { useStockLevelStore } from 'src/stores/stockLevelStore';
     import { useStoresStore } from 'src/stores/storesStore';
     import { useQuasar } from 'quasar';
+    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { computed, ref, watch } from 'vue';
 
     const stockItemApi = new StockItemApiService();
@@ -224,6 +225,12 @@
                 timeout: 2500,
             });
             closeLogPrice();
+        } catch (err) {
+            $q.notify({
+                type: 'negative',
+                message: "Couldn't log the price.",
+                caption: toastCaption(err),
+            });
         } finally {
             submitting.value = false;
         }

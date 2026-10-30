@@ -193,4 +193,46 @@ describe('shoppingListStore — ensureLoadedAsync (R-016 lazy hydration)', () =>
 
         expect(m.getAllAsync).toHaveBeenCalledTimes(2);
     });
+
+    it('joins a refresh already in flight instead of returning before it lands', async () => {
+        const list = deferred<ShoppingListSummary[]>();
+        m.getAllAsync.mockReturnValueOnce(list.promise);
+        const store = useShoppingListStore();
+
+        const refresh = store.refreshAsync();
+        const ensure = store.ensureLoadedAsync();
+        list.resolve([summary('L1', 'Groceries')]);
+        await ensure;
+
+        expect(store.summaries).toHaveLength(1);
+        expect(m.getAllAsync).toHaveBeenCalledTimes(1);
+        await refresh;
+    });
+});
+
+describe('shoppingListStore — overlapping refreshes', () => {
+    it('applies only the latest request, and an earlier caller waits for it', async () => {
+        const older = deferred<ShoppingListSummary[]>();
+        m.getAllAsync.mockReturnValueOnce(older.promise);
+        m.getAllAsync.mockResolvedValueOnce([summary('L2', 'Newer')]);
+        const store = useShoppingListStore();
+
+        const first = store.refreshAsync();
+        await store.refreshAsync();
+        older.resolve([summary('L1', 'Older')]);
+        await first;
+
+        expect(store.summaries.map((s) => s.shopping_list_id)).toEqual(['L2']);
+        expect(store.loading).toBe(false);
+    });
+
+    it('exposes the server-flagged next-up list', async () => {
+        m.getAllAsync.mockResolvedValue([summary('L1', 'A'), { ...summary('L2', 'B'), is_next_up: true }]);
+        const store = useShoppingListStore();
+        expect(store.nextUpSummary).toBeNull();
+
+        await store.refreshAsync();
+
+        expect(store.nextUpSummary?.shopping_list_id).toBe('L2');
+    });
 });

@@ -451,10 +451,12 @@
                 }
                 return;
             }
-            // 2+ products (and/or both axes ambiguous)
-            // → combined modal so the user makes both picks in one
-            // surface. Quantity lives only here (decision 5); quick
-            // paths stay qty-1.
+            // 2+ products (and/or both axes ambiguous) → the QuickAdd
+            // sheet's item preset. That sheet no longer has a product or
+            // quantity step, so it hands straight to
+            // `useStockItemActions.addToList` (asks which draft, offers to
+            // create one); the line lands with no product picked, as a
+            // quick add from anywhere else does.
             if (shouldUseCombinedModal.value) {
                 openQuickAdd({ stockItemId });
                 return;

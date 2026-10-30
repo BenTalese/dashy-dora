@@ -619,8 +619,9 @@
         }
     }
     async function onPaidBaseUrlBlur(p: LlmProviderName) {
-        await saveProvider(p, { base_url: state[p].base_url.trim() || null });
-        if (state[p].has_api_key && state[p].model.trim()) await probe(p);
+        if (await saveProvider(p, { base_url: state[p].base_url.trim() || null })) {
+            if (state[p].has_api_key && state[p].model.trim()) await probe(p);
+        }
     }
 
     // ----- Mode -----

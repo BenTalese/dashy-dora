@@ -61,9 +61,17 @@ class GetDoraScoreHandler:
         # so the current and lagged windows can't drift apart on a
         # slow query. The score is household-wide, so there is no
         # per-user input (finalisation 08-R5).
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        # Aware (R-098): a naive bound against a `timestamptz` column is read
+        # in the Postgres session's zone. `now` only bounds queries here; it
+        # is never compared with a value read back.
+        now = datetime.now(timezone.utc)
 
-        current_inputs = self._gather_inputs(now, lagged=False)
+        # Gathered once and fed to both passes, so the forward-looking
+        # component cancels in the trend rather than being scored on one side
+        # only (an unchanged household used to read as "down").
+        plan_coverage = self._gather_plan_coverage()
+
+        current_inputs = self._gather_inputs(now, plan_coverage, lagged=False)
         current = compute_score(current_inputs)
 
         # Skip the lagged compute when the composite doesn't exist —
@@ -72,27 +80,16 @@ class GetDoraScoreHandler:
         if current.composite is None:
             return current
 
-        lagged_inputs = self._gather_inputs(now, lagged=True)
+        lagged_inputs = self._gather_inputs(now, plan_coverage, lagged=True)
         lagged = compute_score(lagged_inputs)
         return compose_with_trend(current, lagged)
 
-    def _gather_inputs(
-        self,
-        now: datetime,
-        lagged: bool,
-    ) -> DoraScoreInputs:
-        if lagged:
-            start = lagged_window_start(now)
-            end = lagged_window_end(now)
-        else:
-            start = window_start(now)
-            end = now
-
+    def _gather_plan_coverage(self) -> tuple[int, int]:
         # ── Plan coverage ─────────────────────────────────────────
         # Of the meals planned for the next 7 days, how many the pantry can
-        # cook right now. Deliberately forward-looking and therefore identical
-        # in both windows — see `_score_plan_coverage` for why that is the
-        # accepted trade.
+        # cook right now. Deliberately forward-looking, so gathered once and
+        # identical in both windows — see `_score_plan_coverage` for why that
+        # is the accepted trade.
         #
         # Cookability comes from the shared map (R-003), the same one the
         # dashboard summary's per-entry `missing_count` reads. An entry whose
@@ -102,31 +99,46 @@ class GetDoraScoreHandler:
         # linked its recipes yet.
         upcoming_planned_meals = 0
         upcoming_cookable_meals = 0
-        if not lagged:
-            today = household_today(self.repository)
-            week_ahead = today + timedelta(days=7)
-            mpe_scheduled = EntityField(
-                MealPlanEntry, MealPlanEntry.Fields.SCHEDULED_FOR,
+        today = household_today(self.repository)
+        week_ahead = today + timedelta(days=7)
+        mpe_scheduled = EntityField(
+            MealPlanEntry, MealPlanEntry.Fields.SCHEDULED_FOR,
+        )
+        # Cookability first, for just the week's recipes (08-R16; see
+        # `recipe_ids_scheduled_between` for why the order matters).
+        cookability = load_recipe_cookability(
+            self.repository, recipe_ids_scheduled_between(today, week_ahead),
+        )
+        upcoming: list[MealPlanEntry] = (
+            self.repository.get(MealPlanEntry)
+            .include(MealPlanEntry.Fields.RECIPE)
+            .all(mpe_scheduled.between(today, week_ahead))
+        )
+        for entry in upcoming:
+            missing, ingredient_count, unlinked = cookability.get(
+                entry.recipe.id, (0, 0, 0)
             )
-            # Cookability first, for just the week's recipes (08-R16; see
-            # `recipe_ids_scheduled_between` for why the order matters).
-            cookability = load_recipe_cookability(
-                self.repository, recipe_ids_scheduled_between(today, week_ahead),
-            )
-            upcoming: list[MealPlanEntry] = (
-                self.repository.get(MealPlanEntry)
-                .include(MealPlanEntry.Fields.RECIPE)
-                .all(mpe_scheduled.between(today, week_ahead))
-            )
-            for entry in upcoming:
-                missing, ingredient_count, unlinked = cookability.get(
-                    entry.recipe.id, (0, 0, 0)
-                )
-                if ingredient_count == 0 or unlinked > 0:
-                    continue
-                upcoming_planned_meals += 1
-                if missing == 0:
-                    upcoming_cookable_meals += 1
+            if ingredient_count == 0 or unlinked > 0:
+                continue
+            upcoming_planned_meals += 1
+            if missing == 0:
+                upcoming_cookable_meals += 1
+
+        return upcoming_planned_meals, upcoming_cookable_meals
+
+    def _gather_inputs(
+        self,
+        now: datetime,
+        plan_coverage: tuple[int, int],
+        lagged: bool,
+    ) -> DoraScoreInputs:
+        upcoming_planned_meals, upcoming_cookable_meals = plan_coverage
+        if lagged:
+            start = lagged_window_start(now)
+            end = lagged_window_end(now)
+        else:
+            start = window_start(now)
+            end = now
 
         # ── Waste ──────────────────────────────────────────────────
         waste_field = EntityField(
@@ -143,9 +155,9 @@ class GetDoraScoreHandler:
         # window doesn't cleanly map onto a budget "period" (weeks /
         # months don't slide with our 30d), so we ONLY score budget on
         # the current window. For the lagged pass we mark budget as
-        # dormant (score=None) so it doesn't drag or lift the trend
-        # arrow — trend should reflect the *loop* signals, not a
-        # calendar boundary crossing.
+        # dormant (score=None) and `compose_with_trend` drops it from both
+        # sides of the delta — trend should reflect the *loop* signals, not
+        # a calendar boundary crossing.
         #
         # FU-823 / R-058 — and skip it entirely when money features are off.
         # `GetBudgetStatusHandler` deliberately computes period boundaries

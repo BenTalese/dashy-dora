@@ -18,6 +18,8 @@ from uuid import UUID
 from sqlalchemy import Boolean, Date, DateTime, Float, Integer, LargeBinary, String
 from sqlalchemy_utils import UUIDType
 
+from dora_api.persistence.aware import as_utc
+
 
 # ── Per-table key functions ─────────────────────────────────────────────
 
@@ -163,6 +165,18 @@ SECTIONS: tuple[Section, ...] = (
 
 # ── Derived maps ────────────────────────────────────────────────────────
 
+# Sections whose duplicate-skipped rows re-point the backup's children at
+# the existing row (backup pk → existing pk). Reference parents only: a stock
+# item keeps its location and group, a recipe its cuisine, a tag link its tag.
+# Aggregate roots (recipes, lists, templates, meal plans) are deliberately NOT
+# here — remapping those would pour the backup's ingredients / lines / entries
+# into the existing document, duplicating its contents.
+REMAP_ON_DUPLICATE: frozenset[str] = frozenset({
+    "stock_groups", "stock_levels", "stock_locations", "saved_products",
+    "stock_items", "recipe_collections", "cuisines", "categories",
+    "dietary_tags", "tools",
+})
+
 TABLE_NAME_BY_BACKUP_KEY: dict[str, str] = {s.backup_key: s.table_name for s in SECTIONS}
 BACKUP_KEY_BY_TABLE_NAME: dict[str, str] = {s.table_name: s.backup_key for s in SECTIONS}
 SECTION_BY_BACKUP_KEY: dict[str, Section] = {s.backup_key: s for s in SECTIONS}
@@ -268,7 +282,11 @@ def decode_value(value: Any, column_type: Any) -> Any:
     if isinstance(column_type, UUIDType):
         return UUID(value) if not isinstance(value, UUID) else value
     if isinstance(column_type, DateTime):
-        return datetime.fromisoformat(value) if isinstance(value, str) else value
+        parsed = datetime.fromisoformat(value) if isinstance(value, str) else value
+        # A backup taken from SQLite holds naive instants (it drops tzinfo on
+        # read); they are UTC, and an aware value is what a Postgres
+        # `timestamptz` needs to store them as such (R-098).
+        return as_utc(parsed) if column_type.timezone else parsed
     if isinstance(column_type, Date):
         return date.fromisoformat(value) if isinstance(value, str) else value
     if isinstance(column_type, LargeBinary):

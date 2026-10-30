@@ -40,7 +40,9 @@ from dora_api.domain.entities.nutrition_food import (
 from dora_api.domain.entities.nutrition_portion import NutritionPortion
 from dora_api.features.help.version_info import GITHUB_URL
 from dora_api.features.nutrition.food_categories import normalise_category
-from dora_api.features.nutrition.nutrients import USDA_NUTRIENT_ATTRS, to_float
+from dora_api.features.nutrition.nutrients import (USDA_NUTRIENT_ATTRS,
+                                                   USDA_NUTRIENT_RANK,
+                                                   to_float)
 from dora_api.persistence.field import EntityField as Field
 
 _LOGGER = logging.getLogger(__name__)
@@ -370,11 +372,13 @@ def parse_fdc_csv_zip(payload: bytes, source: str, on_rows=None):  # noqa: ANN00
 
     # nutrient id → the NutritionFood attribute it feeds.
     nutrient_attr: Dict[str, str] = {}
+    nutrient_rank: Dict[str, int] = {}
     for row in _rows(archive, nutrient_member, counter):
         key = (_norm(row.get("name", "")), _norm(row.get("unit_name", "")))
         attr = _WANTED_NUTRIENTS.get(key)
         if attr:
             nutrient_attr[row["id"]] = attr
+            nutrient_rank[row["id"]] = USDA_NUTRIENT_RANK[key]
 
     # USDA food-group id → its description. Read for the Health Star Rating's
     # fvnl test and nothing else (see `food_categories.py`); the file has always
@@ -404,16 +408,30 @@ def parse_fdc_csv_zip(payload: bytes, source: str, on_rows=None):  # noqa: ANN00
             imported_at = imported_at,
         )
 
+    # (fdc_id, attr) → rank of a fallback key whose value is currently held.
+    # Only fallback writes are tracked, so this stays small: a preferred
+    # (rank 0) value always wins and is never displaced.
+    fallback_held: Dict[Tuple[str, str], int] = {}
     for row in _rows(archive, food_nutrient_member, counter):
-        attr = nutrient_attr.get(row.get("nutrient_id", ""))
+        nutrient_id = row.get("nutrient_id", "")
+        attr = nutrient_attr.get(nutrient_id)
         if not attr:
             continue
-        food = foods.get(row.get("fdc_id", ""))
+        fdc_id = row.get("fdc_id", "")
+        food = foods.get(fdc_id)
         if food is None:
             continue
         amount = to_float(row.get("amount"))
-        if amount is not None:
+        if amount is None:
+            continue
+        rank = nutrient_rank[nutrient_id]
+        held = (fdc_id, attr)
+        if rank == 0:
             setattr(food, attr, amount)
+            fallback_held.pop(held, None)
+        elif getattr(food, attr) is None or rank <= fallback_held.get(held, -1):
+            setattr(food, attr, amount)
+            fallback_held[held] = rank
 
     portions = _parse_portions(archive, foods)
 

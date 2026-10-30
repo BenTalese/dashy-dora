@@ -39,6 +39,7 @@
                     </BaseTooltip>
                 </BaseButton>
                 <BaseButton
+                    aria-label="What can D.O.R.A. do?"
                     variant="icon"
                     :icon="ICONS.help_outline"
                     class="dora-accent-btn"
@@ -46,7 +47,7 @@
                 >
                     <BaseTooltip>What can D.O.R.A. do?</BaseTooltip>
                 </BaseButton>
-                <BaseButton variant="icon" :icon="ICONS.close" @click="emit('close')" />
+                <BaseButton aria-label="Close chat" variant="icon" :icon="ICONS.close" @click="emit('close')" />
             </div>
             <div class="text-caption dora-text-muted">
                 Your in-app helper. {{ pageHintForHeader }}
@@ -310,6 +311,7 @@
                     </q-chip>
                 </div>
                 <BaseButton
+                    aria-label="Show different suggestions"
                     v-if="canRotateChips"
                     variant="icon"
                     size="sm"
@@ -349,6 +351,7 @@
                         </BaseTooltip>
                     </BaseButton>
                     <BaseButton
+                        aria-label="Send"
                         variant="icon"
                         :icon="ICONS.send"
                         :class="draft.trim() ? 'dora-accent-btn' : ''"

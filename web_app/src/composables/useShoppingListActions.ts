@@ -44,6 +44,7 @@ export function useShoppingListActions() {
     ): Promise<{ added: number; already: number }> {
         let added = 0;
         let already = 0;
+        let failure: string | null = null;
         try {
             for (const item of items) {
                 const result = await api.addLineAsync(listId, item);
@@ -51,12 +52,22 @@ export function useShoppingListActions() {
                 else added++;
                 if (item.stock_item_id) invalidateBuyVerdict(item.stock_item_id);
             }
+        } catch (err) {
+            failure = String(err);
+        }
+        // Refresh even after a partial failure — the lines that did land must
+        // show up, not wait for the next unrelated reload.
+        try {
             await shoppingListStore.refreshAsync();
+        } catch (err) {
+            failure ??= String(err);
+        }
+        if (failure) {
+            notifyErr(`Could not add all items — ${added} added.`, failure);
+        } else {
             notifyOk(
                 `${added} added${already > 0 ? `, ${already} already on list` : ''}.`,
             );
-        } catch (err) {
-            notifyErr('Could not add all items.', String(err));
         }
         return { added, already };
     }

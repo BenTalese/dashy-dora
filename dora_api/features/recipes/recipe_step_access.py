@@ -156,11 +156,14 @@ def _validate_writes(steps: list[StepWrite]) -> None:
     """Reject obvious shape errors before any write hits the DB:
     - depth > 1 (sub-step whose parent is also a sub-step);
     - parent_client_id pointing at a non-existent client_id;
+    - a client_id used twice (both would collapse onto one row id);
     - empty `text`.
 
     Raises ValueError on the first failure so the request layer can 400.
     """
     by_client: dict[object, StepWrite] = {s.client_id: s for s in steps}
+    if len(by_client) != len(steps):
+        raise ValueError("Every step must have a distinct client_id.")
     for step in steps:
         if not (step.text or "").strip():
             raise ValueError("Every step must have non-empty text.")
@@ -275,9 +278,11 @@ def replace_steps_for_recipe(
     tool_inserts: list[dict] = []
     for s in steps:
         step_id = client_to_id[s.client_id]
-        for ing_id in s.ingredient_ids:
+        # dict.fromkeys de-duplicates in order: a repeated id is one link,
+        # not a duplicate link row.
+        for ing_id in dict.fromkeys(s.ingredient_ids):
             ing_inserts.append({"step_id": step_id, "recipe_ingredient_id": ing_id})
-        for tool_id in s.tool_ids:
+        for tool_id in dict.fromkeys(s.tool_ids):
             tool_inserts.append({"step_id": step_id, "tool_id": tool_id})
     if ing_inserts:
         db.session.execute(ing_tbl.insert(), ing_inserts)

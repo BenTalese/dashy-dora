@@ -132,3 +132,61 @@ def test__unit_price_used_for_fake_markdown_comparison():
     )
     assert dq is not None
     assert dq.fake_markdown is False
+
+
+# ── Unit basis + window double-count (repo-layer helpers, still pure) ────
+
+from datetime import datetime, timezone
+from types import SimpleNamespace
+
+from dora_api.features.deals.deal_quality import (household_unit_prices_like,
+                                                  window_offer_prices)
+from dora_api.features.stock_items.your_prices import per_unit_in_canonical
+
+
+def test__no_product_unit_basis__never_flags_fake_markdown():
+    # A product whose size can't be put on a per-unit basis used to compare
+    # its PACK price (8.00) against the household PER-UNIT median (2.50) and
+    # read a genuine special as fake/poor.
+    dq = compute_deal_quality(
+        current_price=8.00,
+        offer_claims_saving=True,
+        window_prices=[8.00, 9.00, 10.00],
+        household_unit_paid_prices=[2.40, 2.50, 2.60],
+        current_unit_price=None,
+    )
+    assert dq is not None
+    assert dq.fake_markdown is False
+    assert dq.band == "great"
+
+
+def test__household_prices_are_converted_to_the_product_canonical_unit():
+    # Product: $3.00 for 500 g → $6.00/kg. Household paid $4.00 for 1 kg
+    # ($4.00/kg) and $0.90 for 200 g ($4.50/kg) — both comparable once in kg.
+    # A 2 L milk observation is another dimension and must be dropped.
+    product = per_unit_in_canonical(total_price=3.00, total_measure=500, unit="g")
+    assert product is not None and product[1] == "kg"
+    observations = [
+        SimpleNamespace(total_price=4.00, total_measure=1, unit="kg"),
+        SimpleNamespace(total_price=0.90, total_measure=200, unit="g"),
+        SimpleNamespace(total_price=3.00, total_measure=2, unit="L"),
+    ]
+    prices = household_unit_prices_like(product, observations)
+    assert sorted(round(p, 2) for p in prices) == [4.00, 4.50]
+    # No product basis ⇒ nothing comparable.
+    assert household_unit_prices_like(None, observations) == []
+
+
+def test__window_prices_skip_the_historic_row_that_is_the_current_offer():
+    now = datetime(2026, 10, 1, tzinfo=timezone.utc)
+    current = SimpleNamespace(price_now=2.00, offered_on=now)
+    historic = [
+        # Same instant + price as current: the offer-append copy. Read back
+        # naive (SQLite) — still the same instant.
+        SimpleNamespace(price_now=2.00, offered_on=now.replace(tzinfo=None)),
+        SimpleNamespace(price_now=3.00, offered_on=datetime(2026, 9, 1, tzinfo=timezone.utc)),
+        # Outside the window.
+        SimpleNamespace(price_now=9.00, offered_on=datetime(2025, 1, 1, tzinfo=timezone.utc)),
+    ]
+    horizon = datetime(2026, 7, 1, tzinfo=timezone.utc)
+    assert window_offer_prices(current, historic, horizon) == [2.00, 3.00]

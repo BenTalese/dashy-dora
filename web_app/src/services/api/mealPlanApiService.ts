@@ -4,7 +4,7 @@ import type {
 } from 'src/models/mealPlan';
 import type { CreatedResponse } from './axiosHttpClient';
 import AxiosHttpClient from './axiosHttpClient';
-import type { Page } from './queryStringBuilder';
+import { createQueryString, fetchAllPages, SortOrder, type Page } from './queryStringBuilder';
 
 export type MealPlanEntryCommand = {
     /** The saved entry this row edits; it keeps its id across the save. Omit
@@ -52,8 +52,19 @@ export default class MealPlanApiService {
     deleteAsync = async (mealPlanId: string): Promise<void> =>
         await this.httpClient.delete(`/meal-plans/${mealPlanId}`);
 
-    getAllAsync = async (): Promise<Page<MealPlan>> =>
-        await this.httpClient.get<Page<MealPlan>>('/meal-plans');
+    /** One page, newest week first. Stated explicitly so paging order never
+     *  depends on the server's default. */
+    getAllAsync = async (
+        pagination?: { page: number; limit: number },
+    ): Promise<Page<MealPlan>> =>
+        await this.httpClient.get<Page<MealPlan>>(
+            `/meal-plans${createQueryString(undefined, { field: 'start_date', order: SortOrder.DESCENDING }, pagination)}`,
+        );
+
+    /** Every meal plan: the planner matches weeks against this list, so a
+     *  plan past the first page would read as missing and be re-created. */
+    getAllPagesAsync = async (): Promise<MealPlan[]> =>
+        await fetchAllPages((page, limit) => this.getAllAsync({ page, limit }));
 
     updateAsync = async (command: UpdateMealPlanCommand): Promise<void> => {
         const { meal_plan_id, ...payload } = command;

@@ -44,7 +44,9 @@ export class PopupBlockedError extends Error {
 
 /** Fetch an HTML document from `path` (an API path, no origin) and show it in
  *  a new tab. Must be called **synchronously from the click handler** — the
- *  first thing it does is claim the tab.
+ *  first thing it does is claim the tab. With `body` the document is POSTed
+ *  (a large selection's ids overflow the request line as a query string —
+ *  gunicorn caps it at 8190 bytes, ~200 uuids); without it, GET.
  *
  *  Throws `PopupBlockedError` if the browser refused the tab, or whatever
  *  `AxiosHttpClient` throws if the fetch failed; the caller owns the wording,
@@ -53,6 +55,7 @@ export class PopupBlockedError extends Error {
 export async function openHtmlDocumentAsync(
     path: string,
     placeholderTitle: string,
+    body?: unknown,
 ): Promise<void> {
     // `noopener` is deliberately NOT passed: with it, `window.open` returns
     // null by spec and there'd be no handle to navigate. The opener reference
@@ -76,7 +79,12 @@ export async function openHtmlDocumentAsync(
     }
 
     try {
-        const html = await http.get<string>(path);
+        const html = body === undefined
+            ? await http.get<string>(path)
+            // A print view only rides a POST because its selection would
+            // overflow the request line; it is still a read, so it retries
+            // like the GET path does.
+            : await http.post<string>(path, body, { retryAsRead: true });
         const url = objectUrlFor(new Blob([html], { type: 'text/html' }));
         // `replace`, not `href`: the placeholder shouldn't sit in the tab's
         // history where Back would return the user to "Preparing…".

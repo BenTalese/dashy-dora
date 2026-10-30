@@ -138,6 +138,23 @@ describe('alertStore — refresh error handling', () => {
     });
 });
 
+describe('alertStore — overlapping refreshes', () => {
+    it('applies only the latest request when an older response arrives last', async () => {
+        let resolveOld!: (v: Alerts) => void;
+        m.getAlertsAsync.mockReturnValueOnce(new Promise<Alerts>((res) => { resolveOld = res; }));
+        m.getAlertsAsync.mockResolvedValueOnce(payload({ actionable_count: 5 }));
+        const store = useAlertStore();
+
+        const older = store.refreshAsync();
+        await store.refreshAsync();
+        resolveOld(payload({ actionable_count: 1 }));
+        await older;
+
+        expect(store.badgeCount).toBe(5);
+        expect(store.loading).toBe(false);
+    });
+});
+
 describe('alertStore — mutation-then-refresh contract', () => {
     it('snoozeAlert defaults to 7 days and refetches the server truth', async () => {
         const store = useAlertStore();

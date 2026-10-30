@@ -7,6 +7,7 @@
         >
             <template #actions>
                 <BaseButton
+                    aria-label="Refresh"
                     variant="icon"
                     :icon="ICONS.refresh"
                     :loading="loading"
@@ -176,6 +177,7 @@
                                             @update:model-value="(value: string | null) => onAssign(src.id, m, value)"
                                         />
                                         <BaseButton
+                                            :aria-label="`Drop mapping for ${m.external_name}`"
                                             variant="danger-icon"
                                             dense
                                             :icon="ICONS.delete"
@@ -271,6 +273,7 @@
                 >
                     <template #append>
                         <BaseButton
+                            aria-label="Copy key"
                             variant="icon"
                             :icon="ICONS.content_copy"
                             @click="copyRevealed"
@@ -423,7 +426,7 @@
         try {
             // The stores resource, through its own service (finalisation
             // 16-R23 — this page carried a second client + row type for it).
-            stores.value = (await storesApi.listAsync()).items;
+            stores.value = await storesApi.listAllAsync();
         } catch (e) {
             $q.notify({ type: 'negative', message: "Couldn't load stores.", caption: toastCaption(e) });
         }

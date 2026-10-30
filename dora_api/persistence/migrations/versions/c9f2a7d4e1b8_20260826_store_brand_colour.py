@@ -18,6 +18,7 @@ Create Date: 2026-08-26 00:00:00.000000
 """
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy_utils import UUIDType
 
 from dora_api.features.stores._logo_colour import dominant_colour
 
@@ -33,9 +34,12 @@ def upgrade():
         batch.add_column(sa.Column('brand_colour', sa.String(7), nullable=True))
 
     connection = op.get_bind()
+    # UUIDType, as the model declares it: the stored id is 16 raw bytes on
+    # SQLite (BINARY(16)) and a native uuid on Postgres. `sa.Uuid` reads it as
+    # a 32-char hex string on SQLite and fails on every row.
     store = sa.table(
         'Store',
-        sa.column('id', sa.Uuid),
+        sa.column('id', UUIDType()),
         sa.column('image', sa.LargeBinary),
         sa.column('brand_colour', sa.String),
     )

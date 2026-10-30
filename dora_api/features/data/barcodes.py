@@ -2,6 +2,7 @@
 
   GET    /api/stock-items/<id>/qr                — PNG of the item's dora:// QR
   GET    /api/stock-items/qr/sheet               — HTML print-sheet of many QRs
+  POST   /api/stock-items/qr/sheet               — same sheet, ids in a JSON body
   GET    /api/data/barcodes/lookup?value=...     — disambiguate a scanned value
   POST   /api/data/barcodes                      — register a real barcode (FU-056)
   DELETE /api/data/barcodes/<id>                 — remove a registration
@@ -38,6 +39,7 @@ from dora_api.domain.entities.barcode import Barcode
 from dora_api.domain.entities.product import Product
 from dora_api.domain.entities.stock_item import StockItem
 from dora_api.features.data.export_shared import PRINT_CSS, PRINT_TOOLBAR
+from dora_api.features.data.export_stock_overview import MAX_SELECTED_IDS
 from dora_api.features.routers import (
     DATA_ROUTER, STOCK_ITEM_ROUTER,
 )
@@ -324,10 +326,19 @@ def _iter_requested_ids(raw: str) -> Iterable[UUID]:
             continue
 
 
-@STOCK_ITEM_ROUTER.route("/qr/sheet", methods=["GET"])
-def stock_item_qr_sheet():
-    ids_raw = request.args.get("ids", "")
-    layout_key = request.args.get("layout") or DEFAULT_LAYOUT_KEY
+class QrSheetRequest(BaseModel):
+    """POST twin of `GET /qr/sheet?ids=…&layout=…`. A large selection's ids
+    overflow the request line (gunicorn caps it at 8190 bytes, ~200 uuids),
+    so the SPA sends them in the body instead. Empty `ids` keeps the GET
+    door's "print every stock item" meaning."""
+    model_config = ConfigDict(extra="forbid")
+    ids: list[UUID] = Field(max_length=MAX_SELECTED_IDS)
+    layout: str | None = None
+
+
+def _qr_sheet_response(requested: list[UUID], layout_key: str | None) -> Response:
+    """The one sheet renderer behind both doors (R-051 spirit)."""
+    layout_key = layout_key or DEFAULT_LAYOUT_KEY
     layout = SHEET_LAYOUTS.get(layout_key)
     if layout is None:
         return bad_request(
@@ -336,7 +347,6 @@ def stock_item_qr_sheet():
         )
 
     repo = SqlAlchemyRepository()
-    requested = list(_iter_requested_ids(ids_raw))
     if not requested:
         # No ids → "print all stock items" shortcut from the brief.
         all_items = repo.get(StockItem).all()
@@ -374,6 +384,21 @@ def stock_item_qr_sheet():
     # header. Harmless to parsers, but it's the sort of thing that muddies the
     # next person's read of a network tab.
     return Response(html, mimetype="text/html")
+
+
+@STOCK_ITEM_ROUTER.route("/qr/sheet", methods=["GET"])
+def stock_item_qr_sheet():
+    return _qr_sheet_response(
+        list(_iter_requested_ids(request.args.get("ids", ""))),
+        request.args.get("layout"),
+    )
+
+
+@STOCK_ITEM_ROUTER.route("/qr/sheet", methods=["POST"])
+@has_request_body(QrSheetRequest)
+def stock_item_qr_sheet_selection():
+    _Request: QrSheetRequest = get_request_body()
+    return _qr_sheet_response(_Request.ids, _Request.layout)
 
 
 def _conflict(message: str) -> Response:

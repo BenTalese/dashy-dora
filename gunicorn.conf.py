@@ -51,6 +51,16 @@ timeout = _int("DORA_WEB_TIMEOUT", 120)
 graceful_timeout = _int("DORA_WEB_GRACEFUL_TIMEOUT", 30)
 keepalive = _int("DORA_WEB_KEEPALIVE", 5)
 
+# The stock export, print and QR-label sheet GETs carry the selected items as a
+# comma-joined `?ids=` list (~37 bytes per uuid): `GET /api/stock-items/export`,
+# `/api/stock-items/print-view` and `/api/stock-items/qr/sheet`. Gunicorn's
+# 4094-byte default request line 400s past ~100 selected items. 8190 is
+# gunicorn's own ceiling — `http/message.py` clamps anything larger back to
+# it (0 would mean unlimited, which is not wanted) — so it holds ~215 items;
+# nginx's default 8k header buffer is the same order. A selection beyond that
+# needs those routes to take a POST body.
+limit_request_line = 8190
+
 # Logs → stdout/stderr so `docker logs` captures them (the app's own file
 # logging via logging_setup keeps writing to the log dir alongside this).
 accesslog = "-"

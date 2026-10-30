@@ -68,6 +68,7 @@
                     </div>
                     <div class="backup-row__actions">
                         <BaseButton
+                            aria-label="Download backup"
                             variant="icon"
                             :icon="ICONS.download"
                             @click="onDownloadRow(row)"
@@ -75,6 +76,7 @@
                             <BaseTooltip>Download</BaseTooltip>
                         </BaseButton>
                         <BaseButton
+                            aria-label="Restore this backup"
                             variant="icon"
                             :icon="ICONS.cloud_upload"
                             @click="onRestoreRow(row)"
@@ -82,6 +84,7 @@
                             <BaseTooltip>Restore this backup</BaseTooltip>
                         </BaseButton>
                         <BaseButton
+                            aria-label="Delete backup"
                             variant="icon"
                             :icon="ICONS.delete"
                             @click="onDeleteRow(row)"
@@ -999,9 +1002,12 @@
                 warnings: summary.warnings,
             };
             reportOpen.value = true;
-            // The staged file was consumed server-side; forget the id so a
-            // later abort doesn't 404 chasing a phantom upload.
+            // The staged file was consumed server-side; forget the id (so the
+            // clear below doesn't abort, and 404, a phantom upload) and drop
+            // the preview + tree — their Restore buttons would otherwise stay
+            // live over an upload that no longer exists.
             uploadId.value = null;
+            await onClearPick();
         } catch (err) {
             report.value = {
                 ok: false,

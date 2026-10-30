@@ -12,6 +12,7 @@ from dora_api.domain.entities.stock_item_expiry_event import (
 )
 from dora_api.domain.entities.stock_level import StockLevel
 from dora_api.domain.entities.stock_location import StockLocation
+from dora_api.domain.entities.store import Store
 from dora_api.domain.types import EMPTY_UUID
 from dora_api.features.app_settings.access import get_or_create_app_setting
 from dora_api.features.app_settings.clock import household_today
@@ -70,6 +71,7 @@ class CreateStockItemResponse:
     stock_level_not_found: bool = False
     stock_location_not_found: bool = False
     stock_group_not_found: bool = False
+    usual_store_not_found: bool = False
     stock_item_already_exists: bool = False
 
 
@@ -97,6 +99,12 @@ class CreateStockItemHandler:
             _StockGroup = self.repository.get(StockGroup).by_id(request.stock_group_id)
             if not _StockGroup:
                 return CreateStockItemResponse(stock_group_not_found=True)
+
+        if (
+            request.usual_store_id is not None
+            and not self.repository.get(Store).exists(request.usual_store_id)
+        ):
+            return CreateStockItemResponse(usual_store_not_found=True)
 
         _StockItemName = EntityField(StockItem, StockItem.Fields.NAME)
         _ExistingStockItem: StockItem | None = (
@@ -205,6 +213,13 @@ def create_stock_item():
             StockGroup.__name__,
             field_of(CreateStockItemRequest, 'stock_group_id'),
             _Request.stock_group_id,
+        )
+
+    if _Response.usual_store_not_found:
+        return entity_existence_failure(
+            Store.__name__,
+            field_of(CreateStockItemRequest, 'usual_store_id'),
+            _Request.usual_store_id,
         )
 
     if _Response.stock_item_already_exists:

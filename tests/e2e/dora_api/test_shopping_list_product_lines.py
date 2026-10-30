@@ -12,6 +12,7 @@ server rules that have no coverage:
 """
 from uuid import uuid4
 
+import pytest
 import requests
 
 from tests.factories import make_stock_item
@@ -320,3 +321,27 @@ def test__copy__product_only_line_keeps_its_product_anchor(api):
         if copy_id:
             requests.delete(f"{LISTS}/{copy_id}")
         requests.delete(f"{LISTS}/{list_id}")
+
+
+# ── Unknown ids on a line PATCH are refused, not 500s ────────────────────
+
+
+@pytest.mark.parametrize(
+    "field, entity",
+    [
+        ("selected_product_id", "Product"),
+        ("purchased_store_id", "Store"),
+        ("planned_store_id", "Store"),
+    ],
+)
+def test__update_line__UnknownForeignKeyId__IsNotFound(api, field, entity):
+    list_id = _make_draft()
+    item = make_stock_item(stock_level_id=_stock_level_id(),
+                           name=f"CartItem {uuid4().hex[:8]}")
+    _add_line(list_id, stock_item_id=item["stock_item_id"])
+    line_id = _lines(list_id)[0]["line_id"]
+    missing = str(uuid4())
+
+    resp = requests.patch(f"{LISTS}/{list_id}/lines/{line_id}", json={field: missing})
+
+    assert_problem(resp, 404, detail=f"{entity} with the ID '{missing}' was not found.")

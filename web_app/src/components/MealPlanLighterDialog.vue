@@ -10,6 +10,10 @@
             <AppSkeleton v-for="n in 3" :key="n" height="52px" />
         </div>
 
+        <div v-else-if="loadError" class="text-negative">
+            Couldn't load lighter options. Close and try again.
+        </div>
+
         <div v-else-if="candidates.length === 0" class="dora-text-muted">
             {{ emptyMessage }}
         </div>
@@ -86,6 +90,7 @@
     const loading = ref(false);
     const applyingId = ref<string | null>(null);
     const candidates = ref<LighterAlternative[]>([]);
+    const loadError = ref(false);
 
     const open = computed({
         get: () => props.modelValue,
@@ -112,16 +117,26 @@
         return 'lighter';
     }
 
+    // Request token: reopening on another meal must not show the previous
+    // meal's late answer.
+    let loadSeq = 0;
     async function load() {
-        if (!props.mealPlanId || !props.entry) return;
+        const req = ++loadSeq;
+        if (!props.mealPlanId || !props.entry) { loading.value = false; return; }
         loading.value = true;
+        loadError.value = false;
         try {
             const result = await api.getLighterAlternativesAsync(
                 props.mealPlanId, props.entry.meal_plan_entry_id,
             );
-            candidates.value = result.candidates;
+            if (req === loadSeq) candidates.value = result.candidates;
+        } catch (err) {
+            // A failed lookup is not "nothing lighter" — say it failed.
+            if (req !== loadSeq) return;
+            console.warn('lighter alternatives failed to load', err);
+            loadError.value = true;
         } finally {
-            loading.value = false;
+            if (req === loadSeq) loading.value = false;
         }
     }
 

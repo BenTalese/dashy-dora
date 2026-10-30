@@ -46,6 +46,7 @@
                          (motion.scss) answers each one in 120ms. -->
                     <q-checkbox
                         class="dora-press"
+                        :aria-label="item.name"
                         :model-value="isTicked(item.stock_item_id)"
                         @update:model-value="toggle(item.stock_item_id)"
                         @click.stop

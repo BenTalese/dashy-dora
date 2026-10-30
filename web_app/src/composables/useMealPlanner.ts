@@ -7,7 +7,7 @@ import { useReducedMotion } from 'src/composables/useReducedMotion';
 import { useBatchEnabled } from 'src/composables/useBatchEnabled';
 import { useMoneyEnabled } from 'src/composables/useMoneyEnabled';
 import { useStockStatus } from 'src/composables/useStockStatus';
-import { isoDate as toIso, localTodayIso, mondayOf, shiftDays } from 'src/helpers/weekDates';
+import { isDateOnly, isoDate as toIso, localTodayIso, mondayOf, shiftDays } from 'src/helpers/weekDates';
 import type {
     MealPlan, MealPlanEntry, MealPlanIngredient,
     MealPlanSuggestion, UnlinkedIngredient,
@@ -183,21 +183,34 @@ export function useMealPlanner() {
     const suggestionsLoading = ref(false);
     const suggestionsWeek = ref<string | null>(null);
 
+    // The week whose ranking is in flight — the guard is per week, so a week
+    // change mid-request starts the new week's fetch instead of being refused.
+    let suggestionsInflightWeek: string | null = null;
+
     async function loadSuggestions() {
-        if (suggestionsLoading.value) return;
-        if (suggestionsWeek.value === focusedMonday.value && suggestions.value.length) return;
+        const week = focusedMonday.value;
+        if (suggestionsInflightWeek === week) return;
+        if (suggestionsWeek.value === week && suggestions.value.length) return;
+        suggestionsInflightWeek = week;
         suggestionsLoading.value = true;
         try {
-            suggestions.value = await mealPlanStore.getWeekSuggestionsAsync(focusedMonday.value);
-            suggestionsWeek.value = focusedMonday.value;
+            const ranked = await mealPlanStore.getWeekSuggestionsAsync(week);
+            // The user moved on to another week — this answer is not theirs.
+            if (focusedMonday.value !== week) return;
+            suggestions.value = ranked;
+            suggestionsWeek.value = week;
         } catch {
             // A failed ranking is not worth a toast: the chip falls back to the
             // plain list, which is a usable rail. Staying silent beats an error
             // for something the user did not explicitly ask to be told about.
+            if (focusedMonday.value !== week) return;
             suggestions.value = [];
             suggestionsWeek.value = null;
         } finally {
-            suggestionsLoading.value = false;
+            if (suggestionsInflightWeek === week) {
+                suggestionsInflightWeek = null;
+                suggestionsLoading.value = false;
+            }
         }
     }
 
@@ -348,7 +361,26 @@ export function useMealPlanner() {
         }
     }
 
-    async function addEntry(dayIso: string, slot: string, recipeId: string) {
+    // Plan mutations rebuild the whole entry list from `focusedPlan`, so two
+    // in flight at once both start from the same snapshot and the later write
+    // drops the earlier one (rapid ± taps lost a serving). Run them one after
+    // another, each building from the plan the previous one refreshed.
+    let planMutationChain: Promise<unknown> = Promise.resolve();
+    function queuePlanMutation(fn: () => Promise<void>): Promise<void> {
+        const run = planMutationChain.then(fn, fn);
+        planMutationChain = run.catch(() => undefined);
+        return run;
+    }
+
+    function addEntry(dayIso: string, slot: string, recipeId: string): Promise<void> {
+        const week = focusedMonday.value;
+        return queuePlanMutation(() => addEntryNow(week, dayIso, slot, recipeId));
+    }
+
+    async function addEntryNow(week: string, dayIso: string, slot: string, recipeId: string) {
+        // Queued steps run later: a week change in between means this tap
+        // belongs to a week no longer on screen, not to the one now focused.
+        if (focusedMonday.value !== week) return;
         if (isPastDay(dayIso)) return;
         // Bridge until C-2.E: the first add to an unplanned week implicitly
         // creates the plan (auto-named) carrying that entry.
@@ -381,9 +413,18 @@ export function useMealPlanner() {
         }
     }
 
-    async function adjustEntryServings(entry: MealPlanEntry, delta: number) {
+    function adjustEntryServings(entry: MealPlanEntry, delta: number): Promise<void> {
+        const week = focusedMonday.value;
+        return queuePlanMutation(() => adjustEntryServingsNow(week, entry.meal_plan_entry_id, delta));
+    }
+
+    async function adjustEntryServingsNow(week: string, entryId: string, delta: number) {
+        if (focusedMonday.value !== week) return;
         const plan = focusedPlan.value;
-        if (!plan) return;
+        // Read the entry from the plan as it is NOW (an earlier queued step may
+        // have changed its servings), not from the caller's snapshot.
+        const entry = plan?.entries.find((e) => e.meal_plan_entry_id === entryId);
+        if (!plan || !entry) return;
         const next = entry.servings + delta;
         // Stepping the last serving away means "take this meal off the plan",
         // so it goes through the removal path rather than dropping the row
@@ -694,16 +735,23 @@ export function useMealPlanner() {
     // Hovering a needed ingredient highlights the day cells whose recipes use
     // it (desktop only — mouse events don't fire on touch).
     const hoveredRecipeIds = ref<Set<string>>(new Set());
+    let budgetSeq = 0;
     async function loadBudgetStatus() {
+        const req = ++budgetSeq;
         if (!moneyEnabled.value) { budgetStatus.value = null; return; }
+        const week = focusedMonday.value;
         try {
             // The period containing the week on screen, not today's: a week
             // two weeks out is measured against its own (as yet unspent)
             // budget (owner 2026-10-15).
-            budgetStatus.value = await budgetApi.getStatusAsync(focusedMonday.value);
+            const status = await budgetApi.getStatusAsync(week);
+            // A newer load (e.g. the week changed) owns the card now.
+            if (req !== budgetSeq) return;
+            budgetStatus.value = status;
         } catch {
             // A budget we can't read is not worth interrupting the planner for;
             // the card simply shows the week's cost without it.
+            if (req !== budgetSeq) return;
             budgetStatus.value = null;
         }
     }
@@ -821,16 +869,38 @@ export function useMealPlanner() {
     function formatDate(iso: string): string {
         return formatLocaleDate(iso);
     }
+    // Request token: a slower earlier week's response (or one in flight when
+    // the week was cleared) must not overwrite what is on screen now.
+    let ingredientsSeq = 0;
     async function loadIngredients() {
+        const req = ++ingredientsSeq;
         const id = focusedPlan.value?.meal_plan_id;
-        if (!id) { ingredients.value = []; unlinkedIngredients.value = []; return; }
+        if (!id) {
+            ingredients.value = [];
+            unlinkedIngredients.value = [];
+            ingredientsLoading.value = false;
+            return;
+        }
         ingredientsLoading.value = true;
         try {
             const payload = await mealPlanStore.getIngredientsForPlanAsync(id);
+            if (req !== ingredientsSeq) return;
             ingredients.value = payload.items;
             unlinkedIngredients.value = payload.unlinked;
+        } catch (err) {
+            if (req !== ingredientsSeq) return;
+            // Fail soft: an empty shopping card plus a toast, rather than a
+            // rejection escaping to the page ErrorBoundary — or a mutation's
+            // "Could not update the plan" when only this follow-up read failed.
+            ingredients.value = [];
+            unlinkedIngredients.value = [];
+            $q.notify({
+                type: 'negative',
+                message: "Couldn't load this week's ingredients.",
+                caption: toastCaption(err),
+            });
         } finally {
-            ingredientsLoading.value = false;
+            if (req === ingredientsSeq) ingredientsLoading.value = false;
         }
     }
 
@@ -1085,7 +1155,11 @@ export function useMealPlanner() {
             // current week (server tz, C-2.K).
             // `mondayOf` normalises whatever day the URL names, so a
             // hand-typed `?week=2026-09-17` still resumes on that week.
-            const urlWeek = typeof route.query.week === 'string' ? route.query.week : null;
+            // A mangled `?week=` that isn't a real date is ignored (it used to
+            // throw a RangeError out of `isoDate`).
+            const rawWeek = route.query.week;
+            const urlWeek = typeof rawWeek === 'string' && isDateOnly(rawWeek)
+                && Number.isFinite(Date.parse(rawWeek)) ? rawWeek : null;
             focusedMonday.value = mondayOf(urlWeek ?? today.value ?? localTodayIso());
             await Promise.all([loadIngredients(), loadBudgetStatus()]);
         } finally {

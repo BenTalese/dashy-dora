@@ -90,6 +90,7 @@
                                 <q-item-section side>
                                     <div class="row items-center no-wrap">
                                         <BaseButton
+                                            :aria-label="`Move ${card.label} up`"
                                             variant="icon"
                                             size="sm"
                                             :icon="ICONS.arrow_upward"
@@ -99,6 +100,7 @@
                                             <BaseTooltip>Move up</BaseTooltip>
                                         </BaseButton>
                                         <BaseButton
+                                            :aria-label="`Move ${card.label} down`"
                                             variant="icon"
                                             size="sm"
                                             :icon="ICONS.arrow_downward"

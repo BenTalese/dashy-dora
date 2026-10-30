@@ -10,7 +10,7 @@
             </div>
         </template>
 
-        <div class="log-body">
+        <div class="log-body" role="region" tabindex="0" aria-label="Meal log">
             <!-- Loading -->
             <div v-if="loading && entries.length === 0" class="log-centre">
                 <q-spinner color="primary" size="42px" />
@@ -18,7 +18,7 @@
 
             <!-- Error -->
             <q-banner
-                v-else-if="error"
+                v-else-if="error && entries.length === 0"
                 class="dora-bg-negative-soft text-negative q-ma-md"
                 rounded
                 dense
@@ -69,6 +69,9 @@
                 </section>
 
                 <div v-if="hasMore" class="log-more">
+                    <div v-if="error" class="text-caption text-negative q-mb-xs">
+                        Couldn't load older entries. {{ error }}
+                    </div>
                     <BaseButton
                         variant="secondary"
                         label="Load older"
@@ -163,6 +166,7 @@
     async function loadMore() {
         if (!nextCursor.value || loading.value) return;
         loading.value = true;
+        error.value = null;
         try {
             const page = await api.getReconcileLogAsync({
                 cursor: nextCursor.value, limit: 30,
@@ -263,7 +267,8 @@
     .log-pill--wait { background: var(--semantic-warning-soft); border-color: color-mix(in srgb, var(--semantic-warning) 30%, transparent); }
     .log-more {
         display: flex;
-        justify-content: center;
+        flex-direction: column;
+        align-items: center;
         margin-top: 0.5rem;
     }
 </style>

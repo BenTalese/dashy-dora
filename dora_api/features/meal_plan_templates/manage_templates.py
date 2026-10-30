@@ -18,7 +18,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import List
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from dora_api.domain.entities.meal_plan import MealPlan
 from dora_api.domain.entities.meal_plan_entry import MealPlanEntry
@@ -374,6 +374,12 @@ def clone_meal_plan_template(template_id: UUID):
 RECURRING_WEEK_CAP = 26
 
 
+def _require_monday(value: date) -> date:
+    if value.weekday() != 0:
+        raise ValueError("Must be a Monday.")
+    return value
+
+
 def _fork_template_onto_week(
     repository, template_entries, template_id, monday, today,
     *, set_id=None, rotation_index=None,
@@ -408,9 +414,22 @@ def _fork_template_onto_week(
         repository.add(entry)
 
     if existing is not None:
-        consumed = [e for e in (existing.entries or []) if e.consumed_at is not None]
-        replaced = len([e for e in (existing.entries or []) if e.consumed_at is None])
-        existing.entries = consumed + new_entries
+        # Nothing forward to fork because every offset fell in the past: leave
+        # the week exactly as it is rather than wiping its forward meals. An
+        # empty template (or one whose recipes were all deleted) still
+        # replaces the forward portion, as it always did.
+        if not new_entries and skipped:
+            return existing.id, 0, skipped, 0
+        # The immutable past is kept as-is — consumed entries AND past days
+        # nobody cooked — and only the forward portion is replaced. Mirrors
+        # `update_meal_plan` (FU-595); keeping only consumed entries here
+        # hard-deleted an uncooked past day and its reconcile rows.
+        preserved = [
+            e for e in (existing.entries or [])
+            if e.consumed_at is not None or e.scheduled_for < today
+        ]
+        replaced = len(existing.entries or []) - len(preserved)
+        existing.entries = preserved + new_entries
         existing.source_template_id = template_id
         existing.source_template_set_id = set_id
         existing.rotation_index = rotation_index
@@ -433,6 +452,13 @@ class ApplyTemplateRequest(BaseModel):
     template_id: UUID
     # The Monday of the target week (the client sends the focused week's Monday).
     monday_of_week: date
+
+    # A plan's week starts on a Monday; any other day would fork a second plan
+    # overlapping the week's real one.
+    @field_validator("monday_of_week")
+    @classmethod
+    def _monday_only(cls, value: date) -> date:
+        return _require_monday(value)
 
 
 @dataclass(slots=True)
@@ -491,6 +517,12 @@ class ApplyRecurringRequest(BaseModel):
     template_set_id: UUID | None = None
     start_monday: date
     end_monday: date
+
+    # Same reason as `ApplyTemplateRequest`: the loop steps 7 days from here.
+    @field_validator("start_monday", "end_monday")
+    @classmethod
+    def _monday_only(cls, value: date) -> date:
+        return _require_monday(value)
 
 
 @dataclass(slots=True)

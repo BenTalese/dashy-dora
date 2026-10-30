@@ -147,3 +147,29 @@ def test__quantities_still_scale_by_servings():
     result = _aggregate([recipe], {recipe.id: 6})
 
     assert result.items[0].total_quantity == 300.0
+
+
+# ── units — converted into the first row's unit, never added raw ──────────
+
+
+def test__aggregate__GramsThenKilograms__TotalsInGrams():
+    flour = _stock_item("flour")
+    a = _recipe("bread", [_ingredient(flour, quantity=500.0, unit="g")])
+    b = _recipe("cake", [_ingredient(flour, quantity=1.0, unit="kg")])
+
+    result = _aggregate([a, b], {a.id: 1, b.id: 1})
+
+    assert result.items[0].total_quantity == 1500.0
+    assert result.items[0].unit == "g"
+
+
+def test__aggregate__DifferentDimensions__TotalIsNone():
+    """500 g and 2 cups have no honest single number without a density."""
+    flour = _stock_item("flour")
+    a = _recipe("bread", [_ingredient(flour, quantity=500.0, unit="g")])
+    b = _recipe("cake", [_ingredient(flour, quantity=2.0, unit="cup")])
+    c = _recipe("scones", [_ingredient(flour, quantity=100.0, unit="g")])
+
+    result = _aggregate([a, b, c], {a.id: 1, b.id: 1, c.id: 1})
+
+    assert result.items[0].total_quantity is None

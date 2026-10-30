@@ -368,10 +368,14 @@
 
     // R-010 — typed against the real command shape, not a loose record, so a
     // renamed setting fails here rather than silently no-op'ing at runtime.
-    async function patch(message: string, body: UpdateAppSettingsCommand) {
+    // Returns whether the save landed: `update()` never throws (it toasts and
+    // yields `null`), so callers branch on this to roll the control back and
+    // skip the follow-ups on failure.
+    async function patch(message: string, body: UpdateAppSettingsCommand): Promise<boolean> {
         saving.value = true;
         try {
-            await update(message, () => appSettingsStore.saveAsync(body));
+            const saved = await update(message, () => appSettingsStore.saveAsync(body));
+            if (saved === null) return false;
             // The mode drives /api/health gates all over the app; refresh the
             // cached flag map so other surfaces don't run on a stale answer.
             await refreshFlags();
@@ -382,6 +386,7 @@
             // says the chip should render. That read as "health stars don't
             // appear until I refresh the page" (owner 2026-09-09).
             recipeStore.invalidateRecipes();
+            return true;
         } finally {
             saving.value = false;
         }
@@ -390,10 +395,9 @@
     async function onModeChange(value: NutritionMode) {
         const previous = mode.value;
         mode.value = value;
-        try {
-            await patch(`Nutrition set to ${value}.`, { nutrition_mode: value });
+        if (await patch(`Nutrition set to ${value}.`, { nutrition_mode: value })) {
             await refreshSources();
-        } catch {
+        } else {
             mode.value = previous;
         }
     }
@@ -407,12 +411,7 @@
     async function onRatingSchemeChange(value: RatingScheme) {
         const previous = ratingScheme.value;
         ratingScheme.value = value;
-        try {
-            await patch(
-                RATING_SCHEME_NAMES[value],
-                { nutrition_rating_scheme: value },
-            );
-        } catch {
+        if (!(await patch(RATING_SCHEME_NAMES[value], { nutrition_rating_scheme: value }))) {
             ratingScheme.value = previous;
         }
     }
@@ -420,13 +419,13 @@
     async function onOffLookupChange(value: boolean) {
         const previous = offLookupEnabled.value;
         offLookupEnabled.value = value;
-        try {
-            await patch(
-                value ? 'Open Food Facts lookups on.' : 'Open Food Facts lookups off.',
-                { nutrition_off_lookup_enabled: value },
-            );
+        const saved = await patch(
+            value ? 'Open Food Facts lookups on.' : 'Open Food Facts lookups off.',
+            { nutrition_off_lookup_enabled: value },
+        );
+        if (saved) {
             await refreshSources();
-        } catch {
+        } else {
             offLookupEnabled.value = previous;
         }
     }
@@ -434,11 +433,10 @@
     async function onUsdaKeySave() {
         const next = usdaKeyDraft.value.trim();
         if (next === savedUsdaKey.value) return;
-        try {
-            await patch('USDA API key saved.', { nutrition_usda_api_key: next });
+        if (await patch('USDA API key saved.', { nutrition_usda_api_key: next })) {
             savedUsdaKey.value = next;
             await refreshSources();
-        } catch {
+        } else {
             usdaKeyDraft.value = savedUsdaKey.value;
         }
     }

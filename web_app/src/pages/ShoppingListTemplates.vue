@@ -73,6 +73,7 @@
                             :icon="ICONS.playlist_add_check"
                             label="Use"
                             :aria-label="`Use ${template.name}`"
+                            :loading="usingId === template.template_id"
                             @click.stop="onUse(template)"
                         >
                             <BaseTooltip>Start a new list from this template</BaseTooltip>
@@ -333,6 +334,8 @@
     const previewTemplate = ref<TemplateSummary | null>(null);
     const previewDetail = ref<TemplateDetail | null>(null);
     const using = ref(false);
+    /** Which card's Use is in flight, so only that button spins. */
+    const usingId = ref<string | null>(null);
 
     const editorOpen = ref(false);
     const editingDetail = ref<TemplateDetail | null>(null);
@@ -440,7 +443,10 @@
     }
 
     async function onUse(template: TemplateSummary) {
+        // A double tap would otherwise instantiate the template twice.
+        if (using.value) return;
         using.value = true;
+        usingId.value = template.template_id;
         try {
             const result = await api.instantiateAsync(template.template_id, {});
             // The lists picker reads the shared store, which is already
@@ -464,6 +470,7 @@
             });
         } finally {
             using.value = false;
+            usingId.value = null;
         }
     }
 
@@ -472,9 +479,14 @@
         previewTemplate.value = template;
         previewDetail.value = null;
         previewOpen.value = true;
+        // A slow answer for a template the user has since moved off must
+        // not fill the preview of the one now open.
+        const isCurrent = () => previewTemplate.value?.template_id === template.template_id;
         try {
-            previewDetail.value = await api.getDetailAsync(template.template_id);
+            const detail = await api.getDetailAsync(template.template_id);
+            if (isCurrent()) previewDetail.value = detail;
         } catch (err) {
+            if (!isCurrent()) return;
             $q.notify({
                 type: 'negative',
                 message: 'Could not load template.',
@@ -532,12 +544,19 @@
         }
     }
 
+    // The template the editor was last opened for, so a slow load for an
+    // earlier one can't fill the editor with the wrong template.
+    let editorTemplateId: string | null = null;
+
     async function openEditor(template: TemplateSummary) {
+        editorTemplateId = template.template_id;
         editingDetail.value = null;
         editorOpen.value = true;
         try {
-            editingDetail.value = await api.getDetailAsync(template.template_id);
+            const detail = await api.getDetailAsync(template.template_id);
+            if (editorTemplateId === template.template_id) editingDetail.value = detail;
         } catch (err) {
+            if (editorTemplateId !== template.template_id) return;
             $q.notify({
                 type: 'negative',
                 message: 'Could not load template.',

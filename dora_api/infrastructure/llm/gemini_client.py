@@ -24,6 +24,7 @@ from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 from dora_api.infrastructure.llm.llm_client import (LlmClient, LlmUnavailable,
+                                                 is_provider_down,
                                                  remember_availability,
                                                  remembered_availability)
 
@@ -54,7 +55,9 @@ class GeminiClient(LlmClient):
         self._timeout = timeout_seconds
         self._enabled = enabled
         self._base_url = (base_url or DEFAULT_BASE_URL).rstrip("/")
-        self._availability_key = (type(self).__name__, self._base_url, self._api_key)
+        # Model is part of the key: a probe of one model must not vouch for
+        # (or condemn) a different model on the same endpoint.
+        self._availability_key = (type(self).__name__, self._base_url, self._api_key, self._model)
 
     def is_available(self) -> bool:
         if not self._enabled or not self._api_key:
@@ -124,7 +127,8 @@ class GeminiClient(LlmClient):
             with urlopen(req, timeout=self._timeout) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
         except (URLError, OSError, ValueError) as exc:
-            remember_availability(self._availability_key, False)
+            if is_provider_down(exc):
+                remember_availability(self._availability_key, False)
             raise LlmUnavailable(f"Gemini request failed: {exc}") from exc
 
         return _to_openai_shape(data)

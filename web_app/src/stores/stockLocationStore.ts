@@ -19,8 +19,8 @@ export const useStockLocationStore = defineStore('stockLocation', () => {
         stockLocations.value.sort((a, b) => collator.compare(a.name, b.name));
 
     const getStockLocationsAsync = () =>
-        stockLocationApiService.getAllAsync().then((page) => {
-            stockLocations.value = [...page.items];
+        stockLocationApiService.getAllPagesAsync().then((items) => {
+            stockLocations.value = items;
             sort();
         });
 

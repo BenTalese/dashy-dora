@@ -16,6 +16,7 @@ The in-memory rate-limit buckets survive the per-test DB rollback, so an
 autouse fixture resets them — otherwise earlier tests would starve later
 ones of their 10-event allowance.
 """
+import json
 from uuid import uuid4
 
 import pytest
@@ -228,3 +229,46 @@ def test__rate_limit_buckets__keys_whose_window_passed_are_evicted():
     assert "old-visitor" not in _scl._buckets
     assert "empty-visitor" not in _scl._buckets
     assert "fresh-visitor" in _scl._buckets
+
+
+#region ---------------- context bounding ----------------
+
+
+def test__bound_client_context__SmallContext__Unchanged():
+    ctx = {"route": "/stock", "nested": {"a": [1, 2, {"b": "c"}]}}
+    assert _scl.bound_client_context(ctx) == ctx
+
+
+def test__bound_client_context__DeepNesting__ClippedWithMarker():
+    deep: dict = {"leaf": "x"}
+    for _ in range(50):
+        deep = {"d": deep}
+    bounded = _scl.bound_client_context(deep)
+    assert bounded["d"]["d"]["d"]["d"] == "[truncated]"
+
+
+def test__bound_client_context__OversizeContext__StaysUnderCapAndKeepsKeys():
+    ctx = {f"k{i}": "v" * 500 for i in range(200)}
+    ctx["stack"] = "s" * 50_000
+    bounded = _scl.bound_client_context(ctx)
+    size = len(json.dumps(bounded).encode("utf-8"))
+    assert size <= _scl._CONTEXT_MAX_BYTES
+    assert bounded["_truncated"] is True
+    assert bounded["k0"] == "v" * 500
+
+
+def test__submit_client_log__OversizeContext__PersistedBounded(api):
+    marker = f"{_token()} big context"
+    resp = requests.post(CLIENT_LOGS, json={
+        "level": "error",
+        "message": marker,
+        "context": {"route": "/stock", "blob": ["x" * 1000] * 500},
+    })
+    assert resp.status_code == 204, resp.text
+
+    rows = [r for r in _audit_rows("client.error") if r["payload"]["message"] == marker]
+    assert len(rows) == 1
+    stored = rows[0]["payload"]["context"]
+    assert len(json.dumps(stored).encode("utf-8")) <= _scl._CONTEXT_MAX_BYTES
+    assert stored["route"] == "/stock"
+    assert stored["_truncated"] is True

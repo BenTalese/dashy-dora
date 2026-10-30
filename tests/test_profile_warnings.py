@@ -74,3 +74,28 @@ def test__warn__silent_when_var_is_whitespace_only(_clean_env, capsys):
     _clean_env.setenv("DORA_SECURE_COOKIES", "   ")
     profile.warn_if_insecure_cookies_in_production()
     assert capsys.readouterr().err == ""
+
+
+@pytest.fixture
+def _prod_env(monkeypatch):
+    monkeypatch.delenv("DORA_SKIP_PROD_VALIDATION", raising=False)
+    monkeypatch.setenv("DORA_ENV", "production")
+    for name in profile.PRODUCTION_REQUIRED_VARS:
+        monkeypatch.setenv(name, "set")
+    return monkeypatch
+
+
+@pytest.mark.parametrize("origins", ["*", "https://dora.example.com, *"])
+def test__validate_production_requirements__WildcardCorsOrigin__RefusesToStart(
+    _prod_env, capsys, origins,
+):
+    _prod_env.setenv("DORA_CORS_ORIGINS", origins)
+    with pytest.raises(SystemExit) as exc:
+        profile.validate_production_requirements()
+    assert exc.value.code == 1
+    assert "DORA_CORS_ORIGINS" in capsys.readouterr().err
+
+
+def test__validate_production_requirements__PinnedCorsOrigins__Boots(_prod_env):
+    _prod_env.setenv("DORA_CORS_ORIGINS", "https://dora.example.com")
+    profile.validate_production_requirements()

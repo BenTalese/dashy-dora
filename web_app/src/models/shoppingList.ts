@@ -204,7 +204,7 @@ export type ShoppingListTotals = {
 };
 
 /** FU-334 — receipt-photo attachment metadata. Bytes are never inlined;
- *  the SPA loads each via `shoppingListAttachmentUrl(listId, id)`. */
+ *  the SPA loads each through `ShoppingListReceiptImage` (authed fetch, R-045). */
 export type ShoppingListAttachment = {
     attachment_id: string;
     sequence: number;

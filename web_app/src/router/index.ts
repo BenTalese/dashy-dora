@@ -48,7 +48,8 @@ export default defineRouter(function (/* { store, ssrContext } */) {
     // '.../onboardingContent.ts' does not provide…") is dev-facing and MUST
     // NOT surface to the user — it's logged to the console for debugging
     // instead, and the error page renders without a spurious "ref".
-    ROUTER.onError((err) => {
+    let redirectingToErrorPage = false;
+    ROUTER.onError((err, to) => {
         console.error('Vue Router Error: ' + err.message);
         Notify.create({
             type: 'negative',
@@ -57,16 +58,14 @@ export default defineRouter(function (/* { store, ssrContext } */) {
             timeout: 3500,
         });
         // Avoid an infinite loop if /errors/server itself fails to load.
-        if (typeof window !== 'undefined' && window.location.pathname.endsWith('/errors/server')) {
+        // Checked against the router, not `window.location.pathname`: the
+        // app uses hash routing, so the path never appears there.
+        const errorPage = '/errors/server';
+        if (redirectingToErrorPage || to.path === errorPage || ROUTER.currentRoute.value.path === errorPage) {
             return;
         }
-        try {
-            void ROUTER.push({ path: '/errors/server' });
-        } catch {
-            if (typeof window !== 'undefined') {
-                window.location.assign('/');
-            }
-        }
+        redirectingToErrorPage = true;
+        void ROUTER.push({ path: errorPage }).finally(() => { redirectingToErrorPage = false; });
     });
 
     // Global auth guard. Bootstraps the session on first navigation, then
@@ -116,9 +115,13 @@ export default defineRouter(function (/* { store, ssrContext } */) {
         // finished get bounced to /welcome unless they're heading to a
         // bypass route. If we don't yet know the state (boot before the
         // backend grew the column, for instance), we let them through —
-        // never trap the user in an opaque redirect loop.
+        // never trap the user in an opaque redirect loop. Public routes
+        // (verify-email / reset-password / forgot-password) are skipped too:
+        // a freshly-registered user clicking their verification link
+        // mid-wizard must reach the page that consumes the token.
         if (
             authStore.isAuthenticated()
+            && !isPublic
             && !ONBOARDING_BYPASS.has(to.path)
             && authStore.currentUser?.onboarding_completed_at === null
         ) {

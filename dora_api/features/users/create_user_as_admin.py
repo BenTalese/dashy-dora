@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from dora_api.domain.entities.audit_event import SEVERITY_AUDIT
 from dora_api.domain.entities.user import User
 from dora_api.domain.types import EMPTY_UUID
@@ -49,6 +49,21 @@ class AdminCreateUserRequest(BaseModel):
     # buys nothing.
     password: str | None = Field(default=None, max_length=255)
 
+    # Stripped once, here, so the strength check and the stored hash see the
+    # same string: validating " Abcdefghij1 " and then storing it stripped let
+    # a password through that was only ever checked with its padding.
+    @field_validator("password", mode="before")
+    @classmethod
+    def _strip_password(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        stripped = value.strip()
+        if value and not stripped:
+            # Whitespace only is a typo, not "mint one for me" (that is an
+            # absent / empty password).
+            raise ValueError("Password cannot be only spaces.")
+        return stripped
+
 
 @dataclass(slots=True)
 class AdminCreateUserResponse:
@@ -74,7 +89,7 @@ class AdminCreateUserHandler:
             if existing_by_email is not None:
                 return AdminCreateUserResponse(email_taken=True)
 
-        chosen = (request.password or "").strip()
+        chosen = request.password or ""
         one_time_password = chosen or mint_one_time_password()
         now = datetime.now(timezone.utc)
         new_user = User(

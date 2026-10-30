@@ -48,7 +48,7 @@ def _seed_stores_and_product(request):
         size="500g",
         size_unit="g",
         size_value=5.0,
-        web_url="www",
+        web_url="https://www.example.test",
     ).model_dump())
 
 #endregion setup
@@ -72,7 +72,7 @@ def test__create_product__CreatingProductWithAllAttributes__ProductCreated(api):
         size = "500g",
         size_unit = "g",
         size_value = 5.0,
-        web_url = "www"
+        web_url = "https://www.example.test"
     )
 
     _Response = requests.post(base_route, json = _ProductRequest.model_dump())
@@ -377,7 +377,7 @@ def test__create_product__ProductAlreadyExists__AppendsHistoricOffer(api):
         "size": "500g",
         "size_unit": "g",
         "size_value": 5.0,
-        "web_url": "www",
+        "web_url": "https://www.example.test",
     }
 
     first = requests.post(base_route, json=payload)
@@ -409,7 +409,7 @@ def test__create_product__ExtraAttributes__IsBadRequest(api):
         "size": "500g",
         "size_unit": "g",
         "size_value": 5.0,
-        "web_url": "www",
+        "web_url": "https://www.example.test",
         "poopusgoopus": "aaaa"
     }
 
@@ -477,7 +477,7 @@ def test__get_products__GettingProduct__GetsAllExpectedAttributes(api):
     assert _Product['size'] == '500g'
     assert _Product['size_unit'] == 'g'
     assert _Product['size_value'] == 5.0
-    assert _Product['web_url'] == 'www'
+    assert _Product['web_url'] == 'https://www.example.test'
     assert _Product.keys() == {
         'brand',
         'has_image',

@@ -26,11 +26,14 @@ from dora_api.features.routers import AUTH_ROUTER
 from dora_api.infrastructure.api_response import (
     business_rule_violation,
     no_content,
+    too_many_requests,
     unauthorized,
     validation_failed,
 )
 from dora_api.infrastructure.audit import emit as audit_emit
-from dora_api.infrastructure.auth_helpers import hash_password, validate_password
+from dora_api.infrastructure.auth_helpers import (
+    hash_password, rate_limit, rate_limit_remaining_seconds, validate_password,
+)
 from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.email_sender import render_template, send_email
 from dora_api.infrastructure.utils import get_request_body
@@ -38,6 +41,12 @@ from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 
 _LOGGER = logging.getLogger(__name__)
+
+# The current-password check is a password oracle for anyone holding a
+# session (e.g. a stolen cookie), so it's throttled per user like login.
+_CHANGE_PASSWORD_SCOPE = "auth.change_password"
+_CHANGE_PASSWORD_MAX = 10
+_CHANGE_PASSWORD_WINDOW_SECONDS = 15 * 60
 
 
 class ChangePasswordRequest(BaseModel):
@@ -83,6 +92,15 @@ def change_password():
     except (ValueError, TypeError):
         session.clear()
         return unauthorized()
+
+    if not rate_limit(
+        _CHANGE_PASSWORD_SCOPE, _CHANGE_PASSWORD_MAX, subject=str(_UserId),
+        window_seconds=_CHANGE_PASSWORD_WINDOW_SECONDS,
+    ):
+        return too_many_requests(rate_limit_remaining_seconds(
+            _CHANGE_PASSWORD_SCOPE, _CHANGE_PASSWORD_MAX, subject=str(_UserId),
+            window_seconds=_CHANGE_PASSWORD_WINDOW_SECONDS,
+        ))
 
     _Request: ChangePasswordRequest = get_request_body()
     pwd_error = validate_password(_Request.new_password)

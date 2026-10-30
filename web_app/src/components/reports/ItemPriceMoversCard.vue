@@ -216,33 +216,41 @@
     const chartLoading = ref(false);
     const chartSeries = computed(() => stockItemHistoryToChart(history.value));
 
+    // Request token: only the newest drill-in may write the chart (a slower
+    // earlier row's history used to land over the newer one).
+    let historySeq = 0;
+    function closeChart(): void {
+        historySeq++;
+        selectedId.value = null;
+        history.value = null;
+        chartLoading.value = false;
+    }
+
     async function toggle(id: string): Promise<void> {
         if (selectedId.value === id) {
-            selectedId.value = null;
-            history.value = null;
+            closeChart();
             return;
         }
+        const req = ++historySeq;
         selectedId.value = id;
         history.value = null;
         chartLoading.value = true;
         try {
-            history.value = await stockItemApi.getPriceHistoryAsync(id);
+            const result = await stockItemApi.getPriceHistoryAsync(id);
+            if (req === historySeq && selectedId.value === id) history.value = result;
         } catch (err) {
             // The row itself is still true — only the chart is missing — so this
             // does not put the whole card in its error state. The chart's own
             // empty line says there is nothing to draw.
             console.warn('item price history failed to load', err);
         } finally {
-            chartLoading.value = false;
+            if (req === historySeq) chartLoading.value = false;
         }
     }
 
     // Changing the range re-answers the question, so a chart opened against the
     // old answer must not linger under the new one.
-    watch(() => props.range, () => {
-        selectedId.value = null;
-        history.value = null;
-    });
+    watch(() => props.range, closeChart);
 
     // The SVG chart is sized in px, so the card measures its own content box —
     // the same pattern `/price-history`, the bottom sheet and Price trends use.

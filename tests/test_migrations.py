@@ -21,10 +21,16 @@ Two layers:
 """
 from __future__ import annotations
 
+import base64
+import io
 import os
+import re
+import sqlite3
 import subprocess
 import sys
 import tempfile
+import uuid
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -72,6 +78,12 @@ _IRREVERSIBLE_ALLOWLIST: dict[str, str] = {
     "e2c5a8f1d7b3": (
         "data-cleanup migration (nullify garbage Product.image values) — the "
         "original garbage isn't recoverable, so a no-op downgrade is correct."
+    ),
+    "e7a2c5f9b3d1": (
+        "converts id columns stored under a string type to UUIDType; the string "
+        "types were defects (Postgres cannot hold a VARCHAR FK onto a uuid key, "
+        "SQLite's stored blobs are identical either way), so there is no schema "
+        "to go back to."
     ),
 }
 
@@ -222,13 +234,42 @@ _KNOWN_UNIQUE_DRIFT: dict[tuple[str, tuple[str, ...]], str] = {
 }
 
 
-def _reflect(insp):
-    """table -> {cols: {name: nullable}, plain: set[colset], uniq: set[colset]}."""
+# Column types that differ in spelling only: unbounded VARCHAR in the model,
+# TEXT in the migrated schema. Same storage and behaviour on SQLite and
+# Postgres, so not worth a rebuild of either table.
+_KNOWN_TYPE_DRIFT: dict[tuple[str, str], str] = {
+    ("AuditEvent", "payload"): "TEXT (migrated) vs unbounded VARCHAR (model): equivalent.",
+    ("RecipeStep", "hint"): "TEXT (migrated) vs unbounded VARCHAR (model): equivalent.",
+    ("RecipeStep", "text"): "TEXT (migrated) vs unbounded VARCHAR (model): equivalent.",
+}
+# Constraint / index names (R-015): (table, kind, name) present on one side only.
+_KNOWN_NAME_DRIFT: dict[tuple[str, str, str], str] = {
+    ("User", "uq", "uq_User_username"): (
+        "the FU-563 username deferral above: the model's UNIQUE has no migrated twin."
+    ),
+}
+
+# SQLite's inspector reports a quoted (mixed-case) FK or PK name as None, so
+# those two are read from the table's DDL.
+_NAMED_KEY = re.compile(r'CONSTRAINT\s+"?(\w+)"?\s+(PRIMARY KEY|FOREIGN KEY)', re.IGNORECASE)
+
+
+def _reflect(insp, engine):
+    """table -> {cols: {name: nullable}, types, plain: set[colset], uniq: set[colset],
+    fks, names: set[(kind, name)]}."""
     out = {}
+    with engine.connect() as conn:
+        ddl = dict(conn.exec_driver_sql("SELECT name, sql FROM sqlite_master WHERE type = 'table'").fetchall())
     for t in insp.get_table_names():
         if t in _IGNORE_TABLES:
             continue
         cols = {c["name"]: bool(c["nullable"]) for c in insp.get_columns(t)}
+        types = {c["name"]: str(c["type"]) for c in insp.get_columns(t)}
+        names = {("ck", c["name"]) for c in insp.get_check_constraints(t)}
+        names |= {("uq", u["name"]) for u in insp.get_unique_constraints(t)}
+        names |= {("uix" if ix.get("unique") else "ix", ix["name"]) for ix in insp.get_indexes(t)}
+        for name, kind in _NAMED_KEY.findall(ddl.get(t) or ""):
+            names.add(("pk" if kind.upper().startswith("PRIMARY") else "fk", name))
         plain, uniq = set(), set()
         for ix in insp.get_indexes(t):
             (uniq if ix.get("unique") else plain).add(tuple(ix["column_names"]))
@@ -241,15 +282,16 @@ def _reflect(insp):
             tuple(fk["constrained_columns"]): ((fk.get("options") or {}).get("ondelete") or None)
             for fk in insp.get_foreign_keys(t)
         }
-        out[t] = {"cols": cols, "plain": plain, "uniq": uniq, "fks": fks}
+        out[t] = {"cols": cols, "types": types, "plain": plain, "uniq": uniq, "fks": fks, "names": names}
     return out
 
 
 @pytest.mark.slow
 def test__migrations__migrated_schema_matches_orm_metadata(temp_db_path):
     """The migrated (prod) schema and the ORM model's `create_all()` schema
-    (dev + the whole e2e suite) must agree on tables, columns, nullability,
-    index/unique colsets, and FK `ondelete` rules — the FU-563/564/565 regression
+    (dev + the whole e2e suite) must agree on tables, columns, column types,
+    nullability, index/unique colsets, constraint + index names (R-015: a later
+    migration drops by name), and FK `ondelete` rules — the FU-563/564/565 regression
     gate for the drift the FU-393 sweep found (dev ran on 1 index vs prod's 32;
     3 Product nullability mismatches; 6 FK ondelete mismatches). Only the
     documented carve-outs above are tolerated; anything else is 'model changed,
@@ -264,8 +306,8 @@ def test__migrations__migrated_schema_matches_orm_metadata(temp_db_path):
     try:
         # create_all on OUR engine never touches the app's bound (e2e) DB.
         db.metadata.create_all(model_engine)
-        migrated = _reflect(inspect(mig_engine))
-        model = _reflect(inspect(model_engine))
+        migrated = _reflect(inspect(mig_engine), mig_engine)
+        model = _reflect(inspect(model_engine), model_engine)
     finally:
         mig_engine.dispose()
         model_engine.dispose()
@@ -303,6 +345,21 @@ def test__migrations__migrated_schema_matches_orm_metadata(temp_db_path):
         for cs in sorted(g["uniq"] - m["uniq"]):
             if (t, cs) not in _KNOWN_UNIQUE_DRIFT:
                 problems.append(f"{t}({', '.join(cs)}): UNIQUE migrated but NOT in ORM model")
+        # Column types (as SQLite reflects them: BINARY(16) and NUMERIC(16) both
+        # read back NUMERIC(16), so a UUIDType column compares equal however it
+        # was declared, and a VARCHAR/CHAR id column does not).
+        for c in sorted(set(m["types"]) & set(g["types"])):
+            if m["types"][c] != g["types"][c] and (t, c) not in _KNOWN_TYPE_DRIFT:
+                problems.append(
+                    f"{t}.{c}: type drift — model {m['types'][c]}, migrated {g['types'][c]}"
+                )
+        # Constraint + index names.
+        for kind, name in sorted(m["names"] - g["names"], key=str):
+            if (t, kind, name) not in _KNOWN_NAME_DRIFT:
+                problems.append(f"{t}: {kind} {name!r} in ORM model but NOT migrated (name drift?)")
+        for kind, name in sorted(g["names"] - m["names"], key=str):
+            if (t, kind, name) not in _KNOWN_NAME_DRIFT:
+                problems.append(f"{t}: {kind} {name!r} migrated but NOT in ORM model (name drift?)")
         # FK ondelete rules (FU-565). Compare only FK colsets present in both so a
         # column-add/drop is reported once (above) not twice.
         for cs in sorted(set(m["fks"]) & set(g["fks"])):
@@ -317,6 +374,116 @@ def test__migrations__migrated_schema_matches_orm_metadata(temp_db_path):
         "`table_mappings.py` with the migration chain, or add a documented "
         "carve-out if the difference is intentional:\n  " + "\n  ".join(problems)
     )
+
+
+# ── Upgrading a populated SQLite database ──────────────────────────────────
+# The tests above build from empty. These seed rows at an earlier revision and
+# upgrade across the migrations that read or rebuild them (R-095).
+
+def _insert(conn: sqlite3.Connection, table: str, **values) -> None:
+    """Insert one row, filling every other NOT NULL column that has no
+    default with a placeholder of its declared type."""
+    for _cid, name, decl, notnull, default, _pk in conn.execute(f'PRAGMA table_info("{table}")'):
+        if name in values or not notnull or default is not None:
+            continue
+        decl = decl.upper()
+        if "16" in decl:  # BINARY(16) / NUMERIC(16): a UUIDType id
+            values[name] = uuid.uuid4().bytes
+        elif any(k in decl for k in ("INT", "BOOL", "FLOAT", "NUM", "REAL")):
+            values[name] = 0
+        elif "DATE" in decl:
+            values[name] = "2026-01-01 00:00:00"
+        else:
+            values[name] = "x"
+    cols = ", ".join(f'"{c}"' for c in values)
+    marks = ", ".join("?" for _ in values)
+    conn.execute(f'INSERT INTO "{table}" ({cols}) VALUES ({marks})', tuple(values.values()))
+
+
+@contextmanager
+def _sqlite(path: Path):
+    """A plain sqlite3 connection (foreign keys off, as sqlite3 defaults) that
+    commits and is closed on exit, so Windows can delete the temp file."""
+    conn = sqlite3.connect(path)
+    try:
+        with conn:
+            yield conn
+    finally:
+        conn.close()
+
+
+def _upgrade_to(temp_db: Path, revision: str) -> None:
+    result = _run_migration(temp_db, f"flask_migrate.upgrade(revision={revision!r})")
+    assert result.returncode == 0, f"upgrade to {revision} failed:\n{result.stdout}\n{result.stderr}"
+
+
+def _red_logo() -> bytes:
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (8, 8), (200, 20, 20)).save(buf, format="PNG")
+    return b"data:image/png;base64," + base64.b64encode(buf.getvalue())
+
+
+@pytest.mark.slow
+def test__migrations__store_brand_colour_backfills_an_existing_logo(temp_db_path):
+    """c9f2a7d4e1b8 reads `Store.id` back to update each row. It used to read
+    the BINARY(16) id through `sa.Uuid`, which raises on the first SQLite row
+    with an image, so any install with a store logo could not upgrade."""
+    _upgrade_to(temp_db_path, "b3f7c1d9a2e6")  # the revision before c9f2a7d4e1b8
+    store_id = uuid.uuid4().bytes
+    with _sqlite(temp_db_path) as conn:
+        _insert(conn, "Store", id=store_id, name="Coles", image=_red_logo())
+
+    result = _run_migration(temp_db_path, "flask_migrate.upgrade()")
+    assert result.returncode == 0 and "MIGRATION_OK" in result.stdout, (
+        f"upgrade across c9f2a7d4e1b8 with a logo failed:\n{result.stdout}\n{result.stderr}"
+    )
+    with _sqlite(temp_db_path) as conn:
+        colour = conn.execute('SELECT brand_colour FROM "Store" WHERE id = ?', (store_id,)).fetchone()[0]
+    assert colour is not None and colour.startswith("#")
+
+
+@pytest.mark.slow
+def test__migrations__sqlite_rebuilds_keep_rows_and_convert_string_ids(temp_db_path):
+    """e7a2c5f9b3d1 + f4b8d1c6a9e2 on an install whose substitutes table still
+    has the original VARCHAR(36) id columns:
+
+    * the 16-byte ids survive the type conversion unchanged (no CAST);
+    * rebuilding `StockItem` (a parent) does not fire its children's ON DELETE
+      CASCADE: env.py runs the chain with foreign keys off. With them on, the
+      rebuild's DROP TABLE deleted every substitute row."""
+    _upgrade_to(temp_db_path, "b8d2f4a6c1e3")  # the revision before e7a2c5f9b3d1
+    a, b = sorted((uuid.uuid4().bytes, uuid.uuid4().bytes))
+    with _sqlite(temp_db_path) as conn:
+        # Recreate the table as an install from before c8a1d3b6e9f4 was
+        # corrected has it: VARCHAR(36) id columns.
+        ddl = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE name = 'StockItemSubstitute'"
+        ).fetchone()[0]
+        old_ddl = re.sub(r"(stock_item_[ab]_id) \w+(\(16\))?", r"\1 VARCHAR(36)", ddl, count=2)
+        conn.execute('DROP TABLE "StockItemSubstitute"')
+        conn.execute(old_ddl)
+        _insert(conn, "StockItem", id=a, name="Butter")
+        _insert(conn, "StockItem", id=b, name="Margarine")
+        _insert(conn, "StockItemSubstitute", stock_item_a_id=a, stock_item_b_id=b, notes="1:1")
+    with _sqlite(temp_db_path) as conn:
+        assert "VARCHAR(36)" in conn.execute(
+            "SELECT sql FROM sqlite_master WHERE name = 'StockItemSubstitute'"
+        ).fetchone()[0]
+
+    result = _run_migration(temp_db_path, "flask_migrate.upgrade()")
+    assert result.returncode == 0 and "MIGRATION_OK" in result.stdout, f"{result.stdout}\n{result.stderr}"
+
+    with _sqlite(temp_db_path) as conn:
+        rows = conn.execute(
+            'SELECT stock_item_a_id, stock_item_b_id, notes FROM "StockItemSubstitute"'
+        ).fetchall()
+        ddl = conn.execute("SELECT sql FROM sqlite_master WHERE name = 'StockItemSubstitute'").fetchone()[0]
+        items = conn.execute('SELECT count(*) FROM "StockItem"').fetchone()[0]
+    assert rows == [(a, b, "1:1")]
+    assert "VARCHAR(36)" not in ddl
+    assert items == 2
 
 
 @pytest.mark.skipif(

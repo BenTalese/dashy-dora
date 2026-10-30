@@ -54,15 +54,17 @@ def check_entries(
     today: date,
     allowed_slots: set[str],
     valid_slots: set[str],
+    preserved_batch_keys: frozenset[str] = frozenset(),
 ) -> MealPlanWriteOutcome | None:
     """The structural checks every entry write runs before touching the DB,
     or None when they all pass. Slots are free-text labels validated against
     the household vocabulary (R-010); the message names `valid_slots`, not the
-    allowance, so a deleted slot is never offered back."""
+    allowance, so a deleted slot is never offered back. `preserved_batch_keys`
+    are the ids of batches an update keeps (see `validate_cook_groups`)."""
     bad_slot = find_invalid_slot((e.slot for e in entries), allowed_slots)
     if bad_slot is not None:
         return MealPlanWriteOutcome(invalid_slot_message = invalid_slot_message(bad_slot, valid_slots))
-    cook_batch_error = validate_cook_groups(entries)
+    cook_batch_error = validate_cook_groups(entries, preserved_batch_keys)
     if cook_batch_error is not None:
         return MealPlanWriteOutcome(invalid_cook_batch_message = cook_batch_error)
     if any(e.scheduled_for < today for e in entries):

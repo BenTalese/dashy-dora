@@ -3,7 +3,7 @@
          (document-scroll page; no :style-fn). -->
     <q-page class="q-pa-md column q-gutter-md page">
         <div class="row items-center">
-            <BaseButton variant="icon" :icon="ICONS.chevron_left" @click="goToPlanner">
+            <BaseButton aria-label="Back to the planner" variant="icon" :icon="ICONS.chevron_left" @click="goToPlanner">
                 <BaseTooltip>Back to the planner</BaseTooltip>
             </BaseButton>
             <div class="q-ml-sm">
@@ -71,10 +71,11 @@
                                 <BaseButton variant="ghost" dense label="Cancel" @click="cancelRename" />
                             </template>
                             <template v-else>
-                                <BaseButton variant="icon" :icon="ICONS.edit" @click="startRename(t)">
+                                <BaseButton :aria-label="`Rename ${t.name}`" variant="icon" :icon="ICONS.edit" @click="startRename(t)">
                                     <BaseTooltip>Rename</BaseTooltip>
                                 </BaseButton>
                                 <BaseButton
+                                    :aria-label="`Delete ${t.name}`"
                                     variant="danger-ghost" :icon="ICONS.delete_outline"
                                     round dense
                                     @click="confirmDeleteTemplate(t)"
@@ -113,10 +114,10 @@
                     </q-item-section>
                     <q-item-section side>
                         <div class="row items-center q-gutter-xs">
-                            <BaseButton variant="icon" :icon="ICONS.edit" @click="openSetEditor(s.meal_plan_template_set_id)">
+                            <BaseButton :aria-label="`Edit ${s.name}`" variant="icon" :icon="ICONS.edit" @click="openSetEditor(s.meal_plan_template_set_id)">
                                 <BaseTooltip>Edit</BaseTooltip>
                             </BaseButton>
-                            <BaseButton variant="icon" :icon="ICONS.delete" @click="deleteSet(s)">
+                            <BaseButton :aria-label="`Delete ${s.name}`" variant="icon" :icon="ICONS.delete" @click="deleteSet(s)">
                                 <BaseTooltip>Delete</BaseTooltip>
                             </BaseButton>
                         </div>
@@ -147,9 +148,9 @@
                         </q-item-section>
                         <q-item-section side>
                             <div class="row items-center no-wrap">
-                                <BaseButton variant="icon" size="sm" :icon="ICONS.arrow_upward" :disable="idx === 0" @click="moveItem(idx, -1)" />
-                                <BaseButton variant="icon" size="sm" :icon="ICONS.arrow_downward" :disable="idx === setTemplateIds.length - 1" @click="moveItem(idx, 1)" />
-                                <BaseButton variant="icon" size="sm" :icon="ICONS.close" @click="removeItem(idx)" />
+                                <BaseButton :aria-label="`Move ${templateNameFor(tid)} up`" variant="icon" size="sm" :icon="ICONS.arrow_upward" :disable="idx === 0" @click="moveItem(idx, -1)" />
+                                <BaseButton :aria-label="`Move ${templateNameFor(tid)} down`" variant="icon" size="sm" :icon="ICONS.arrow_downward" :disable="idx === setTemplateIds.length - 1" @click="moveItem(idx, 1)" />
+                                <BaseButton :aria-label="`Remove ${templateNameFor(tid)}`" variant="icon" size="sm" :icon="ICONS.close" @click="removeItem(idx)" />
                             </div>
                         </q-item-section>
                     </q-item>
@@ -272,9 +273,21 @@
     async function openSetEditor(setId: string | null) {
         editingSetId.value = setId;
         if (setId) {
-            const detail = await setApi.getDetailAsync(setId);
-            setName.value = detail.name;
-            setTemplateIds.value = detail.items.map((i) => i.template_id);
+            try {
+                const detail = await setApi.getDetailAsync(setId);
+                // A later open (another set) superseded this one — drop it.
+                if (editingSetId.value !== setId) return;
+                setName.value = detail.name;
+                setTemplateIds.value = detail.items.map((i) => i.template_id);
+            } catch (err) {
+                if (editingSetId.value !== setId) return;
+                $q.notify({
+                    type: 'negative',
+                    message: "Couldn't open that set.",
+                    caption: toastCaption(err),
+                });
+                return;
+            }
         } else {
             setName.value = '';
             setTemplateIds.value = [];

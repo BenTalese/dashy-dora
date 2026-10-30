@@ -84,15 +84,20 @@ export async function openQrSheetAsync(options: {
     ids?: string[];
     layout?: string;
 } = {}): Promise<void> {
-    // Must stay a sync entry point: `openHtmlDocumentAsync` claims the tab in
-    // the caller's own call stack (R-046), so awaiting anything before this
-    // line would re-break "Print one" exactly the way FU-648 described.
-    const params = new URLSearchParams();
-    if (options.layout) params.set('layout', options.layout);
-    if (options.ids && options.ids.length > 0) params.set('ids', options.ids.join(','));
-    const query = params.toString();
-    return openHtmlDocumentAsync(
-        `/stock-items/qr/sheet${query ? `?${query}` : ''}`,
-        'QR sheet',
-    );
+    // Must stay a sync entry point: both openers claim the tab in the caller's
+    // own call stack (R-046), so awaiting anything before this line would
+    // re-break "Print one" exactly the way FU-648 described.
+    if (options.ids && options.ids.length > 0) {
+        // A selection travels in the body — a few hundred ids in a query
+        // string is past what gunicorn / nginx will accept on the request line.
+        return openHtmlDocumentAsync(
+            '/stock-items/qr/sheet',
+            'QR sheet',
+            { ids: options.ids, ...(options.layout ? { layout: options.layout } : {}) },
+        );
+    }
+    const query = options.layout
+        ? `?${new URLSearchParams({ layout: options.layout }).toString()}`
+        : '';
+    return openHtmlDocumentAsync(`/stock-items/qr/sheet${query}`, 'QR sheet');
 }

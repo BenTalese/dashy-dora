@@ -2959,6 +2959,53 @@ exceptions, which still must be commented) · **Source** (where it was establish
   own settings page, its API field and a help paragraph; caption copy asserting
   a gate that no `v-if`, route guard or query filter implements.
 
+### R-101: An async load keyed by what is on screen discards a result for a key that has moved on
+- **Rule:** a fetch whose result is written into state that belongs to a
+  *current selection* (a route param, the focused week, the open list or
+  template, the selected report range, the item in the peek) captures that
+  key before the `await` and, after it, writes nothing when the key no longer
+  matches (`const id = listId.value; … if (id !== listId.value) return;`), or
+  uses a request counter (`const req = ++seq; … if (req !== seq) return;`).
+  The `loading` flag and any error state follow the same guard. Mutations
+  that rebuild a document from a snapshot (the planner's whole-entry PUT) run
+  through one queue so each builds from the plan the previous one refreshed.
+- **Why:** the 2026-10-29 QA sweep found the same race in twenty places
+  (recipe page and cook mode, the item page and its QR label, the shopping
+  list, its templates and preview, the planner's ingredients, budget,
+  suggestions and swap panel, the reports page and its movers card, price
+  history, the reconcile set editor, the lighter dialog, the builder
+  preview). Each had been written as a plain `x.value = await get(id)`, so a
+  fast A→B switch showed A under B's URL and the next save PATCHed the wrong
+  entity.
+- **How to comply:** capture the key or counter in the same function as the
+  `await`; put the guard before *every* write that follows it, including the
+  `catch` and the `finally` that clears `loading`. A load that is not keyed
+  (the stores' household-wide lists) uses the request counter so the latest
+  request wins.
+- **Violation signal:** `.value = await` in a function that reads a route
+  param, a focused key or a selected id without a comparison after the await.
+- **Established:** 2026-10-29 (autonomous QA sweep). See ADR-098.
+
+### R-102: A SQLite migration runs with foreign keys OFF, and a batch rebuild re-creates its CHECKs by exact name
+- **Rule:** `migrations/env.py` turns `PRAGMA foreign_keys` off for the whole Alembic run on SQLite (and back on
+  after), and refuses to commit an upgrade that introduced dangling references (`PRAGMA foreign_key_check` counts
+  per child/parent, before vs after). A migration that batch-rebuilds a table with a CHECK constraint re-creates that
+  CHECK under its exact model name (not through the naming convention, which re-applies the `ck_<table>_` prefix on
+  every rebuild). A migration that drops or renames a constraint reflects the name that actually exists on the
+  current dialect rather than assuming the convention produced it.
+- **Why:** the app sets `foreign_keys=ON` on every connection, so every earlier batch rebuild of a parent table
+  cascade-deleted its CASCADE children and blanked its SET NULL links (FU-965); three CHECK names had doubled
+  prefixes; and eight revisions failed on Postgres because they assumed SQLite-derived names or SQLite's
+  integer-as-boolean (2026-10-30 portability audit).
+- **How to comply:** write data migrations with `sa.table(...).update().values(sa.true())`, quote mixed-case table
+  names in raw SQL, resolve a constraint name with the migration's `_existing_fk_name()` / `_reflected()` helpers (see
+  `d3f8b1a6c4e2`, `d4f9b2e7a318`), and run the offline Postgres DDL check (`scratchpad/fix/gen.sh` pattern: emit the
+  chain with `--sql` on the postgresql dialect against a stateful fake inspector) before shipping a migration.
+  `test__migrations__migrated_schema_matches_orm_metadata` now compares names and types, so drift fails the suite.
+- **Violation signal:** `batch_alter_table(` without re-created CHECKs on a table that has one; `= 1` / `= 0` on a
+  boolean in migration SQL; an unquoted mixed-case table name in `op.execute`.
+- **Established:** 2026-10-30 (autonomous QA round 2). See ADR-099.
+
 ## ADR process (evaluate every task)
 
 At the end of each work unit, ask: **did this task make or rely on a decision that
@@ -6379,3 +6426,44 @@ A non-binding cookbook of solutions to recurring problems. Not rules — just a
   mark-open expiry prompt) stays a component passed to `$q.dialog({
   component })`; the copy still has to say what is lost — the colour is not
   the warning.
+
+### ADR-098: Keyed loads guard against stale responses; snapshot mutations queue (promotes R-101)
+- **Date / task:** 2026-10-29 (autonomous QA sweep)
+- **Status:** accepted
+- **Context:** Twenty surfaces wrote `state = await fetch(key)` with no check
+  that `key` was still the one on screen, and the planner rebuilt its whole
+  entry list from a snapshot on every tap, so two fast taps both sent "+1
+  from 1". None of it showed on a fast local backend, all of it shows on a
+  phone on the shop floor.
+- **Decision:** every keyed load captures its key (or a request counter)
+  before the `await` and writes nothing afterwards when it has moved on;
+  whole-document mutations go through one promise chain per document
+  (`queuePlanMutation`), each step reading the refreshed document (R-101).
+- **Alternatives considered:** `AbortController` cancellation on every
+  change. Rejected: the client calls through `AxiosHttpClient`, which has no
+  per-call signal, and a cancelled request still has to be ignored on the
+  way back; the guard is the part that matters. A generic `useKeyedLoad`
+  composable: deferred until a third shape of the same guard appears — today
+  the two shapes (key compare, counter) are each one line.
+- **Consequences:** a late response is dropped silently, so a surface that
+  needs the *latest* data after a key change must re-request (the picker's
+  `week` prop re-requesting suggestions is that pattern). Loading flags are
+  cleared only by the owning request.
+
+### ADR-099: SQLite migrations run with foreign keys off; constraint names are reflected, never assumed (promotes R-102)
+- **Date / task:** 2026-10-30 (autonomous QA round 2 — Postgres portability + migration repair)
+- **Status:** accepted
+- **Context:** The chain had only ever run on SQLite from an empty database. An offline Postgres emission found eight
+  revisions that fail there (unquoted `"StockItem"`, `SET is_active = 1`, a VARCHAR(36) FK onto a UUID key, two
+  `drop_constraint` names that only SQLite's batch rebuild ever produced); and the batch rebuilds themselves, run
+  with the app's `foreign_keys=ON`, cascade-deleted child rows (FU-965).
+- **Decision:** `env.py` owns the SQLite FK pragma for the run and verifies no new dangling references; migrations
+  that drop/rename constraints reflect the live name per dialect; a batch rebuild re-creates CHECKs by exact name;
+  two forward migrations (`e7a2c5f9b3d1`, `f4b8d1c6a9e2`) converge existing installs on the model's column types and
+  constraint names, reflect-first so they are no-ops where already right (R-006 carve-out, explained inline). The
+  schema-drift test compares names and types, not just column sets.
+- **Alternatives considered:** rewriting history (squash the chain) — rejected, existing SQLite installs sit at
+  various revisions; a Postgres-only fix in the old files — rejected, both dialects must emit from one file.
+- **Consequences:** `test__migrations__upgrade_head_runs_on_postgres` still needs `DORA_TEST_POSTGRES_URL` (FU-405);
+  until CI runs it, the offline emission is the gate. Downgrades of the two convergence migrations are no-ops
+  (allow-listed).

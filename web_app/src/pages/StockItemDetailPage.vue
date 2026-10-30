@@ -9,8 +9,8 @@
              three actions live inline on the page already. Show QR stays
              since it's not reachable elsewhere. -->
         <div class="row items-center no-wrap q-mb-md q-gutter-sm stock-detail__header">
-            <BaseButton v-if="!embedded" variant="icon" :icon="ICONS.arrow_back" @click="goBack" />
-            <BaseButton v-else variant="icon" :icon="ICONS.close" @click="emit('close')">
+            <BaseButton aria-label="Back" v-if="!embedded" variant="icon" :icon="ICONS.arrow_back" @click="goBack" />
+            <BaseButton aria-label="Close panel" v-else variant="icon" :icon="ICONS.close" @click="emit('close')">
                 <BaseTooltip>Close panel</BaseTooltip>
             </BaseButton>
             <!-- 2026-08-24 feedback: a long name used to wrap, which pushed the
@@ -502,6 +502,7 @@
                                                  doesn't nudge the +Nd buttons — those stay
                                                  anchored to the right. -->
                                             <BaseButton
+                                                aria-label="Clear expiry"
                                                 v-if="detail.expiry_date"
                                                 variant="danger-icon"
                                                 size="sm"
@@ -706,6 +707,7 @@
                                     <q-item-section side>
                                         <div class="row items-center no-wrap">
                                             <BaseButton
+                                                :aria-label="`Rename ${pb.label}`"
                                                 variant="icon"
                                                 :icon="ICONS.edit"
                                                 :disable="busy"
@@ -714,6 +716,7 @@
                                                 <BaseTooltip>Rename</BaseTooltip>
                                             </BaseButton>
                                             <BaseButton
+                                                :aria-label="`Remove ${pb.label}`"
                                                 variant="icon"
                                                 :icon="ICONS.delete_outline"
                                                 :disable="busy"
@@ -918,7 +921,8 @@
                                         @click.stop
                                     />
                                     <BaseButton
-                                        v-if="prod.web_url"
+                                        :aria-label="`Open on ${prod.store_name}`"
+                                        v-if="isWebLink(prod.web_url)"
                                         variant="icon"
                                         :icon="ICONS.open_in_new"
                                         :href="prod.web_url"
@@ -927,7 +931,7 @@
                                     >
                                         <BaseTooltip>Open on {{ prod.store_name }}</BaseTooltip>
                                     </BaseButton>
-                                    <BaseButton variant="icon" :icon="ICONS.link_off" class="text-negative" @click="onUnlink(prod.product_id)">
+                                    <BaseButton :aria-label="`Unlink ${prod.name}`" variant="icon" :icon="ICONS.link_off" class="text-negative" @click="onUnlink(prod.product_id)">
                                         <BaseTooltip>Unlink</BaseTooltip>
                                     </BaseButton>
                                 </q-card-actions>
@@ -1027,6 +1031,7 @@
                                      without the row getting cluttered. -->
                                 <div class="row no-wrap items-center">
                                     <BaseButton
+                                        :aria-label="`Edit note or ratio for ${sub.name}`"
                                         variant="icon"
                                         :icon="ICONS.edit"
                                         @click.stop="onEditSubstituteMetadata(sub)"
@@ -1034,6 +1039,7 @@
                                         <BaseTooltip>Edit note / ratio</BaseTooltip>
                                     </BaseButton>
                                     <BaseButton
+                                        :aria-label="`Remove substitute ${sub.name}`"
                                         variant="icon"
                                         :icon="ICONS.link_off"
                                         class="text-negative"
@@ -1173,6 +1179,7 @@
                                 </q-item-section>
                                 <q-item-section side>
                                     <BaseButton
+                                        :aria-label="`Remove barcode ${bc.barcode}`"
                                         v-if="bc.source === 'direct'"
                                         variant="icon"
                                         :icon="ICONS.delete"
@@ -1441,6 +1448,12 @@
     // peek splitter it is NOT in a q-page-container, so <q-page> can't resolve a
     // layout — fall back to a plain <div> there. Document-scroll either way.
     const rootTag = computed(() => (props.embedded ? 'div' : QPage));
+
+    // The server validates the scheme on write; this guards older rows so a
+    // stored `javascript:` (or any non-web) URL never becomes a live link.
+    function isWebLink(url: string | null | undefined): url is string {
+        return !!url && /^https?:\/\//i.test(url.trim());
+    }
     const emit = defineEmits<{
         (e: 'close'): void;
         /** Round-17: emitted when the user clicks a substitute inside the
@@ -1540,21 +1553,26 @@
     // behind a header button + modal, so the fetch is keyed to that tab opening.
     // Still lazy — most visits to this page never open Scanning, and this is a
     // network round-trip per item.
+    // Bumped on every fetch and on an id swap (peek panel), so a response for
+    // the previous item can't land under the new one.
+    let qrRequest = 0;
     async function ensureQrLoadedAsync() {
         if (qrSrc.value || qrLoading.value) return;
+        const token = ++qrRequest;
         qrLoading.value = true;
         qrError.value = null;
         try {
             // size 512 looks crisp on retina; the box clamps to 256.
-            qrSrc.value = await fetchQrImageUrlAsync(stockItemId.value, 512);
+            const src = await fetchQrImageUrlAsync(stockItemId.value, 512);
+            if (token === qrRequest) qrSrc.value = src;
         } catch (error) {
             // The reason, not just the fact. This used to be a bare sentence
             // with the error discarded, which is why the reported failure
             // (FU-648) survived two investigations unexplained — there was
             // nothing for the one person who could see it to report back.
-            qrError.value = describeQrFailure(error);
+            if (token === qrRequest) qrError.value = describeQrFailure(error);
         } finally {
-            qrLoading.value = false;
+            if (token === qrRequest) qrLoading.value = false;
         }
     }
 
@@ -1573,6 +1591,15 @@
 
     const tab = ref<string>(
         typeof route.query.section === 'string' ? route.query.section : 'overview',
+    );
+    // Dora's "Find substitutes" pushes `?section=substitutes` onto this same
+    // page, which reuses the component — follow the query after mount too.
+    const TAB_NAMES = ['overview', 'products', 'recipes', 'substitutes', 'scanning', 'lists', 'history'];
+    watch(
+        () => route.query.section,
+        (section) => {
+            if (typeof section === 'string' && TAB_NAMES.includes(section)) tab.value = section;
+        },
     );
     // if the URL pointed at ?section=products but products
     // is off (or the admin flips it off later), fall back to Overview so
@@ -1864,7 +1891,7 @@
         unit: string;
         store_id: string | null;
         pack_count: number | null;
-    }) {
+    }, done: () => void) {
         await withBusyReload(() => stockItemApi.addPriceObservationAsync(stockItemId.value, {
             total_price: value.total_price,
             total_measure: value.total_measure,
@@ -1872,6 +1899,9 @@
             store_id: value.store_id ?? null,
             pack_count: value.pack_count ?? null,
         }));
+        // Only close the widget's dialog once the save landed (a throw above
+        // keeps it open with the typed values).
+        done();
     }
     // Multipack (FU-227 follow-up): "4 × 125g" instead of "500g flat" when
     // the observation carries a pack count. Per-pack = total / count.
@@ -2022,14 +2052,24 @@
         void router.push(`/cookbook/${recipeId}/cook`);
     }
     async function onAddMissing(_recipeId: string, stockItemIds: string[]) {
-        const primary = shoppingListStore.quickAddTargetListId;
-        if (!primary) {
-            await actions.addToList(stockItemIds[0] ?? stockItemId.value);
-            return;
-        }
+        await addIdsToPrimary(stockItemIds.length ? stockItemIds : [stockItemId.value]);
+    }
+    // Shared by the recipe-card "add missing" / "add all" actions. With no
+    // single quick-add target (0 or 2+ drafts), the first id goes through
+    // `addToList`, which resolves the list interactively and returns where it
+    // landed; the rest follow it there (StockOverview's bulkAddToPrimary shape).
+    async function addIdsToPrimary(ids: string[]) {
         busy.value = true;
         try {
-            await slActions.addItems(primary, stockItemIds.map((id) => ({ stock_item_id: id })));
+            let listId = shoppingListStore.quickAddTargetListId;
+            let rest = ids;
+            if (!listId) {
+                listId = await actions.addToList(ids[0]!);
+                rest = ids.slice(1);
+            }
+            if (listId && rest.length > 0) {
+                await slActions.addItems(listId, rest.map((id) => ({ stock_item_id: id })));
+            }
         } finally {
             busy.value = false;
         }
@@ -2059,17 +2099,7 @@
             .map((ing) => ing.stock_item_id)
             .filter((id): id is string => !!id);
         if (ids.length === 0) return;
-        const primary = shoppingListStore.quickAddTargetListId;
-        if (!primary) {
-            await actions.addToList(ids[0] ?? stockItemId.value);
-            return;
-        }
-        busy.value = true;
-        try {
-            await slActions.addItems(primary, ids.map((id) => ({ stock_item_id: id })));
-        } finally {
-            busy.value = false;
-        }
+        await addIdsToPrimary(ids);
     }
 
     // ── Substitutes ──────────────────────────────────────────────────────
@@ -2517,10 +2547,13 @@
     }
 
     async function loadDetail() {
+        const id = stockItemId.value;
         loading.value = true;
         loadError.value = null;
         try {
-            const d = await stockItemApi.getDetailAsync(stockItemId.value);
+            const d = await stockItemApi.getDetailAsync(id);
+            // The peek panel can swap ids mid-flight — drop a stale response.
+            if (id !== stockItemId.value) return;
             const keepDrafts = detail.value?.stock_item_id === d.stock_item_id && isDirty.value;
             detail.value = d;
             hydrateForm(d, keepDrafts);
@@ -2528,17 +2561,25 @@
             // List membership (the "on lists" tab) comes from the shopping-list
             // store, loaded on mount and refreshed by the list actions themselves.
         } catch (err) {
+            if (id !== stockItemId.value) return;
             loadError.value = 'Could not load this stock item.';
             console.warn('stock-item detail load failed', err);
         } finally {
-            loading.value = false;
+            if (id === stockItemId.value) loading.value = false;
         }
     }
 
-    watch(stockItemId, () => {
-        // The peek panel swaps ids in place — drop the cached QR so the tab
-        // can't show the previous item's label, and re-fetch if it's the tab
-        // we're currently looking at.
+    watch(stockItemId, (id) => {
+        // Leaving the page empties the id; keep the old detail up through the
+        // layout cross-fade rather than blanking it (R-037).
+        if (!id) return;
+        // The peek panel swaps ids in place — drop the previous item's detail
+        // (so a failed load can't leave it on screen for saveField to patch)
+        // and its cached QR, invalidating any in-flight QR fetch, then re-fetch
+        // the label if it's the tab we're currently looking at.
+        detail.value = null;
+        qrRequest++;
+        qrLoading.value = false;
         qrSrc.value = null;
         qrError.value = null;
         if (tab.value === 'scanning') void ensureQrLoadedAsync();

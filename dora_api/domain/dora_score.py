@@ -203,7 +203,22 @@ def compose_with_trend(
     the user's data doesn't span a week yet."""
     if current.composite is None or lagged is None or lagged.composite is None:
         return current
-    delta = current.composite - lagged.composite
+    # Like for like: a component unscored in either window (budget is never
+    # scored on the lagged pass) is dropped from BOTH sides, or an unchanged
+    # household reads as a swing purely from the component set differing.
+    scored_in_both = (
+        {c.key for c in current.components if c.score is not None}
+        & {c.key for c in lagged.components if c.score is not None}
+    )
+    current_shared = _composite_of(
+        [c for c in current.components if c.key in scored_in_both]
+    )
+    lagged_shared = _composite_of(
+        [c for c in lagged.components if c.key in scored_in_both]
+    )
+    if current_shared is None or lagged_shared is None:
+        return current
+    delta = current_shared - lagged_shared
     # Hysteresis: don't render an arrow for tiny drift (±2 points).
     # The composite is 0-100 and each component is a mean of a small
     # integer signal — 2 points isn't a real change.
@@ -305,8 +320,8 @@ def _score_plan_coverage(inputs: DoraScoreInputs) -> DoraScoreComponent:
 
     The one **forward**-looking component. Every other signal grades the
     trailing 30 days; this one grades the next 7, which means it contributes
-    nothing to the trend arrow — the lagged recompute sees the same future and
-    returns the same number, so it cancels in the delta. That is a real
+    nothing to the trend arrow — the handler gathers it once and feeds the same
+    counts to both passes, so it cancels in the delta. That is a real
     limitation and it is the right trade: the arrow is a secondary flourish,
     and "your plan is half-uncookable" is the single most actionable thing this
     card can say. Anyone re-tuning the trend should know it moves on three

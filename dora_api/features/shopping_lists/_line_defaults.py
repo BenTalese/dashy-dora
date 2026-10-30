@@ -68,13 +68,15 @@ def apply_line_defaults(repository: Repository, lines: List[ShoppingListLine]) -
     product_ids = list({
         p.selected_product_id for p in [*latest.values(), *targets] if p.selected_product_id
     })
+    # R-032 — the store is read off the FK column (`_store_id`), not the
+    # noload `store` relationship: a Product already in the session (e.g. the
+    # caller's own pick) comes back from the identity map without it, even
+    # with `.include(STORE)`.
     products: Dict = {}
     if product_ids:
         products = {
             p.id: p
-            for p in repository.get(Product)
-            .include(Product.Fields.STORE)
-            .all(EntityField(Product, "id").in_(product_ids))
+            for p in repository.get(Product).all(EntityField(Product, "id").in_(product_ids))
         }
 
     for line in targets:
@@ -87,9 +89,9 @@ def apply_line_defaults(repository: Repository, lines: List[ShoppingListLine]) -
             if line.selected_product_id is None and product is not None:
                 line.selected_product_id = product.id
                 if line.planned_store_id is None:
-                    line.planned_store_id = product.store.id
+                    line.planned_store_id = product._store_id
         picked = products.get(line.selected_product_id)
         if line.planned_store_id is None and picked is not None:
-            line.planned_store_id = picked.store.id
+            line.planned_store_id = picked._store_id
         if line.planned_store_id is None and item is not None:
             line.planned_store_id = item.usual_store_id

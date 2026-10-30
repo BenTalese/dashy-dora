@@ -248,6 +248,28 @@ def test__restock_radar__LongStandingLow__IsOutsideTheWindow(api):
     assert item["stock_item_id"] not in {r["stock_item_id"] for r in rows}
 
 
+def test__restock_radar__AwareStoredInstant__ComparesWithoutTypeError(api):
+    """Postgres reads `stock_level_last_updated` back aware, SQLite naive; the
+    cutoff must compare against either (R-098). The aware value is set on the
+    in-session entity so the handler sees exactly what Postgres would hand it.
+    """
+    from dora_api.features.dashboard.get_restock_radar import GetRestockRadarHandler
+
+    item = _make_item(stock_level_id=_stock_level_id(2))
+
+    with app.app_context():
+        repository = SqlAlchemyRepository()
+        entity = repository.get(StockItem).by_id(UUID(item["stock_item_id"]))
+        assert entity is not None
+        entity.stock_level_last_updated = datetime.now(timezone.utc)
+        try:
+            dto = GetRestockRadarHandler(repository).handle()
+        finally:
+            repository.session.rollback()
+
+    assert item["stock_item_id"] in {str(r.stock_item_id) for r in dto.rows}
+
+
 def test__restock_radar__PlannedMeal__FlagsTheRowAsPlanned(api):
     """`is_planned` is what survived the "Before you shop" merge.
 

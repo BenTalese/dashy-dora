@@ -140,6 +140,24 @@ def test__meal_plan_cost__EntryIsPricedAtItsPlannedServings__NotTheRecipesOwn(ap
     assert (plan["cost_counted_meals"], plan["cost_total_meals"]) == (1, 1)
 
 
+def test__create_meal_plan__PricedRecipe__ResponseBodyCarriesTheCost(api):
+    """The POST echo is built by `handle_by_id`; while it held the plan, its
+    recipes sat in the identity map with `ingredients` noloaded EMPTY and the
+    cost pass priced nothing (R-032)."""
+    set_money_enabled(True)
+    today, slot = _household_today(), _slot()
+
+    resp = requests.post(MEAL_PLANS, json={
+        "start_date": today.isoformat(),
+        "entries": [{"recipe_id": _four_dollar_recipe(), "scheduled_for": today.isoformat(),
+                     "servings": 2, "slot": slot}],
+    })
+
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["entries"][0]["estimated_cost"] == 2.0
+    assert resp.json()["estimated_cost"] == 2.0
+
+
 def test__meal_plan_cost__DayAndWeekTotals__AgreeWithTheEntriesTheySum(api):
     set_money_enabled(True)
     today, slot = _household_today(), _slot()

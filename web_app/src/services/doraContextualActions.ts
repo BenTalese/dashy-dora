@@ -82,11 +82,14 @@ export function contextualActionsFor(
                 recipeId: id,
             },
             {
+                // The planner is slot-first (arm a day's slot, then pick the
+                // recipe) and has no recipe preselect to hand off to, so this
+                // only opens it — it used to say "Plan this for a day" and pass
+                // a `recipe_id` the planner never read.
                 kind: 'navigate',
-                label: 'Plan this for a day',
+                label: 'Open Meal Plans',
                 icon: ICONS.event_note,
                 path: '/meal-plans',
-                query: { recipe_id: id },
             },
             {
                 kind: 'add_missing',

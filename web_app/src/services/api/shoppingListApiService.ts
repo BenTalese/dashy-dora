@@ -4,19 +4,7 @@ import type {
     ShoppingListStatus,
     ShoppingListSummary
 } from 'src/models/shoppingList';
-import AxiosHttpClient, { resolveBaseURL } from './axiosHttpClient';
-
-/** FU-334 — URL for a single receipt attachment (raw bytes). Pass a
- *  `version` (e.g. a counter bumped after upload) to bust the browser cache. */
-export function shoppingListAttachmentUrl(
-    listId: string,
-    attachmentId: string,
-    version?: number | string,
-): string {
-    const base = resolveBaseURL();
-    const suffix = version !== undefined ? `?v=${encodeURIComponent(String(version))}` : '';
-    return `${base}/shopping-lists/${listId}/attachments/${attachmentId}${suffix}`;
-}
+import AxiosHttpClient from './axiosHttpClient';
 
 export type CreateShoppingListCommand = {
     name?: string;

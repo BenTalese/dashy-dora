@@ -74,6 +74,22 @@
             </q-card>
         </div>
 
+        <!-- ── Session failed to load ───────────────────────────────
+             Ahead of `nothingToDo`: empty arrays after a failed read are not
+             "all caught up". -->
+        <div v-else-if="loadError" class="runner-card-wrap">
+            <q-card class="runner-card" flat>
+                <q-card-section class="text-center q-pt-lg">
+                    <q-icon :name="ICONS.error_outline" color="negative" size="64px" />
+                    <div class="text-h5 q-mt-sm">Could not load the stocktake.</div>
+                    <div class="text-caption dora-text-muted-7 q-mt-xs">{{ loadError }}</div>
+                </q-card-section>
+                <q-card-actions align="center" class="q-pb-lg">
+                    <BaseButton label="Back to Stock" :to="'/stock'" />
+                </q-card-actions>
+            </q-card>
+        </div>
+
         <!-- ── Nothing to do at all ────────────────────────────────── -->
         <div v-else-if="nothingToDo" class="runner-card-wrap">
             <q-card class="runner-card" flat>
@@ -394,6 +410,7 @@
     const { addStockItemsToList } = useShoppingListActions();
 
     const loading = ref(true);
+    const loadError = ref<string | null>(null);
     const session = ref<StocktakeSessionItem[]>([]);
     const index = ref(0);
     const busy = ref(false);
@@ -414,12 +431,10 @@
     const sweepKeepId = ref<string | null>(null);
 
     /** No review, no walk, no sweep — the "all caught up" card. Distinct from
-     *  `done`, which is the summary of work actually performed. */
-    const nothingToDo = computed(() =>
-        reviewItems.value.length === 0
-        && session.value.length === 0
-        && sweepItems.value.length === 0,
-    );
+     *  `done`, which is the summary of work actually performed. Snapshotted
+     *  at load: working through the phases empties these arrays, and a
+     *  finished run must get its summary, not this card. */
+    const nothingToDo = ref(false);
 
     /** The first phase with anything in it, in fixed order. */
     function firstNonEmptyPhase(): Phase {
@@ -847,6 +862,9 @@
             session.value = result.walk;
             sweepItems.value = result.sweep;
             phase.value = firstNonEmptyPhase();
+            nothingToDo.value = phase.value === 'done';
+        } catch (err) {
+            loadError.value = toastCaption(err) || 'Please try again.';
         } finally {
             loading.value = false;
         }

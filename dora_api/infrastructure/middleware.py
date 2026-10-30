@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import time
 from uuid import uuid4
 
@@ -69,14 +70,25 @@ PUBLIC_ENDPOINTS = frozenset({
 })
 
 
+# A caller's X-Request-Id is kept only if it fits `AuditEvent.request_id`
+# (String(64)) and is plain token characters. Anything else gets a fresh id:
+# an over-long value fails the audit insert on Postgres, and the id is echoed
+# into logs and the response header, so it must not carry arbitrary text.
+_REQUEST_ID = re.compile(r"[A-Za-z0-9._:-]{1,64}")
+
+
+def _request_id(incoming: str | None) -> str:
+    candidate = incoming.strip() if incoming else ""
+    return candidate if _REQUEST_ID.fullmatch(candidate) else uuid4().hex
+
+
 @MIDDLEWARE.before_app_request
 def handle_incoming_request():
     # ── Logging context ──────────────────────────────────────────────
     # X-Request-Id from the caller is honoured (round-trips across our
     # axios client, which generates one per call) so client + server
     # log lines correlate. Falls back to a fresh uuid4 for ad-hoc curls.
-    incoming = request.headers.get("X-Request-Id")
-    request_id = incoming.strip() if incoming else uuid4().hex
+    request_id = _request_id(request.headers.get("X-Request-Id"))
     set_request_id(request_id)
     set_user_id(session.get(SESSION_USER_ID_KEY))
     g.request_started_at = time.perf_counter()

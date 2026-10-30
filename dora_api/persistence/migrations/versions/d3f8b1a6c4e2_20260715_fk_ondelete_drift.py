@@ -30,6 +30,7 @@ Revision ID: d3f8b1a6c4e2
 Revises: c1e8a5f3d9b2
 Create Date: 2026-07-15 00:00:00.000000
 """
+import sqlalchemy as sa
 from alembic import op
 
 
@@ -50,6 +51,22 @@ _FKS = [
 ]
 
 
+def _existing_fk_name(table, cols, conventional):
+    """The FK's current name. On SQLite the batch rebuild reflects these FKs
+    anonymous and names them by the convention, so `conventional` is right.
+    Postgres keeps whatever name the FK was created with, and
+    `Product.store_id`'s is still `fk_Product_merchant_id_Merchant` from before
+    the merchant→store rename (a3e9f6c2d8b4), which renamed the column and
+    table but not the constraint."""
+    bind = op.get_bind()
+    if bind.dialect.name == 'sqlite':
+        return conventional
+    for fk in sa.inspect(bind).get_foreign_keys(table):
+        if list(fk['constrained_columns']) == list(cols) and fk.get('name'):
+            return fk['name']
+    return conventional
+
+
 def _apply(ondelete_for):
     """Recreate each FK with `ondelete_for(model_ondelete)`, one batch per table
     so a table with several drifted FKs (StockItem) rebuilds only once."""
@@ -57,9 +74,10 @@ def _apply(ondelete_for):
     for table, name, ref, cols, refcols, model_od in _FKS:
         by_table.setdefault(table, []).append((name, ref, cols, refcols, model_od))
     for table, fks in by_table.items():
+        existing = {name: _existing_fk_name(table, cols, name) for name, _r, cols, _rc, _od in fks}
         with op.batch_alter_table(table) as batch:
             for name, ref, cols, refcols, model_od in fks:
-                batch.drop_constraint(batch.f(name), type_="foreignkey")
+                batch.drop_constraint(batch.f(existing[name]), type_="foreignkey")
                 batch.create_foreign_key(
                     batch.f(name), ref, cols, refcols, ondelete=ondelete_for(model_od),
                 )

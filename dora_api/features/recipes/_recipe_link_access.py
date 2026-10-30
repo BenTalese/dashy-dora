@@ -71,17 +71,19 @@ class RecipeLinkAccess:
         """Map filter inputs (ids OR human-friendly names) to ids, silently
         dropping anything that matches neither. Lets the SPA pass ids and
         Dora's tools pass names through the same filter path."""
+        return {resolved for resolved in self._resolve_each(values) if resolved is not None}
+
+    def _resolve_each(self, values: Iterable[str]) -> list[UUID | None]:
+        """One entry per input: its id, or None when it names nothing."""
         known = self._all_ids()
         by_name = self._name_to_id()
-        out: set[UUID] = set()
+        out: list[UUID | None] = []
         for raw in values:
             coerced = _coerce_uuid(raw)
             if coerced is not None and coerced in known:
-                out.add(coerced)
-                continue
-            named = by_name.get(str(raw).strip().lower())
-            if named is not None:
-                out.add(named)
+                out.append(coerced)
+            else:
+                out.append(by_name.get(str(raw).strip().lower()))
         return out
 
     def ids_for_recipes(self, recipe_ids: Iterable[UUID]) -> dict[UUID, list[UUID]]:
@@ -117,8 +119,12 @@ class RecipeLinkAccess:
 
     def recipe_ids_with_all(self, ids: Iterable) -> set[UUID]:
         """Recipes linked to *every* id in the input (a multi-select means
-        "fits all of these")."""
-        wanted = list(self.resolve_filter_values(ids))
+        "fits all of these"). An input that names nothing can't be fitted,
+        so it matches no recipe — dropping it would widen the filter."""
+        resolved = self._resolve_each(v for v in ids if str(v).strip())
+        if None in resolved:
+            return set()
+        wanted = list(set(resolved))
         if not wanted:
             return set()
         link = self._link()

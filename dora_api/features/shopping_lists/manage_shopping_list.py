@@ -225,6 +225,10 @@ class FinishShoppingListHandler:
         lst: ShoppingList | None = self.repository.get(ShoppingList).by_id(shopping_list_id)
         if lst is None:
             return FinishShoppingListResponse(not_found=True)
+        # Idempotent: a repeat POST (double-tap, retry) must not re-stock
+        # every ticked item, re-harvest prices or move completed_at.
+        if lst.is_done:
+            return FinishShoppingListResponse()
 
         ticked_lines = self.repository.get(ShoppingListLine).all(
             EntityField(ShoppingListLine, "shopping_list_id").eq(shopping_list_id)

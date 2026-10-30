@@ -117,7 +117,7 @@
                 :value="recipe.available_meals"
                 :aria-label="`Cooked meals ready to eat - ${recipe.name}`"
                 @focus="onTileFocus"
-                @keydown.enter.prevent="commitTile"
+                @keydown.enter.prevent="blurTile"
                 @keydown.esc.prevent="cancelTile"
                 @blur="commitTile"
             >
@@ -184,6 +184,11 @@
     function onTileFocus(event: FocusEvent) {
         poolArmed.value = true;
         (event.target as HTMLInputElement | null)?.select();
+    }
+    // Enter only blurs; the blur is the one commit. `poolAdjust` is a delta,
+    // so committing on Enter AND on the blur that follows sent it twice.
+    function blurTile(event: Event) {
+        (event.target as HTMLInputElement).blur();
     }
     function commitTile(event: Event) {
         const input = event.target as HTMLInputElement;

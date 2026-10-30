@@ -88,3 +88,37 @@ def test__bulk_verdicts__empty_list_is_an_empty_map(api):
 def test__bulk_verdicts__unknown_list_is_404(api):
     resp = requests.get(f"{LISTS}/{uuid4()}/buy-verdicts")
     assert resp.status_code == 404, resp.text
+
+
+def _finished_list_with_priced_line(stock_item_id: str, *, ticked: bool) -> None:
+    list_id = _make_draft()
+    line_id = requests.post(
+        f"{LISTS}/{list_id}/lines", json={"stock_item_id": stock_item_id},
+    ).json()["line_id"]
+    assert requests.patch(
+        f"{LISTS}/{list_id}/lines/{line_id}",
+        json={"actual_unit_price": 4.0, "is_ticked": ticked},
+    ).status_code == 204
+    assert requests.post(f"{LISTS}/{list_id}/finish").status_code == 200
+
+
+def test__gather_verdict_inputs__PricedButUntickedLineOnDoneList__IsNotAPurchase(api):
+    # R-061 — a stored price is not evidence of a purchase; only a ticked
+    # (bought) line on a finished list is.
+    from dora_api.app import app
+    from dora_api.domain.entities.stock_item import StockItem
+    from dora_api.features.stock_items.get_buy_verdict import \
+        gather_verdict_inputs_for_items
+    from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
+
+    item_id = make_stock_item(stock_level_id=_stock_level_id(),
+                              name=f"Verdict R-061 {uuid4().hex[:8]}")["stock_item_id"]
+    _finished_list_with_priced_line(item_id, ticked=True)
+    _finished_list_with_priced_line(item_id, ticked=False)
+
+    with app.app_context():
+        repo = SqlAlchemyRepository()
+        item = repo.get(StockItem).by_id(item_id)
+        inputs = gather_verdict_inputs_for_items(repo, [item])[item.id]
+
+    assert len(inputs.price_samples) == 1

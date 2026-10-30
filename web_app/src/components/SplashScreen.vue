@@ -69,6 +69,7 @@
     import offlineSrc from 'src/assets/dora/dorabot-fatal-error-or-offline.png';
     import { onBeforeUnmount, ref, watch } from 'vue';
     import { backendBaseUrlIsUserSet } from 'src/services/api/backendUrl';
+    import { isNativePlatform } from 'src/helpers/platform';
 
     const props = defineProps<{ error: string | null }>();
     const emit = defineEmits<{ retry: [] }>();
@@ -79,7 +80,9 @@
     // plain web install on its env default has no URL to change, so retry is
     // the only honest action there. Read once at construction: the boot file
     // has already populated the cache from storage before we mount.
-    const showChangeUrl = backendBaseUrlIsUserSet();
+    // Native always offers it, even with nothing saved yet: there is no env
+    // default to fall back on there.
+    const showChangeUrl = isNativePlatform() || backendBaseUrlIsUserSet();
 
     // Shared with About (finalisation 15-R9); the splash can't depend on the
     // router, so it reloads outright.

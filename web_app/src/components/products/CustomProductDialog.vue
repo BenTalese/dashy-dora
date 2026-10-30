@@ -185,7 +185,7 @@
         form.image = null;
         Object.keys(errors).forEach((k) => { errors[k as keyof typeof errors] = ''; });
         try {
-            stores.value = (await storesApi.listAsync()).items;
+            stores.value = await storesApi.listAllAsync();
         } catch {
             stores.value = [];
         }

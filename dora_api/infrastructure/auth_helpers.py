@@ -58,7 +58,8 @@ from dora_api.domain.entities.auth_token import ALLOWED_PURPOSES, AuthToken
 #     ceiling. Werkzeug's `generate_password_hash` uses scrypt/pbkdf2
 #     (not bcrypt), so there's no 72-byte silent-truncation trap.
 #   - Rate-limiting per identity/IP is enforced separately by
-#     `rate_limit("auth.login", max_per_minute=5)` in `features/auth/login.py`
+#     `rate_limit("auth.login", max_per_minute=5)` per IP plus a per-username
+#     bucket (10 / 15 min) in `features/auth/login.py`
 #     (NIST §5.2.2 throttling).
 #
 # **No admin override.** The rules apply install-wide; making them
@@ -318,6 +319,10 @@ def build_reset_url(token: str) -> str:
 # deployments swap for Redis later.
 _buckets: dict[tuple[str, str], deque[float]] = {}
 _buckets_lock = Lock()
+# Per-key window length (seconds); keys absent here use the 60s default.
+_bucket_windows: dict[tuple[str, str], float] = {}
+_SWEEP_INTERVAL_SECONDS = 5.0
+_last_sweep = 0.0
 
 
 def _bucket_key(scope: str, subject: str | None = None) -> tuple[str, str]:
@@ -338,6 +343,7 @@ def _bucket_key(scope: str, subject: str | None = None) -> tuple[str, str]:
 
 def rate_limit(
     scope: str, max_per_minute: int, subject: str | None = None,
+    window_seconds: float = 60.0,
 ) -> bool:
     """Returns True if the call is within the limit, False otherwise.
 
@@ -349,12 +355,37 @@ def rate_limit(
     has a session.user_id) pass `str(user_id)` here so a shared
     household IP doesn't count multiple users against the same bucket
     (FU-458). For pre-auth routes leave it None to keep the IP fallback.
+
+    `window_seconds` widens the sliding window (default one minute, so
+    `max_per_minute` keeps its literal meaning for every existing caller).
+    A wider window lets a caller express "10 per 15 minutes" — used by the
+    per-username login bucket, which must not depend on the client IP
+    being trustworthy (a forged/misproxied `X-Forwarded-For` rotates the
+    IP bucket freely).
     """
     key = _bucket_key(scope, subject)
     now = time.monotonic()
     with _buckets_lock:
+        _bucket_windows[key] = window_seconds
+        # Evict keys whose whole window has passed — scopes embed emails and
+        # IPs, so the dict otherwise grows by one entry per subject ever seen
+        # (same sweep as `client_logs._allow`). Each key is judged against
+        # its own window so a 15-minute bucket isn't swept after 60s. Swept
+        # at most every few seconds: the scan is O(buckets) under the lock,
+        # and a client spraying usernames would otherwise make every login
+        # pay for the whole dict.
+        global _last_sweep
+        if not (0.0 <= now - _last_sweep < _SWEEP_INTERVAL_SECONDS):
+            _last_sweep = now
+            for stale_key in [
+                k for k, b in _buckets.items()
+                if not b or b[-1] < now - _bucket_windows.get(k, 60.0)
+            ]:
+                if stale_key != key:
+                    del _buckets[stale_key]
+                    _bucket_windows.pop(stale_key, None)
+        cutoff = now - window_seconds
         bucket = _buckets.setdefault(key, deque())
-        cutoff = now - 60.0
         while bucket and bucket[0] < cutoff:
             bucket.popleft()
         if len(bucket) >= max_per_minute:
@@ -365,17 +396,29 @@ def rate_limit(
 
 def rate_limit_remaining_seconds(
     scope: str, max_per_minute: int, subject: str | None = None,
+    window_seconds: float = 60.0,
 ) -> int:
     """Seconds until the oldest event in the bucket falls outside the
     sliding window. Used for the Retry-After response header. `subject`
-    must match what was passed to `rate_limit` — same key both sides."""
+    and `window_seconds` must match what was passed to `rate_limit` —
+    same key both sides."""
     key = _bucket_key(scope, subject)
     now = time.monotonic()
     with _buckets_lock:
         bucket = _buckets.get(key)
         if not bucket or len(bucket) < max_per_minute:
             return 0
-        return max(0, int(60.0 - (now - bucket[0])) + 1)
+        return max(0, int(window_seconds - (now - bucket[0])) + 1)
+
+
+def rate_limit_reset(scope: str, subject: str | None = None) -> None:
+    """Drop one bucket. Used after a *successful* login so the per-username
+    failure budget only ever counts attempts that didn't prove the password
+    (an attacker can't trigger this without already knowing it)."""
+    key = _bucket_key(scope, subject)
+    with _buckets_lock:
+        _buckets.pop(key, None)
+        _bucket_windows.pop(key, None)
 
 
 # ── Helpers used across endpoints ──────────────────────────────────────
@@ -407,6 +450,6 @@ __all__ = [
     "issue_token", "find_active_token", "consume_token",
     "revoke_tokens_for_user",
     "public_base_url", "spa_deep_link", "build_verify_url", "build_reset_url",
-    "rate_limit", "rate_limit_remaining_seconds",
+    "rate_limit", "rate_limit_remaining_seconds", "rate_limit_reset",
     "try_send",
 ]

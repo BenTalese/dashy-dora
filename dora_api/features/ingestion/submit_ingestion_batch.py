@@ -42,7 +42,7 @@ from typing import Literal
 from uuid import UUID
 
 from flask import request
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from dora_api.domain.entities.idempotency_key import IdempotencyKey
 from dora_api.domain.entities.ingestion_source import IngestionSource
@@ -51,6 +51,7 @@ from dora_api.domain.entities.ingestion_store_mapping import \
 from dora_api.domain.entities.store import Store
 from dora_api.domain.entities.product import Product
 from dora_api.domain.entities.product_offer import ProductOffer
+from dora_api.features.products.web_url import check_web_url
 from dora_api.features.products.offer_mapping import (OfferOutcome,
                                                        apply_offer_to_product)
 from dora_api.features.ingestion.product_identity import (StoreRef, find_ingested_product,
@@ -95,7 +96,8 @@ class _ProductIn(StoreRef):
     # `merchant_stockcode` carve-out: the producer's SKU code, kept
     # verbatim across the rename per the runbook.
     merchant_stockcode: str | None = Field(default=None, max_length=255)
-    web_url: str | None = Field(default=None, max_length=500)
+    # http(s) only, ≤ 255 (the column) — `products/web_url` owns the rule.
+    web_url: str | None = None
     source: str | None = Field(default=None, max_length=64)
     # The product picture as a `data:image/...;base64,...` URL, the form every
     # product image is stored in and `GET /products/<id>/image` decodes (same
@@ -106,6 +108,18 @@ class _ProductIn(StoreRef):
     # exist and the companion never sent one).
     image: str | None = image_field()
 
+    @field_validator("web_url")
+    @classmethod
+    def _web_url(cls, value: str | None) -> str | None:
+        # The whole batch is one request body, so a rejected field here fails
+        # every record in the push — and real producers send `""` or a
+        # relative path when they have no link. Degrade to "no link" instead
+        # (the strict rule stays on the SPA's create path).
+        try:
+            return check_web_url(value or None)
+        except ValueError:
+            return None
+
 
 class _OfferIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -115,6 +129,18 @@ class _OfferIn(BaseModel):
     price_was: float | None = Field(default=None, gt=0)
     observed_at: datetime
     source: str | None = Field(default=None, max_length=64)
+
+    @field_validator("observed_at")
+    @classmethod
+    def _aware_utc(cls, value: datetime) -> datetime:
+        # An offset-carrying instant was stored as naive local on SQLite then
+        # read back as UTC by `as_utc` — shifting every price by the
+        # producer's offset — so normalise to UTC here. A naive instant has
+        # always been read as UTC; keep that (documented in the ingestion
+        # guide) rather than fail the whole batch over one record.
+        if value.tzinfo is None or value.utcoffset() is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
 
 
 _IMAGE_DATA_URL_RE = re.compile(r"^data:image/[\w.+-]+;base64,")

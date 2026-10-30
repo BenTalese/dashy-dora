@@ -10,6 +10,8 @@ import type {
 } from 'src/services/api/authApiService';
 import { clearApiResponseCache } from 'src/services/api/apiResponseCache';
 import AuthApiService from 'src/services/api/authApiService';
+import { hasBackendBaseUrl } from 'src/services/api/backendUrl';
+import { isNativePlatform } from 'src/helpers/platform';
 import { NormalisedApiError, setUnauthorizedHandler } from 'src/services/api/axiosHttpClient';
 import { clearAllListState } from 'src/composables/useListState';
 import { computed, readonly, ref } from 'vue';
@@ -58,21 +60,45 @@ export const useAuthStore = defineStore('auth', () => {
         };
     }
 
+    // A response that isn't a user object (e.g. an HTML page served by a
+    // WebView or proxy at a non-API address) means "not signed in", never a
+    // truthy currentUser.
+    function asUser(payload: unknown): AuthenticatedUser | null {
+        if (typeof payload !== 'object' || payload === null) return null;
+        return typeof (payload as { user_id?: unknown }).user_id === 'string'
+            ? payload as AuthenticatedUser
+            : null;
+    }
+
+    const probeAsync = async () => {
+        // Native with no saved address: there's no backend to ask (the base
+        // URL would resolve against the WebView's own origin). Settle as
+        // signed-out so the router can render the address picker.
+        if (isNativePlatform() && !hasBackendBaseUrl()) {
+            bootstrapRequired.value = false;
+            currentUser.value = null;
+            isBootstrapped.value = true;
+            bootstrapError.value = null;
+            return;
+        }
+        // check fresh-install state first. If no admin
+        // exists yet, skip the /me probe (it'll 401) and let the
+        // router send the user to /setup. The probe is cheap
+        // (single COUNT) and explicitly public.
+        bootstrapRequired.value = (await authApiService.bootstrapRequiredAsync()) === true;
+        if (bootstrapRequired.value) {
+            currentUser.value = null;
+        } else {
+            currentUser.value = asUser(await authApiService.getMeAsync());
+        }
+        isBootstrapped.value = true;
+        bootstrapError.value = null;
+    };
+
     const runBootstrap = async () => {
         while (!isBootstrapped.value) {
             try {
-                // check fresh-install state first. If no admin
-                // exists yet, skip the /me probe (it'll 401) and let the
-                // router send the user to /setup. The probe is cheap
-                // (single COUNT) and explicitly public.
-                bootstrapRequired.value = await authApiService.bootstrapRequiredAsync();
-                if (bootstrapRequired.value) {
-                    currentUser.value = null;
-                } else {
-                    currentUser.value = await authApiService.getMeAsync();
-                }
-                isBootstrapped.value = true;
-                bootstrapError.value = null;
+                await probeAsync();
             } catch (error) {
                 bootstrapError.value =
                     error instanceof NormalisedApiError && error.isNetworkError
@@ -91,6 +117,13 @@ export const useAuthStore = defineStore('auth', () => {
         return inflightBootstrap;
     };
 
+    /** Re-run the boot probe in place after the backend address changes, so
+     *  the fresh-install / signed-in state reflects the new server. Leaves
+     *  the router view mounted; errors propagate to the caller. */
+    const rebootstrapAsync = async (): Promise<void> => {
+        await probeAsync();
+    };
+
     const retryBootstrap = () => {
         bootstrapError.value = null;
         const resolve = retryResolver;
@@ -101,7 +134,7 @@ export const useAuthStore = defineStore('auth', () => {
     /** Force a fresh /me probe (e.g. after the user restarts onboarding so
      *  `onboarding_completed_at` flips back to null and the guard kicks in). */
     const refreshAsync = async () => {
-        currentUser.value = await authApiService.getMeAsync();
+        currentUser.value = asUser(await authApiService.getMeAsync());
     };
 
     const loginAsync = async (command: LoginCommand) => {
@@ -192,6 +225,7 @@ export const useAuthStore = defineStore('auth', () => {
         imageVersionOf,
         bumpImageVersion,
         bootstrapAsync,
+        rebootstrapAsync,
         retryBootstrap,
         refreshAsync,
         loginAsync,

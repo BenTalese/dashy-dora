@@ -239,6 +239,20 @@ def test__get_meal_plans__StartDateWindowFilter__ReturnsOnlyPlansInWindow(api):
     assert _AfterId not in _Ids
 
 
+def test__get_meal_plans__NoSortRequested__NewestWeekFirst(api):
+    """Sorted by id alone the 50-row page was an arbitrary slice of the
+    household's weeks; the default is now `start_date` descending."""
+    _Today = _household_today()
+    _make_plan(start_date=(_Today + timedelta(days=400)).isoformat())
+    _Newest = _make_plan(start_date=(_Today + timedelta(days=500)).isoformat())
+
+    _Items = assert_envelope(requests.get(f"{MEAL_PLANS}?limit=5"))
+
+    assert _Items[0]["meal_plan_id"] == _Newest["meal_plan_id"]
+    _Starts = [p["start_date"] for p in _Items]
+    assert _Starts == sorted(_Starts, reverse=True)
+
+
 def test__get_meal_plans__FilteringOnNonExistentAttribute__IsBadRequest(api):
     _Response = requests.get(f"{MEAL_PLANS}?filter=poopusgoopus:eq:1")
 

@@ -144,6 +144,7 @@
         </div>
         <q-table
             v-else
+            ref="tableRef"
             :rows="rows"
             :columns="columns"
             row-key="audit_event_id"
@@ -220,7 +221,7 @@
                             {{ detail.severity }}
                         </q-chip>
                     </q-toolbar-title>
-                    <BaseButton variant="icon" :icon="ICONS.close" v-close-popup />
+                    <BaseButton aria-label="Close" variant="icon" :icon="ICONS.close" v-close-popup />
                 </q-toolbar>
                 <q-separator />
                 <q-card-section v-if="detail">
@@ -258,7 +259,8 @@
     import BaseDialog from 'src/components/BaseDialog.vue';
     import { ICONS } from 'src/style/icons';
     import { useQuasar } from 'quasar';
-    import { computed, onMounted, reactive, ref } from 'vue';
+    import { computed, onMounted, reactive, ref, watch } from 'vue';
+    import type { QTable } from 'quasar';
     import AuditApiService, { type AuditEvent, type AuditFilters } from 'src/services/api/auditApiService';
     import SettingsPageHeader from 'src/components/settings/SettingsPageHeader.vue';
     import SettingsSection from 'src/components/settings/SettingsSection.vue';
@@ -280,6 +282,19 @@
     ];
 
     const filters = reactive<AuditFilters>({});
+    /* The table's scroll box is rendered by QTable with no attribute
+       pass-through, so it can't take `tabindex` in the template. On a phone the
+       columns overflow sideways, and a scroll area a keyboard can't reach is
+       content a keyboard user can't read (axe `scrollable-region-focusable`). */
+    const tableRef = ref<QTable | null>(null);
+    watch(tableRef, (table) => {
+        const scroller = (table?.$el as HTMLElement | undefined)
+            ?.querySelector<HTMLElement>('.q-table__middle');
+        scroller?.setAttribute('tabindex', '0');
+        scroller?.setAttribute('role', 'region');
+        scroller?.setAttribute('aria-label', 'Audit events');
+    });
+
     const page = ref(1);
     const size = ref(50);
     const total = ref(0);

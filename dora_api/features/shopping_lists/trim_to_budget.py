@@ -322,9 +322,11 @@ def _load_meal_demand(
     ingredients: List[RecipeIngredient] = repository.get(RecipeIngredient).all(
         EntityField(RecipeIngredient, "_recipe_id").in_(recipe_ids)
     )
+    # R-032 — `ing.stock_item` is noload (always None on this load), which
+    # made this whole index come back empty; key off the FK column instead.
     per_recipe: Dict[UUID, List[RecipeIngredient]] = {}
     for ing in ingredients:
-        if ing.stock_item is None or ing.is_optional:
+        if ing._stock_item_id is None or ing.is_optional:
             continue
         per_recipe.setdefault(ing._recipe_id, []).append(ing)
 
@@ -334,13 +336,11 @@ def _load_meal_demand(
         ings = per_recipe.get(rid, [])
         recipe_name = recipe_name_by_id.get(rid)
         for ing in ings:
-            item = ing.stock_item
-            if item is None:
-                continue
-            demand = result.get(item.id)
+            item_id = ing._stock_item_id
+            demand = result.get(item_id)
             if demand is None:
                 demand = _MealDemand(earliest=entry.scheduled_for)
-                result[item.id] = demand
+                result[item_id] = demand
             elif demand.earliest is None or entry.scheduled_for < demand.earliest:
                 demand.earliest = entry.scheduled_for
             demand.entry_count += 1

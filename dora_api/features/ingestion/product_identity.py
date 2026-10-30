@@ -25,7 +25,6 @@ from pydantic import BaseModel, Field, model_validator
 
 from dora_api.domain.entities.ingestion_store_mapping import IngestionStoreMapping
 from dora_api.domain.entities.product import Product
-from dora_api.domain.entities.store import Store
 from dora_api.infrastructure.ports import Repository
 from dora_api.persistence.field import EntityField
 
@@ -74,7 +73,13 @@ def find_ingested_product(
     """
     field_name = EntityField(Product, Product.Fields.NAME)
     field_stockcode = EntityField(Product, Product.Fields.MERCHANT_STOCKCODE)
-    field_store_id = EntityField(Store, Store.Fields.ID)
+    # The scalar FK, not `EntityField(Store, Store.Fields.ID)`: filtering on
+    # the Store entity without `.include(Product.Fields.STORE)` made
+    # SQLAlchemy emit a cartesian `FROM Product, Store`, so the read side
+    # (no includes) matched a same-named product at ANY store and the
+    # companion's unsave deleted the wrong row. The FK works with or without
+    # includes.
+    field_store_id = EntityField(Product, "_store_id")
     # OD-2 — a custom product is the user's to edit. A scraped record with
     # the same name at the same store creates its own row rather than
     # overwriting the user's figure, and a lookup must say "not held" so a

@@ -26,39 +26,65 @@ export const useShoppingListStore = defineStore('shoppingList', () => {
         return summaries.value.find((s) => s.shopping_list_id === id) ?? null;
     });
 
+    // UX-v2 §3.3 — the "next up" pick is a server-owned rule; the client
+    // just follows the flag.
+    const nextUpSummary = computed(
+        () => summaries.value.find((s) => s.is_next_up) ?? null
+    );
+
     let hydrated = false;
+    let latestRequestId = 0;
     let inflight: Promise<void> | null = null;
 
-    const refreshAsync = async () => {
-        loading.value = true;
-        loadError.value = null;
+    // Only the most recent request may write: concurrent refreshes would
+    // otherwise apply whichever response happens to arrive last.
+    const fetchAsync = async (requestId: number): Promise<void> => {
         try {
             const [s, m] = await Promise.all([
                 api.getAllAsync(),
                 api.getMembershipAsync()
             ]);
+            if (requestId !== latestRequestId) return;
             summaries.value = s;
             membership.value = m;
             hydrated = true;
         } catch (err) {
+            if (requestId !== latestRequestId) return;
             // Surface to the console explicitly — the catch used to set
             // `loadError` silently and the UI rendered nothing useful,
             // which read as a "blank screen" bug.
             console.error('[shoppingListStore] refreshAsync failed', err);
             loadError.value = err instanceof Error ? err.message : String(err);
         } finally {
-            loading.value = false;
+            if (requestId === latestRequestId) loading.value = false;
         }
     };
 
-    /** R-016 — lazy hydration. Use this in `onMounted` when you need
-     *  summaries/membership populated but don't care about a forced refresh.
-     *  Call `refreshAsync` directly for an explicit refetch (post-mutation,
-     *  pull-to-refresh, explicit reload). */
+    /** Resolves once the latest in-flight request has been applied. */
+    const settledAsync = async (): Promise<void> => {
+        while (inflight) await inflight;
+    };
+
+    const refreshAsync = async (): Promise<void> => {
+        loading.value = true;
+        loadError.value = null;
+        const request = fetchAsync(++latestRequestId).finally(() => {
+            // Compare identity: a request that settled synchronously must not
+            // clear a newer one, and must not be left behind to spin on.
+            if (inflight === request) inflight = null;
+        });
+        inflight = request;
+        await settledAsync();
+    };
+
+    /** R-016 — lazy hydration. Use this in `onMounted` (or a route guard)
+     *  when you need summaries/membership populated but don't care about a
+     *  forced refresh; it joins a load already in flight rather than
+     *  starting another. Call `refreshAsync` directly for an explicit
+     *  refetch (post-mutation, pull-to-refresh, explicit reload). */
     const ensureLoadedAsync = (): Promise<void> => {
         if (hydrated) return Promise.resolve();
-        inflight ??= refreshAsync().finally(() => { inflight = null; });
-        return inflight;
+        return inflight ? settledAsync() : refreshAsync();
     };
 
     return {
@@ -68,6 +94,7 @@ export const useShoppingListStore = defineStore('shoppingList', () => {
         loadError: readonly(loadError),
         quickAddTargetListId,
         quickAddTargetSummary,
+        nextUpSummary,
         refreshAsync,
         ensureLoadedAsync
     };

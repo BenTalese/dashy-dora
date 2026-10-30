@@ -117,11 +117,14 @@
     import { useAlertStore } from 'src/stores/alertStore';
     import { useStockItemStore } from 'src/stores/stockItemStore';
     import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+    import { useQuasar } from 'quasar';
+    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { useRoute, useRouter } from 'vue-router';
 
     // The bell is the whole alerts surface (owner 2026-10-15: the Alerts page
     // was cut once its toggles moved to Settings and its rows gained the
     // buttons they needed). Rows are the shared AlertRow (R-001).
+    const $q = useQuasar();
     const route = useRoute();
     const router = useRouter();
     const alertStore = useAlertStore();
@@ -177,10 +180,19 @@
 
     async function setLevel(alert: Alert, levelId: string) {
         if (!alert.stock_item_id) return;
-        await stockItemStore.updateStockLevelAsync({
-            stock_item_id: alert.stock_item_id,
-            stock_level_id: levelId,
-        });
+        try {
+            await stockItemStore.updateStockLevelAsync({
+                stock_item_id: alert.stock_item_id,
+                stock_level_id: levelId,
+            });
+        } catch (err) {
+            $q.notify({
+                type: 'negative',
+                message: 'Could not update.',
+                caption: toastCaption(err),
+            });
+            return;
+        }
         await alertStore.refreshAsync();
     }
 
@@ -215,6 +227,12 @@
         dismissingAll.value = true;
         try {
             await alertStore.dismissAllAsync();
+        } catch (err) {
+            $q.notify({
+                type: 'negative',
+                message: "Couldn't dismiss the alerts.",
+                caption: toastCaption(err),
+            });
         } finally {
             dismissingAll.value = false;
         }
@@ -234,13 +252,15 @@
         void alertStore.refreshAsync();
     }
 
+    // Registered before the first await: an unmount during that await would
+    // otherwise run onUnmounted first and leak the interval + listener.
     onMounted(async () => {
-        await alertStore.refreshAsync();
         pollHandle = setInterval(() => {
             if (document.visibilityState === 'hidden') return;
             void alertStore.refreshAsync();
         }, 60_000);
         document.addEventListener('visibilitychange', onVisibilityChange);
+        await alertStore.refreshAsync();
     });
 
     onUnmounted(() => {

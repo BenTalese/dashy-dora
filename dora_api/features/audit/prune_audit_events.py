@@ -37,9 +37,11 @@ def prune_audit_events() -> int:
     """Delete events older than the retention cut-off. Returns the count
     deleted. Wrapped in app.app_context so it can run from APScheduler
     threads outside an HTTP request."""
-    cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days())
     try:
         with app.app_context():
+            # Inside the context: outside it the setting read always failed
+            # and the job silently fell back to the 365-day default.
+            cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days())
             table = db.metadata.tables["AuditEvent"]
             result = db.session.execute(
                 delete(table).where(table.c.occurred_at < cutoff),

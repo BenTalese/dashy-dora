@@ -1159,7 +1159,7 @@
      * rather than one way off a hover a phone cannot perform.
      */
     import { computed, onBeforeUnmount, onMounted, reactive, ref, watch, type Ref } from 'vue';
-    import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
+    import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router';
     import { useQuasar } from 'quasar';
     import { storeToRefs } from 'pinia';
 
@@ -1528,18 +1528,23 @@
     }
 
     async function loadRecipe() {
+        // Captured so a slow response for a recipe we've since navigated away
+        // from (sibling version link) can't overwrite the current one.
+        const id = recipeId.value;
         loading.value = true;
         loadError.value = null;
         try {
-            const fresh = await recipeApi.getAsync(recipeId.value);
+            const fresh = await recipeApi.getAsync(id);
+            if (id !== recipeId.value) return;
             recipe.value = fresh;
             hydrateRecipeForm(form, fresh);
             imageDirty.value = false;
             stepImagesDirty.value = false;
         } catch (err) {
+            if (id !== recipeId.value) return;
             loadError.value = toastCaption(err) || "Couldn't load this recipe.";
         } finally {
-            loading.value = false;
+            if (id === recipeId.value) loading.value = false;
         }
         // After the form is hydrated, so `missingIngredients` is current.
         // Deliberately not awaited by callers: the page is fully usable while
@@ -2219,8 +2224,9 @@
         e.returnValue = '';
     }
 
-    // In-app navigation — the Back arrow, a sibling version, cook mode.
-    onBeforeRouteLeave(async () => {
+    /** Shared by both route guards below: let the user keep or drop
+     *  unsaved work before the page shows something else (R-020). */
+    async function confirmLeaveIfDirty(): Promise<boolean> {
         if (!dirty.value) return true;
         return await confirm({
             title: 'Unsaved changes',
@@ -2229,11 +2235,23 @@
             cancelLabel: 'Stay',
             destructive: true,
         });
+    }
+
+    // In-app navigation away from the page — the Back arrow, cook mode.
+    onBeforeRouteLeave(confirmLeaveIfDirty);
+
+    // `/cookbook/A` → `/cookbook/B` (a sibling version, a new version)
+    // reuses this component, so the leave guard never fires for it.
+    onBeforeRouteUpdate(async (to, from) => {
+        if (to.params.id === from.params.id) return true;
+        return await confirmLeaveIfDirty();
     });
 
     // Switching recipes in place (a sibling version) is a fresh load; the
-    // guard above has already dealt with any unsaved work.
-    watch(recipeId, () => {
+    // update guard above has already dealt with any unsaved work. Leaving to
+    // `/cookbook` empties the id on the way out — nothing to load.
+    watch(recipeId, (id) => {
+        if (!id) return;
         dirty.value = false;
         headerEditing.value = false;
         ingredientsEditing.value = false;

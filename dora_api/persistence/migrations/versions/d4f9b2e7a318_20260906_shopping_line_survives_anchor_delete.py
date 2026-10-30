@@ -62,6 +62,18 @@ def _anchor_check_name() -> str:
     )
 
 
+def _reflected(batch_op, name: str) -> str:
+    """The reflected CHECK name, in the form each backend's drop matches.
+
+    Postgres drops natively, so the name must reach `DROP CONSTRAINT` as-is:
+    `f()` stops the naming convention being applied to the already-final name
+    (which would name a constraint that doesn't exist). SQLite's batch rebuild
+    looks the name up among the reflected constraints, which carry the
+    convention applied once more, so there the plain name is what matches.
+    """
+    return name if op.get_bind().dialect.name == 'sqlite' else batch_op.f(name)
+
+
 def upgrade():
     op.add_column(
         'ShoppingListLine',
@@ -109,7 +121,7 @@ def upgrade():
             'fk_ShoppingListLine_product_id_Product',
             'Product', ['product_id'], ['id'], ondelete='SET NULL',
         )
-        batch_op.drop_constraint(anchor_check, type_='check')
+        batch_op.drop_constraint(_reflected(batch_op, anchor_check), type_='check')
         batch_op.create_check_constraint(
             _ANCHOR_CHECK_SUFFIX,
             'stock_item_id IS NOT NULL OR product_id IS NOT NULL '
@@ -142,7 +154,7 @@ def downgrade():
             'fk_ShoppingListLine_product_id_Product',
             'Product', ['product_id'], ['id'], ondelete='CASCADE',
         )
-        batch_op.drop_constraint(anchor_check, type_='check')
+        batch_op.drop_constraint(_reflected(batch_op, anchor_check), type_='check')
         batch_op.create_check_constraint(
             _ANCHOR_CHECK_SUFFIX,
             'stock_item_id IS NOT NULL OR product_id IS NOT NULL',

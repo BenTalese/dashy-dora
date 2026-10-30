@@ -238,9 +238,11 @@ export function buildUpdateCommand(
     }
     if (form.steps_mode !== src.steps_mode) command.steps_mode = form.steps_mode;
     if (dirty.stepImages) {
+        // Full replace, in display order: a saved image rides along as its
+        // image id (the server keeps it), a new upload as its data URL.
         command.step_images = form.step_images
-            .map((img) => img.data_url || '')
-            .filter((s) => s.startsWith('data:image/'));
+            .map((img) => img.existing_image_id ?? img.data_url)
+            .filter((s) => !!s);
     }
     if (form.prep_time_minutes !== src.prep_time_minutes) command.prep_time_minutes = toIntOrNull(form.prep_time_minutes);
     if (form.recipe_collection_id !== src.recipe_collection_id) command.recipe_collection_id = form.recipe_collection_id;

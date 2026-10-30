@@ -39,8 +39,9 @@ from dora_api.features.shopping_lists.get_shopping_list_detail import (
     LinePreferredBuyDto, LineProductOfferDto, build_line_offers,
 )
 from dora_api.infrastructure.api_response import (business_rule_violation,
-                                                  created, no_content,
-                                                  not_found, ok)
+                                                  created,
+                                                  entity_existence_failures,
+                                                  no_content, not_found, ok)
 from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.field import EntityField
@@ -52,6 +53,12 @@ _LOGGER = logging.getLogger(__name__)
 
 
 # ───── DTOs ──────────────────────────────────────────────────────────────
+
+def _line_quantity(template_quantity: int | None) -> int:
+    """A template line may carry 0 (the editor's "none yet"); a list line
+    needs at least 1 (`CreateLineRequest.quantity` is `ge=1`)."""
+    return max(1, template_quantity or 1)
+
 
 @dataclass(frozen=True, slots=True)
 class TemplateLineDto:
@@ -203,6 +210,8 @@ def get_template_detail(template_id: UUID):
 class CreateTemplateLineInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     stock_item_id: UUID
+    # The editor's stepper goes down to 0 ("no quantity yet"); a template
+    # line instantiates into a list line, which clamps to >= 1 (`_line_quantity`).
     quantity: int | None = Field(default=1, ge=0)
 
 
@@ -215,6 +224,7 @@ class CreateTemplateRequest(BaseModel):
 @dataclass(slots=True)
 class CreateTemplateResponse:
     template_id: UUID | None = None
+    missing_stock_item_ids: tuple[UUID, ...] = ()
 
 
 class CreateTemplateHandler:
@@ -222,6 +232,16 @@ class CreateTemplateHandler:
         self.repository = repository
 
     def handle(self, request: CreateTemplateRequest) -> CreateTemplateResponse:
+        requested_ids = list(dict.fromkeys(line.stock_item_id for line in request.lines))
+        found_ids = {
+            str(item.id) for item in self.repository.get(StockItem).all(
+                EntityField(StockItem, "id").in_(requested_ids)
+            )
+        } if requested_ids else set()
+        missing = tuple(i for i in requested_ids if str(i) not in found_ids)
+        if missing:
+            return CreateTemplateResponse(missing_stock_item_ids=missing)
+
         now = datetime.now(timezone.utc)
         template = ShoppingListTemplate(
             name = request.name.strip(),
@@ -231,13 +251,19 @@ class CreateTemplateHandler:
         self.repository.add(template)
 
         # Lines added in submission order — sequence reflects that order so
-        # downstream rendering and instantiation preserve intent.
-        for idx, line in enumerate(request.lines):
+        # downstream rendering and instantiation preserve intent. Same
+        # unique-per-item rule as AddTemplateLine: a repeated item folds into
+        # its first occurrence.
+        seen: set[UUID] = set()
+        for line in request.lines:
+            if line.stock_item_id in seen:
+                continue
+            seen.add(line.stock_item_id)
             self.repository.add(ShoppingListTemplateLine(
                 template_id = template.id,
                 stock_item_id = line.stock_item_id,
                 quantity = line.quantity,
-                sequence = idx,
+                sequence = len(seen) - 1,
             ))
         # FU-512 unit-of-work: one commit at the end.
         self.repository.save_changes()
@@ -249,6 +275,10 @@ class CreateTemplateHandler:
 def create_template():
     _Request: CreateTemplateRequest = get_request_body()
     _Response = CreateTemplateHandler(SqlAlchemyRepository()).handle(_Request)
+    if _Response.missing_stock_item_ids:
+        return entity_existence_failures(
+            StockItem.__name__, "lines", *_Response.missing_stock_item_ids,
+        )
     _LOGGER.info(
         f"Created template {_Response.template_id} '{_Request.name}' with {len(_Request.lines)} line(s)"
     )
@@ -584,7 +614,6 @@ class InstantiateTemplateHandler:
             items = {
                 i.id: i for i in self.repository.get(StockItem)
                 .include("products")
-                    .then_include("store")
                 .all(EntityField(StockItem, "id").in_(item_ids))
             }
             live_preferred_buys = {
@@ -608,15 +637,19 @@ class InstantiateTemplateHandler:
             new_lines.append(ShoppingListLine(
                 shopping_list_id = target.id,
                 stock_item_id = tl.stock_item_id,
-                quantity = tl.quantity,
+                quantity = _line_quantity(tl.quantity),
                 sequence = next_sequence + len(new_lines),
                 selected_product_id = offer.id if offer else None,
-                planned_store_id = offer.store.id if offer else None,
+                # R-032 — the FK column, not the noload `store` relationship.
+                planned_store_id = offer._store_id if offer else None,
                 preferred_buy_id = (
                     tl.preferred_buy_id if tl.preferred_buy_id in live_preferred_buys else None
                 ),
                 added_at = now,
             ))
+            # A template can hold the same item twice (legacy rows); the
+            # second copy is "already on the list" like any other.
+            on_list.add(tl.stock_item_id)
         apply_line_defaults(self.repository, new_lines)
         for line in new_lines:
             self.repository.add(line)
@@ -701,10 +734,16 @@ class SnapshotFromListHandler:
 
         added = 0
         skipped_product_lines = 0
+        templated_items: set[UUID] = set()
         for sl in source_lines:
             if sl.stock_item_id is None:
                 skipped_product_lines += 1
                 continue
+            # An item can sit on a list as both a plain line and a nested
+            # product line; a template holds one line per item.
+            if sl.stock_item_id in templated_items:
+                continue
+            templated_items.add(sl.stock_item_id)
             self.repository.add(ShoppingListTemplateLine(
                 template_id = template.id,
                 stock_item_id = sl.stock_item_id,

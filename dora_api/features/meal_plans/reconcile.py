@@ -236,12 +236,10 @@ def reconcile_overdue_signal(today: date) -> ReconcileOverdueSignal:
     )
 
 
-def _encode_cursor(scheduled_for) -> str:
-    """Cursor is just the last page's max `scheduled_for` — the next page
-    filters `scheduled_for > cursor`. Same-day ties (30+ past-day entries
-    on a single calendar day for one household) are the only edge that
-    could skip — negligible at household scale, documented rather than
-    engineered around.
+def _encode_cursor(scheduled_for, entry_id) -> str:
+    """Keyset cursor on the page order `(scheduled_for, id)`: the last row's
+    day AND id, so a day that straddles a page boundary resumes at the next
+    entry of that day instead of skipping the rest of it.
 
     R-005 portability: the raw-SQL row hands `scheduled_for` back as a
     `date` on Postgres but a `str` ("YYYY-MM-DD") on SQLite. Without this
@@ -250,14 +248,16 @@ def _encode_cursor(scheduled_for) -> str:
     `uuid_key` handles for UUIDs."""
     if isinstance(scheduled_for, str):
         scheduled_for = date.fromisoformat(scheduled_for[:10])
-    return base64.urlsafe_b64encode(scheduled_for.isoformat().encode()).decode()
+    raw = f"{scheduled_for.isoformat()}|{uuid_key(entry_id)}"
+    return base64.urlsafe_b64encode(raw.encode()).decode()
 
 
-def _decode_cursor(cursor: str) -> Optional[date]:
+def _decode_cursor(cursor: str) -> Optional[tuple[date, Optional[UUID]]]:
+    """`(day, entry id)`; the id is None for a date-only cursor minted before
+    the keyset change, which then pages by day alone as it used to."""
     try:
-        return date.fromisoformat(
-            base64.urlsafe_b64decode(cursor.encode()).decode()
-        )
+        day_text, _, id_text = base64.urlsafe_b64decode(cursor.encode()).decode().partition("|")
+        return date.fromisoformat(day_text), (UUID(id_text) if id_text else None)
     except (ValueError, TypeError):
         return None
 
@@ -310,18 +310,23 @@ def _receipt_rows(
     pending_states: tuple[str, ...] | None,
     newest_first: bool,
 ) -> tuple[list[dict], Optional[str]]:
-    """Cursor-paged rows, one per entry. The queue reads oldest-first and its
-    cursor is the last page's max `scheduled_for`; the read-only log (owner
-    2026-08-13) reads newest-first and its cursor is the last page's min."""
+    """Cursor-paged rows, one per entry, keyset on `(scheduled_for, id)`. The
+    queue reads oldest-first and resumes after the last page's last row; the
+    read-only log (owner 2026-08-13) reads newest-first and resumes before it."""
     params: dict = {"today": today, "limit": limit + 1}
     cursor_clause = ""
-    if cursor:
-        cursor_date = _decode_cursor(cursor)
-        if cursor_date is not None:
-            params["cursor_date"] = cursor_date
+    decoded = _decode_cursor(cursor) if cursor else None
+    if decoded is not None:
+        cursor_date, cursor_id = decoded
+        params["cursor_date"] = cursor_date
+        after = "<" if newest_first else ">"
+        if cursor_id is None:
+            cursor_clause = f"AND mpe.scheduled_for {after} :cursor_date "
+        else:
+            params["cursor_id"] = _bind(cursor_id)
             cursor_clause = (
-                "AND mpe.scheduled_for < :cursor_date " if newest_first
-                else "AND mpe.scheduled_for > :cursor_date "
+                f"AND (mpe.scheduled_for {after} :cursor_date "
+                f"OR (mpe.scheduled_for = :cursor_date AND mpe.id {after} :cursor_id)) "
             )
     direction = "DESC" if newest_first else "ASC"
     query = text(
@@ -336,7 +341,8 @@ def _receipt_rows(
     rows_list = list(db.session.execute(query, params).mappings().all())
     next_cursor: Optional[str] = None
     if len(rows_list) > limit:
-        next_cursor = _encode_cursor(rows_list[limit - 1]["scheduled_for"])
+        last = rows_list[limit - 1]
+        next_cursor = _encode_cursor(last["scheduled_for"], last["entry_id"])
         rows_list = rows_list[:limit]
     return rows_list, next_cursor
 

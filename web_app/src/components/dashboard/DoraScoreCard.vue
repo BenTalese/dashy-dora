@@ -125,6 +125,7 @@
                     <div
                         v-if="c.score !== null"
                         class="dora-score-component__bar"
+                        role="img"
                         :aria-label="`${c.label} score ${c.score} out of 100`"
                     >
                         <div

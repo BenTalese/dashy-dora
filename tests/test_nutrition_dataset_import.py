@@ -278,3 +278,34 @@ def test__parse__FoodWithAnUnknownCategoryId__LeavesTheCategoryNull():
     foods, _ = _parse(**{"food.csv": orphan})
 
     assert foods[0].food_category is None
+
+
+def test__parse__AtwaterEnergyOnly__IsUsedAndEnergy1008TakesPrecedence():
+    # Recent Foundation releases carry energy for many foods only as the
+    # Atwater rows (2047 general / 2048 specific, kcal). Those foods used to
+    # have no energy and be dropped as unusable.
+    nutrients = _NUTRIENT_CSV + (
+        "2047,\"Energy (Atwater General Factors)\",KCAL\n"
+        "2048,\"Energy (Atwater Specific Factors)\",KCAL\n"
+    )
+    foods_csv = _FOOD_CSV + (
+        "444,foundation_food,\"Lentils, dry\",16\n"
+        "555,foundation_food,\"Oats, rolled\",20\n"
+    )
+    food_nutrients = _FOOD_NUTRIENT_CSV + (
+        "20,444,2048,343.0\n"     # Atwater specific only (lower precedence)…
+        "21,444,2047,352.0\n"     # …general beats specific
+        "22,555,2047,390.0\n"     # Atwater row arrives first…
+        "23,555,1008,379.0\n"     # …but 1008 wins regardless of order
+        "24,111,2047,99.0\n"      # banana already has 1008 = 89 — keeps it
+    )
+    foods, _ = _parse(**{
+        "nutrient.csv": nutrients,
+        "food.csv": foods_csv,
+        "food_nutrient.csv": food_nutrients,
+    })
+    by_ref = {f.source_ref: f for f in foods}
+
+    assert by_ref["444"].kcal_per_100g == pytest.approx(352.0)
+    assert by_ref["555"].kcal_per_100g == pytest.approx(379.0)
+    assert by_ref["111"].kcal_per_100g == pytest.approx(89.0)

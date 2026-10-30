@@ -56,7 +56,7 @@ _PRODUCT_DEFAULTS = {
     "size": "500g",
     "size_unit": "g",
     "size_value": 5.0,
-    "web_url": "www",
+    "web_url": "https://www.example.test",
 }
 
 

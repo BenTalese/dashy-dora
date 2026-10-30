@@ -1,3 +1,4 @@
+from datetime import datetime
 from uuid import UUID
 
 from flask import session
@@ -8,6 +9,7 @@ from dora_api.features.auth.register_user import (AuthenticatedUserDto,
                                                   SESSION_USER_ID_KEY)
 from dora_api.features.routers import AUTH_ROUTER
 from dora_api.infrastructure.api_response import ok, unauthorized
+from dora_api.persistence.aware import as_utc
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 
@@ -51,11 +53,15 @@ def get_me():
     # after the session was minted, the cookie is invalid — covers reset
     # (which invalidates everyone) and self-serve change-password
     # invalidating other-device sessions.
+    # Compared as instants, not ISO text (R-098): a naive SQLite value and an
+    # aware Postgres one (rendered in the session's timezone) don't order as
+    # strings.
     stamped = session.get(SESSION_PWD_V_KEY)
+    changed_at = as_utc(user.password_changed_at)
     if (
-        user.password_changed_at is not None
+        changed_at is not None
         and stamped
-        and stamped < user.password_changed_at.isoformat()
+        and as_utc(datetime.fromisoformat(stamped)) < changed_at
     ):
         session.clear()
         return unauthorized()

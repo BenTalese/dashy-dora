@@ -179,6 +179,13 @@
         background: var(--brand-primary-soft);
         font-weight: 600;
     }
+    /* D-004 — the chip is 32px tall; a finger gets the 44px floor. Pointer, not
+       width (R-085): a narrow desktop window keeps the compact chip. */
+    @media (pointer: coarse) {
+        .settings-mnav__chip {
+            min-height: 44px;
+        }
+    }
     .settings-mnav__chip-badge {
         margin-left: 6px;
         min-width: 16px;

@@ -19,6 +19,7 @@ from dora_api.domain.units import format_quantity
 from dora_api.features.data.export_shared import (
     PRINT_CSS,
     PRINT_TOOLBAR,
+    csv_safe_row,
     export_filename,
 )
 from dora_api.features.recipes.get_recipes import GetRecipesHandler, RecipeDto
@@ -34,13 +35,13 @@ def _build_csv(recipe: RecipeDto) -> str:
     writer = csv.writer(buffer)
     writer.writerow(["ingredient", "quantity", "unit", "notes", "location"])
     for ingredient in recipe.ingredients:
-        writer.writerow([
+        writer.writerow(csv_safe_row([
             ingredient.stock_item_name,
             ingredient.quantity if ingredient.quantity is not None else "",
             ingredient.unit or "",
             ingredient.notes or "",
             ingredient.stock_location_name or "",
-        ])
+        ]))
     return buffer.getvalue()
 
 

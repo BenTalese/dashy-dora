@@ -97,8 +97,9 @@ def upgrade():
 
     # Carry the old install bool over before dropping it: an install that had
     # nutrition switched on keeps it on, at the depth that actually worked.
+    # Bare boolean predicate: `= 1` is a type error against a Postgres boolean.
     op.execute(
-        'UPDATE "AppSetting" SET nutrition_mode = \'simple\' WHERE nutrition_enabled = 1'
+        'UPDATE "AppSetting" SET nutrition_mode = \'simple\' WHERE nutrition_enabled'
     )
 
     with op.batch_alter_table('AppSetting') as batch_op:
@@ -123,8 +124,16 @@ def downgrade():
             'nutrition_db_source', sa.String(length=255), nullable=False, server_default='',
         ))
 
+    # `sa.true()` renders `1` on SQLite and `true` on Postgres.
+    app_setting = sa.table(
+        'AppSetting',
+        sa.column('nutrition_enabled', sa.Boolean()),
+        sa.column('nutrition_mode', sa.String()),
+    )
     op.execute(
-        'UPDATE "AppSetting" SET nutrition_enabled = 1 WHERE nutrition_mode <> \'off\''
+        app_setting.update()
+        .where(app_setting.c.nutrition_mode != 'off')
+        .values(nutrition_enabled=sa.true())
     )
 
     with op.batch_alter_table('AppSetting') as batch_op:

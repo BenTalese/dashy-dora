@@ -28,7 +28,8 @@ depends_on = None
 def upgrade():
     # Detach existing stock items so we can drop the old flat table without
     # tripping the FK.
-    op.execute("UPDATE StockItem SET stock_location_id = NULL")
+    # Quoted: Postgres folds an unquoted identifier to lower case (`stockitem`).
+    op.execute('UPDATE "StockItem" SET stock_location_id = NULL')
 
     with op.batch_alter_table('StockItem') as batch:
         batch.add_column(sa.Column('expiry_date', sa.Date(), nullable=True))
@@ -51,7 +52,8 @@ def upgrade():
 
 
 def downgrade():
-    op.execute("UPDATE StockItem SET stock_location_id = NULL")
+    # Quoted: Postgres folds an unquoted identifier to lower case (`stockitem`).
+    op.execute('UPDATE "StockItem" SET stock_location_id = NULL')
     op.drop_table('StockLocation')
     op.create_table(
         'StockLocation',

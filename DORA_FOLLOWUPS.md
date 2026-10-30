@@ -39,6 +39,186 @@ long session summary. Distinct from the other logs:
 
 ---
 
+## [OPEN] FU-965 — ⚠️ SQLite migrations ran batch rebuilds with foreign keys ON: earlier upgrades may have cascade-deleted child rows in the production DB
+- **Raised:** 2026-10-30 (autonomous QA round 2, migration repair)
+- **Type:** finding (data integrity — owner check)
+- **What:** the app's connect listener sets `PRAGMA foreign_keys=ON` on every SQLite connection, and Alembic's batch
+  mode rebuilds a table by creating a copy, copying rows, dropping the original and renaming. With FKs on, dropping
+  the original fires the children's `ON DELETE` actions: CASCADE children are deleted and SET NULL links are blanked.
+  Proven in scratch: rebuilding `StockItem` deleted every `StockItemSubstitute` row. Revisions that rebuild parent
+  tables — e.g. `d3f8b1a6c4e2` (StockItem, Product) and `d4f9b2e7a318` (ShoppingListLine) — would have done this to any
+  populated SQLite install that upgraded across them after the data existed. Fixed going forward: `migrations/env.py`
+  now turns FKs off for the run (R-102 / ADR-099) and fails the upgrade if it introduced new dangling references.
+- **Why deferred:** whether the owner's deployed SQLite DB actually lost rows depends on which revisions it crossed
+  with data present (a `create_all` dev DB never ran them). Check: substitutes (`StockItemSubstitute`), product links
+  (`StockItemProduct`), price observations, shopping-list lines, recipe ingredients/steps on the production DB against
+  a pre-upgrade backup; the `DORA_VERIFY` operator line names the queries.
+- **Recommended resolution:** **now** — one look at the production DB (or its last backup) before the next deploy.
+
+## [OPEN] FU-964 — Security items from the 2026-10-30 review that need an owner call (beyond FU-928's SEC-2/3/4)
+- **Raised:** 2026-10-30 (autonomous QA round 2, defensive security review)
+- **Type:** finding (needs a call)
+- **What:** fixed in this round: per-username login throttle, login timing, change-password rate limit, logo
+  decompression bomb, TTS bounds, push-subscription takeover + https-only, CORS `*` refused, CSV formula guard,
+  client-log context cap, LIKE escaping, `web_url` scheme check, provider base-URL scheme check, compose
+  `DORA_SECURE_COOKIES` default, nginx headers. Still open and each a product/deploy decision: **(1)** `PATCH /auth/me`
+  changes the email without the current password and marks it verified (a stolen session becomes a permanent takeover
+  via forgot-password) — require `current_password`, don't auto-verify; **(2)** bootstrap-admin is count-then-insert, so
+  two parallel first POSTs can both become admin, and `ADMIN_BOOTSTRAP_EMAIL` is guessable — a boot-printed one-time
+  setup token; **(3)** `/api/health` tells anonymous callers the budget, headcount, feature flags and schema version —
+  keep only `status` public; **(4)** an ingestion key can delete any product, not only ones it ingested; **(5)**
+  login/register are CSRF-exempt (login CSRF) — an Origin/Referer check closes it but the Capacitor shell sends
+  `capacitor://`; **(6)** the container runs as root, `PUID`/`PGID` unused; **(7)** push endpoints must be https now but
+  may still name a private host; **(8)** compose publishes `5170:5170` on every interface — with
+  `DORA_TRUSTED_PROXY_HOPS>0` a direct client can forge `X-Forwarded-For` (comment added; `127.0.0.1:5170` is the fix
+  but changes the owner's deploy). Also: a non-admin member can `PATCH /budget/settings` (household-shared per R-038 —
+  confirm that is intended).
+- **Why deferred:** each changes a contract the owner has to stand behind (auth flow, deploy shape, companion scope).
+- **Recommended resolution:** owner, alongside FU-928; (1) and (3) are an hour each once decided.
+
+## [OPEN] FU-963 — Accessibility: colour contrast and nested interactive rows (axe-core, 2026-10-30)
+- **Raised:** 2026-10-30 (autonomous QA round 2, axe-core WCAG 2.1 AA at 1280 and 375)
+- **Type:** finding (design-level; the mechanical defects — names, labels, roles, scroll focus, 44px settings nav —
+  were fixed in the same round)
+- **What:** (1) **color-contrast** fails on 132 page×width combinations: the header's `.dora-brand-text` on every page,
+  plus muted text on /stock (9 nodes), /my-products (14), reports and settings — the FU-674 / FU-801 / FU-850 token
+  family. Re-run the scratch `a11y.mjs` against a seeded backend to regenerate `violations.json`. (2)
+  **nested-interactive**: the planner's slot row (`<button class="slot-row">` with focusable children), the shopping
+  run row (`div[role=button]` wrapping buttons; the plan row's quantity input inside a button, reported 2026-10-29) and
+  the templates card (`role=button` card with its own buttons) — keyboard users can't reach the inner controls
+  predictably. Fix shape: the row is a plain container with one explicit "open" control, or the inner controls move
+  out of the clickable area (the stock row's `openFocused` pattern).
+- **Why deferred:** contrast is a palette decision (D-rules + themes); the rows are layout restructures.
+- **Recommended resolution:** contrast with FU-674; rows one surface at a time, planner first.
+
+## [OPEN] FU-962 — Native shell: Android cleartext (plain http:// home servers) and downloads in the WebView
+- **Raised:** 2026-10-30 (autonomous QA round 2)
+- **Type:** finding (needs a call + a device)
+- **What:** (1) `src-capacitor/android/.../AndroidManifest.xml` targets SDK 36 with no `usesCleartextTraffic` / network
+  security config and no `server.cleartext`; iOS has no ATS local-networking exception. The typical self-host address
+  `http://192.168.x.y:5170` always fails with "Couldn't reach that server" (the setup page now hints at `http://`, but
+  the platform still blocks it). Allowing cleartext for user-chosen LAN hosts is a posture choice. (2)
+  `services/files/downloadHelpers.triggerSave` clicks an `<a download href="blob:">`, which the Android WebView
+  ignores — CSV export and backup download likely do nothing on native; `window.open` in the WebView is unverified.
+  Needs the Filesystem/Share plugin on native and a device check.
+- **Why deferred:** platform policy + needs a phone in hand (FU-729's walk).
+- **Recommended resolution:** with the next native-app unit.
+
+## [OPEN] FU-961 — QR label sheet: "print every item" takes ~40 s on a 2000-item pantry (client times out at 30 s)
+- **Raised:** 2026-10-30 (autonomous QA round 2, query-budget run against a 2000-item bulk seed)
+- **Type:** finding (performance)
+- **What:** `GET /api/stock-items/qr/sheet` with no ids renders a PNG QR per item inline: 2 SELECTs but 41.6 s of CPU
+  for 2000 items (~10 s for the default 500). The client timeout is 30 s, so a big pantry's "print all" is a dead tab.
+  Every other GET route stayed under 0.25 s on the same dataset (no N+1 found).
+- **Why deferred:** a design choice — SVG QR (no raster encode), cache the per-item code bytes (they never change), or
+  cap "print all" behind a selection prompt.
+- **Recommended resolution:** opportunistic; a cache keyed on item id is the smallest change.
+
+## [OPEN] FU-960 — Onboarding seed endpoint has no first-user gate server-side; companion contract tightened
+- **Raised:** 2026-10-30 (autonomous QA round 2)
+- **Type:** finding
+- **What:** (1) the wizard no longer seeds default groups/locations for non-first users (client fix this round), but
+  `POST /onboarding/seed` and the pack-item seed still accept the call from any signed-in user, so a stale client can
+  re-create defaults the admin deleted. Gate on `first_user` (or admin) in `onboarding.py`, with a test. (2) The ingest
+  API now normalises `observed_at` to UTC (an offset is honoured; a naive value is read as UTC, as it always was) and
+  degrades a `web_url` that is not http(s) or is over 255 chars to "no link" instead of storing it — the companion
+  should send an offset-carrying timestamp and a full URL; its guide (`docs/04_proposals/…ingestion…`) should say so.
+- **Why deferred:** (1) changes an endpoint contract; (2) lives in the other repo.
+- **Recommended resolution:** (1) next onboarding touch; (2) next companion release.
+
+## [OPEN] FU-959 — PWA / session leftovers from the QA sweep: no push unsubscribe on logout, no background update check, NetworkFirst 5 s fallback, query lost on session expiry
+- **Raised:** 2026-10-29 (autonomous QA sweep, round 2)
+- **Type:** finding
+- **What:** (1) `usePushSubscription`: logout neither unsubscribes the browser nor deletes the server row, so on a shared
+  device the next user keeps receiving the previous user's push alerts. (2) `usePwaLifecycle`: nothing calls
+  `registration.update()`, so an installed PWA resumed from the background with no navigation never learns of a new
+  worker; `updateDismissed` never resets, so a second update in one session is hidden. (3) `quasar.config.ts` runtime
+  caching: NetworkFirst with `networkTimeoutSeconds: 5` answers a slow GET from cache, so on a slow self-host box a
+  refetch after a write can show the pre-write data. (4) `authStore.handleSessionExpired` redirects via
+  `currentHashPath()`, which strips the query, so `/stock?location_id=…` comes back as `/stock`.
+- **Why deferred:** each is a design-level call (push ownership per user; update cadence; cache timeout vs. offline
+  read-only) rather than an obvious bug; (4) is small but touches the auth redirect contract.
+- **Recommended resolution:** (1) with the next auth/notifications unit — it is a privacy issue on shared devices;
+  (2)–(4) opportunistic.
+
+## [OPEN] FU-958 — Finish dialog counts deferred lines the shopper never sees; the server's leftover endpoints act on them too
+- **Raised:** 2026-10-29 (autonomous QA sweep)
+- **Type:** finding (needs a call)
+- **What:** `ShoppingListDetail.untickedCount` counts every unticked line including `deferred_by_budget` ones, so after
+  ticking everything the run face shows, the finish dialog still says "N items aren't ticked". Making it count from
+  `baseLines` alone would be wrong, though: `move-unticked-to` and `discard-unticked` (`list_actions.py`) select by
+  `is_ticked == False` only, so they move / discard deferred lines as well, and the dialog's count would then under-state
+  what the server is about to do.
+- **Why deferred:** a product decision — are trimmed-off lines "leftovers" to carry to the next list (then the dialog
+  should *say* so), or are they outside the shop (then the two endpoints should skip them and the count comes from
+  `baseLines`)?
+- **Recommended resolution:** owner call; then one small unit across the page and `list_actions.py`.
+
+## [OPEN] FU-957 — Renaming a meal slot leaves entries and recipes under the old name
+- **Raised:** 2026-10-29 (autonomous QA sweep)
+- **Type:** finding (needs a call)
+- **What:** `manage_meal_slots.py` rename changes `MealSlot.name` only; `MealPlanEntry.slot` and `Recipe.time_of_day`
+  are free-text copies. Renaming "Dinner" to "Tea" shows Tea with `usage_count` 0 and every existing dinner entry
+  carries an off-vocabulary label, so it no longer lands in a known planner row. Deletion is documented as non-cascading;
+  rename is not documented either way.
+- **Why deferred:** may be intended (a rename as a "new slot"); if not, it is one `UPDATE … WHERE slot = :old` on each of
+  the two tables inside the same transaction.
+- **Recommended resolution:** owner call; if cascade, pair with a pinning test in `test_meal_slot_router.py`.
+
+## [OPEN] FU-956 — Swapping one day's recipe inside a cook batch breaks the batch invariant
+- **Raised:** 2026-10-29 (autonomous QA sweep)
+- **Type:** finding (needs a call)
+- **What:** `swap_suggestions.apply_swap` accepts an entry that carries a `cook_batch_id` and changes its recipe only,
+  so the batch mixes recipes (the single-recipe rule `validate_cook_groups` enforces on PATCH) and `CookBatch.recipe_id`
+  goes stale.
+- **Why deferred:** the right behaviour is a design choice — refuse the swap on a batch member, or swap every member.
+- **Recommended resolution:** owner call; small either way.
+
+## [OPEN] FU-955 — Backup restore: stores are not a section but `saved_products.store_id` is a required FK; self-referencing rows depend on dump order
+- **Raised:** 2026-10-29 (autonomous QA sweep)
+- **Type:** finding
+- **What:** (1) `restore_shared.REQUIRED_FKS` lists `("saved_products", "store_id")` but there is no `stores` section,
+  so a cross-install restore where store ids differ drops every saved product and, through `product_id`, its offers,
+  barcodes, product links and product-only lines; `StockItem.usual_store_id` is nulled. (2) `_dump_table` has no ORDER BY,
+  so a location moved under a newer parent (or a sub-step under a later step) can have its self-FK nulled as "target not
+  present" if the child precedes the parent in the dump — the comment at `restore_shared.py` says rows may insert in any
+  order, which is not true for self-FKs. Same-install restores (the common case) are unaffected by (1).
+- **Why deferred:** (1) is a scope decision (add a `stores` section keyed by name, placed before saved products, remapped
+  through the 2026-10-29 dup-key map); (2) needs a topological sort or a second pass for self-FKs.
+- **Recommended resolution:** with the next backup/restore unit; before any cross-install restore is advertised.
+
+## [OPEN] FU-954 — `scanning_enabled` is a client-only gate; the barcode routes don't check it
+- **Raised:** 2026-10-29 (autonomous QA sweep)
+- **Type:** finding (question)
+- **What:** the install-wide `scanning_enabled` flag hides the scan + QR surface in the SPA, but `data/barcodes.py` and
+  the QR routes serve regardless. Harmless for a household install; wrong if the flag is meant as a policy (the same
+  shape FU-866 calls out for the ingest route's flag).
+- **Why deferred:** intent question — hide-only (R-029) or enforce.
+- **Recommended resolution:** opportunistic, alongside FU-866.
+
+## [OPEN] FU-953 — Planner leftovers from the QA sweep: only add/adjust are queued; the stepper isn't disabled while a save is pending
+- **Raised:** 2026-10-29 (autonomous QA sweep; R-101)
+- **Type:** leftover
+- **What:** `useMealPlanner.queuePlanMutation` serialises `addEntry` and `adjustEntryServings` only; `removeEntry`, cook-day
+  edits, fresh/link toggles and the template apply still rebuild the entry list directly and can still clash with a queued
+  step. `MealPlanEntryMenu`'s stepper resyncs on open but is not disabled while a save is in flight (a busy prop would
+  have to travel through four components). Also still open on the shopping list page: a failed tick calls `load()` (a
+  skeleton flash, R-084) rather than the quiet refresh.
+- **Why deferred:** each is a small, separate change beyond the obvious-bug fixes the sweep was for.
+- **Recommended resolution:** opportunistic, next planner or shopping-list unit.
+
+## [OPEN] FU-952 — Tidy after the QA sweep: `rollbackRegistry` has no registrants; QR blob URLs are never revoked; concurrent pytest runs collide on one DB file
+- **Raised:** 2026-10-29 (autonomous QA sweep)
+- **Type:** leftover
+- **What:** (1) `stockItemStore.updateStockLevelAsync` was the only `registerRollback` caller and now reverts in place, so
+  `services/errorHandling/rollbackRegistry.ts` only ever runs an empty stack from `boot/globalErrorHandler.ts` (its spec
+  and the FU-539 comments still describe the old contract) — retire it or keep it as the documented hook. (2)
+  `fetchQrImageUrlAsync` blob URLs are never `URL.revokeObjectURL`'d (pre-existing; the stale-fetch guard now discards
+  more of them). (3) `tests/conftest.py` pins `data/dora.test.db`, so two pytest runs on one box corrupt each other
+  ("no such table: User") — a per-run temp path (or `DORA_TEST_DB_PATH`) would let parallel sessions run the suite.
+- **Why deferred:** none is user-visible; each is a few lines in its own file.
+- **Recommended resolution:** opportunistic.
+
 ## [OPEN] FU-951 — Put a (?) HelpHint beside the headings the help drafts named
 - **Raised:** 2026-10-29 (help redesign; the drafts' "Chip:" rows in `HELP_CONTENT.md`)
 - **Type:** follow-up (D-015)

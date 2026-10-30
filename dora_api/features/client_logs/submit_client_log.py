@@ -10,13 +10,14 @@ WARN/ERROR events also persist to the audit log (source=web,
 action="client.error" / "client.warning") for the admin view; INFO beacons
 land there at low severity.
 """
+import json
 import logging
 import time
 from collections import deque
 from threading import Lock
 
 from flask import request, session
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from dora_api.domain.entities.audit_event import (
     SEVERITY_ERROR, SEVERITY_INFO, SEVERITY_WARN, SOURCE_WEB,
@@ -46,6 +47,55 @@ _BUCKET_MAX_EVENTS = 10
 _buckets: dict[str, deque[float]] = {}
 _buckets_lock = Lock()
 
+# `context` comes from anonymous callers and is written to the audit table,
+# so it's bounded: nesting past this depth becomes a marker, and keys stop
+# being kept once the serialised dict would pass this many bytes. Kept as a
+# dict (never a string preview) so the audit layer's key-based secret
+# redaction still sees every key that survives.
+_CONTEXT_MAX_DEPTH = 4
+_CONTEXT_MAX_BYTES = 4096
+# A long stack excerpt keeps its head instead of vanishing behind the marker.
+_CONTEXT_MAX_STRING_CHARS = 2048
+_TRUNCATED_MARKER = "[truncated]"
+
+
+def _clip_depth(value: object, depth: int) -> object:
+    if isinstance(value, dict):
+        if depth >= _CONTEXT_MAX_DEPTH:
+            return _TRUNCATED_MARKER
+        return {str(k): _clip_depth(v, depth + 1) for k, v in value.items()}
+    if isinstance(value, list):
+        if depth >= _CONTEXT_MAX_DEPTH:
+            return _TRUNCATED_MARKER
+        return [_clip_depth(v, depth + 1) for v in value]
+    if isinstance(value, str) and len(value) > _CONTEXT_MAX_STRING_CHARS:
+        return value[:_CONTEXT_MAX_STRING_CHARS] + _TRUNCATED_MARKER
+    return value
+
+
+def _serialised_size(value: object) -> int:
+    return len(json.dumps(value, ensure_ascii=False, default=str).encode("utf-8"))
+
+
+def bound_client_context(context: dict | None) -> dict | None:
+    if context is None:
+        return None
+    clipped = _clip_depth(context, 0)
+    if _serialised_size(clipped) <= _CONTEXT_MAX_BYTES:
+        return clipped
+    # Headroom for the trailing `_truncated` flag.
+    budget = _CONTEXT_MAX_BYTES - 32
+    bounded: dict = {}
+    for key, value in clipped.items():
+        if _serialised_size({**bounded, key: value}) <= budget:
+            bounded[key] = value
+        elif _serialised_size({**bounded, key: _TRUNCATED_MARKER}) <= budget:
+            bounded[key] = _TRUNCATED_MARKER
+        else:
+            break
+    bounded["_truncated"] = True
+    return bounded
+
 
 class SubmitClientLogRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -53,9 +103,13 @@ class SubmitClientLogRequest(BaseModel):
     level: str = Field(min_length=1, max_length=16)
     message: str = Field(min_length=1, max_length=2048)
     # Best-effort breadcrumbs the SPA can attach: route, component name,
-    # stack trace excerpt, user-agent. Capped overall payload size is
-    # enforced by Pydantic field-length above + this dict being free-form.
+    # stack trace excerpt, user-agent. Free-form, so bounded on the way in.
     context: dict | None = None
+
+    @field_validator("context")
+    @classmethod
+    def _bounded_context(cls, value: dict | None) -> dict | None:
+        return bound_client_context(value)
 
 
 def _client_bucket_key() -> str:

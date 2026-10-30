@@ -126,3 +126,52 @@ def test__qr_sheet__unknown_layout_is_a_named_400():
 
     assert resp.status_code == 400
     assert "a4-21up" in resp.text  # the error names the available layouts
+
+
+#region ---------------- print sheet, POST door ----------------
+# A big selection's ids overflow the request line (gunicorn: 8190 bytes, ~200
+# uuids), so the SPA POSTs them as a JSON body. Same sheet, same semantics.
+
+
+def test__qr_sheet_post__honours_order_and_carries_a_selection_too_big_for_a_get():
+    first = f"QR post A {uuid4().hex[:6]}"
+    second = f"QR post B {uuid4().hex[:6]}"
+    first_id = _make_item(first)
+    second_id = _make_item(second)
+    # 400 unknown uuids ≈ 15 KB — a GET of this would be refused upstream.
+    filler = [str(uuid4()) for _ in range(400)]
+
+    resp = requests.post(
+        SHEET, json={"ids": [second_id, *filler, first_id], "layout": "a4-21up"},
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.headers["Content-Type"].startswith("text/html")
+    html = resp.text
+    assert "2 label(s)" in html
+    assert html.index(second) < html.index(first)
+    assert 'src="data:image/png;base64,' in html
+    assert "/api/stock-items" not in html
+
+
+def test__qr_sheet_post__empty_ids_prints_every_item():
+    name = f"QR post print-all {uuid4().hex[:6]}"
+    _make_item(name)
+
+    resp = requests.post(SHEET, json={"ids": []})
+
+    assert resp.status_code == 200, resp.text
+    assert name in resp.text
+
+
+def test__qr_sheet_post__unknown_layout_is_a_named_400():
+    resp = requests.post(SHEET, json={"ids": [], "layout": "avery-9999"})
+
+    assert resp.status_code == 400
+    assert "a4-21up" in resp.text
+
+
+def test__qr_sheet_post__over_the_id_cap_is_400():
+    resp = requests.post(SHEET, json={"ids": [str(uuid4()) for _ in range(5001)]})
+
+    assert resp.status_code == 400

@@ -27,7 +27,7 @@
         <div v-if="loading && summariesEmpty" class="text-center q-py-xl">
             <AppSpinner size="48px" />
         </div>
-        <div v-else class="text-center dora-text-muted q-py-xl">
+        <div v-else-if="summariesEmpty && !loadError" class="text-center dora-text-muted q-py-xl">
             <q-icon :name="ICONS.shopping_cart" size="60px" class="q-mb-sm" />
             <div class="text-h6">No shopping lists yet.</div>
             <div class="q-mt-md">
@@ -68,9 +68,10 @@
 
     async function retryLoad() {
         await store.refreshAsync();
-        // No in-component redirect; if a list appears the user can navigate
-        // away (e.g. from the new-list dialog's `@created`). The route
-        // guard already had its chance.
+        // Same redirect the route guard makes. Re-navigating to this route
+        // would not re-run its `beforeEnter`, so follow the pick directly.
+        const next = store.nextUpSummary;
+        if (next) await router.replace(`/shopping-lists/${next.shopping_list_id}`);
     }
 
     async function onListCreated({ listId }: { listId: string }) {

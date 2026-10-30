@@ -75,6 +75,26 @@ def test__finish__double_tap_is_idempotent(api):
     assert len(_detail(item)["price_observations"]) == 1
 
 
+def test__finish__OnAlreadyDoneList__RestocksNothing(api):
+    # A second /finish used to re-stock every ticked item, overwriting a level
+    # the user had since lowered.
+    item = _new_stock_item()
+    list_id, _ = _list_with_priced_ticked_line(item, price=3.25)
+    assert requests.post(f"{SHOPPING_LISTS}/{list_id}/finish").json()["items_restocked"] == 1
+    out_level = max(
+        requests.get(f"{BASE}/stock-levels").json()["items"], key=lambda l: l["sequence"],
+    )["stock_level_id"]
+    assert requests.patch(
+        f"{STOCK_ITEMS}/{item}", json={"stock_level_id": out_level},
+    ).status_code == 204
+
+    resp = requests.post(f"{SHOPPING_LISTS}/{list_id}/finish")
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["items_restocked"] == 0
+    assert _detail(item)["stock_level_id"] == out_level
+
+
 def test__finish__unpriced_ticked_line_is_not_harvested(api):
     item = _new_stock_item()
     list_id = requests.post(

@@ -107,6 +107,18 @@ export default class AuthApiService {
         return result.required;
     };
 
+    /** Is the server at the configured address actually Dora? Any host
+     *  answers *something* with a 200 (a router admin page, a WebView's own
+     *  index.html), so a status code alone proves nothing. The public
+     *  `bootstrap-required` endpoint always answers `{ required: boolean }`;
+     *  anything else is a different server. Network/HTTP errors propagate. */
+    isDoraServerAsync = async (): Promise<boolean> => {
+        const result = await this.httpClient.get<unknown>('/auth/bootstrap-required');
+        return typeof result === 'object'
+            && result !== null
+            && typeof (result as { required?: unknown }).required === 'boolean';
+    };
+
     /** Pre-auth capability probe. Currently exposes just
      *  `email_sender_configured` — false when the install has no live
      *  SMTP (dry-run only logs the outbound body, which a normal user

@@ -51,7 +51,9 @@ export function useCookTimer(options: { onFinish: () => void }) {
     }
 
     function start(seconds: number) {
-        if (remaining.value === null) {
+        // A finished timer sits at 0, not null — restarting it is a fresh
+        // countdown, not a resume of nothing.
+        if (remaining.value === null || remaining.value <= 0) {
             remaining.value = seconds;
             total.value = seconds;
         }

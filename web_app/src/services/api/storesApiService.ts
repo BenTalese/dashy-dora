@@ -1,15 +1,20 @@
 import type { Store } from 'src/models/store';
 import type { CreatedResponse } from './axiosHttpClient';
 import AxiosHttpClient from './axiosHttpClient';
-import type { Page } from './queryStringBuilder';
+import { createQueryString, fetchAllPages, type Page } from './queryStringBuilder';
 
 /** FU-189 — client for `/api/stores` (CRUD + image upload). Zero pre-seeded
  *  stores ship; users curate the list themselves. */
 export default class StoresApiService {
     private httpClient = new AxiosHttpClient();
 
-    listAsync = async (): Promise<Page<Store>> =>
-        await this.httpClient.get<Page<Store>>('/stores');
+    listAsync = async (pagination?: { page: number; limit: number }): Promise<Page<Store>> =>
+        await this.httpClient.get<Page<Store>>(`/stores${createQueryString(undefined, undefined, pagination)}`);
+
+    /** Every store: the pickers hold the whole list, so a store past the
+     *  server's default page would otherwise be missing from them. */
+    listAllAsync = async (): Promise<Store[]> =>
+        await fetchAllPages((page, limit) => this.listAsync({ page, limit }));
 
     createAsync = async (cmd: CreateStoreCommand): Promise<CreatedResponse> =>
         await this.httpClient.post<CreatedResponse>('/stores', cmd);

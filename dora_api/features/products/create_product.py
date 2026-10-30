@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from dora_api.domain.entities.store import Store
 from dora_api.domain.entities.product import Product
@@ -13,6 +13,7 @@ from dora_api.features.products.offer_mapping import (OFFER_SOURCE_MANUAL,
                                                        OfferOutcome,
                                                        apply_offer_to_product)
 from dora_api.features.products.get_products import get_products
+from dora_api.features.products.web_url import check_web_url
 from dora_api.features.routers import PRODUCT_ROUTER
 from dora_api.infrastructure.api_response import business_rule_violation, created
 from dora_api.infrastructure.decorators import has_request_body
@@ -29,7 +30,9 @@ _LOGGER = logging.getLogger(__name__)
 class CreateProductRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    brand: str | None = Field(default = None, min_length = 1)
+    # String caps match the `Product` columns (all `String(255)`); Postgres
+    # enforces them, so an over-long value used to 500 instead of 400.
+    brand: str | None = Field(default = None, min_length = 1, max_length = 255)
     # image is a data-URL string ("data:image/...;base64,..."), stored
     # as UTF-8 bytes on the entity; served back via GET /products/<id>/image.
     # Matches the stock-item/recipe convention. The old `Base64Bytes` decoded
@@ -41,8 +44,8 @@ class CreateProductRequest(BaseModel):
     store_name: str = Field(min_length = 1)
     # `merchant_stockcode` is the producer's SKU on the
     # offer, retained verbatim per the rename runbook.
-    merchant_stockcode: str | None = Field(default = None, min_length = 1)
-    name: str = Field(min_length = 1)
+    merchant_stockcode: str | None = Field(default = None, min_length = 1, max_length = 255)
+    name: str = Field(min_length = 1, max_length = 255)
     # How many countable things the pack holds ("12" eggs in a 700 g carton).
     # `size_value` stays the total measure; this is what lets a recipe's bare
     # "3 eggs" be priced off the pack (ADR-073, FU-856).
@@ -53,10 +56,15 @@ class CreateProductRequest(BaseModel):
     # Defaults to `price_now`, which reads as "no markdown"; 0.0 would read as
     # "was free" and make every custom product look permanently discounted.
     price_was: float | None = Field(default = None, gt = 0)
-    size: str = Field(min_length = 1)
-    size_unit: str = Field(min_length = 1)
+    size: str = Field(min_length = 1, max_length = 255)
+    size_unit: str = Field(min_length = 1, max_length = 255)
     size_value: float = Field(gt = 0)
     web_url: str | None = Field(default = None, min_length = 1)
+
+    @field_validator("web_url")
+    @classmethod
+    def _web_url(cls, value: str | None) -> str | None:
+        return check_web_url(value)
 
 
 # the manual product-add reuses the C-10 shared

@@ -41,7 +41,135 @@ next.
 
 ---
 
-## 2026-10-29 (latest): **Help area redesigned (20-D4 decided), the drafted guides landed, screenshots captured**
+## 2026-10-30 (latest): **Autonomous QA round 2 — new angles: authz matrix, fresh install, fault injection, a11y, security, Postgres**
+
+**Status: done. Nothing committed (the owner commits). Tree = `270da487` + yesterday's sweep + this unit.**
+
+**Owner ask:** *"do more rounds like this again and try different angles."*
+
+**Angles (none repeated from 2026-10-29):**
+1. **Authorization matrix** — 220 route×method calls as anonymous and as a freshly created non-admin, cross-checked
+   against which handlers call `require_admin`: no anonymous leak, no admin-gated handler answering a member; the
+   member-reachable "admin-ish" routes (alert prefs, providers, budget settings, stores, nutrition sources) are by design
+   (R-038) — budget PATCH by a member noted in FU-964 for confirmation.
+2. **Fresh install, driven live** — empty DB on :5172 → `/setup` → first admin → wizard (Skip) → every route on an
+   empty household (all empty states render; one copy fix: the empty cookbook said "no recipes match the filters") →
+   register a second user → their wizard.
+3. **Fault injection** — Playwright route interception failing API reads (1 in 3 with 500 / abort / every read 500)
+   across all routes: zero page errors, blank pages or stuck spinners in all three modes.
+4. **Accessibility + tap targets** — axe-core WCAG 2.1 AA at 1280 and 375 plus a D-004 measurement with touch
+   emulation. Eleven rules fixed to zero (icon-button names, toggle/field names via `SettingsRow` naming its slot
+   control, prohibited aria on spans, nav list roles, scroll-region focus, calendar/list roles, progress/slider names,
+   44 px settings nav on coarse pointers). Left as FU-963: colour contrast (132 page×width hits, the FU-674 token
+   family) and three nested-interactive rows.
+5. **Security review** (defensive) — 14 hardening fixes landed (per-username login throttle + timing, change-password
+   limit, logo decompression bomb, TTS bounds, push-subscription takeover/https, CORS `*` refused, CSV formula guard,
+   client-log cap, LIKE escaping, `web_url` + provider-URL scheme checks, compose secure-cookie default, nginx
+   headers); eight contract-level items logged as **FU-964** next to FU-928's SEC-2/3/4 (still owner calls).
+6. **Postgres portability + migration drift** — offline DDL emission of the whole chain on the postgresql dialect:
+   **eight revisions fail on an empty Postgres** (unquoted mixed-case tables, boolean `= 1`, a VARCHAR(36) FK onto a
+   UUID key, constraint names only SQLite ever derived). All fixed in place (SQLite behaviour unchanged for installs
+   past them) plus two reflect-first convergence migrations (`e7a2c5f9b3d1` column types, `f4b8d1c6a9e2` constraint
+   names); session tz pinned to UTC; `nulls_last`; request-id cap; the schema-drift test now compares names and types.
+   **Side finding (FU-965, ⚠️):** SQLite batch rebuilds ran with `foreign_keys=ON`, so earlier parent-table rebuilds
+   cascade-deleted child rows — `env.py` now owns the pragma; the owner must check the production DB. **R-102 /
+   ADR-099.**
+7. **Deep read of the lightly-reviewed areas** (assistant, nutrition, companion seam) — Dora's data-tool questions
+   failed on every hosted LLM (no `tool_call_id`, then 60 s "unavailable"); link-status matched products at any store
+   (cartesian join on a noload relationship, R-032) so the companion's unsave could delete the wrong product;
+   backdated offers overwrote the current price; deal quality compared mismatched units; USDA Atwater energy keys
+   dropped foods; probe wrote `verified` onto the saved row; plus confirm/tool-arg 500s. All fixed with tests.
+8. **Onboarding / auth / native / print read** — second users re-seeded deleted defaults (HIGH, client fixed; server
+   gate FU-960), verify-email bounced to the wizard, native first run probed an empty URL, the theme radio showed
+   nothing selected, CSV `\r`, forgot-password rejection; export/print/QR ids now POSTed (the 200-item request-line
+   ceiling), folded into one `openHtmlDocumentAsync(path, title, body?)`.
+9. **Query budget** — SELECT count + wall time per GET route on the dense seed and on a 2000-item bulk seed: no N+1;
+   one real finding, the "print every QR label" sheet at 41 s for 2000 items (FU-961).
+10. **Stateful workflow + DB invariants** — create → level → product link → list → tick/price → finish (twice) →
+    verdict → substitutes → waste → recipe → cook → plan → move → delete-location; then `foreign_key_check`,
+    case-insensitive name uniqueness, canonical substitute pairs, line sequences, entries inside their week, single-recipe
+    batches: all hold.
+
+**Gates on the final tree:** pytest **2677 passed** (2605 yesterday; 72 new), vitest **836 / 90 files** (817 → 836),
+`vue-tsc` + `npm run lint` clean, `quasar build` green, offline Postgres DDL for the whole chain clean, axe re-audit
+0 on the eleven targeted rules, crawl/flows re-driven on the final build.
+
+**Owner-level items (left, logged):** FU-960 (seed endpoint gate; companion contract: offset-carrying `observed_at`,
+http(s) `web_url`), FU-961 (QR sheet perf), FU-962 (Android cleartext, native downloads), FU-963 (contrast, nested
+rows), FU-964 (security decisions), **FU-965 (check the production DB for cascade-deleted rows)**. Verify section:
+`DORA_VERIFY.md` → "Autonomous QA round 2".
+
+**Next up:** owner commits; checks FU-965 first; walks the two verify sections; decides FU-964 (1)+(3) and FU-958.
+
+---
+
+## 2026-10-29: **Autonomous QA sweep — many angles, ~90 bugs found, ~85 fixed**
+
+**Status: done. Nothing committed (the owner commits). Tree = `270da487` + this unit.**
+
+**Owner ask:** *"I'm going to be away for a long time. Do many rounds of QA from different angles and fix the bugs you
+find. Autonomous. Anything that needs my input, leave it. Bugs should be obvious bugs."*
+
+**Angles run (in order):**
+1. Baseline gates: pytest 2548 / vitest 796 / build green.
+2. Static read-only reviews, parallel (opus): backend ×3 feature slices + the big stock/recipe/list read handlers;
+   frontend pages, components, settings pages, composables/helpers; a second round over boot / error handling / PWA /
+   Dora intents / shortcuts / sheets.
+3. **Frontend↔backend contract audit** (Flask `url_map` dumped and every `services/api/*.ts` call resolved; bodies,
+   params and DTOs diffed). This is what caught the two worst regressions — both from `fb49f00a`:
+   `bootstrap_admin.py` had lost `hash_password` / `audit_emit` from its imports (every fresh install 500'd on
+   `/setup`), and `AxiosHttpClient`'s instance-level JSON content type made axios serialise the chunk-upload
+   `FormData` as JSON (every backup restore and spreadsheet import failed on chunk 1).
+4. Live, against a dense-seeded throwaway backend on :5171 + the built SPA, with scratchpad Playwright: a crawl of
+   all 99 routes at 1440 and 375 (console errors, Vue warns, 4xx/5xx), a phone-width overflow check, scripted user
+   flows (login, stock peek, cook mode, recipe edit + leave, lists, planner week nav, reconcile Skip, reports range
+   switch, backup upload, import upload, settings toggles, help), and a 522-request API sweep (GET every route with
+   real ids; `[]`/`{}`/junk bodies on writes) — zero 5xx before or after.
+5. Fix wave: six frontend fix agents + two backend fix agents on **disjoint file sets**, each gated on
+   vitest/vue-tsc/lint or targeted pytest; then a **diff-reviewer agent per side**, which found 8 + 7 real follow-on
+   defects (one a regression: the new restore dup-key remap would have merged a backup recipe's ingredients into the
+   same-named existing recipe, and turned a remapped product link into a PK violation) — all fixed by hand.
+6. Playwright smoke (`DORA_E2E_PYTHON=python DORA_E2E_CHANNEL=chrome`): 9 passed.
+
+**What landed** — see `CHANGELOG.md` "Autonomous QA sweep (2026-10-29)" for the user-facing list by surface. The
+structural ones: step images survive an edit (new contract: a `step_images` entry is a data URL *or* an existing
+image id, server keeps the bytes; `resolve_step_image_entries`); the stock-level optimistic write reverts in place
+instead of via the rollback registry (which now has no registrants, FU-952); `/meal-plans` sorts by `start_date`
+and the SPA fetches every page (a >50-week household lost weeks and created duplicates); stale-response guards on ~20
+keyed loads and a promise queue for planner mutations (**R-101 / ADR-098**); the restore remap limited to reference
+parents with join rows re-keyed after decode; trim-to-budget's meal-demand loader keyed off the FK (it had never fired,
+R-032); buy-verdict / belief skip unticked lines (R-061); the reconcile queue on a `(scheduled_for, id)` keyset cursor;
+the lagged Dora Score comparing like components; template-fork keeping uncooked past days (FU-595 parity).
+
+**Round 2** (boot / PWA / shortcuts / Dora / sheets, after the first wave): eleven more fixes — the Workbox
+`dora-api` rule no longer caches the `no-store` health probe (offline banner cleared from cache), `useShortcut` lets
+Escape reach a registered shortcut and ignores keys inside menus/dialogs and on buttons, `/` on Stock, the
+`?section=` watcher on the item page, the quick-add preset path through `addToList`, catch+toast on the price sheet and
+Dismiss all, chunked upload resume-from-`received` with a 5-minute chunk timeout (`RequestOptions` on `post`), the
+authed-image blob revoke, and an R-101 guard on the price-history sheet.
+
+**Gates on the final tree:** pytest **2605 passed** (baseline 2548; 57 new), vitest **817 / 87 files** (baseline
+796), `vue-tsc` + `npm run lint` clean, `quasar build` green, Playwright smoke 9/9, route crawls clean at both widths,
+the scripted flows re-driven on the final build against a fresh seed.
+
+**Left for the owner (logged, not fixed):** FU-952..FU-959 — the finish-dialog count vs. deferred lines and the two
+leftover endpoints (a product call), meal-slot rename cascade, swap inside a cook batch, cross-install restore
+(stores section / self-FK order), `scanning_enabled` server enforcement, planner queue coverage + stepper busy state,
+rollbackRegistry tidy / QR blob revoke / shared test DB path, push-unsubscribe-on-logout + PWA update check.
+
+**Process notes:** every Python text-mode patch (mine and the agents') rewrote LF files as CRLF; a scratchpad
+normaliser restored them before the gates — memory note saved. `tests/conftest.py`'s fixed `data/dora.test.db` makes
+parallel pytest runs collide (FU-952). The API sweep's `{}` POST to `/onboarding/restart` threw the seeded user back
+into the wizard mid-run — reseed between sweeps.
+
+**Verification:** `DORA_VERIFY.md` → "Autonomous QA sweep, browser-verify owed (2026-10-29)" lists the ~16 fixes that
+were made from a code read and want one look each; the rest were driven live (listed at the top of that section).
+
+**Next up:** owner commits; walks the verify section; decides FU-958 / FU-957 / FU-956.
+
+---
+
+## 2026-10-29: **Help area redesigned (20-D4 decided), the drafted guides landed, screenshots captured**
 
 **Status: done. Nothing committed (commit only when asked).**
 

@@ -199,7 +199,7 @@
                     <div class="welcome-panel__head">
                         <div class="welcome-panel__title">Your household</div>
                         <div class="welcome-panel__sub">
-                            Shared by everyone in Dora. Settings → System has the rest.
+                            Shared by everyone in Dora. The rest is under Settings, in Admin mode.
                         </div>
                     </div>
                     <!-- `dark` on each field: see OnboardingPickPanel. -->
@@ -519,7 +519,7 @@
     import OnboardingStory from 'src/pages/onboarding/OnboardingStory.vue';
     import { storeToRefs } from 'pinia';
     import {
-        THEME_FAMILIES, coalesceFontFamily, fontFamilyOptions, themeKeyFor,
+        THEME_FAMILIES, coalesceFontFamily, familyAndModeOf, fontFamilyOptions, themeKeyFor,
     } from 'src/services/themeService';
     import type { ProcessedImage } from 'src/services/files/imageService';
     import type { AppSettings, UpdateAppSettingsCommand } from 'src/services/api/appSettingsApiService';
@@ -740,7 +740,7 @@
         `dora.onboarding.draft.${userId || 'anonymous'}`;
 
     const form = reactive<WizardDraft>({
-        theme: 'system',
+        theme: themeKeyFor('system', PESTO),
         fontFamily: 'default',
         seedDemo: false,
         stepIndex: 0,
@@ -937,19 +937,23 @@
             rows.push({ key: 'features', icon: ICONS.tune, step: stepIndexOf('features'),
                 text: on.length > 0 ? `Features on: ${on.join(', ')}` : 'All optional features off' });
         }
-        const seedParts: string[] = [];
-        const groupCount = groupPickCount.value + customGroups.value.length;
-        const locationCount = locationPickCount.value + customLocations.value.length;
-        if (groupCount > 0) seedParts.push(plural(groupCount, 'stock group'));
-        if (locationCount > 0) seedParts.push(plural(locationCount, 'location'));
-        if (seedParts.length > 0) {
-            rows.push({ key: 'seed', icon: ICONS.category, step: stepIndexOf('stock'),
-                text: seedParts.join(' and ') });
-        }
-        const itemCount = selectedPackItemsList.value.length + draftItems.value.length;
-        if (itemCount > 0) {
-            rows.push({ key: 'items', icon: ICONS.inventory_2, step: stepIndexOf('stock'),
-                text: plural(itemCount, 'stock item') });
+        // Stock seeding is first-user only (applyDraft gates it the same
+        // way), so a later household member's recap never promises it.
+        if (state.value?.first_user) {
+            const seedParts: string[] = [];
+            const groupCount = groupPickCount.value + customGroups.value.length;
+            const locationCount = locationPickCount.value + customLocations.value.length;
+            if (groupCount > 0) seedParts.push(plural(groupCount, 'stock group'));
+            if (locationCount > 0) seedParts.push(plural(locationCount, 'location'));
+            if (seedParts.length > 0) {
+                rows.push({ key: 'seed', icon: ICONS.category, step: stepIndexOf('stock'),
+                    text: seedParts.join(' and ') });
+            }
+            const itemCount = selectedPackItemsList.value.length + draftItems.value.length;
+            if (itemCount > 0) {
+                rows.push({ key: 'items', icon: ICONS.inventory_2, step: stepIndexOf('stock'),
+                    text: plural(itemCount, 'stock item') });
+            }
         }
         if (form.seedDemo) {
             rows.push({ key: 'demo', icon: ICONS.restaurant_menu,
@@ -1029,6 +1033,11 @@
             // localStorage may be unavailable.
         }
     }
+    function canonicalTheme(stored: ThemePreference): ThemePreference {
+        const decoded = familyAndModeOf(stored);
+        return decoded ? themeKeyFor(decoded.mode, decoded.family) : stored;
+    }
+
     function loadDraft() {
         try {
             const userId = currentUser.value?.user_id ?? '';
@@ -1314,6 +1323,25 @@
             };
             await Promise.all([refreshFeatureFlags(), refreshCookingPolicy(), reloadMeasurementSystem()]);
         }
+        // Seeding defaults + starter items is the FIRST user's job only. A
+        // later household member (or anyone re-running the tour from About)
+        // must never re-create defaults the admin deleted or renamed — the
+        // stock step isn't even shown to them, but the pick maps would still
+        // default to "everything ticked" without this gate.
+        if (state.value?.first_user) {
+            await applyStockSeed();
+        }
+        // optional demo dataset. After the items pass so the demo
+        // can reuse a starter-pack "Spaghetti pasta" / "Garlic" / "Olive oil"
+        // if the user picked them; otherwise the demo creates its own. The
+        // server is idempotent (`seeded: false` when the demo recipe already
+        // exists) so a re-finish never duplicates.
+        if (form.seedDemo) {
+            await onboardingApi.seedDemoAsync();
+        }
+    }
+
+    async function applyStockSeed() {
         // send the actual picked names/paths. Master bool is
         // implicit: it's true whenever any pick under it survives.
         const groupsWanted = groupPickCount.value > 0;
@@ -1357,14 +1385,6 @@
         ];
         if (items.length > 0) {
             await onboardingApi.seedItemsAsync({ items });
-        }
-        // optional demo dataset. After the items pass so the demo
-        // can reuse a starter-pack "Spaghetti pasta" / "Garlic" / "Olive oil"
-        // if the user picked them; otherwise the demo creates its own. The
-        // server is idempotent (`seeded: false` when the demo recipe already
-        // exists) so a re-finish never duplicates.
-        if (form.seedDemo) {
-            await onboardingApi.seedDemoAsync();
         }
     }
 
@@ -1483,23 +1503,28 @@
             // isn't one of the three onboarding options (e.g. they picked a
             // richer palette in Preferences on a re-run), the select shows
             // blank and persistPreferences leaves it untouched — we never
-            // clobber a real choice.
-            form.theme = currentUser.value.theme ?? 'system';
+            // clobber a real choice. A stored key is read through the
+            // theme helpers (R-003) so the legacy bare 'system' (and the
+            // other legacy aliases) lands on the card that now represents it.
+            form.theme = canonicalTheme(currentUser.value.theme ?? 'system');
             form.fontFamily = coalesceFontFamily(currentUser.value.font_family);
         }
         loadDraft();
+        // An older draft may carry the legacy bare 'system' too.
+        form.theme = canonicalTheme(form.theme);
         stepIndex.value = Math.min(stepIndex.value, visibleSteps.value.length - 1);
         void loadFeatureBaseline();
 
         // Pre-load existing groups/locations (so the first-item name pickers
         // include what's already there) + the starter catalogue (default
-        // names + packs to preview and pick from).
+        // names + packs to preview and pick from). The catalogue (and its
+        // every-default-ticked picks) is first-user only — see applyDraft.
         await Promise.all([
             loadStockGroups(),
             stockLocationStore.stockLocations.length === 0
                 ? stockLocationStore.getStockLocationsAsync()
                 : Promise.resolve(),
-            loadCatalog(),
+            state.value?.first_user ? loadCatalog() : Promise.resolve(),
         ]);
     });
 </script>

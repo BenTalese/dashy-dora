@@ -14,6 +14,7 @@ import uuid
 
 import requests
 
+from tests.support import assert_problem
 from dora_api.app import app
 from dora_api.domain.entities.product import Product
 from dora_api.persistence.field import EntityField
@@ -527,3 +528,106 @@ def test__ingest__a_cheaper_second_offer_reads_as_a_new_low(api):
     row = next(r for r in rows if r["name"] == product["name"])
     assert row["price_now"] == 8.0
     assert row["previous_low"] == 10.0
+
+
+def _push_offer(key: str, product: dict, price: float, when: str) -> requests.Response:
+    return _post_ingest(key, {"products": [product], "offers": [{
+        "product_ref": product["ref"], "price_now": price, "observed_at": when,
+    }]})
+
+
+def _product_row(stockcode: str) -> dict:
+    items = requests.get(f"{BASE}/products").json()["items"]
+    return next(p for p in items if p.get("merchant_stockcode") == stockcode)
+
+
+def test__ingest__an_older_offer_lands_in_history_but_never_overwrites_current(api):
+    """R-098 — `current_offer` used to take whatever offer arrived last, so a
+    backdated / out-of-order push overwrote the current price. The newest
+    observation wins; the older one is still recorded as history."""
+    sid, key = _mint_key()
+    _map_store(sid, "OrderStore", _seeded_store_id())
+    stockcode = uuid.uuid4().hex[:10]
+    product = {"ref": "p1", "name": f"Order test {stockcode}", "store": "OrderStore",
+               "merchant_stockcode": stockcode}
+
+    # First push: the create placeholder (price 0, stamped "now") must be
+    # replaced even though this offer is older than "now".
+    assert _push_offer(key, product, 5.0, "2026-06-08T10:00:00+00:00").status_code == 200
+    assert _product_row(stockcode)["price_now"] == 5.0
+
+    resp = _push_offer(key, product, 9.0, "2026-06-01T10:00:00+00:00")
+    assert resp.status_code == 200, resp.text
+    assert any(r["kind"] == "offer" for r in resp.json()["accepted"]), resp.text
+    assert _product_row(stockcode)["price_now"] == 5.0
+
+    # A genuinely newer one still moves it.
+    assert _push_offer(key, product, 4.0, "2026-06-15T10:00:00+00:00").status_code == 200
+    assert _product_row(stockcode)["price_now"] == 4.0
+
+
+def test__ingest__observed_at_without_an_offset_is_read_as_utc(api):
+    """A naive instant has always been read back as UTC; one bad record must
+    not fail the whole batch, so the rule is kept and the value normalised."""
+    from dora_api.domain.entities.product_historic_offer import ProductHistoricOffer
+    from dora_api.persistence.aware import as_utc
+    from datetime import datetime, timezone
+
+    sid, key = _mint_key()
+    _map_store(sid, "TzStore", _seeded_store_id())
+    stockcode = uuid.uuid4().hex[:10]
+    product = {"ref": "p1", "name": f"Tz {stockcode}", "store": "TzStore",
+               "merchant_stockcode": stockcode}
+    resp = _push_offer(key, product, 2.0, "2026-07-12T10:00:00")
+    assert resp.status_code == 200, resp.text
+    offer_id = next(r["id"] for r in resp.json()["accepted"] if r["kind"] == "offer")
+    with app.app_context():
+        historic = SqlAlchemyRepository().get(ProductHistoricOffer).by_id(uuid.UUID(offer_id))
+        assert as_utc(historic.offered_on) == datetime(2026, 7, 12, 10, 0, tzinfo=timezone.utc)
+
+
+def test__ingest__offset_observed_at_is_stored_as_the_utc_instant(api):
+    """An offset timestamp used to be stored as naive *local* time on SQLite
+    and read back as UTC — every price shifted by the producer's offset."""
+    from dora_api.domain.entities.product_historic_offer import ProductHistoricOffer
+    from dora_api.persistence.aware import as_utc
+    from datetime import datetime, timezone
+
+    sid, key = _mint_key()
+    _map_store(sid, "TzStore", _seeded_store_id())
+    stockcode = uuid.uuid4().hex[:10]
+    product = {"ref": "p1", "name": f"Tz {stockcode}", "store": "TzStore",
+               "merchant_stockcode": stockcode}
+    resp = _push_offer(key, product, 2.0, "2026-07-12T10:00:00+10:00")
+    assert resp.status_code == 200, resp.text
+    offer_id = next(r["id"] for r in resp.json()["accepted"] if r["kind"] == "offer")
+
+    with app.app_context():
+        historic = SqlAlchemyRepository().get(ProductHistoricOffer).by_id(uuid.UUID(offer_id))
+        assert as_utc(historic.offered_on) == datetime(2026, 7, 12, 0, 0, tzinfo=timezone.utc)
+
+
+def test__ingest__web_url_that_is_not_http_degrades_to_no_link(api):
+    """The SPA renders `web_url` as an "Open on store" href — a `javascript:`
+    URL must never be stored, and the column is String(255). The batch is one
+    request, so a bad link on one record degrades to "no link" rather than
+    refusing every record in the push (real producers send "" when they have
+    none)."""
+    sid, key = _mint_key()
+    _map_store(sid, "UrlStore", _seeded_store_id())
+    for bad in ("javascript:alert(1)", "https://example.test/" + "a" * 250, "", "coles.com.au/p/1"):
+        stockcode = uuid.uuid4().hex[:10]
+        resp = _post_ingest(key, {"products": [{
+            "ref": "p1", "name": f"Url {stockcode}", "store": "UrlStore",
+            "merchant_stockcode": stockcode, "web_url": bad,
+        }], "offers": []})
+        assert resp.status_code == 200, resp.text
+        assert _product_row(stockcode)["web_url"] is None, bad
+
+    stockcode = uuid.uuid4().hex[:10]
+    ok = _post_ingest(key, {"products": [{
+        "ref": "p1", "name": f"Url {stockcode}", "store": "UrlStore",
+        "merchant_stockcode": stockcode, "web_url": "https://example.test/p/1",
+    }], "offers": []})
+    assert ok.status_code == 200, ok.text
+    assert _product_row(stockcode)["web_url"] == "https://example.test/p/1"

@@ -176,6 +176,45 @@ def test__auto_drained_entry_is_not_in_queue_but_appears_in_the_log(api):
         requests.delete(f"{MEAL_PLANS}/{plan_id}")
 
 
+def _walk_pages(query: str, limit: int) -> list[str]:
+    seen: list[str] = []
+    cursor = None
+    for _ in range(500):
+        url = f"{MEAL_PLANS}/reconcile-queue?limit={limit}{query}"
+        page = requests.get(url + (f"&cursor={cursor}" if cursor else "")).json()
+        seen.extend(e["entry_id"] for e in page["entries"])
+        cursor = page["next_cursor"]
+        if cursor is None:
+            return seen
+    raise AssertionError("pagination never ended")
+
+
+def test__reconcile_queue__DayStraddlesPageBoundary__EveryEntryListedOnce(api):
+    """The cursor used to be the last row's day alone, so the next page's
+    `scheduled_for > day` skipped the rest of a day split across pages. It is a
+    keyset on (day, id) now — both directions."""
+    _set_auto_drain(False)
+    recipe = _pick_recipe()
+    created = [
+        _create_past_day_entry(recipe["recipe_id"], days_ago=2, servings=1)
+        for _ in range(3)
+    ]
+    mine = {entry_id for _, entry_id in created}
+    _trigger_sweep()
+
+    queue = _walk_pages("", limit=2)
+    log = _walk_pages("&include_resolved=true", limit=2)
+
+    assert mine <= set(queue)
+    assert sorted(queue) == sorted(set(queue))
+    assert len(queue) == requests.get(f"{MEAL_PLANS}/reconcile-queue").json()["total"]
+    assert mine <= set(log)
+    assert sorted(log) == sorted(set(log))
+    assert len(log) == requests.get(
+        f"{MEAL_PLANS}/reconcile-queue?include_resolved=true"
+    ).json()["total"]
+
+
 # ── Verb: cooked (as planned) ───────────────────────────────────────────
 
 def test__verb_cooked_on_auto_drain_on__no_pool_change_and_writes_resolved_confirmed(api):

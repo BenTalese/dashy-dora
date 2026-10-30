@@ -1,14 +1,12 @@
 // Store-layer coverage — stockItemStore, the richest client store: sorted
-// collection cache, optimistic stock-level swap with rollback registration,
+// collection cache, optimistic stock-level swap with in-place revert,
 // canonical-row refetch, and the FU-511 auto-add toast that reaches across
 // into the shopping-list store. (The offline-queue absorption this used to
 // cover went with the queue — offline is read-only as of 2026-08-23.)
 //
 // Mock boundary: the API service class, the shopping-list
-// store, and Quasar's Notify. The rollback registry is
-// deliberately REAL — the optimistic-rollback contract (register → stale
-// until the global error handler fires executeRollbacks → restored) is the
-// behaviour under test, so we drive the real registry from the test.
+// store, and Quasar's Notify. The rollback registry is REAL so the tests can
+// prove a level write leaves nothing in it for a later global-handler sweep.
 import { createPinia, setActivePinia } from 'pinia';
 import type { StockItem } from 'src/models/stockItem';
 import {
@@ -18,6 +16,7 @@ import {
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useStockItemStore } from 'src/stores/stockItemStore';
+import { useStockLevelStore } from 'src/stores/stockLevelStore';
 
 const m = vi.hoisted(() => ({
     getAllPagesAsync: vi.fn(),
@@ -28,6 +27,13 @@ const m = vi.hoisted(() => ({
     notify: vi.fn(),
     slRefreshAsync: vi.fn(),
     slSummaries: [] as Array<{ shopping_list_id: string; display_name: string }>,
+    getLevelsAsync: vi.fn(),
+}));
+
+vi.mock('src/services/api/stockLevelApiService', () => ({
+    default: class {
+        getAllAsync = m.getLevelsAsync;
+    },
 }));
 
 vi.mock('src/services/api/stockItemApiService', () => ({
@@ -78,6 +84,7 @@ beforeEach(() => {
     m.updateAsync.mockResolvedValue({});
     m.deleteAsync.mockResolvedValue(undefined);
     m.slRefreshAsync.mockResolvedValue(undefined);
+    m.getLevelsAsync.mockResolvedValue({ items: [], total: 0, page: 1, limit: 50 });
 });
 
 async function seedStore(items: StockItem[]) {
@@ -187,24 +194,65 @@ describe('stockItemStore — updateStockLevelAsync (optimistic + rollback)', () 
 
         expect(m.getAsync).toHaveBeenCalledWith('SI-1');
         expect(store.stockItems[0]?.stock_level_last_updated).toBe('2026-07-11T00:00:00Z');
-        // Success cleared the registered rollback — a later global-handler
-        // sweep must NOT revert the committed level.
+        // Nothing is left in the global rollback registry to revert the
+        // committed level on a later, unrelated error.
         executeRollbacks();
         expect(levelOf(store, 'SI-1')).toBe('LVL-low');
     });
 
-    it('on API rejection the registered rollback restores the original level', async () => {
+    it('moves the derived status fields with the level, and restores them on failure', async () => {
+        m.getLevelsAsync.mockResolvedValueOnce({
+            items: [
+                { stock_level_id: 'LVL-good', name: 'Good', sequence: 0 },
+                { stock_level_id: 'LVL-out', name: 'Out', sequence: 2 },
+            ],
+            total: 2, page: 1, limit: 50,
+        });
+        await useStockLevelStore().getStockLevelsAsync();
+        const store = await seedStore([{
+            ...item('SI-1', 'Apple', 'LVL-good'),
+            stock_level_sequence: 0, is_out_of_stock: false, is_low_stock: false, needs_restock: false,
+        }]);
+        const update = deferred<never>();
+        m.updateAsync.mockReturnValueOnce(update.promise);
+
+        const pending = store.updateStockLevelAsync({ stock_item_id: 'SI-1', stock_level_id: 'LVL-out' });
+        expect(store.stockItems[0]).toMatchObject({
+            stock_level_sequence: 2, is_out_of_stock: true, needs_restock: true,
+        });
+
+        update.reject(new Error('offline'));
+        await expect(pending).rejects.toThrow('offline');
+        expect(store.stockItems[0]).toMatchObject({
+            stock_level_id: 'LVL-good', stock_level_sequence: 0, is_out_of_stock: false, needs_restock: false,
+        });
+    });
+
+    it('on API rejection restores the original level itself and rethrows', async () => {
         const store = await seedStore([item('SI-1', 'Apple', 'LVL-good')]);
         m.updateAsync.mockRejectedValueOnce(new Error('422 validation'));
 
+        // Callers like the stocktake runner catch the rejection themselves, so
+        // the revert must not depend on the global error handler.
         await expect(
             store.updateStockLevelAsync({ stock_item_id: 'SI-1', stock_level_id: 'LVL-out' }),
         ).rejects.toThrow('422 validation');
 
-        // Contract: the store leaves the optimistic value in place and relies
-        // on the boot-level global error handler to run executeRollbacks().
-        expect(levelOf(store, 'SI-1')).toBe('LVL-out');
-        executeRollbacks(); // what globalErrorHandler.ts does on unhandledrejection
+        expect(levelOf(store, 'SI-1')).toBe('LVL-good');
+    });
+
+    it('restores the right row by id when the cache is re-sorted during the request', async () => {
+        const store = await seedStore([item('SI-1', 'Banana', 'LVL-good')]);
+        const update = deferred<never>();
+        m.updateAsync.mockReturnValueOnce(update.promise);
+        m.createAsync.mockResolvedValueOnce(item('SI-0', 'Apple', 'LVL-low'));
+
+        const pending = store.updateStockLevelAsync({ stock_item_id: 'SI-1', stock_level_id: 'LVL-out' });
+        await store.createStockItemAsync({ name: 'Apple' } as never); // sorts in at index 0
+        update.reject(new Error('offline'));
+        await expect(pending).rejects.toThrow('offline');
+
+        expect(levelOf(store, 'SI-0')).toBe('LVL-low');
         expect(levelOf(store, 'SI-1')).toBe('LVL-good');
     });
 

@@ -57,14 +57,16 @@
                      keyboard- nor screen-reader-reachable. `role="img"` plus a
                      generated label is the same treatment `PriceHistoryChart`
                      got in chunk 4; the columns themselves stay decorative
-                     because the label already carries what they say. -->
-                <ul
+                     because the label already carries what they say. They are
+                     `div`s, not `li`s: under `role="img"` the list semantics are
+                     gone, which leaves each `li` an orphaned listitem. -->
+                <div
                     v-if="columns.length > 0"
                     class="km-columns"
                     role="img"
                     :aria-label="timelineLabel"
                 >
-                    <li v-for="col in columns" :key="col.date" class="km-column">
+                    <div v-for="col in columns" :key="col.date" class="km-column">
                         <span
                             class="km-column__bar"
                             :style="{ height: `${col.heightPct}%` }"
@@ -74,8 +76,8 @@
                                 cook{{ col.cookCount === 1 ? '' : 's' }}
                             </BaseTooltip>
                         </span>
-                    </li>
-                </ul>
+                    </div>
+                </div>
             </template>
 
             <div
@@ -260,7 +262,6 @@
         font-size: var(--font-size-sm);
     }
     .km-columns {
-        list-style: none;
         margin: var(--space-4) 0 0;
         padding: 0;
         display: flex;

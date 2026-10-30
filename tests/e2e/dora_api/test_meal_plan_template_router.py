@@ -156,3 +156,76 @@ def test_editing_or_deleting_template_does_not_touch_forked_plan():
         if template_id:
             requests.delete(f"{TEMPLATES}/{template_id}")
         requests.delete(f"{MEAL_PLANS}/{plan_id}")
+
+
+def _household_today() -> date:
+    return date.fromisoformat(requests.get(f"{MEAL_PLANS}/today").json()["today"])
+
+
+def test__apply_template__PastUnconsumedEntryInWeek__IsPreserved(api):
+    """Forking onto an existing week keeps its immutable past — a past day
+    nobody cooked included, not only consumed entries (mirrors FU-595 in
+    `update_meal_plan`). Before the fix the replace hard-deleted it."""
+    from sqlalchemy import text
+
+    from dora_api.app import app, db
+    from tests.support import uuid_bind
+
+    today = _household_today()
+    this_monday = today - timedelta(days=today.weekday())
+    recipe_id = _a_recipe_id()
+    slot = requests.get("http://localhost:5170/api/meal-slots").json()[0]["name"]
+    previous = requests.get("http://localhost:5170/api/app-settings").json()["auto_drain_past_meals"]
+    requests.patch("http://localhost:5170/api/app-settings", json={"auto_drain_past_meals": False})
+    try:
+        # The seed may already plan this week; clear it so the fork has exactly
+        # one plan to land on (the per-test rollback restores it).
+        for p in requests.get(f"{MEAL_PLANS}?filter=start_date:eq:{this_monday.isoformat()}").json()["items"]:
+            requests.delete(f"{MEAL_PLANS}/{p['meal_plan_id']}")
+        week_plan = requests.post(MEAL_PLANS, json={
+            "start_date": this_monday.isoformat(),
+            "entries": [{"recipe_id": recipe_id, "scheduled_for": today.isoformat(), "slot": slot}],
+        })
+        assert week_plan.status_code == 201, week_plan.text
+        week_plan_id = week_plan.json()["meal_plan_id"]
+        past_entry_id = week_plan.json()["entries"][0]["meal_plan_entry_id"]
+        past_day = today - timedelta(days=1)
+        with app.app_context(), db.engine.begin() as conn:
+            conn.execute(
+                text('UPDATE "MealPlanEntry" SET scheduled_for = :d WHERE id = :eid'),
+                {"d": past_day.isoformat(), "eid": uuid_bind(past_entry_id)},
+            )
+
+        # A template whose only meal is on Sunday — always today or later.
+        source_monday = _monday(2)
+        source_plan_id = _create_plan(source_monday, [{
+            "recipe_id": recipe_id,
+            "scheduled_for": (source_monday + timedelta(days=6)).isoformat(),
+            "servings": 1, "slot": slot,
+        }])
+        template_id = _save_template("Sunday only", source_plan_id)
+
+        applied = requests.post(f"{MEAL_PLANS}/from-template", json={
+            "template_id": template_id,
+            "monday_of_week": this_monday.isoformat(),
+        })
+    finally:
+        requests.patch("http://localhost:5170/api/app-settings", json={"auto_drain_past_meals": previous})
+
+    assert applied.status_code == 200, applied.text
+    assert applied.json()["meal_plan_id"] == week_plan_id
+    days = sorted(e["scheduled_for"] for e in _plan(week_plan_id)["entries"])
+    assert days == [past_day.isoformat(), (this_monday + timedelta(days=6)).isoformat()]
+
+
+def test__apply_template__MondayOfWeekIsNotAMonday__IsBadRequest(api):
+    from tests.support import assert_problem
+
+    wednesday = _monday(3) + timedelta(days=2)
+
+    resp = requests.post(f"{MEAL_PLANS}/from-template", json={
+        "template_id": "00000000-0000-0000-0000-000000000001",
+        "monday_of_week": wednesday.isoformat(),
+    })
+
+    assert_problem(resp, 400, field="monday_of_week")

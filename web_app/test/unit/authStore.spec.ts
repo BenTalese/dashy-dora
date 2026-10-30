@@ -22,6 +22,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useAuthStore } from 'src/stores/authStore';
 import { NormalisedApiError } from 'src/services/api/axiosHttpClient';
+import { clearBackendBaseUrl, setBackendBaseUrl } from 'src/services/api/backendUrl';
 import type * as AxiosHttpClientModule from 'src/services/api/axiosHttpClient';
 
 const m = vi.hoisted(() => ({
@@ -69,6 +70,20 @@ vi.mock('src/services/api/axiosHttpClient', async () => {
         },
     };
 });
+
+// Capacitor is mocked at its own boundary so the real platform helper and the
+// real backend-URL store run; `native.on` flips the shell per test.
+const native = vi.hoisted(() => ({ on: false }));
+vi.mock('@capacitor/core', () => ({
+    Capacitor: { isNativePlatform: () => native.on },
+}));
+vi.mock('@capacitor/preferences', () => ({
+    Preferences: {
+        get: vi.fn().mockResolvedValue({ value: null }),
+        set: vi.fn().mockResolvedValue(undefined),
+        remove: vi.fn().mockResolvedValue(undefined),
+    },
+}));
 
 function user(overrides: Partial<AuthenticatedUser> = {}): AuthenticatedUser {
     return {
@@ -332,5 +347,70 @@ describe('authStore — profile updates + avatar cache', () => {
         expect(m.changePasswordAsync).toHaveBeenCalledWith({ current_password: 'a', new_password: 'b' });
         // A password change must not touch the cached user identity.
         expect(store.currentUser?.email).toBe('old@x.io');
+    });
+});
+
+describe('authStore — native shell with no backend address', () => {
+    beforeEach(async () => {
+        native.on = true;
+        await clearBackendBaseUrl();
+    });
+
+    it('settles signed-out without probing, so the address picker can render', async () => {
+        const store = useAuthStore();
+
+        await store.bootstrapAsync();
+
+        expect(store.isBootstrapped).toBe(true);
+        expect(store.currentUser).toBeNull();
+        expect(store.bootstrapRequired).toBe(false);
+        expect(store.bootstrapError).toBeNull();
+        expect(m.bootstrapRequiredAsync).not.toHaveBeenCalled();
+        expect(m.getMeAsync).not.toHaveBeenCalled();
+    });
+
+    it('re-probes the new server once an address is saved', async () => {
+        const store = useAuthStore();
+        await store.bootstrapAsync();
+
+        await setBackendBaseUrl('dora.example.com');
+        const me = user({ user_id: 'U-5' });
+        m.getMeAsync.mockResolvedValue(me);
+        await store.rebootstrapAsync();
+
+        expect(m.bootstrapRequiredAsync).toHaveBeenCalledTimes(1);
+        expect(store.currentUser).toEqual(me);
+    });
+});
+
+describe('authStore — non-JSON probe answers', () => {
+    it('treats an HTML body from /auth/me as signed out', async () => {
+        m.getMeAsync.mockResolvedValue('<!doctype html><html></html>');
+        const store = useAuthStore();
+
+        await store.bootstrapAsync();
+
+        expect(store.isBootstrapped).toBe(true);
+        expect(store.currentUser).toBeNull();
+        expect(store.isAuthenticated()).toBe(false);
+    });
+
+    it('treats an HTML body on refresh as signed out', async () => {
+        const store = useAuthStore();
+        await store.loginAsync({ username: 'ben', password: 'pw' });
+
+        m.getMeAsync.mockResolvedValue('<!doctype html><html></html>');
+        await store.refreshAsync();
+
+        expect(store.currentUser).toBeNull();
+    });
+
+    it('treats a non-boolean bootstrap-required answer as "not required"', async () => {
+        m.bootstrapRequiredAsync.mockResolvedValue(undefined);
+        const store = useAuthStore();
+
+        await store.bootstrapAsync();
+
+        expect(store.bootstrapRequired).toBe(false);
     });
 });

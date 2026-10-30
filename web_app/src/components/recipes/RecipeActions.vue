@@ -4,6 +4,7 @@
          host page handles each emit. `spread` pushes the cart to the far end
          (the card's footer); the row keeps the buttons together. -->
     <BaseButton
+        :aria-label="recipe.is_favourite ? 'Remove from favourites' : 'Mark favourite'"
         variant="icon"
         :icon="recipe.is_favourite ? ICONS.favorite : ICONS.favorite_border"
         :color="recipe.is_favourite ? 'negative' : undefined"
@@ -14,6 +15,7 @@
         </BaseTooltip>
     </BaseButton>
     <BaseButton
+        aria-label="Filter stock to this recipe's ingredients"
         v-if="showFilterByIngredients"
         variant="icon"
         :icon="ICONS.filter_list"
@@ -22,6 +24,7 @@
         <BaseTooltip>Filter stock to this recipe's ingredients</BaseTooltip>
     </BaseButton>
     <BaseButton
+        :aria-label="cookButtonTooltip"
         variant="filled-icon"
         :icon="ICONS.chef_hat"
         :color="cookButtonColor"
@@ -31,6 +34,7 @@
     </BaseButton>
     <q-space v-if="spread" />
     <BaseButton
+        :aria-label="addListTooltip"
         variant="icon"
         :icon="cookable === true ? ICONS.add_shopping_cart : ICONS.remove_shopping_cart"
         :color="cookable === false ? 'warning' : undefined"

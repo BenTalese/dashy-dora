@@ -273,6 +273,33 @@ def test__link_status__never_resolves_a_custom_product__and_bearer_delete_refuse
     assert len(still_there.json()["items"]) == 1
 
 
+def test__link_status__name_fallback_is_scoped_to_the_named_store(api):
+    """The read-side lookup filtered on the Store entity without joining it,
+    so SQLAlchemy built a cartesian `FROM Product, Store` and the name
+    fallback matched a same-named product at ANY store; the companion's
+    unsave then deleted the wrong product. A product held only at store A is
+    not held at store B."""
+    stores = requests.get(f"{BASE}/stores").json()["items"]
+    assert len(stores) >= 2, "expected seed to provision at least two stores"
+    sid, key = _mint_key()
+    _map_store(sid, "StoreA", stores[0]["store_id"])
+    _map_store(sid, "StoreB", stores[1]["store_id"])
+    name = f"TwoStore {uuid.uuid4().hex[:6]}"
+    product_id = _seed_ingested_product(key, sid, "StoreA", uuid.uuid4().hex[:10], name)
+
+    resp = _post_link_status(key, {
+        "items": [
+            {"ref": "a", "store": "StoreA", "name": name},
+            {"ref": "b", "store": "StoreB", "name": name},
+        ],
+    })
+    assert resp.status_code == 200, resp.text
+    by_ref = {i["ref"]: i for i in resp.json()["items"]}
+    assert by_ref["a"]["product_id"] == product_id
+    assert by_ref["b"]["product_id"] is None
+    assert by_ref["b"]["reason"] == "product_not_found"
+
+
 def test__link_status__over_the_item_cap_is_rejected(api):
     _sid, key = _mint_key()
     resp = _post_link_status(key, {

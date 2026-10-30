@@ -345,6 +345,10 @@ def gather_belief_inputs_for_items(
                 completed_at_by_list[l.id] = l.completed_at
     purchase_dates_by_item: dict[UUID, set[date]] = {i.id: set() for i in items}
     for line in lines:
+        # R-061 — only a bought line is a purchase: ticked, and not deferred
+        # by trim-to-budget (same rule as `spend_lines`).
+        if not line.is_ticked or line.deferred_by_budget:
+            continue
         completed_at = completed_at_by_list.get(line.shopping_list_id)
         if completed_at is None:
             continue

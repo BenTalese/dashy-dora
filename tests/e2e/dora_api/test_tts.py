@@ -76,6 +76,18 @@ def test__tts_synthesize__empty_text_is_400(api):
     assert resp.status_code == 400, resp.text
 
 
+def test__tts_synthesize__JsonArrayBody__IsProblemDetails400(api):
+    """A non-object body used to reach `.get` on a list and 500. Errors are the
+    ProblemDetails envelope, still carrying the `error` key the SPA's raw
+    fetch reads."""
+    from tests.support import assert_problem
+
+    resp = requests.post(f"{API}/tts", json=["Hello"])
+
+    body = assert_problem(resp, 400)
+    assert body["error"]
+
+
 def test__update_me__voice_prefs_round_trip(api):
     # Snapshot dora's current prefs so the test leaves no residue.
     before = requests.get(f"{AUTH}/me").json()
@@ -105,3 +117,39 @@ def test__update_me__rejects_invalid_voice_engine(api):
 def test__update_me__rejects_unknown_voice_id(api):
     resp = requests.patch(f"{AUTH}/me", json={"voice_id": "definitely-not-a-voice"})
     assert resp.status_code == 422, resp.text
+
+
+def test__tts_synthesize__TextOverLimit__Is400WithErrorKey(api):
+    from tests.support import assert_problem
+
+    resp = requests.post(f"{API}/tts", json={"text": "a" * 2001})
+
+    body = assert_problem(resp, 400, field="text")
+    assert body["error"]
+
+
+def test__tts_synthesize__NonFiniteOrHugeKnobs__Are400NotA500(api):
+    """NaN / inf / huge knobs used to reach `2.0 ** (x / 12)` (OverflowError →
+    500) or Piper's CLI. Each is refused up front, before Piper is consulted."""
+    from tests.support import assert_problem
+
+    for knob, value in (
+        ("pitch_semitones", float("nan")),
+        ("pitch_semitones", 1e308),
+        ("length_scale", float("inf")),
+        ("length_scale", 0),
+        ("noise_scale", -1),
+        ("noise_w", 99),
+        ("sentence_silence", 1e9),
+    ):
+        resp = requests.post(f"{API}/tts", json={"text": "Hello.", knob: value})
+        body = assert_problem(resp, 400, field=knob)
+        assert body["error"], (knob, value)
+
+
+def test__tts_synthesize__UnknownField__Is400(api):
+    from tests.support import assert_problem
+
+    resp = requests.post(f"{API}/tts", json={"text": "Hello.", "speed": 2})
+
+    assert_problem(resp, 400, field="speed")

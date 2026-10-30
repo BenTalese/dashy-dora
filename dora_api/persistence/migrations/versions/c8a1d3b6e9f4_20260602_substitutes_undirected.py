@@ -18,6 +18,7 @@ Create Date: 2026-06-02 00:00:00.000000
 """
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy_utils import UUIDType
 
 revision = 'c8a1d3b6e9f4'
 down_revision = 'c6e9f4a82d15'
@@ -29,8 +30,11 @@ def upgrade():
     op.drop_table('StockItemSubstitute')
     op.create_table(
         'StockItemSubstitute',
-        sa.Column('stock_item_a_id', sa.String(length=36), nullable=False),
-        sa.Column('stock_item_b_id', sa.String(length=36), nullable=False),
+        # UUIDType to match `StockItem.id`: Postgres refuses a VARCHAR FK onto
+        # a uuid column. Installs that ran the earlier VARCHAR(36) form are
+        # converted by e7a2c5f9b3d1.
+        sa.Column('stock_item_a_id', UUIDType(), nullable=False),
+        sa.Column('stock_item_b_id', UUIDType(), nullable=False),
         sa.Column('notes', sa.String(), nullable=True),
         sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(['stock_item_a_id'], ['StockItem.id'], ondelete='CASCADE'),
@@ -44,8 +48,8 @@ def downgrade():
     op.drop_table('StockItemSubstitute')
     op.create_table(
         'StockItemSubstitute',
-        sa.Column('stock_item_id', sa.String(length=36), nullable=False),
-        sa.Column('substitute_id', sa.String(length=36), nullable=False),
+        sa.Column('stock_item_id', UUIDType(), nullable=False),
+        sa.Column('substitute_id', UUIDType(), nullable=False),
         sa.ForeignKeyConstraint(['stock_item_id'], ['StockItem.id'], ondelete='CASCADE'),
         sa.ForeignKeyConstraint(['substitute_id'], ['StockItem.id'], ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('stock_item_id', 'substitute_id'),

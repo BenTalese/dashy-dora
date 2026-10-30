@@ -446,3 +446,131 @@ def test__verify_email__rejects_foreign_purpose_token(api):
     token = _mint(PURPOSE_RESET_PASSWORD, RESET_PASSWORD_TTL)
     resp = _fresh_session().post(f"{BASE}/verify-email", json={"token": token})
     assert resp.status_code == 400, resp.text
+
+
+def test__bootstrap_admin__creates_first_admin_on_empty_install(api):
+    """QA 2026-10-29 — the success path. The `fb49f00a` import tidy dropped
+    `hash_password` / `audit_emit` from this module, so every fresh install
+    500'd on /setup; the existing tests only covered the reject branches.
+    Wipe the seeded users (the per-test snapshot restores them) and walk the
+    one-shot path end to end: 200, admin flag, session established."""
+    from sqlalchemy import delete as sa_delete
+    from dora_api.app import db
+    with app.app_context():
+        db.session.execute(sa_delete(db.metadata.tables["User"]))
+        db.session.commit()
+
+    s = _fresh_session()
+    assert s.get(f"{BASE}/bootstrap-required").json() == {"required": True}
+    response = s.post(f"{BASE}/bootstrap-admin", json={
+        "username": "first-admin",
+        "password": "Abcdefghij1",
+        "email": "first-admin@example.com",
+    })
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["username"] == "first-admin"
+    assert body["is_admin"] is True
+    me = s.get(f"{BASE}/me")
+    assert me.status_code == 200, me.text
+    assert me.json()["is_admin"] is True
+    # One-shot: a second call is refused.
+    again = s.post(f"{BASE}/bootstrap-admin", json={
+        "username": "second", "password": "Abcdefghij1",
+    })
+    assert again.status_code == 410
+
+
+# ── Security review: per-username login limit, timing, change-password ──
+
+def test__login__IpRotatesButUsernameRepeats__Returns429(api, monkeypatch):
+    """The IP bucket is trivially defeated by a forged / misproxied
+    `X-Forwarded-For`. Simulate a fresh IP per request: the per-username
+    bucket (10 / 15 min) must still cut guessing off with a 429."""
+    import itertools
+    import types
+    from dora_api.infrastructure import auth_helpers
+    _reset_rate_buckets()
+    counter = itertools.count()
+
+    class _RotatingRequest:
+        @property
+        def remote_addr(self):
+            return f"10.9.{next(counter)}.1"
+
+    monkeypatch.setattr(auth_helpers, "request", _RotatingRequest())
+    s = _fresh_session()
+    victim = f"victim-{uuid.uuid4().hex[:6]}"
+    for _ in range(10):
+        r = s.post(f"{BASE}/login", json={"username": victim, "password": "wrong-pw"})
+        assert r.status_code == 401, r.text
+    blocked = s.post(f"{BASE}/login", json={"username": victim.upper(), "password": "x"})
+    assert blocked.status_code == 429
+    assert int(blocked.headers["Retry-After"]) > 60
+    # A different account is unaffected.
+    other = s.post(f"{BASE}/login", json={"username": f"o-{victim}", "password": "x"})
+    assert other.status_code == 401
+    _reset_rate_buckets()
+
+
+def test__login__UsernameBudgetExhausted__CorrectPasswordStillSignsIn(api, monkeypatch):
+    """The per-username bucket counts guesses, it is not a lockout: an
+    attacker spraying `dora`'s username must not lock the real owner out —
+    only wrong passwords are refused once the budget is spent."""
+    import itertools
+    from dora_api.infrastructure import auth_helpers
+    _reset_rate_buckets()
+    counter = itertools.count()
+
+    class _RotatingRequest:
+        @property
+        def remote_addr(self):
+            return f"10.8.{next(counter)}.1"
+
+    monkeypatch.setattr(auth_helpers, "request", _RotatingRequest())
+    attacker = _fresh_session()
+    for _ in range(10):
+        assert attacker.post(f"{BASE}/login", json={"username": "dora", "password": "wrong-pw"}).status_code == 401
+    assert attacker.post(f"{BASE}/login", json={"username": "dora", "password": "wrong-pw"}).status_code == 429
+    owner = _fresh_session()
+    assert owner.post(f"{BASE}/login", json={"username": "dora", "password": "dora"}).status_code == 200
+    _reset_rate_buckets()
+
+
+def test__login__UnknownUsername__StillRunsDummyHashVerify(api, monkeypatch):
+    """Anti-enumeration: an unknown username must cost the same scrypt verify
+    as a wrong password, so response timing can't reveal which users exist."""
+    from dora_api.features.auth import login as login_mod
+    _reset_rate_buckets()
+    seen: list[str] = []
+    real = login_mod.check_password_hash
+
+    def _spy(pwhash, password):
+        seen.append(pwhash)
+        return real(pwhash, password)
+
+    monkeypatch.setattr(login_mod, "check_password_hash", _spy)
+    r = _fresh_session().post(f"{BASE}/login", json={
+        "username": f"nobody-{uuid.uuid4().hex[:8]}", "password": "whatever-pw",
+    })
+    assert r.status_code == 401
+    assert seen == [login_mod._DUMMY_PASSWORD_HASH]
+    _reset_rate_buckets()
+
+
+def test__change_password__OverPerUserLimit__Returns429(api):
+    from dora_api.features.auth import change_password as cp
+    from dora_api.infrastructure.auth_helpers import rate_limit
+    _reset_rate_buckets()
+    user_id = str(_dora_user_id())
+    for _ in range(cp._CHANGE_PASSWORD_MAX):
+        assert rate_limit(
+            cp._CHANGE_PASSWORD_SCOPE, cp._CHANGE_PASSWORD_MAX, subject=user_id,
+            window_seconds=cp._CHANGE_PASSWORD_WINDOW_SECONDS,
+        )
+    r = requests.post(f"{BASE}/me/password", json={
+        "current_password": "wrong-current", "new_password": "Zyxwvutsrq987",
+    })
+    assert r.status_code == 429
+    assert "Retry-After" in r.headers
+    _reset_rate_buckets()

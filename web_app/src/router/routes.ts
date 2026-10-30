@@ -141,19 +141,11 @@ const routes: RouteRecordRaw[] = [
                 beforeEnter: async () => {
                     const { useShoppingListStore } = await import('src/stores/shoppingListStore');
                     const store = useShoppingListStore();
-                    if (store.summaries.length === 0 && !store.loading) {
-                        try {
-                            await store.refreshAsync();
-                        } catch {
-                            // Fall through — Overview will render the
-                            // empty / error state.
-                        }
-                    }
-                    // UX-v2 §3.3 — the "next up" pick is a server-owned rule
-                    // (live shop > first date-wise after the last completed >
-                    // earliest pending > most recently completed). The guard
-                    // just follows the flag; no date logic lives here.
-                    const next = store.summaries.find((s) => s.is_next_up);
+                    // Joins a load another surface already started, so the
+                    // redirect never runs against a half-loaded store. A
+                    // failure lands in `loadError` for the Overview to show.
+                    await store.ensureLoadedAsync();
+                    const next = store.nextUpSummary;
                     if (next) return `/shopping-lists/${next.shopping_list_id}`;
                     // No lists at all — render the empty state.
                     return;

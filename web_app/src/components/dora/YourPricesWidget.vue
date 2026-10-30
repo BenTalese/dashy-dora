@@ -174,7 +174,7 @@
             unit: string;
             store_id: string | null;
             pack_count: number | null;
-        }): void;
+        }, done: () => void): void;
     }>();
 
     const dialogOpen = ref(false);
@@ -195,8 +195,9 @@
         store_id: string | null;
         pack_count: number | null;
     }) {
-        emit('submit', value);
-        dialogOpen.value = false;
+        // The parent calls `done` once the save resolves, so a failed save
+        // leaves the dialog open with the typed values intact.
+        emit('submit', value, () => { dialogOpen.value = false; });
     }
 </script>
 

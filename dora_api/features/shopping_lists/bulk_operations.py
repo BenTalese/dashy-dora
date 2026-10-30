@@ -24,7 +24,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from dora_api.domain.entities.shopping_list import ShoppingListLine
+from dora_api.domain.entities.shopping_list import ShoppingList, ShoppingListLine
 from dora_api.features.routers import SHOPPING_LIST_ROUTER
 from dora_api.features.shopping_lists.manage_shopping_list_lines import (
     AddLineHandler, AddLineRequest, RemoveLineByStockItemHandler)
@@ -179,13 +179,17 @@ class ReorderHandler:
         self.repository = repository
 
     def handle(self, request: ReorderRequest, shopping_list_id: UUID) -> ReorderResponse:
+        if not self.repository.get(ShoppingList).exists(shopping_list_id):
+            return ReorderResponse(list_not_found=True)
+        # A repeated id keeps its first position (and counts once).
+        line_ids = list(dict.fromkeys(request.line_ids))
         # Pull every line on the list so we can both validate the request
         # and assign sequences in a single pass.
         all_lines: List[ShoppingListLine] = self.repository.get(ShoppingListLine).all(
             EntityField(ShoppingListLine, "shopping_list_id").eq(shopping_list_id)
         )
         by_id = {l.id: l for l in all_lines}
-        mismatched = [lid for lid in request.line_ids if lid not in by_id]
+        mismatched = [lid for lid in line_ids if lid not in by_id]
         if mismatched:
             return ReorderResponse(mismatched=mismatched)
 
@@ -193,7 +197,7 @@ class ReorderHandler:
         # not mentioned keep going after, preserving their relative order.
         next_seq = 0
         seen: set[UUID] = set()
-        for lid in request.line_ids:
+        for lid in line_ids:
             line = by_id[lid]
             line.sequence = next_seq
             next_seq += 1
@@ -208,7 +212,7 @@ class ReorderHandler:
             next_seq += 1
 
         self.repository.save_changes()
-        return ReorderResponse(reordered_count=len(request.line_ids))
+        return ReorderResponse(reordered_count=len(line_ids))
 
 
 @SHOPPING_LIST_ROUTER.route("/<uuid:shopping_list_id>/lines/reorder", methods=["POST"])
@@ -216,6 +220,8 @@ class ReorderHandler:
 def reorder_lines(shopping_list_id: UUID):
     _Request: ReorderRequest = get_request_body()
     _Response = ReorderHandler(SqlAlchemyRepository()).handle(_Request, shopping_list_id)
+    if _Response.list_not_found:
+        return not_found("ShoppingList", shopping_list_id)
     if _Response.mismatched:
         return bad_request(
             "Some line ids don't belong to this list.",

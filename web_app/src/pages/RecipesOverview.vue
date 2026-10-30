@@ -429,7 +429,9 @@
                 class="text-center dora-text-muted q-py-xl"
             >
                 <q-icon :name="ICONS.menu_book" size="60px" class="q-mb-sm" />
-                <div>No recipes match the current filters.</div>
+                <!-- An empty cookbook is not a filter miss: say what to do next. -->
+                <div v-if="recipes.length === 0 && !hasAnyFilter">No recipes yet. Add one, or import a recipe from a link or a photo.</div>
+                <div v-else>No recipes match the current filters.</div>
                 <BaseButton
                     v-if="hasAnyFilter"
                     variant="ghost"
@@ -733,6 +735,9 @@
     type ExpiringFacts = { count: number; soonest: string | null };
     const expiringByRecipeId = ref<Map<string, ExpiringFacts>>(new Map());
     const expiringFetchInFlight = ref(false);
+    /** True once the expiring set has actually arrived — an empty map is a
+     *  real answer ("nothing uses an expiring item"), not "still loading". */
+    const expiringLoaded = ref(false);
 
     type SortKey =
         | 'name'
@@ -939,7 +944,7 @@
             // the unrestricted list rather than an empty flash).
             if (
                 expiringOnly.value
-                && expiringByRecipeId.value.size > 0
+                && expiringLoaded.value
                 && !expiringByRecipeId.value.has(r.recipe_id)
             ) {
                 return false;
@@ -1282,6 +1287,7 @@
     watch(expiringOnly, async (on) => {
         if (!on) {
             expiringByRecipeId.value = new Map();
+            expiringLoaded.value = false;
             return;
         }
         expiringFetchInFlight.value = true;
@@ -1297,6 +1303,7 @@
                 });
             }
             expiringByRecipeId.value = next;
+            expiringLoaded.value = true;
         } catch (err) {
             $q.notify({
                 type: 'negative',

@@ -17,7 +17,7 @@ export function parseFilename(header: string | null): string | null {
  *  after the click so we don't leak memory across many exports. */
 /** Build an RFC-4180 CSV from rows and hand it to the browser as a download
  *  (finalisation 18-R8 — the import page carried its own escaper + anchor
- *  click). Cells are quoted when they hold a comma, quote or newline. */
+ *  click). Cells are quoted when they hold a comma, quote, CR or LF. */
 export function downloadCsv(
     header: readonly string[],
     rows: ReadonlyArray<ReadonlyArray<unknown>>,
@@ -29,7 +29,7 @@ export function downloadCsv(
         else if (typeof v === 'string') s = v;
         else if (typeof v === 'number' || typeof v === 'boolean' || typeof v === 'bigint') s = String(v);
         else s = JSON.stringify(v) ?? '';
-        return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+        return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
     const lines = [header.join(','), ...rows.map((r) => r.map(escape).join(','))];
     triggerSave(new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' }), filename);

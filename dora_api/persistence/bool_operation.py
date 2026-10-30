@@ -32,6 +32,22 @@ class BoolOperation:
 
 # ── Comparison operations ──────────────────────────────────────────────────────
 
+# LIKE wildcards in a user's search text must match literally ("100%" is not
+# "100 then anything"). Escaped with an explicit ESCAPE char so it behaves the
+# same on SQLite and Postgres (R-005).
+_LIKE_ESCAPE = "\\"
+
+
+def _escape_like(value: Any) -> Any:
+    if not isinstance(value, str):
+        return value
+    return (
+        value.replace(_LIKE_ESCAPE, _LIKE_ESCAPE + _LIKE_ESCAPE)
+        .replace("%", _LIKE_ESCAPE + "%")
+        .replace("_", _LIKE_ESCAPE + "_")
+    )
+
+
 class Equal(BoolOperation):
     def __init__(self, field, value, case_sensitive: bool = False):
         self.field = field
@@ -149,8 +165,8 @@ class Contains(BoolOperation):
 
     def to_sqla(self, mapper_registry: registry) -> ColumnElement:
         col = self._resolve(self.field, case_sensitive=False)
-        val = self._resolve(self.value, case_sensitive=False)
-        return col.like(f"%{val}%")
+        val = _escape_like(self._resolve(self.value, case_sensitive=False))
+        return col.like(f"%{val}%", escape=_LIKE_ESCAPE)
 
 
 class StartsWith(BoolOperation):
@@ -163,8 +179,8 @@ class StartsWith(BoolOperation):
 
     def to_sqla(self, mapper_registry: registry) -> ColumnElement:
         col = self._resolve(self.field, case_sensitive=False)
-        val = self._resolve(self.value, case_sensitive=False)
-        return col.like(f"{val}%")
+        val = _escape_like(self._resolve(self.value, case_sensitive=False))
+        return col.like(f"{val}%", escape=_LIKE_ESCAPE)
 
 
 # ── Logical operations ─────────────────────────────────────────────────────────

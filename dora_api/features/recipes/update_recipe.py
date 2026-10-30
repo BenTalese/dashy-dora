@@ -29,7 +29,8 @@ from dora_api.features.recipes.recipe_step_access import (
     StepWrite, replace_steps_for_recipe,
 )
 from dora_api.features.recipes.recipe_step_image_access import (
-    StepImageWrite, replace_step_images_for_recipe,
+    UnknownStepImageId, replace_step_images_for_recipe,
+    resolve_step_image_entries,
 )
 from dora_api.features.recipes.recipe_section_access import (
     SectionWrite, replace_sections_for_recipe,
@@ -63,16 +64,16 @@ class UpdateRecipeRequest(BaseModel):
     # cuisine + category are FK vocabularies (resolved like
     # recipe_collection_id below). Explicit null clears the link.
     category_id: UUID | None = None
-    cook_time_minutes: int | None = None
+    cook_time_minutes: int | None = Field(default = None, ge = 0)
     cuisine_id: UUID | None = None
     difficulty: str | None = None
     instructions: str | None = None
     # RD-29 — free-text personal notes. Explicit null clears.
     notes: str | None = Field(default = None, max_length = 5000)
     is_favourite: bool | None = None
-    prep_time_minutes: int | None = None
+    prep_time_minutes: int | None = Field(default = None, ge = 0)
     recipe_collection_id: UUID | None = None
-    servings: int | None = None
+    servings: int | None = Field(default = None, ge = 1)
     # origin URL for imported recipes. Explicit null clears.
     source: str | None = Field(default = None, max_length = 2048)
     time_of_day: str | None = None
@@ -101,7 +102,9 @@ class UpdateRecipeRequest(BaseModel):
     # PROPOSAL_RECIPE_IMAGE_STEPS — present (even as []) = replace the full
     # step image set. Omit to leave untouched. Mode-switch is
     # non-destructive: clients toggling away from image mode can leave the
-    # rows in place by omitting the field.
+    # rows in place by omitting the field. Each entry is either a new
+    # `data:image/...` data URL or the id of one of this recipe's saved step
+    # images (kept, in its new position).
     step_images: List[str] | None = None
 
 
@@ -388,14 +391,14 @@ class UpdateRecipeHandler:
         # PROPOSAL_RECIPE_IMAGE_STEPS — full-replace semantics matching `steps`
         # above. Empty list clears all rows; mode flip alone (without
         # `step_images` in the payload) leaves existing rows in place so the
-        # user can experiment with modes without re-uploading.
+        # user can experiment with modes without re-uploading. Kept-image ids
+        # are resolved to their bytes before the replace wipes the rows.
         if "step_images" in _SetFields and request.step_images is not None:
             try:
-                _ImageWrites = [
-                    StepImageWrite(sequence=i, image_data_url=data_url)
-                    for i, data_url in enumerate(request.step_images)
-                ]
+                _ImageWrites = resolve_step_image_entries(recipe_id, request.step_images)
                 replace_step_images_for_recipe(recipe_id, _ImageWrites)
+            except UnknownStepImageId as exc:
+                return UpdateRecipeResponse(invalid_step_image_message=str(exc))
             except ValueError as exc:
                 return UpdateRecipeResponse(invalid_step_message=str(exc))
 

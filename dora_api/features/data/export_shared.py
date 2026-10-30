@@ -11,6 +11,25 @@ def slugify(value: str) -> str:
     return text or "untitled"
 
 
+# Leading characters a spreadsheet app reads as a formula (or as the start of
+# one, after it strips a tab / CR). A household member's free-text "notes"
+# could otherwise run `=HYPERLINK(...)` / DDE in whoever opens the export.
+_CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def csv_safe_cell(value: object) -> object:
+    """OWASP CSV-injection mitigation: prefix a formula-looking text cell with
+    a single quote so Excel / Sheets / LibreOffice show it as text. Non-text
+    cells (a negative quantity) pass through untouched."""
+    if isinstance(value, str) and value.startswith(_CSV_FORMULA_PREFIXES):
+        return "'" + value
+    return value
+
+
+def csv_safe_row(cells: list[object]) -> list[object]:
+    return [csv_safe_cell(cell) for cell in cells]
+
+
 def export_filename(prefix: str, list_name: str, extension: str) -> str:
     # R-021 — the date stamp on a download is the household's calendar day
     # ("recipe-bolognese-2026-06-29.csv"), not the server's.

@@ -11,8 +11,9 @@ overwrite"):
 - An unchanged offer (same `price_now` at the same `observed_at`) is a
   no-op. Dedupe key: `(product_id, observed_at, price_now)`.
 - A new price → append a `ProductHistoricOffer` *and* move
-  `current_offer` to the new value (so the catalogue read still reads
-  the latest).
+  `current_offer` to the new value — but only when it is at least as new
+  as the current one (R-098), so a backdated / out-of-order push lands in
+  history without overwriting the current price.
 - The historic point carries the `source` string for provenance.
 
 The mapping returns a small status so the caller can build per-record
@@ -27,6 +28,7 @@ from enum import Enum
 from dora_api.domain.entities.product import Product
 from dora_api.domain.entities.product_historic_offer import \
     ProductHistoricOffer
+from dora_api.persistence.aware import as_utc
 from dora_api.persistence.field import EntityField
 from dora_api.infrastructure.ports import Repository
 
@@ -99,9 +101,23 @@ def apply_offer_to_product(
     # Move current. The 1:1 `current_offer` row is mutated in place
     # rather than rebuilt, because rebuilding would break the FK on the
     # owning Product row.
-    if product.current_offer is not None:
+    if product.current_offer is not None and _supersedes(product.current_offer, observed_at):
         product.current_offer.offered_on = observed_at
         product.current_offer.price_now = price_now
         product.current_offer.price_was = effective_price_was
 
     return OfferResult(OfferOutcome.APPENDED, str(historic.id))
+
+
+def _supersedes(current, observed_at: datetime) -> bool:
+    """Whether an offer observed at `observed_at` should become current.
+
+    R-098 — newest observation wins, compared as UTC instants (SQLite reads
+    the stored value back naive). The ingest-create placeholder (price 0,
+    stamped "now" before any real price is known) is always replaced: real
+    offers are validated `price_now > 0`, so a 0 can only be that
+    placeholder, and its "now" stamp would otherwise outrank a genuinely
+    older first price."""
+    if current.offered_on is None or (current.price_now or 0) <= 0:
+        return True
+    return as_utc(observed_at) >= as_utc(current.offered_on)

@@ -1,5 +1,5 @@
 import AxiosHttpClient, { type CreatedResponse } from './axiosHttpClient';
-import type { Page } from './queryStringBuilder';
+import { createQueryString, fetchAllPages, type Page } from './queryStringBuilder';
 
 export type StockLocation = {
     name: string;
@@ -16,8 +16,16 @@ export default class StockLocationApiService {
         this.httpClient = new AxiosHttpClient();
     }
 
-    getAllAsync = async (): Promise<Page<StockLocation>> =>
-        await this.httpClient.get<Page<StockLocation>>('/stock-locations');
+    getAllAsync = async (
+        pagination?: { page: number; limit: number },
+    ): Promise<Page<StockLocation>> =>
+        await this.httpClient.get<Page<StockLocation>>(
+            `/stock-locations${createQueryString(undefined, undefined, pagination)}`,
+        );
+
+    /** Every location: the store is the whole tree, not its first page. */
+    getAllPagesAsync = async (): Promise<StockLocation[]> =>
+        await fetchAllPages((page, limit) => this.getAllAsync({ page, limit }));
 
     createAsync = async (command: CreateStockLocationCommand): Promise<CreatedResponse> =>
         await this.httpClient.post<CreatedResponse>('/stock-locations', command);

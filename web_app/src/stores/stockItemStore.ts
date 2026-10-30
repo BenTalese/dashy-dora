@@ -3,6 +3,7 @@ import { invalidateBuyVerdict } from 'src/composables/useBuyVerdict';
 import { nameCollator } from 'src/composables/useMoney';
 import { usePantryBeliefs } from 'src/composables/usePantryBeliefs';
 import { usePlannedDemand } from 'src/composables/usePlannedDemand';
+import { isLowStockSequence, isOutOfStockSequence, needsRestockSequence } from 'src/helpers/stockStatus';
 import { Notify } from 'quasar';
 import type { StockItem } from 'src/models/stockItem';
 import type {
@@ -11,9 +12,9 @@ import type {
     UpdateStockItemResponse
 } from 'src/services/api/stockItemApiService';
 import StockItemApiService from 'src/services/api/stockItemApiService';
-import { clearRollbacks, registerRollback } from 'src/services/errorHandling/rollbackRegistry';
 import { useRecipeStore } from 'src/stores/recipeStore';
 import { useShoppingListStore } from 'src/stores/shoppingListStore';
+import { useStockLevelStore } from 'src/stores/stockLevelStore';
 import type { Ref } from 'vue';
 import { computed, readonly, ref } from 'vue';
 
@@ -144,40 +145,62 @@ export const useStockItemStore = defineStore('stockItem', () => {
         return entity;
     };
 
-    /** Optimistic stock-level swap with rollback if the API rejects.
+    /** Optimistic stock-level swap, reverted in place if the API rejects.
      *  Offline is read-only (2026-08-23): a network failure rejects like any
-     *  other, the registered rollback restores the previous level, and the
-     *  user is told — nothing is buffered and re-promised. */
+     *  other, the previous level is restored, and the error is rethrown so the
+     *  caller (or the global handler) tells the user. */
     async function updateStockLevelAsync(stockItemToUpdate: UpdateStockItemCommand) {
-        const stockItemIndex = stockItems.value.findIndex(
-            (si) => si.stock_item_id == stockItemToUpdate.stock_item_id
-        );
-        if (stockItemIndex < 0) {
+        const { stock_item_id } = stockItemToUpdate;
+        const findIndex = () => stockItems.value.findIndex((si) => si.stock_item_id === stock_item_id);
+        const cached = stockItems.value[findIndex()];
+        if (!cached) {
             // Not hydrated here (the stocktake runner writes before `/stock`
             // has been visited): still the one write path — persist, keep the
             // recipe facts honest and surface the auto-add — just nothing to
-            // move optimistically (finalisation 05-R5).
+            // move optimistically.
             const result = await stockItemApiService.updateAsync(stockItemToUpdate);
             invalidateDerivedRecipeFacts();
-            invalidateLevelOverlays(stockItemToUpdate.stock_item_id);
-            await handleAutoAddedResponse(stockItemToUpdate.stock_item_id, result);
+            invalidateLevelOverlays(stock_item_id);
+            await handleAutoAddedResponse(stock_item_id, result);
             return;
         }
 
-        const originalStockLevel = stockItems.value[stockItemIndex]!.stock_level_id;
-        const nextStockLevel = stockItemToUpdate.stock_level_id!;
-        stockItems.value[stockItemIndex]!.stock_level_id = nextStockLevel;
+        const original = {
+            stock_level_id: cached.stock_level_id,
+            stock_level_sequence: cached.stock_level_sequence,
+            is_out_of_stock: cached.is_out_of_stock,
+            is_low_stock: cached.is_low_stock,
+            needs_restock: cached.needs_restock,
+        };
+        const nextLevelId = stockItemToUpdate.stock_level_id!;
+        cached.stock_level_id = nextLevelId;
+        // Rows read the derived status fields first, so move them with the id
+        // or the swatch shows the old level until the refetch lands.
+        const nextLevel = useStockLevelStore().levelById.get(nextLevelId);
+        if (nextLevel) {
+            cached.stock_level_sequence = nextLevel.sequence;
+            cached.is_out_of_stock = isOutOfStockSequence(nextLevel);
+            cached.is_low_stock = isLowStockSequence(nextLevel);
+            cached.needs_restock = needsRestockSequence(nextLevel);
+        }
 
-        registerRollback(() => {
-            stockItems.value[stockItemIndex]!.stock_level_id = originalStockLevel;
-        });
-
-        const { stock_item_id } = stockItemToUpdate;
-        const result = await stockItemApiService.updateAsync(stockItemToUpdate);
+        let result: UpdateStockItemResponse;
+        try {
+            result = await stockItemApiService.updateAsync(stockItemToUpdate);
+        } catch (err) {
+            // Revert here rather than via the global rollback registry: most
+            // callers catch the rejection themselves, so a registry-only undo
+            // would never run. Re-look-up by id — the array may have changed
+            // during the await.
+            const current = stockItems.value[findIndex()];
+            if (current) Object.assign(current, original);
+            throw err;
+        }
         // Refetch the canonical row so any server-derived fields
         // (timestamps, normalised values, the attention flag) are picked up.
-        stockItems.value[stockItemIndex] = await stockItemApiService.getAsync(stock_item_id);
-        clearRollbacks();
+        const refreshed = await stockItemApiService.getAsync(stock_item_id);
+        const index = findIndex();
+        if (index >= 0) stockItems.value[index] = refreshed;
         invalidateDerivedRecipeFacts();
         invalidateLevelOverlays(stock_item_id);
         // level transition may have triggered the auto-add hook.

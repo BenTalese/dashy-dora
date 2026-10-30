@@ -123,6 +123,13 @@ class CreateRecipeHandler:
                     f"Allowed: {', '.join(ALLOWED_DIFFICULTY_VALUES)}."
                 ),
             )
+        if request.steps_mode not in ALLOWED_STEPS_MODES:
+            return CreateRecipeResponse(
+                invalid_vocabulary_message=(
+                    f"Invalid steps_mode '{request.steps_mode}'. "
+                    f"Allowed: {', '.join(ALLOWED_STEPS_MODES)}."
+                ),
+            )
         # `time_of_day` is the household meal-slot vocabulary
         # (MealSlot table), validated at the boundary (R-010). Off-vocab
         # values are rejected on new writes; legacy stored values persist.
@@ -230,7 +237,7 @@ class CreateRecipeHandler:
             # is the only path that populates this.
             version_group_id = None,
             kcal = request.kcal,
-            steps_mode = request.steps_mode if request.steps_mode in ALLOWED_STEPS_MODES else "freeform",
+            steps_mode = request.steps_mode,
             # stamp at write time so the cookbook "Recently
             # added" sort axis has a stable, recipe-owned timestamp.
             created_at = datetime.now(timezone.utc),

@@ -1003,6 +1003,8 @@
     useShortcut([
         { keys: 'n', scope: 'Stock overview', description: 'New stock item', handler: onCreateClick },
         { keys: 'f', scope: 'Stock overview', description: 'Focus the filter/search', handler: focusSearch },
+        // The global "/" stands down on /stock and leaves the key to this page.
+        { keys: '/', scope: 'Stock overview', description: 'Focus the filter/search', handler: focusSearch },
         { keys: 'a', scope: 'Stock overview', description: 'Add focused / selected to primary list', handler: addFocusedOrSelected },
         { keys: 'arrowdown', scope: 'Stock overview', description: 'Focus next item', handler: () => moveFocus(1) },
         { keys: 'arrowup', scope: 'Stock overview', description: 'Focus previous item', handler: () => moveFocus(-1) },

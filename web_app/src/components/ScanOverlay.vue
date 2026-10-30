@@ -76,6 +76,7 @@
                 </div>
                 <div class="scan-actions">
                     <BaseButton
+                        :aria-label="torchOn ? 'Turn torch off' : 'Turn torch on'"
                         v-if="torchSupported"
                         variant="icon"
                         :icon="torchOn ? 'flashlight_on' : 'flashlight_off'"
@@ -83,6 +84,7 @@
                         @click="toggleTorch"
                     />
                     <BaseButton
+                        aria-label="Close scanner"
                         variant="icon"
                         :icon="ICONS.close"
                         color="white"
@@ -188,6 +190,10 @@
     let controls: IScannerControls | null = null;
     let stream: MediaStream | null = null;
     let audioCtx: AudioContext | null = null;
+    // Bumped by every start and stop. A start still awaiting the camera (the
+    // permission prompt) when the overlay closes sees a newer generation, shuts
+    // down what it opened, and its decode callback goes quiet.
+    let scanGeneration = 0;
 
     // Debounce identical decodes for 2 seconds. Without this, holding a
     // code in front of the camera fires the lookup once per frame.
@@ -213,12 +219,15 @@
     });
 
     async function startScanner() {
+        const generation = ++scanGeneration;
+        const isStale = () => generation !== scanGeneration;
         cameraError.value = null;
         cameraReady.value = false;
         torchOn.value = false;
         cameraUnavailable.value = null;
         try {
             const { BrowserMultiFormatReader } = await import('@zxing/browser');
+            if (isStale()) return;
             codeReader = new BrowserMultiFormatReader();
 
             // Pick a back-facing camera when one is exposed; otherwise just
@@ -230,15 +239,21 @@
                 devices.find((d) => /back|rear|environment/i.test(d.label))
                 ?? devices[0];
 
-            controls = await codeReader.decodeFromVideoDevice(
+            if (isStale() || !codeReader) return;
+            const started = await codeReader.decodeFromVideoDevice(
                 preferred?.deviceId,
                 videoRef.value ?? undefined,
                 (result) => {
-                    if (!result) return;
+                    if (!result || isStale()) return;
                     const text = result.getText?.() ?? String(result);
                     handleDecoded(text);
                 },
             );
+            if (isStale()) {
+                try { started.stop(); } catch { /* ignore */ }
+                return;
+            }
+            controls = started;
             cameraReady.value = true;
             // Capture the live MediaStream so we can probe the video track
             // for torch capability.
@@ -249,6 +264,7 @@
                 | undefined;
             torchSupported.value = Boolean(caps?.torch);
         } catch (err) {
+            if (isStale()) return;
             const unavailable = explainCameraFailure();
             if (unavailable) {
                 cameraUnavailable.value = unavailable;
@@ -270,6 +286,7 @@
     }
 
     function stopScanner() {
+        scanGeneration++;
         try {
             controls?.stop?.();
         } catch { /* ignore */ }

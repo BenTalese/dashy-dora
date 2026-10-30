@@ -6,11 +6,21 @@
 // `style: 'coarse'` is the sentence form, in whole days ("today",
 // "yesterday", "3 days ago", "last week", "2 weeks ago"), for a card that
 // reads as prose (the dashboard's restock radar; finalisation 08-R9).
+import { parseLocalIso } from 'src/helpers/weekDates';
+
 export function relativeTime(iso: string, options: { style?: 'short' | 'coarse' } = {}): string {
     if (!iso) return '';
     const diffMs = Date.now() - new Date(iso).getTime();
     if (options.style === 'coarse') {
-        const days = Math.floor(diffMs / 86_400_000);
+        // Calendar days, not elapsed 24h blocks: 11pm yesterday is
+        // "yesterday" at 8am. Both sides go to local midnight; round absorbs DST.
+        const then = parseLocalIso(iso) ?? new Date(iso);
+        const now = new Date();
+        const days = Math.round(
+            (new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+                - new Date(then.getFullYear(), then.getMonth(), then.getDate()).getTime())
+            / 86_400_000,
+        );
         if (days <= 0) return 'today';
         if (days === 1) return 'yesterday';
         if (days < 7) return `${days} days ago`;

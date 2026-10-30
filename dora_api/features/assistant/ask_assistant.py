@@ -282,20 +282,29 @@ class AskAssistantHandler:
                     # to confirm. Short-circuits the conversation.
                     return self._propose_action(name, args)
                 if tools.is_data_tool(name):
-                    rows = tools.run_tool(name, args)
+                    try:
+                        rows = tools.run_tool(name, args)
+                    except (AttributeError, TypeError, ValueError, KeyError, OverflowError) as exc:
+                        # Model-supplied args are untrusted (a number where a
+                        # string was declared, an absurd day count). Feed the
+                        # failure back so the model can retry or explain,
+                        # rather than 500ing the whole turn.
+                        _LOGGER.info("Assistant tool %s rejected its args: %s", name, exc)
+                        messages.append(_tool_result_message(
+                            call, name, json.dumps({"error": f"invalid arguments for '{name}'"}),
+                        ))
+                        continue
                     last_data_tool = name
                     last_row_count = len(rows)
-                    messages.append({
-                        "role": "tool",
-                        # FU-515 B.1 — sanitise the serialised rows (untrusted
-                        # data; see the SECURITY block in the system prompt).
-                        "content": _sanitize_tool_output(json.dumps(rows, default=str)),
-                    })
+                    # FU-515 B.1 — sanitise the serialised rows (untrusted
+                    # data; see the SECURITY block in the system prompt).
+                    messages.append(_tool_result_message(
+                        call, name, _sanitize_tool_output(json.dumps(rows, default=str)),
+                    ))
                 else:
-                    messages.append({
-                        "role": "tool",
-                        "content": json.dumps({"error": f"unknown tool '{name}'"}),
-                    })
+                    messages.append(_tool_result_message(
+                        call, name, json.dumps({"error": f"unknown tool '{name}'"}),
+                    ))
 
         # Exhausted the tool budget without a final text answer.
         return AssistantReplyDto(
@@ -347,6 +356,18 @@ class AskAssistantHandler:
             mood="confused",
             tool=tool_name,
         )
+
+
+def _tool_result_message(call: dict, name: str, content: str) -> dict:
+    """A provider-neutral tool-result message. Each LLM client maps it to its
+    native shape: Anthropic needs the `tool_call_id` as `tool_use_id`, OpenAI
+    needs `tool_call_id`, Gemini matches `functionResponse` by `name`."""
+    return {
+        "role": "tool",
+        "tool_call_id": str(call.get("id") or ""),
+        "name": name,
+        "content": content,
+    }
 
 
 def _parse_tool_call(call: dict) -> tuple[str, dict]:
@@ -539,7 +560,14 @@ def confirm_action():
         )
     _Request: ConfirmActionRequest = get_request_body()
     _LOGGER.info("Assistant confirming action: %s", _Request.type)
-    result = confirm_actions.commit(_Request.type, _Request.payload)
+    try:
+        result = confirm_actions.commit(_Request.type, _Request.payload)
+    except (KeyError, ValueError, TypeError) as exc:
+        # A malformed or stale payload (missing key, bad UUID, wrong type)
+        # is the client's problem, not a server fault — answer in the usual
+        # shape rather than 500.
+        _LOGGER.info("Assistant confirm payload rejected for %s: %s", _Request.type, exc)
+        return ok({"ok": False, "answer": "That action couldn't be applied — it may be out of date. Try asking again."})
     if result is None:
         return ok({"ok": False, "answer": f"I don't know how to commit '{_Request.type}'."})
     return ok({"ok": bool(result.get("ok")), "answer": result.get("message", "Done.")})

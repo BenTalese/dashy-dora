@@ -27,12 +27,15 @@ def group_by_cook_key(entry_requests) -> dict:
     return dict(groups)
 
 
-def validate_cook_groups(entry_requests) -> Optional[str]:
+def validate_cook_groups(entry_requests, preserved_keys: frozenset[str] = frozenset()) -> Optional[str]:
     """Structural validation of every `cook_key` group. Returns a user-facing
     error message on the first violation, or None when all groups are valid.
 
     A cook batch (entries sharing a `cook_key`) must:
-      * link at least two days (a one-day "batch" is just a normal meal);
+      * link at least two days (a one-day "batch" is just a normal meal) —
+        unless the key names a preserved batch (`preserved_keys`): a batch
+        straddling today keeps its past cook day server-side, so one forward
+        leftover day resent under its id is still a two-day batch;
       * use a single recipe (one cook produces one dish);
       * use a single meal slot (v1 links the same slot across days);
       * never repeat a day (each day is one occasion of the cook);
@@ -47,7 +50,7 @@ def validate_cook_groups(entry_requests) -> Optional[str]:
     for key, members in group_by_cook_key(entry_requests).items():
         if any(getattr(m, "cook_fresh", False) for m in members):
             return "A meal cooked fresh on the day can't also be part of a cook batch."
-        if len(members) < 2:
+        if len(members) < 2 and str(key) not in preserved_keys:
             return "A cook batch must cover at least two days."
         if len({m.recipe_id for m in members}) > 1:
             return "A cook batch must use a single recipe across all its days."

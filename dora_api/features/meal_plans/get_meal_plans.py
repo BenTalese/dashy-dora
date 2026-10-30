@@ -35,7 +35,8 @@ from dora_api.features.stock_items.inference_overlay import (
 )
 from dora_api.infrastructure.api_response import bad_request, paginated
 from dora_api.infrastructure.ports import Repository
-from dora_api.infrastructure.query_options import InvalidQueryParameter, parse_query_options
+from dora_api.infrastructure.query_options import (InvalidQueryParameter, SortClause,
+                                                   parse_query_options)
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.page import Page
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
@@ -266,6 +267,7 @@ def _apply_cook_batch_view(entries: List['MealPlanEntryDto']) -> List['MealPlanE
 
 _FIELD_MAP: dict[str, EntityField] = {
     "meal_plan_id": EntityField(MealPlan, "id"),
+    "start_date": EntityField(MealPlan, "start_date"),
 }
 
 
@@ -683,6 +685,11 @@ class GetMealPlansHandler:
         if not entity:
             return None
         dto = MealPlanDto.from_entity(entity)
+        # Release the plan before hydrating (R-032). While it is referenced,
+        # its recipes stay in the identity map with `ingredients` initialised
+        # EMPTY by the noload, and `_recipes_with_ingredients` gets those same
+        # objects back un-repopulated — so the POST body carried no cost.
+        del entity
         return self._hydrate_cook_coverage(self._hydrate_inference(
             self._hydrate_cookability(
                 self._hydrate_cost(self._hydrate_nutrition(self._hydrate_entry_has_image([dto])))
@@ -694,6 +701,12 @@ class GetMealPlansHandler:
 def get_meal_plans():
     try:
         _Options = parse_query_options(request.args)
+        # Newest week first unless asked otherwise: sorted by id alone the
+        # 50-row page was an arbitrary slice of the household's weeks.
+        if _Options.sort is None:
+            _Options = dataclasses.replace(
+                _Options, sort=SortClause(field="start_date", direction="desc"),
+            )
         _Page = GetMealPlansHandler(SqlAlchemyRepository()).handle(_Options)
     except InvalidQueryParameter as exc:
         return bad_request(str(exc))

@@ -36,6 +36,7 @@
                     <div class="row q-gutter-xs items-center">
                         <template v-if="reorderable">
                             <BaseButton
+                                :aria-label="`Move ${item.name} up`"
                                 variant="icon"
                                 :icon="ICONS.arrow_upward"
                                 :disable="index === 0"
@@ -44,6 +45,7 @@
                                 <BaseTooltip>Move up</BaseTooltip>
                             </BaseButton>
                             <BaseButton
+                                :aria-label="`Move ${item.name} down`"
                                 variant="icon"
                                 :icon="ICONS.arrow_downward"
                                 :disable="index === items.length - 1"
@@ -52,10 +54,10 @@
                                 <BaseTooltip>Move down</BaseTooltip>
                             </BaseButton>
                         </template>
-                        <BaseButton variant="icon" :icon="ICONS.edit" @click="startRename(item)">
+                        <BaseButton :aria-label="`Rename ${item.name}`" variant="icon" :icon="ICONS.edit" @click="startRename(item)">
                             <BaseTooltip>Rename</BaseTooltip>
                         </BaseButton>
-                        <BaseButton variant="icon" :icon="ICONS.delete_outline" @click="onDelete(item)">
+                        <BaseButton :aria-label="`Delete ${item.name}`" variant="icon" :icon="ICONS.delete_outline" @click="onDelete(item)">
                             <BaseTooltip>Delete</BaseTooltip>
                         </BaseButton>
                     </div>
@@ -152,6 +154,11 @@
     }
 
     function saveRename(item: VocabItem) {
+        // The input unmounts when `editingId` clears, and a browser may fire
+        // `blur` on that removal. Only the live edit may save: this stops Esc
+        // (which clears `editingId` first) from saving instead of cancelling,
+        // and Enter-then-unmount-blur from emitting the rename twice.
+        if (editingId.value !== item.id) return;
         const next = renameDraft.value.trim();
         editingId.value = null;
         if (next && next !== item.name) emit('rename', item.id, next);

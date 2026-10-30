@@ -158,9 +158,7 @@
         // two-word search ("greek yoghurt") collapsed to "greekyoghurt".
         const text = String(raw ?? '').trim();
         if (text.length < 2) {
-            results.value = [];
-            failedSources.value = [];
-            isBarcode.value = false;
+            resetSearch();
             return;
         }
 
@@ -196,11 +194,19 @@
         }
     }
 
-    function onHide() {
-        query.value = '';
+    // Bumping the token also orphans any in-flight search, so its response
+    // can't repopulate the list after a clear or close.
+    function resetSearch() {
+        searchToken++;
+        searching.value = false;
         results.value = [];
         failedSources.value = [];
         isBarcode.value = false;
+    }
+
+    function onHide() {
+        query.value = '';
+        resetSearch();
     }
 
     // Reset when reopened so a previous search doesn't linger.

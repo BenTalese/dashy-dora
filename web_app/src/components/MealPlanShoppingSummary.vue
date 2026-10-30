@@ -295,11 +295,16 @@
         const cost = props.estimatedCost;
         if (!status?.enabled || status.remaining === null || cost === null) return null;
         const period = status.period === 'monthly' ? 'month' : 'week';
-        if (status.remaining <= 0) {
+        if (status.remaining < 0) {
             return {
                 text: `Budget already ${formatMoney(Math.abs(status.remaining))} over this ${period}`,
                 over: true,
             };
+        }
+        // Exactly spent is not "$0.00 over": nothing is left, and this week's
+        // meals only tip it over if they cost something.
+        if (status.remaining === 0) {
+            return { text: `Budget fully spent this ${period}`, over: cost > 0 };
         }
         if (cost > status.remaining) {
             return {

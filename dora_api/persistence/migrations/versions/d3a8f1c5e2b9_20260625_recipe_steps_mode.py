@@ -35,9 +35,10 @@ def upgrade():
             server_default='freeform',
         ))
 
+    # Quoted: Postgres folds unquoted identifiers to lower case.
     op.execute(
-        "UPDATE Recipe SET steps_mode = 'structured' "
-        "WHERE id IN (SELECT DISTINCT recipe_id FROM RecipeStep)"
+        "UPDATE \"Recipe\" SET steps_mode = 'structured' "
+        'WHERE id IN (SELECT DISTINCT recipe_id FROM "RecipeStep")'
     )
 
     op.create_table(

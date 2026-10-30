@@ -236,6 +236,9 @@
              *  until loaded; the "Dora suggests" chip shows the plain list
              *  meanwhile rather than an empty rail. */
             suggestions?: MealPlanSuggestion[] | undefined;
+            /** The focused week (its Monday). The ranking is per week, so a
+             *  week change while "Dora suggests" is selected re-requests it. */
+            week?: string | undefined;
             /** Whether to render the "→ slot · date" target line. False on the
              *  phone sheet, whose own title bar names the destination — an
              *  explicit prop, never a viewport sniff (R-019 / ADR-014): this
@@ -289,6 +292,9 @@
         activeFilter.value = key;
         if (key === 'suggests') emit('suggestionsRequested');
     }
+    watch(() => props.week, () => {
+        if (activeFilter.value === 'suggests') emit('suggestionsRequested');
+    });
 
     const reasonByRecipeId = computed(
         () => new Map(props.suggestions.map((s) => [s.recipe_id, s.reason_chip])),

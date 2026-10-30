@@ -152,6 +152,15 @@ def test__resolve_food__MissingFields__RejectedByTheSchema(api):
     assert_problem(requests.post(f"{BASE}/nutrition/foods/resolve", json={}), 400)
 
 
+def test__resolve_food__SourceRefLongerThanTheColumn__RejectedByTheSchema(api):
+    # `NutritionFood.source_ref` is String(64); the request used to allow 100,
+    # which Postgres refuses on insert (500) instead of a 400 here.
+    resp = requests.post(f"{BASE}/nutrition/foods/resolve", json={
+        "source": "off", "source_ref": "9" * 65,
+    })
+    assert_problem(resp, 400, field="source_ref")
+
+
 #endregion
 
 #region ---------------- sources ----------------

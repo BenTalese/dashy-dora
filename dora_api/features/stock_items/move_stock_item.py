@@ -46,6 +46,9 @@ class MoveStockItemHandler:
             return MoveStockItemResponse(stock_item_not_found=True)
 
         if request.destination_location_id is None:
+            # R-032: stock_location is lazy="noload" — a relationship-only
+            # None assignment doesn't dirty the FK column, so clear it directly.
+            item._stock_location_id = None
             item.stock_location = None
             self.repository.save_changes()
             return MoveStockItemResponse()

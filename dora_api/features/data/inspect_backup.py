@@ -35,7 +35,7 @@ from dora_api.features.data.restore_shared import (
     DUPLICATE_KEY_BY_BACKUP_KEY,
     TABLE_NAME_BY_BACKUP_KEY,
 )
-from dora_api.features.data.uploads import staged_path
+from dora_api.features.data.uploads import is_valid_upload_id, staged_path
 from dora_api.features.routers import DATA_ROUTER
 from dora_api.infrastructure.api_response import bad_request, ok
 
@@ -98,6 +98,8 @@ def _resolve_file_path() -> tuple[Path | None, DataError | None, bool]:
     body = request.get_json(silent=True)
     if isinstance(body, dict) and isinstance(body.get("upload_id"), str):
         upload_id = body["upload_id"]
+        if not is_valid_upload_id(upload_id):
+            return None, invalid("Malformed upload_id."), False
         path = staged_path(upload_id)
         if not path.exists():
             return None, upload_missing(upload_id), False

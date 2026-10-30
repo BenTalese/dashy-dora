@@ -26,7 +26,8 @@ from dora_api.domain.entities.user import User
 from dora_api.features.auth.register_user import AuthenticatedUserDto
 from dora_api.features.routers import AUTH_ROUTER
 from dora_api.infrastructure.api_response import gone, ok, too_many_requests, validation_failed
-from dora_api.infrastructure.auth_helpers import (is_valid_email, normalise_email,
+from dora_api.infrastructure.audit import emit as audit_emit
+from dora_api.infrastructure.auth_helpers import (hash_password, is_valid_email, normalise_email,
                                                   rate_limit, rate_limit_remaining_seconds,
                                                   validate_password)
 from dora_api.infrastructure.decorators import has_request_body

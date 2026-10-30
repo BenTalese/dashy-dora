@@ -636,12 +636,13 @@
                                 :key="att.attachment_id"
                                 class="sld-receipt-thumb"
                             >
-                                <img
-                                    :src="attachmentSrc(att.attachment_id)"
-                                    alt="Receipt"
+                                <ShoppingListReceiptImage
+                                    :list-id="listId"
+                                    :attachment-id="att.attachment_id"
                                     @click="attachmentZoomId = att.attachment_id"
                                 />
                                 <BaseButton
+                                    aria-label="Remove receipt"
                                     variant="ghost"
                                     :icon="ICONS.delete"
                                     class="sld-receipt-delete"
@@ -661,10 +662,10 @@
                         max-width="900px"
                         @update:model-value="(v) => { if (!v) attachmentZoomId = null }"
                     >
-                        <img
+                        <ShoppingListReceiptImage
                             v-if="attachmentZoomId"
-                            :src="attachmentSrc(attachmentZoomId)"
-                            alt="Receipt"
+                            :list-id="listId"
+                            :attachment-id="attachmentZoomId"
                             class="sld-receipt-zoom"
                         />
                     </BaseDialog>
@@ -771,14 +772,17 @@
                          tall empty rail instead of under the lists it belongs
                          to. Virtualising is also dead weight now: the picker is
                          capped at drafts + shopping + 5 done, so it renders
-                         about eight rows, not the 29 it used to. -->
-                    <ShoppingListRailItem
-                        v-for="s in railEntries"
-                        :key="s.shopping_list_id"
-                        :summary="s"
-                        :active="s.shopping_list_id === listId"
-                        @select="switchToList(s.shopping_list_id)"
-                    />
+                         about eight rows, not the 29 it used to. The `q-list`
+                         wrapper is the `role="list"` its `q-item` rows need. -->
+                    <q-list>
+                        <ShoppingListRailItem
+                            v-for="s in railEntries"
+                            :key="s.shopping_list_id"
+                            :summary="s"
+                            :active="s.shopping_list_id === listId"
+                            @select="switchToList(s.shopping_list_id)"
+                        />
+                    </q-list>
                     <BaseButton
                         v-if="olderDoneSummaries.length > 0"
                         variant="ghost"
@@ -1160,6 +1164,7 @@
     import ShoppingListPlanRow from 'src/components/shoppingList/ShoppingListPlanRow.vue';
     import ShoppingListRunFace from 'src/components/shoppingList/ShoppingListRunFace.vue';
     import ShoppingListReceiptFace from 'src/components/shoppingList/ShoppingListReceiptFace.vue';
+    import ShoppingListReceiptImage from 'src/components/shoppingList/ShoppingListReceiptImage.vue';
     import {
         PLAN_SECTION_MODES, useLineSections, isNestedChild,
         isProductOnly, sectionIconFor, type SectionMode,
@@ -1195,7 +1200,6 @@
         type ShoppingListSummary
     } from 'src/models/shoppingList';
     import ShoppingListApiService, {
-        shoppingListAttachmentUrl,
         type TrimToBudgetResult,
         type UpdateLineCommand,
     } from 'src/services/api/shoppingListApiService';
@@ -1466,6 +1470,11 @@
                 } restocked.`,
             });
         } catch (err) {
+            // The leftovers may already have moved or gone before the finish
+            // itself failed. Re-read so `untickedCount` reflects that and a
+            // retry doesn't dispose of them a second time (e.g. a second
+            // "Leftovers from …" list).
+            await refreshDetailQuietly();
             $q.notify({
                 type: 'negative',
                 message: 'Could not finish shopping.',
@@ -1630,19 +1639,22 @@
         reason_chip: string;
         saved: number;
     };
-    const trimState = reactive({
-        state: 'idle' as TrimState,
-        busy: false,
-        loaded: false,                    // true once we've fetched the initial preview
-        projectedTotal: 0,
-        budgetTarget: 0,
-        overshoot: 0,
-        stillOver: 0,
-        savedApplied: 0,
-        previewLines: [] as TrimPreviewLine[],
-        excluded: new Set<string>(),
-        dismissed: false,
-    });
+    function initialTrimState() {
+        return {
+            state: 'idle' as TrimState,
+            busy: false,
+            loaded: false,                    // true once we've fetched the initial preview
+            projectedTotal: 0,
+            budgetTarget: 0,
+            overshoot: 0,
+            stillOver: 0,
+            savedApplied: 0,
+            previewLines: [] as TrimPreviewLine[],
+            excluded: new Set<string>(),
+            dismissed: false,
+        };
+    }
+    const trimState = reactive(initialTrimState());
 
     function fmtMoney(v: number | null | undefined): string {
         return formatMoney(v ?? 0);
@@ -1681,15 +1693,17 @@
             trimState.overshoot = 0;
             return;
         }
+        const id = listId.value;
         try {
-            const result = await api.trimToBudgetAsync(listId.value, {
+            const result = await api.trimToBudgetAsync(id, {
                 mode: 'preview',
                 exclude_line_ids: [...trimState.excluded],
             });
-            applyTrimResult(result);
+            // A list switch mid-flight must not paint A's banner onto B.
+            if (id === listId.value) applyTrimResult(result);
         } catch {
             // Non-fatal; the banner just stays hidden.
-            trimState.loaded = true;
+            if (id === listId.value) trimState.loaded = true;
         }
     }
 
@@ -1967,7 +1981,10 @@
     }
 
     async function load() {
-        if (!listId.value) return;
+        // The id this read is for: a list switch mid-flight starts another
+        // load, and this one's late answer must not paint over it.
+        const id = listId.value;
+        if (!id) return;
         loading.value = true;
         loadError.value = null;
         // Clear the previous list's data so the user sees a loading spinner
@@ -1975,12 +1992,15 @@
         // while the new list's detail is in flight.
         detail.value = null;
         try {
-            detail.value = await api.getDetailAsync(listId.value);
-            primeVerdicts(listId.value);
+            const result = await api.getDetailAsync(id);
+            if (id !== listId.value) return;
+            detail.value = result;
+            primeVerdicts(id);
         } catch (err) {
+            if (id !== listId.value) return;
             loadError.value = `Could not load list: ${describeApiError(err)}`;
         } finally {
-            loading.value = false;
+            if (id === listId.value) loading.value = false;
         }
         // refresh the trim-to-budget banner state as soon as the
         // list is available. Own try/catch inside; failures never bubble.
@@ -1997,9 +2017,12 @@
      *  failure because the optimistic state is still the user's best guess and
      *  the next action will re-read anyway. */
     async function refreshDetailQuietly(): Promise<void> {
-        if (!listId.value) return;
+        const id = listId.value;
+        if (!id) return;
         try {
-            detail.value = await api.getDetailAsync(listId.value);
+            const result = await api.getDetailAsync(id);
+            // A list switch mid-flight: the new list's load owns `detail`.
+            if (id === listId.value) detail.value = result;
         } catch {
             // Intentionally silent — see above.
         }
@@ -2052,8 +2075,9 @@
         // The dialog just persisted a new stock_location for one line's
         // item. Reload the list detail so the line's breadcrumb + group
         // membership move with it — the dialog re-reads via v-model on
-        // detail.lines.
-        await load();
+        // detail.lines. Quietly (R-084): `load()` nulls `detail`, which
+        // unmounts this `v-if`-gated dialog and loses its local ticks.
+        await refreshDetailQuietly();
     }
 
     // ── Name editing (UX-v2 §5: clearable custom name) ────────────────
@@ -2167,7 +2191,12 @@
     // detail design means switching lists (rail, dropdown, rail kebab)
     // only changes `route.params.id` without unmounting this component,
     // so `onMounted` doesn't re-fire.
-    watch(listId, () => { void load(); });
+    watch(listId, () => {
+        // The trim banner is per-list: a dismissal, an "applied" summary or a
+        // kept-line exclusion on list A must not carry over to list B.
+        Object.assign(trimState, initialTrimState());
+        void load();
+    });
 
     // ── FU-653: Dora's inferred suggestions ───────────────────────────
     // No dismissal state any more (2026-09-17) — the strip is either something
@@ -2205,7 +2234,11 @@
 
     /** @returns whether the tick reached the server — the run face only
      *  promises an undo for a change that actually landed. */
-    async function onToggleTicked(lineId: string, value: boolean): Promise<boolean> {
+    async function onToggleTicked(
+        lineId: string,
+        value: boolean,
+        forListId: string = listId.value,
+    ): Promise<boolean> {
         // Optimistic flip so the checkbox feels instant; if the request
         // fails we re-load the canonical state. Offline is read-only
         // (2026-08-23), so a network failure is a plain failure here — the
@@ -2215,7 +2248,7 @@
         if (line) line.is_ticked = value;
         if (value) recentTickStack.value.push(lineId);
         try {
-            await api.updateLineAsync(listId.value, lineId, { is_ticked: value });
+            await api.updateLineAsync(forListId, lineId, { is_ticked: value });
             // The counts are ours to flip optimistically, but the money isn't:
             // `remaining_price` and the store breakdown are server-owned
             // aggregates (R-003), and the run face's footer puts "Remaining"
@@ -2224,7 +2257,7 @@
             await refreshDetailQuietly();
             return true;
         } catch (err) {
-            await load();
+            if (forListId === listId.value) await load();
             $q.notify({
                 type: 'negative',
                 message: 'Could not update line.',
@@ -2245,7 +2278,10 @@
      *  something that never happened. */
     async function onRunTick(line: ShoppingListLine) {
         if (line.is_ticked) return;
-        const ok = await onToggleTicked(line.line_id, true);
+        // The toast outlives a list switch, so its Undo must untick the line
+        // on the list it was picked from, not whichever list is open by then.
+        const id = listId.value;
+        const ok = await onToggleTicked(line.line_id, true, id);
         if (!ok) return;
         $q.notify({
             type: 'positive',
@@ -2255,7 +2291,7 @@
             actions: [{
                 label: 'Undo',
                 color: 'white',
-                handler: () => { void onToggleTicked(line.line_id, false); },
+                handler: () => { void onToggleTicked(line.line_id, false, id); },
             }],
         });
     }
@@ -2872,18 +2908,14 @@
         () => !!detail.value && detail.value.status !== 'draft',
     );
 
-    function attachmentSrc(attachmentId: string): string {
-        if (!listId.value) return '';
-        return shoppingListAttachmentUrl(listId.value, attachmentId);
-    }
-
     async function onAttachmentPicked(image: ProcessedImage) {
         if (!detail.value || !listId.value) return;
         attachmentUploading.value = true;
         try {
             await api.addAttachmentAsync(listId.value, image.dataUrl);
-            // Re-fetch to pick up the server-assigned id + sequence.
-            await load();
+            // Re-fetch to pick up the server-assigned id + sequence. Quietly
+            // (R-084): an in-place edit, not a navigation.
+            await refreshDetailQuietly();
         } catch (err) {
             $q.notify({
                 type: 'negative',
@@ -2911,7 +2943,7 @@
         try {
             await api.deleteAttachmentAsync(listId.value, attachmentId);
             // Optimistic local removal so the strip updates without a re-fetch
-            // round-trip; load() runs anyway to stay authoritative.
+            // round-trip; a failure re-reads quietly to stay authoritative.
             detail.value.attachments = (detail.value.attachments ?? []).filter(
                 (a) => a.attachment_id !== attachmentId,
             );
@@ -2924,7 +2956,7 @@
                 message: 'Could not remove receipt.',
                 caption: toastCaption(err),
             });
-            await load();
+            await refreshDetailQuietly();
         }
     }
 

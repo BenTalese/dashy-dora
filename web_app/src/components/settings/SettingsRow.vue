@@ -4,20 +4,22 @@
         :class="{ 'settings-row--stacked': stacked, 'settings-row--inline': inline }"
     >
         <div class="settings-row__info">
-            <div v-if="label || $slots.label" class="settings-row__label">
+            <div v-if="label || $slots.label" ref="labelEl" class="settings-row__label">
                 <slot name="label">{{ label }}</slot>
             </div>
             <div v-if="help || $slots.help" class="settings-row__help">
                 <slot name="help">{{ help }}</slot>
             </div>
         </div>
-        <div class="settings-row__control">
+        <div ref="controlEl" class="settings-row__control">
             <slot />
         </div>
     </div>
 </template>
 
 <script setup lang="ts">
+    import { onBeforeUnmount, onMounted, onUpdated, ref } from 'vue';
+
     // IMPL_PLAN_SETTINGS_REBUILD §2.5 — single row inside a SettingsSection:
     // left = label + optional one-line help; right = control. Collapses to
     // label-above-control on narrow viewports (Phase 5 verifies).
@@ -35,6 +37,81 @@
          */
         inline?: boolean;
     }>();
+
+    /* The row's label is visible text beside the control, but nothing ties the
+       two together for a screen reader: a bare `q-toggle` / `q-input` /
+       `q-select` dropped in the slot announces as an unnamed switch or field
+       (axe `aria-toggle-field-name`, `label`). Every settings page uses this
+       row, so the row names its own controls rather than every call site
+       repeating the label as an `aria-label`. A control that already carries a
+       name (its own `aria-label`, a Quasar `label`, or text content) is left
+       alone. The label's `textContent` is used rather than `aria-labelledby`
+       so a slotted InfoTip's own "More information: …" name isn't folded in.
+       A MutationObserver covers controls that mount after the row does
+       (`v-if` on a loaded draft). */
+    const labelEl = ref<HTMLElement | null>(null);
+    const controlEl = ref<HTMLElement | null>(null);
+    const OWNED = 'data-settings-row-name';
+    const CONTROLS = [
+        '[role="switch"]',
+        '[role="checkbox"]',
+        '[role="slider"]',
+        '[role="combobox"]',
+        'input:not([type="hidden"])',
+        'select',
+        'textarea',
+    ].join(',');
+
+    function hasOwnName(el: HTMLElement): boolean {
+        if (el.getAttribute('aria-label')?.trim() || el.hasAttribute('aria-labelledby')) {
+            return true;
+        }
+        const role = el.getAttribute('role');
+        if ((role === 'switch' || role === 'checkbox') && el.textContent?.trim()) return true;
+        const fieldLabel = el.closest('.q-field')?.querySelector('.q-field__label');
+        return Boolean(fieldLabel?.textContent?.trim());
+    }
+
+    /* The ownership marker's value is the exact name the row applied. If the
+       control's `aria-label` no longer equals it, the call site has since
+       named the control itself — the name is theirs, so the marker goes and
+       the row never touches it again. While the row still owns the name it
+       follows the label text, and an emptied label takes the name with it. */
+    function nameControls() {
+        if (!controlEl.value) return;
+        const text = labelEl.value?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+        controlEl.value.querySelectorAll<HTMLElement>(CONTROLS).forEach((el) => {
+            const applied = el.getAttribute(OWNED);
+            if (applied !== null) {
+                if (el.getAttribute('aria-label') !== applied) {
+                    el.removeAttribute(OWNED);
+                    return;
+                }
+                if (!text) {
+                    el.removeAttribute('aria-label');
+                    el.removeAttribute(OWNED);
+                } else if (text !== applied) {
+                    el.setAttribute('aria-label', text);
+                    el.setAttribute(OWNED, text);
+                }
+                return;
+            }
+            if (!text || hasOwnName(el)) return;
+            el.setAttribute('aria-label', text);
+            el.setAttribute(OWNED, text);
+        });
+    }
+
+    let observer: MutationObserver | null = null;
+    onMounted(() => {
+        nameControls();
+        if (controlEl.value && typeof MutationObserver !== 'undefined') {
+            observer = new MutationObserver(nameControls);
+            observer.observe(controlEl.value, { childList: true, subtree: true });
+        }
+    });
+    onUpdated(nameControls);
+    onBeforeUnmount(() => observer?.disconnect());
 </script>
 
 <style scoped lang="scss">
