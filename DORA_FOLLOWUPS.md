@@ -57,6 +57,9 @@ long session summary. Distinct from the other logs:
   ShoppingListOverviewCard, useMealPlanner, expiryIndicator, MealReconcileRunner, DoraChat) don't re-render when the
   household timezone arrives from `/health` after first paint — only the `useDateFormat` helpers subscribe; a stale
   "Today" is possible for the first second of a cold load on a household whose zone differs from the device.
+  (8) After deleting an item that was just created through the New item dialog, a later navigation issued one stray
+  `GET /stock-items/<deleted>/detail` (404, console only) in the scripted journey; a hand-built repro did not show it —
+  confirm in the browser.
 - **Why deferred:** each is small but outside the obvious-bug remit, and (1) needs a decision.
 - **Recommended resolution:** (5) now-ish (a time bomb); the rest opportunistic.
 
