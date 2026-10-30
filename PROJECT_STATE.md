@@ -1,6 +1,6 @@
 ﻿# Dashy Dora — Project State
 
-**Last reviewed: 2026-10-30 (late): finish-off steps 1–2 done (security + four planner/list/slot decisions), release prep mostly done (version/build id, PUID/PGID, README), browser walk 1 of 5 done (0 failures) and the rest parked as FU-971. Uncommitted on top of `f91453f2`.**
+**Last reviewed: 2026-10-30 (late): finish-off steps 1–2 done (security + four planner/list/slot decisions), release prep mostly done (version/build id, PUID/PGID, README), browser walk 1 of 5 done (0 failures) and the rest parked as FU-971. Pushed as `693af124`.**
 
 This is the single front door: where every phase and workstream is up
 to, and what needs your attention. For *where things stand* this doc

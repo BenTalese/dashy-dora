@@ -43,7 +43,7 @@ next.
 
 ## 2026-10-30 (latest): **Finish-off steps 1–2 done, step 4 mostly done, step 3 cut short (FU-971)**
 
-**Status: paused by the owner ("wrap up, continue later"). Uncommitted on top of `f91453f2` (owner hasn't asked for a commit).**
+**Status: paused by the owner ("wrap up, continue later"). Committed and pushed as `693af124`.**
 
 **Owner ask:** *"whats next for this project? lets finish it off"* → five-step plan agreed: (1) security,
 (2) design calls, (3) walk the browser checks, (4) release prep (version number, README, release process, PUID/PGID),
