@@ -3,6 +3,7 @@ import { useQuasar } from 'quasar';
 import type { Alert, AlertAction } from 'src/models/alert';
 import AlertApiService from 'src/services/api/alertApiService';
 import { useAlertStore } from 'src/stores/alertStore';
+import { useStockItemStore } from 'src/stores/stockItemStore';
 import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
 
 const api = new AlertApiService();
@@ -24,6 +25,7 @@ const api = new AlertApiService();
 export function useAlertActions() {
     const $q = useQuasar();
     const alertStore = useAlertStore();
+    const stockItemStore = useStockItemStore();
 
     const busyAlertId = ref<string | null>(null);
 
@@ -36,18 +38,25 @@ export function useAlertActions() {
         try {
             await api.applyActionAsync(alert.alert_id, action);
             await (opts?.refresh ? opts.refresh() : alertStore.refreshAsync());
-            $q.notify({ type: 'positive', message: 'Done.' });
-            return true;
         } catch (err) {
             $q.notify({
                 type: 'negative',
                 message: 'Could not apply.',
                 caption: toastCaption(err),
             });
-            return false;
-        } finally {
             busyAlertId.value = null;
+            return false;
         }
+        // Every alert action writes the item's expiry server-side. Refreshed
+        // outside the try: the action already succeeded, so a failed refresh
+        // (404 after a delete, a network blip) must not report it as failed.
+        // The store skips the GET when the row isn't loaded.
+        if (alert.stock_item_id) {
+            await stockItemStore.refreshStockItemAsync(alert.stock_item_id).catch(() => undefined);
+        }
+        busyAlertId.value = null;
+        $q.notify({ type: 'positive', message: 'Done.' });
+        return true;
     }
 
     return { busyAlertId, applyAction };

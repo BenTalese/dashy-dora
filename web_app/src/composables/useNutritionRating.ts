@@ -28,6 +28,7 @@ import { computed } from 'vue';
 
 import { useFeatureFlags } from 'src/composables/useFeatureFlags';
 import { useNutritionMode } from 'src/composables/useNutritionMode';
+import { formatNumber } from 'src/composables/useMoney';
 import type {
     Recipe,
     RecipeHealthStarRating,
@@ -124,7 +125,7 @@ export function useNutritionRating() {
     const thresholdOptions = computed<{ label: string; value: number }[]>(() => {
         if (scheme.value === 'health_star') {
             return [5, 4.5, 4, 3.5, 3, 2.5, 2, 1.5, 1]
-                .map(v => ({ label: `${v.toFixed(1)} stars`, value: v }));
+                .map(v => ({ label: `${formatNumber(v, { digits: 1, minDigits: 1 })} stars`, value: v }));
         }
         if (scheme.value === 'nutri_score') {
             return NUTRI_SCORE_GRADES.map((grade, index) => ({

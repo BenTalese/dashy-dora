@@ -1561,38 +1561,41 @@
         await stockGroupStore.ensureLoadedAsync().catch(() => undefined);
     }
 
-    // Deep-link filter hydration: other screens (e.g. Locations) link here
-    // with `?location_id=…&attention=true` to pre-narrow the list. Read those
-    // on mount and reactively whenever the query changes (e.g. user uses
-    // back/forward).
+    // Deep-link filter hydration: other screens (e.g. Locations, the
+    // dashboard) link here with `?location_id=…&attention=true` to pre-narrow
+    // the list. A deep link replaces the session-saved filters rather than
+    // stacking on them (an intersection usually lands on zero rows), and the
+    // query is replaced away once applied so Back/refresh doesn't re-apply it
+    // over whatever the user changed since.
+    const DEEP_LINK_FILTER_KEYS = ['location_id', 'attention', 'level_id', 'expiring'] as const;
+    function isTruthyFlag(value: unknown): boolean {
+        return value === 'true' || value === '1';
+    }
     function applyQueryFilters() {
         const q = route.query;
+        if (!DEEP_LINK_FILTER_KEYS.some((key) => q[key] !== undefined)) return;
+        filters.clearFilters();
+        applyRecipeQuery(q.recipe);
         if (typeof q.location_id === 'string' && q.location_id) {
             filters.locationFilter.value = q.location_id;
         }
-        if (q.attention === 'true' || q.attention === '1') {
+        if (isTruthyFlag(q.attention)) {
             filters.hasAlertOnly.value = true;
         }
         if (typeof q.level_id === 'string' && q.level_id) {
             filters.levelFilter.value = q.level_id;
         }
-        // FU-583 — the Dora Score freshness action deep-links here with
-        // `expiring=1` to narrow to expiring-soon / expired.
-        // `?stocktake=1` was the twin of this, opening the "Needs check"
-        // filter; with that chip retired (2026-08-21) the Dora Score action
-        // points at `/stocktake` itself, so there is nothing to read here.
-        if (q.expiring === 'true' || q.expiring === '1') {
+        // The Dora Score freshness action narrows to expiring-soon / expired.
+        if (isTruthyFlag(q.expiring)) {
             filters.expiringSoonOnly.value = true;
         }
+        const next = { ...q };
+        DEEP_LINK_FILTER_KEYS.forEach((key) => delete next[key]);
+        void router.replace({ path: route.path, query: next });
     }
 
     watch(
-        () => [
-            route.query.location_id,
-            route.query.attention,
-            route.query.level_id,
-            route.query.expiring,
-        ],
+        () => DEEP_LINK_FILTER_KEYS.map((key) => route.query[key]),
         applyQueryFilters,
     );
 

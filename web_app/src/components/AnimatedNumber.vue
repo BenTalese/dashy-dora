@@ -10,6 +10,7 @@
     // value so currency/counts read correctly at every frame.
     import { motionDurationMs } from 'src/composables/useMicroFeedback';
     import { computed, onBeforeUnmount, ref, watch } from 'vue';
+    import { formatNumber } from 'src/composables/useMoney';
 
     const props = withDefaults(
         defineProps<{
@@ -55,7 +56,10 @@
     // shadow the `format` prop (vue/no-dupe-keys).
     function render(n: number): string {
         if (props.format) return props.format(n);
-        return props.prefix + n.toFixed(props.decimals) + props.suffix;
+        // D-006 — even the un-formatted path writes digits in the household locale.
+        return props.prefix
+            + formatNumber(n, { digits: props.decimals, minDigits: props.decimals })
+            + props.suffix;
     }
 
     const current = ref(props.value);

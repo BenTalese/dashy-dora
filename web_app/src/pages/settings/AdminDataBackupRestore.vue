@@ -59,7 +59,7 @@
                             </q-chip>
                         </div>
                         <div class="backup-row__meta">
-                            {{ formatSize(row.size_bytes) }}
+                            {{ formatFileSize(row.size_bytes) }}
                             · {{ row.sections.length }} section{{ row.sections.length === 1 ? '' : 's' }}
                             <span v-if="row.created_by_username">
                                 · by {{ row.created_by_username }}
@@ -385,6 +385,7 @@
     import BaseTooltip from 'src/components/BaseTooltip.vue';
     import BaseButton from 'src/components/BaseButton.vue';
     import { formatDateTime as formatLocaleDateTime } from 'src/composables/useDateFormat';
+    import { formatFileSize, formatNumber } from 'src/composables/useMoney';
     import BaseDialog from 'src/components/BaseDialog.vue';
     import SettingsPageHeader from 'src/components/settings/SettingsPageHeader.vue';
     import SettingsSection from 'src/components/settings/SettingsSection.vue';
@@ -628,7 +629,7 @@
                 const hidden = total - sample.rows.length;
                 children.push({
                     key: `${section}:__truncated__`,
-                    label: `… and ${hidden.toLocaleString()} more not shown`,
+                    label: `… and ${formatNumber(hidden, { digits: 0 })} more not shown`,
                     section,
                     noTick: true,
                     disabled: true,
@@ -789,14 +790,6 @@
             return iso;
         }
     }
-    function formatSize(bytes: number): string {
-        if (bytes < 1024) return `${bytes} B`;
-        const kb = bytes / 1024;
-        if (kb < 1024) return `${kb.toFixed(1)} KB`;
-        const mb = kb / 1024;
-        if (mb < 1024) return `${mb.toFixed(1)} MB`;
-        return `${(mb / 1024).toFixed(2)} GB`;
-    }
     function summarizeRestore(body: unknown): string {
         const created = (body as { created?: Record<string, unknown> } | null)?.created ?? {};
         const total = Object.values(created).reduce((a: number, b: unknown) => a + Number(b || 0), 0);
@@ -868,7 +861,7 @@
         if (file.size > MAX_BACKUP_BYTES) {
             $q.notify({
                 type: 'negative',
-                message: `That file is over the ${(MAX_BACKUP_BYTES / 1024 / 1024 / 1024).toFixed(0)} GB limit (${(file.size / 1024 / 1024).toFixed(1)} MB).`,
+                message: `That file is over the ${formatNumber(MAX_BACKUP_BYTES / 1024 / 1024 / 1024, { digits: 0 })} GB limit (${formatFileSize(file.size)}).`,
             });
             pickedFile.value = null;
             return;

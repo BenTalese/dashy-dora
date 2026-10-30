@@ -219,6 +219,7 @@
         submitting.value = true;
         try {
             await stockItemApi.addPriceObservationAsync(selectedItem.value.stock_item_id, value);
+            stockItemStore.invalidatePriceFacts(selectedItem.value.stock_item_id);
             $q.notify({
                 type: 'positive',
                 message: `Logged a price for ${selectedItem.value.name}.`,

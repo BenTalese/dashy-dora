@@ -78,10 +78,14 @@ def test__audit__scrub_drops_password_keys(api):
 
 
 def test__audit__get_returns_single_event(api):
-    body = _list(size=1)
-    if not body["items"]:
-        return  # Empty install — nothing to fetch.
-    event_id = body["items"][0]["audit_event_id"]
+    # The seed writes no audit rows, so emit one first.
+    created = requests.post(
+        STOCK_GROUPS_URL, json={"name": f"audit-get-{int(time.time() * 1000)}"},
+    )
+    assert created.status_code in (200, 201), created.text
+    rows = _list(request_id=created.headers["X-Request-Id"])["items"]
+    assert rows, "the create must have emitted an audit event"
+    event_id = rows[0]["audit_event_id"]
     detail = requests.get(f"{AUDIT_URL}/{event_id}").json()
     assert detail["audit_event_id"] == event_id
 
@@ -128,3 +132,20 @@ def test__prune_audit_events__RowOlderThanConfiguredRetention__IsDeleted(api):
             select(table).where(table.c.id == aged),
         ).first()
         assert gone is None
+
+
+def test__audit_events__occurred_at_carries_a_utc_offset(api):
+    """QA 2026-10-30 — SQLite hands the instant back naive; serialised without
+    the offset the SPA parsed it as local time and the audit log read hours
+    off (R-098)."""
+    from datetime import datetime
+    import uuid as _uuid
+    created = requests.post(STOCK_GROUPS_URL, json={"name": f"Audit tz {_uuid.uuid4().hex[:6]}"})
+    assert created.status_code in (200, 201), created.text
+    body = requests.get(f"{AUDIT_URL}?size=5").json()
+    rows = body.get("items") or []
+    assert rows, "a write produces an auto-audit event"
+    for row in rows:
+        parsed = datetime.fromisoformat(row["occurred_at"])
+        assert parsed.tzinfo is not None, row["occurred_at"]
+

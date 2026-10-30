@@ -1209,6 +1209,7 @@
     import { useProductStore } from 'src/stores/productStore';
     import { useShoppingListStore } from 'src/stores/shoppingListStore';
     import { useStockItemStore } from 'src/stores/stockItemStore';
+    import { useRecipeStore } from 'src/stores/recipeStore';
     import { useStockLevelStore } from 'src/stores/stockLevelStore';
     import { useStoresStore } from 'src/stores/storesStore';
     import { useLogPrice } from 'src/composables/useLogPrice';
@@ -1226,6 +1227,7 @@
     const templateApi = new ShoppingListTemplateApiService();
     const store = useShoppingListStore();
     const stockItemStore = useStockItemStore();
+    const recipeStore = useRecipeStore();
     const stockLevelStore = useStockLevelStore();
     const productStore = useProductStore();
     const { moneyEnabled } = useMoneyEnabled();
@@ -1441,6 +1443,11 @@
         finishing.value = true;
         try {
             const { moved, discarded } = await disposeLeftoversBeforeFinish();
+            const restockedIds = [...new Set(
+                (detail.value?.lines ?? [])
+                    .filter((l) => l.is_ticked && l.stock_item_id)
+                    .map((l) => l.stock_item_id as string),
+            )];
             const result = await api.finishAsync(listId.value);
             finishReviewOpen.value = false;
             if (moved > 0) {
@@ -1463,6 +1470,13 @@
                 refreshAll(),
                 stockItemStore.getStockItemsAsync(),
             ]);
+            // The finish restocks server-side (and harvests prices), bypassing
+            // the store mutations that would otherwise mark these stale.
+            restockedIds.forEach((id) => {
+                stockItemStore.invalidateLevelOverlays(id);
+                invalidateBuyVerdict(id);
+            });
+            recipeStore.invalidateRecipes();
             $q.notify({
                 type: 'positive',
                 message: `Shopping finished. ${result.items_restocked} item${
@@ -2085,7 +2099,7 @@
     // (`display_name`); this only edits the raw custom `name`.
     const dateFallbackName = computed(() => {
         const d = detail.value?.planned_shop_date;
-        if (d) return formatDate(`${d}T00:00:00`);
+        if (d) return formatDate(d);
         return detail.value ? formatDate(detail.value.created_at) : '';
     });
 
@@ -2687,7 +2701,6 @@
     ) {
         if (kind === 'remove_from_list') {
             await onRemoveLine(line.line_id);
-            if (line.stock_item_id) invalidateBuyVerdict(line.stock_item_id);
             return;
         }
         if (kind === 'mark_stocked' && line.stock_item_id) {
@@ -2739,7 +2752,10 @@
                     listId.value,
                     alsoRemoveStockItemId,
                 );
+                invalidateBuyVerdict(alsoRemoveStockItemId);
             }
+            // The verdict ("already on a list") depends on list membership.
+            if (before?.stock_item_id) invalidateBuyVerdict(before.stock_item_id);
             // Quiet, not `refreshAll()`: removing a line is an edit to the list
             // you are already looking at, not a navigation, so blanking `detail`
             // flashed the whole page through the skeleton on every remove

@@ -136,24 +136,16 @@ def test__price_observation__unit_alias_persists_canonical(api):
 def test__price_observation__store_id_attached_and_resolved(api):
     """A2 — optional store_id; server resolves the name for the chip."""
     item = _new_stock_item()
-    stores = requests.get(f"{BASE}/stores").json().get("items") or requests.get(f"{BASE}/stores").json()
-    # The stores endpoint returns either {items:[...]} or a list; both shapes
-    # are present in seed-vs-empty installs. Skip cleanly if the dev env has no
-    # stores (this test asserts behaviour when there IS one).
-    if not stores:
-        return
-    store_id = stores[0]["store_id"] if isinstance(stores[0], dict) and "store_id" in stores[0] else stores[0].get("id")
-    if not store_id:
-        return
+    stores = requests.get(f"{BASE}/stores").json()["items"]
+    assert stores, "the seed ships stores"
+    store_id = stores[0]["store_id"]
     resp = requests.post(
         f"{STOCK_ITEMS}/{item}/price-observations",
         json={"total_price": 4.0, "total_measure": 1.0, "unit": "L", "store_id": store_id},
     )
     assert resp.status_code == 204, resp.text
     obs = _detail(item)["price_observations"][0]
-    assert obs["store_name"] == next(
-        s["name"] for s in stores if (s.get("store_id") or s.get("id")) == store_id
-    )
+    assert obs["store_name"] == stores[0]["name"]
 
 
 def test__price_observation__unknown_store_rejected(api):

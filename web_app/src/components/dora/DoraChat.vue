@@ -381,8 +381,10 @@
         type AddToShoppingListAction,
         type CommitAddItem,
         type ConfirmAction,
+        type ConfirmActionType,
         type PendingAction,
     } from 'src/services/api/assistantApiService';
+    import { clearBuyVerdictCache, invalidateBuyVerdict } from 'src/composables/useBuyVerdict';
     import HealthApiService from 'src/services/api/healthApiService';
     import HelpApiService from 'src/services/api/helpApiService';
     import {
@@ -404,6 +406,8 @@
     import { useStockItemStore } from 'src/stores/stockItemStore';
     import { useStockLevelStore } from 'src/stores/stockLevelStore';
     import { useLocationStore } from 'src/stores/locationStore';
+    import { invalidateReconcileQueue } from 'src/composables/useReconcileQueue';
+    import { usePlannedDemand } from 'src/composables/usePlannedDemand';
     import type { LocationNode } from 'src/models/location';
     import { localTodayIso } from 'src/helpers/weekDates';
     import { useSuggestionStore } from 'src/stores/suggestionStore';
@@ -1224,6 +1228,8 @@
         try {
             const result = await assistantApi.actAsync(action.shopping_list.id, items);
             pushDoraMessage({ text: result.answer, mood: 'happy' });
+            swallow(shoppingListStore.refreshAsync());
+            items.forEach((item) => invalidateBuyVerdict(item.stock_item_id));
         } catch (err) {
             message.done = false;
             pushDoraMessage({
@@ -1249,6 +1255,7 @@
                 text: result.answer,
                 mood: result.ok ? 'super_excited' : 'sad',
             });
+            if (result.ok) refreshAfterConfirmedAction(action.type, action.payload);
         } catch (err) {
             message.done = false;
             pushDoraMessage({
@@ -1258,6 +1265,58 @@
         } finally {
             thinking.value = false;
             await scrollToBottom();
+        }
+    }
+
+    /** Run a background refresh after an action that already succeeded. Its
+     *  failure must not reach the global handler (an "oopsie" toast and
+     *  unrelated optimistic rollbacks for a write that worked); the data
+     *  self-heals on the next load. */
+    function swallow(p: Promise<unknown>): void {
+        p.catch(() => undefined);
+    }
+
+    // The confirm endpoint writes server-side, bypassing the store mutations
+    // that would otherwise mark the lazily-hydrated collections stale (R-062).
+    // Stock refetches only touch a list that's loaded (`refreshIfLoadedAsync`).
+    function refreshAfterConfirmedAction(
+        type: ConfirmActionType,
+        payload: Record<string, unknown>,
+    ): void {
+        const stockItemId = typeof payload.stock_item_id === 'string'
+            ? payload.stock_item_id
+            : null;
+        switch (type) {
+            case 'update_stock_level':
+            case 'mark_opened':
+            case 'push_expiry':
+            case 'move_item':
+                if (stockItemId) swallow(stockItemStore.refreshStockItemAsync(stockItemId));
+                else swallow(stockItemStore.refreshIfLoadedAsync());
+                recipeStore.invalidateRecipes();
+                // A level drop can auto-add the item to a list.
+                swallow(shoppingListStore.refreshAsync());
+                return;
+            case 'tick_shopping_line':
+            case 'add_recipe_to_list':
+            case 'trim_list_to_budget':
+                swallow(shoppingListStore.refreshAsync());
+                clearBuyVerdictCache();
+                return;
+            case 'cook_recipe':
+                swallow(stockItemStore.refreshIfLoadedAsync());
+                swallow(shoppingListStore.refreshAsync());
+                clearBuyVerdictCache();
+                recipeStore.invalidateRecipes();
+                usePlannedDemand().invalidate();
+                invalidateReconcileQueue();
+                return;
+            case 'plan_meal_for_date':
+            case 'adjust_recipe_meals':
+                recipeStore.invalidateRecipes();
+                usePlannedDemand().invalidate();
+                invalidateReconcileQueue();
+                return;
         }
     }
 

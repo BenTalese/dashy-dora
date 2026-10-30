@@ -526,6 +526,7 @@
     import { useAppSettingsStore } from 'src/stores/appSettingsStore';
     import { useFeatureFlags } from 'src/composables/useFeatureFlags';
     import { refreshCookingPolicy } from 'src/composables/useCookingPolicy';
+    import { refreshMoneyPolicy } from 'src/composables/useMoney';
     import { useMeasurementSystem } from 'src/composables/useMeasurementSystem';
     import type { DoraSegmentedOption } from 'src/components/settings/DoraSegmented.vue';
     import {
@@ -544,6 +545,8 @@
     import { useStockGroupStore } from 'src/stores/stockGroupStore';
     import { extractFieldErrors } from 'src/services/errorHandling/apiErrorHandler';
     import { useAuthStore } from 'src/stores/authStore';
+    import { clearOnboardingSkipped, markOnboardingSkipped } from 'src/helpers/onboardingSkip';
+    import { useScanningEnabled } from 'src/composables/useScanningEnabled';
     import { useStockLocationStore } from 'src/stores/stockLocationStore';
     import { computed, onMounted, reactive, ref, watch } from 'vue';
     import { useRouter } from 'vue-router';
@@ -553,6 +556,8 @@
     const stockGroupStore = useStockGroupStore();
     const appSettingsStore = useAppSettingsStore();
     const { refresh: refreshFeatureFlags, money: moneyFlag } = useFeatureFlags();
+    // Scanning keeps its own cached health answer beside the flags.
+    const { refreshScanning } = useScanningEnabled();
     const { reload: reloadMeasurementSystem } = useMeasurementSystem();
     const authStore = useAuthStore();
     const stockLocationStore = useStockLocationStore();
@@ -1321,7 +1326,14 @@
                 timezone: saved.timezone,
                 measurementSystem: saved.measurement_system,
             };
-            await Promise.all([refreshFeatureFlags(), refreshCookingPolicy(), reloadMeasurementSystem()]);
+            // `refreshMoneyPolicy` re-reads `locale_policy`, which carries the
+            // household timezone the date helpers use — without it dates stay
+            // in the old zone until a reload.
+            await Promise.all([
+                refreshFeatureFlags(), refreshScanning(),
+                refreshCookingPolicy(), reloadMeasurementSystem(),
+                refreshMoneyPolicy(),
+            ]);
         }
         // Seeding defaults + starter items is the FIRST user's job only. A
         // later household member (or anyone re-running the tour from About)
@@ -1432,14 +1444,7 @@
             // stale (null) value and bounces the user straight back to
             // /welcome — making the button look dead until a hard refresh.
             await authStore.refreshAsync();
-            try {
-                localStorage.setItem(
-                    'dora.onboarding.skipped_at',
-                    new Date().toISOString(),
-                );
-            } catch {
-                // Ignore — banner just won't fire.
-            }
+            markOnboardingSkipped(currentUser.value?.user_id);
             clearDraft();
             void router.push('/');
         } catch (err) {
@@ -1473,11 +1478,7 @@
             clearDraft();
             // Clear any stale "skipped" flag so the dashboard banner
             // doesn't reappear after a proper completion.
-            try {
-                localStorage.removeItem('dora.onboarding.skipped_at');
-            } catch {
-                // Ignore.
-            }
+            clearOnboardingSkipped(currentUser.value?.user_id);
             return true;
         } catch (err) {
             handleApplyError(err);

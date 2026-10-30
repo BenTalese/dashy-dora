@@ -128,7 +128,7 @@
     import BaseDialog from 'src/components/BaseDialog.vue';
     import BaseButton from 'src/components/BaseButton.vue';
     import { useLocationStore } from 'src/stores/locationStore';
-    import StockItemApiService from 'src/services/api/stockItemApiService';
+    import { useStockItemStore } from 'src/stores/stockItemStore';
     import type { LocationNode } from 'src/models/location';
     import type { ShoppingListLine } from 'src/models/shoppingList';
 
@@ -142,7 +142,7 @@
     }>();
 
     const $q = useQuasar();
-    const stockItemApi = new StockItemApiService();
+    const stockItemStore = useStockItemStore();
     const locationStore = useLocationStore();
 
     onMounted(() => { void locationStore.ensureLoadedAsync(); });
@@ -264,7 +264,7 @@
         assignSaving.value = true;
         assigning[target.line_id] = true;
         try {
-            await stockItemApi.updateAsync({
+            await stockItemStore.updateStockItemAsync({
                 stock_item_id: target.stock_item_id,
                 stock_location_id: locationId,
             });

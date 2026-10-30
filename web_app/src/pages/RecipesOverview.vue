@@ -1549,30 +1549,37 @@
     }
 
     // ── Query-param deep links ──────────────────────────────────────
-    // The stock item detail screen links here with `?usesStockItem=…` to
-    // ask "which recipes use this item?". Hydrate that filter on mount
-    // and reactively if the query changes.
+    // The stock item detail screen links here with `?usesStockItem=…`, the
+    // dashboard with `?cookable=true` ("Cookable tonight → See more") and
+    // `?expiring=true` ("Use it up → See more"). A deep link replaces the
+    // session-saved filters rather than stacking on them (an intersection
+    // usually lands on zero rows), and the query is replaced away once
+    // applied so Back/refresh doesn't re-apply it.
+    const DEEP_LINK_FILTER_KEYS = ['usesStockItem', 'cookable', 'expiring'] as const;
+    function isTruthyFlag(value: unknown): boolean {
+        return value === 'true' || value === '1';
+    }
     function applyQuery() {
-        const id = route.query.usesStockItem;
-        if (typeof id === 'string' && id && !usesStockItemIds.value.includes(id)) {
+        const q = route.query;
+        if (!DEEP_LINK_FILTER_KEYS.some((key) => q[key] !== undefined)) return;
+        clearFilters();
+        const id = q.usesStockItem;
+        if (typeof id === 'string' && id) {
             usesStockItemIds.value = [id];
         }
-        // Dashboard's "Cookable tonight → See more" link sets ?cookable=true.
-        if (route.query.cookable === 'true' || route.query.cookable === '1') {
+        if (isTruthyFlag(q.cookable)) {
             cookableNowOnly.value = true;
         }
-        // Owner 2026-09-08 — the dashboard's "Use it up" card grew a "See more"
-        // button beside its *Recipes using these* heading, and this is where it
-        // lands. The filter itself already existed (the `expiringOnly` chip, and
-        // `?expiring_within_days=14` behind it); it simply had no deep link, so
-        // the card could show three recipes and offer no way to the rest.
         // Setting the ref is enough — its own `watch` runs the fetch.
-        if (route.query.expiring === 'true' || route.query.expiring === '1') {
+        if (isTruthyFlag(q.expiring)) {
             expiringOnly.value = true;
         }
+        const next = { ...q };
+        DEEP_LINK_FILTER_KEYS.forEach((key) => delete next[key]);
+        void router.replace({ path: route.path, query: next });
     }
     watch(
-        () => [route.query.usesStockItem, route.query.cookable, route.query.expiring],
+        () => DEEP_LINK_FILTER_KEYS.map((key) => route.query[key]),
         applyQuery,
     );
 

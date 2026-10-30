@@ -8,6 +8,7 @@ own observations ("your data") with its linked products' offer history
 ("context"), every point normalised to the same canonical unit.
 """
 import uuid
+from datetime import UTC, datetime, timedelta
 
 import requests
 
@@ -23,6 +24,12 @@ def _new_stock_item() -> str:
     })
     assert resp.status_code == 201, resp.text
     return resp.json()["stock_item_id"]
+
+
+def _days_ago(days: int) -> str:
+    # Relative to now: the baseline is a trailing 365-day window measured
+    # from `now`, so fixed calendar dates age out of it.
+    return (datetime.now(UTC) - timedelta(days=days)).isoformat()
 
 
 def _log(item: str, *, total_price: float, total_measure: float, unit: str, observed_at: str) -> None:
@@ -69,11 +76,11 @@ def test__stock_item_price_history__observations_only__sorted_and_tagged(api):
     item = _new_stock_item()
     # Logged out of chronological order; the endpoint must sort ascending.
     _log(item, total_price=3.0, total_measure=1.0, unit="L",
-         observed_at="2026-03-01T00:00:00+00:00")
+         observed_at=_days_ago(120))
     _log(item, total_price=2.0, total_measure=1.0, unit="L",
-         observed_at="2026-01-01T00:00:00+00:00")
+         observed_at=_days_ago(180))
     _log(item, total_price=5.0, total_measure=1.0, unit="L",
-         observed_at="2026-02-01T00:00:00+00:00")
+         observed_at=_days_ago(150))
     body = _history(item).json()
 
     assert body["display_unit"] == "100ml"
@@ -96,7 +103,7 @@ def test__stock_item_price_history__ml_observation_displays_per_100ml(api):
     (below 1 L → /100ml; at or above → /L). See units.display_denominator_for."""
     item = _new_stock_item()
     _log(item, total_price=3.0, total_measure=500.0, unit="ml",
-         observed_at="2026-05-01T00:00:00+00:00")
+         observed_at=_days_ago(60))
     body = _history(item).json()
     assert body["display_unit"] == "100ml"
     assert len(body["points"]) == 1
@@ -111,8 +118,7 @@ def test__stock_item_price_history__seeded_milk_unions_offers(api):
     """Milk has observations in L and links to two 2 L products with offer
     history — the union must carry both sources on one per-L axis."""
     milk = _find_stock_item_by_name("Full Cream Milk")
-    if milk is None:
-        return  # seed shape changed — nothing to assert against
+    assert milk is not None, "the seed ships 'Full Cream Milk'"
     body = _history(milk).json()
 
     assert body["display_unit"] == "100ml"

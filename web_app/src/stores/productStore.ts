@@ -2,6 +2,8 @@ import { acceptHMRUpdate, defineStore } from 'pinia';
 import type { Product } from 'src/models/product';
 import type { UpdateProductCommand } from 'src/services/api/productApiService';
 import ProductApiService from 'src/services/api/productApiService';
+import { useFeatureFlags } from 'src/composables/useFeatureFlags';
+import { useRecipeStore } from 'src/stores/recipeStore';
 import { readonly, ref } from 'vue';
 
 const productApiService = new ProductApiService();
@@ -37,8 +39,23 @@ export const useProductStore = defineStore('product', () => {
     const updateProductAsync = (command: UpdateProductCommand): Promise<void> =>
         productApiService.updateAsync(command).then(() => getProductsAsync());
 
+    /** Deleting a product drops its price history, which moves recipe costs,
+     *  and the `products` feature flag is data-presence (any product at all),
+     *  so the last delete can switch the surface off. */
+    const deleteProductsAsync = async (productIds: string[]): Promise<void> => {
+        try {
+            for (const productId of productIds) {
+                await productApiService.deleteAsync(productId);
+            }
+        } finally {
+            useRecipeStore().invalidateRecipes();
+            void useFeatureFlags().refresh();
+            await getProductsAsync();
+        }
+    };
+
     const deleteProductAsync = (productId: string): Promise<void> =>
-        productApiService.deleteAsync(productId).then(() => getProductsAsync());
+        deleteProductsAsync([productId]);
 
     return {
         products: readonly(products),
@@ -46,6 +63,7 @@ export const useProductStore = defineStore('product', () => {
         ensureLoadedAsync,
         updateProductAsync,
         deleteProductAsync,
+        deleteProductsAsync,
     };
 });
 

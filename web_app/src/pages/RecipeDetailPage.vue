@@ -648,7 +648,13 @@
                                     </li>
                                 </ul>
 
-                                <p v-if="group.rows.length === 0" class="rn__ingsecempty">
+                                <!-- The unsectioned group always exists (it owns "Add
+                                     ingredient" while editing); in view mode an empty
+                                     one is nothing to say, not an empty section. -->
+                                <p
+                                    v-if="group.rows.length === 0 && (ingredientsEditing || group.sectionId !== null)"
+                                    class="rn__ingsecempty"
+                                >
                                     Nothing in this section yet.
                                 </p>
 

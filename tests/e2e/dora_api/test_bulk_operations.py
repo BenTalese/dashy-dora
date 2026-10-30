@@ -98,14 +98,15 @@ def test__bulk_move__unknown_destination_is_rejected(api):
         "stock_item_ids": [sid],
         "destination_location_id": str(uuid4()),
     })
-    assert resp.status_code >= 400, resp.text
+    assert_problem(resp, 422, title="Business rule violation.")
+    assert "Destination location was not found." in str(resp.json())
 
 
 def test__bulk_move__empty_id_list_is_rejected(api):
     resp = requests.post(f"{STOCK_ITEMS}/bulk-move", json={
         "stock_item_ids": [], "destination_location_id": None,
     })
-    assert resp.status_code >= 400, resp.text
+    assert_problem(resp, 400, field="stock_item_ids")
 
 
 # ───── Bulk set level ─────────────────────────────────────────────────────
@@ -144,7 +145,8 @@ def test__bulk_set_level__unknown_level_is_rejected(api):
     resp = requests.post(f"{STOCK_ITEMS}/bulk-set-level", json={
         "stock_item_ids": [sid], "stock_level_id": str(uuid4()),
     })
-    assert resp.status_code >= 400, resp.text
+    assert_problem(resp, 422, title="Business rule violation.")
+    assert "Stock level was not found." in str(resp.json())
 
 
 # ───── Bulk waste + undo ──────────────────────────────────────────────────

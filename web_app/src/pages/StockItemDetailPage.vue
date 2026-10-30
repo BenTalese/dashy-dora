@@ -1292,7 +1292,7 @@
                             v-for="ev in lifecycleEvents"
                             :key="ev.id"
                             :title="ev.title"
-                            :subtitle="formatLocaleDateTime(ev.at)"
+                            :subtitle="formatEventAt(ev.at)"
                             :icon="ev.icon"
                             :color="ev.color"
                         >
@@ -1377,6 +1377,7 @@
     import BaseTooltip from 'src/components/BaseTooltip.vue';
     import { ICONS } from 'src/style/icons';
     import { formatDate, formatDateTime as formatLocaleDateTime } from 'src/composables/useDateFormat';
+    import { isDateOnly, parseLocalIso } from 'src/helpers/weekDates';
     import SearchInput from 'src/components/SearchInput.vue';
     import AppSkeleton from 'src/components/AppSkeleton.vue';
     import BaseButton from 'src/components/BaseButton.vue';
@@ -1899,6 +1900,7 @@
             store_id: value.store_id ?? null,
             pack_count: value.pack_count ?? null,
         }));
+        stockItemStore.invalidatePriceFacts(stockItemId.value);
         // Only close the widget's dialog once the save landed (a throw above
         // keeps it open with the typed values).
         done();
@@ -1916,6 +1918,7 @@
         await withBusyReload(() =>
             stockItemApi.deletePriceObservationAsync(stockItemId.value, obs.observation_id),
         );
+        stockItemStore.invalidatePriceFacts(stockItemId.value);
     }
     async function onToggleOpen() {
         if (!detail.value) return;
@@ -2451,11 +2454,14 @@
         }
 
         // Synthetic "Opened" — single entry derived from current state.
-        // opened_on is a date; widen to start-of-day for ordering.
+        // opened_on is a calendar date: kept date-only (never widened to a
+        // naive `T00:00:00` instant, which would render in the household zone
+        // and shift a day when the device zone differs). `formatEventAt`
+        // renders it as a date; `eventTime` orders it at local start-of-day.
         if (d.is_open && d.opened_on) {
             out.push({
                 id: `opened-${d.opened_on}`,
-                at: `${d.opened_on}T00:00:00`,
+                at: d.opened_on,
                 title: 'Opened',
                 icon: ICONS.lock_open,
                 // was 'amber-9'; reuses the --severity-attention
@@ -2484,9 +2490,20 @@
         // cap in get_stock_item_detail.py, reported via
         // `history_older_count`); we render everything the server
         // sends and surface the drop count in the timeline footer.
-        out.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+        out.sort((a, b) => eventTime(b.at) - eventTime(a.at));
         return out;
     });
+
+    /** Sort key for a timeline entry: date-only values sit at local midnight. */
+    function eventTime(at: string): number {
+        return (parseLocalIso(at) ?? new Date(at)).getTime();
+    }
+
+    /** Timeline subtitle: a calendar date renders as a date, an instant as
+     *  date + time. */
+    function formatEventAt(at: string): string {
+        return isDateOnly(at) ? formatDate(at, { dateStyle: 'medium' }) : formatLocaleDateTime(at);
+    }
 
     // ── Unlink products ──────────────────────────────────────────────────
     // The saved-products picker dialog was retired; the Find-&-link CTA
@@ -2494,6 +2511,7 @@
     // linked back from the My Products "Link to stock item…" dialog.
     async function onUnlink(productId: string) {
         await withBusyReload(() => stockItemApi.unlinkProductAsync(stockItemId.value, productId));
+        stockItemStore.invalidatePriceFacts(stockItemId.value);
     }
 
     // ── Delete ───────────────────────────────────────────────────────────

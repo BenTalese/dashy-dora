@@ -48,6 +48,11 @@ export interface HealthInfo {
         // every session needs on boot, not just admins. Optional in the type
         // because older backends won't emit it; callers default to metric.
         measurement_system?: string;
+        // the household's IANA timezone (`AppSetting.timezone`), e.g.
+        // 'Australia/Sydney'. Drives the client's display-only "today" and
+        // datetime renders (R-021 / D-006). Optional in the type because older
+        // backends won't emit it; callers fall back to the device clock.
+        timezone?: string;
     };
     // FU-615 — install-wide household cooking config (moved off User).
     // Every client reads it here: cook mode seeds its serving scaler from

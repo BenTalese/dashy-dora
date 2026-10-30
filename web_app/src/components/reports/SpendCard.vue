@@ -63,7 +63,7 @@
                         />
                         <span class="spend-legend__name">{{ row.category }}</span>
                         <span class="spend-legend__value">{{ formatMoney(row.spent) }}</span>
-                        <span class="spend-legend__meta">{{ row.share_pct }}%</span>
+                        <span class="spend-legend__meta">{{ formatPercent(row.share_pct) }}</span>
                     </li>
                 </ul>
             </div>
@@ -97,7 +97,7 @@
                             />
                             <template v-if="row.delta_pct === null">new</template>
                             <template v-else>
-                                {{ row.delta_pct > 0 ? '+' : '' }}{{ row.delta_pct }}%
+                                {{ formatPercent(row.delta_pct, { signed: true }) }}
                             </template>
                         </span>
                         <span class="spend-legend__meta">
@@ -154,7 +154,7 @@
     import CardLoadError from 'src/components/dashboard/CardLoadError.vue';
     import DashboardCard from 'src/components/dashboard/DashboardCard.vue';
     import ProportionBar from 'src/components/ProportionBar.vue';
-    import { formatMoney } from 'src/composables/useMoney';
+    import { formatMoney, formatPercent } from 'src/composables/useMoney';
     import { storeColour } from 'src/style/storeSwatch';
     import type {
         ReportRange,

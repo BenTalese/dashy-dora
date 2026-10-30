@@ -68,7 +68,9 @@ class DealLine:
     name: str
     brand: str | None
     store_name: str
-    size: str
+    # `Product.size` is nullable; a sizeless product must render no size, not
+    # the word "None" (the card and the text body both printed it).
+    size: str | None
     price_now: str
     price_was: str
     saving: str
@@ -112,7 +114,9 @@ def deals_ledger_key(today: date) -> str:
     return f"deals:weekly_email:{iso_year}-W{iso_week:02d}"
 
 
-def build_deal_lines(product_dtos, currency: str, limit: int) -> list[DealLine]:
+def build_deal_lines(
+    product_dtos, currency: str, limit: int, locale: str | None = None,
+) -> list[DealLine]:
     """Flatten ranked `ProductDto`s into template rows, dropping any that
     aren't genuinely on special.
 
@@ -131,10 +135,10 @@ def build_deal_lines(product_dtos, currency: str, limit: int) -> list[DealLine]:
             name=dto.name,
             brand=dto.brand,
             store_name=dto.store_name,
-            size=dto.size,
-            price_now=format_money(dto.price_now, currency),
-            price_was=format_money(dto.price_was, currency),
-            saving=format_money(dto.price_was - dto.price_now, currency),
+            size=(dto.size or "").strip() or None,
+            price_now=format_money(dto.price_now, currency, locale),
+            price_was=format_money(dto.price_was, currency, locale),
+            saving=format_money(dto.price_was - dto.price_now, currency, locale),
             discount_percent=pct,
             url=dto.web_url,
         ))
@@ -143,10 +147,27 @@ def build_deal_lines(product_dtos, currency: str, limit: int) -> list[DealLine]:
     return lines
 
 
-def build_digest(product_dtos, currency: str, compact: bool) -> DealsDigest:
+def text_line(line: DealLine) -> str:
+    """One deal in the plain-text body. The size rides in brackets only when
+    it adds something: no size, or a name that already ends with it
+    ("Spaghetti No.5 500g"), and it's left off rather than printed twice."""
+    label = line.name
+    if line.size and not line.name.rstrip().lower().endswith(line.size.lower()):
+        label = f"{line.name} ({line.size})"
+    return (
+        f"- {label}: {line.price_now} was {line.price_was}, "
+        f"{line.discount_percent}% off at {line.store_name}"
+    )
+
+
+def build_digest(
+    product_dtos, currency: str, compact: bool, locale: str | None = None,
+) -> DealsDigest:
+    """`locale` is the household's: prices read as they do in the app ("7,99 €"
+    under de-DE), not always symbol-first."""
     limit = MAX_DEALS_COMPACT if compact else MAX_DEALS_EXPANDED
     return DealsDigest(
-        lines=build_deal_lines(product_dtos, currency, limit),
+        lines=build_deal_lines(product_dtos, currency, limit, locale),
         currency=currency,
     )
 

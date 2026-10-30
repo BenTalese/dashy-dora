@@ -41,7 +41,60 @@ next.
 
 ---
 
-## 2026-10-30 (latest): **Autonomous QA round 2 — new angles: authz matrix, fresh install, fault injection, a11y, security, Postgres**
+## 2026-10-30 (latest): **Autonomous QA round 3 — pathways: journeys, documents, regions, two devices, offline, scale**
+
+**Status: done. Committed and pushed as the round-3 commit (rounds 1+2 went up as `a1d19fea`).**
+
+**Owner ask:** *"push up your work and do another round from more angles and more pathways of using the app."*
+
+**Angles:**
+1. **End-to-end journeys with state assertions** (scratch Playwright, assertions through the app's own session):
+   cart button on/off, level picker, expiry +7d/clear, log a price, inline rename, favourite, prepared-meals pool,
+   print tab, cook mode through to the finish dialog, shop start → tick → finish, stocktake review, reconcile, Dora
+   "what's expiring" / "add milk", "/" search, new item + delete, budget save, dark theme — 28/35 green; the rest were
+   locator misses, not defects. Screenshots reviewed by eye: one copy bug (an empty unsectioned ingredient group
+   rendering "Nothing in this section yet." in view mode) and the FU-966 count mismatch.
+2. **Rendered documents** (emails rendered in-process; print views, CSVs and the backup fetched live): 16 defects —
+   the shopping-list print priced lines from offers alone and disagreed with the app on every list, the recipe print
+   dropped sections/steps/photos and printed "None" for unlinked ingredients, raw floats, ISO + server-local dates,
+   hard-coded `$`, no UTF-8 BOM, doubled charset headers, "None · Coles" in the deals mail, deal-mail links to
+   `localhost` when no public URL is set. All fixed; `domain/locale_format.py` now carries ICU-derived date/money
+   patterns for the Region page's locales so print views match the SPA's `Intl` output.
+3. **Regional formats, driven live under en-AU / en-US+New York / de-DE+Berlin / a Pago Pago household on a Sydney
+   device** (browser forced to ja-JP to catch device-locale leaks — none): audit log showed UTC as local (server omitted
+   the offset), the planner's mini calendar said SEPTEMBER in New York, German percentages kept the English point,
+   hard-coded English weekday labels, and client "Today/Tomorrow" from the device clock. Fixed: the server publishes
+   `locale_policy.timezone`; the client adopts a non-UTC household zone for instants and relative days.
+4. **Two devices at once** (threads): the planner's whole-plan PATCH drops the other device's meal (**FU-967**, design
+   call); a done list accepted new lines (fixed); two finishes both restocked/harvested (fixed with a conditional
+   UPDATE); same-item parallel create, parallel ticks and parallel level writes behaved.
+5. **Cross-surface hand-offs** (static trace of 9 pathways): 14 stale-cache seams fixed in one pass (finish → recipe
+   cookability/overlays, Dora actions → rows/lists/recipes, bell expiry → stock, deep links stacking on saved filters,
+   Put away, planned demand, the `products` flag, per-user overlay caches on sign-out, the per-device onboarding
+   banner, reconcile → cookbook pool, price/link writes → recipe cost, location delete → rows + filter).
+6. **Test-suite quality**: stale skips, either-or asserts, 2027 time bombs, a lying Playwright handshake, a leaking
+   Quasar timer — fixed; two destructive routes gained behavioural tests; an autouse fixture resets rate-limit buckets.
+7. **Fresh install → wizard → second user, offline (cached reads render, writes say so), a 2000-item pantry** (every
+   page under 0.3 s of network; My Products renders ~2,900 cards at once → **FU-968**), the stock search matched ANY
+   typed word (fixed to every word).
+
+**Gates:** pytest **2716 passed** (2678 → 2716), vitest **861 / 91 files**, `vue-tsc` + lint clean, build
+green, journeys re-driven on the final build. Two diff reviewers ran on this round's batch; their follow-ons (a UTC-default
+regression in the timezone work, refresh-after-action error paths, date-only strings re-zoned) were fixed before the gates.
+
+**Left (logged):** FU-966 (card vs rail counts), FU-967 (planner lost update), FU-968 (My Products virtualisation),
+FU-969 (server English date copy, quantity decimals under de-DE, `public_url_configured` in the admin UI, bulk-add to a
+done list, 2027-dated print tests). Verify: `DORA_VERIFY.md` → "Autonomous QA round 3".
+
+**Process notes:** the login limiter (5/min per IP) trips scripted logins from localhost — scripts now reuse one
+session and honour `Retry-After`; a `… | tail -1 && pytest tests/` chain runs the suite even when the first command
+failed (the pipeline's status is `tail`'s), which collided with a targeted run on the shared test DB.
+
+**Next up:** owner checks FU-965 (still first), walks the three verify sections, decides FU-967 / FU-964 / FU-958.
+
+---
+
+## 2026-10-30: **Autonomous QA round 2 — new angles: authz matrix, fresh install, fault injection, a11y, security, Postgres**
 
 **Status: done. Nothing committed (the owner commits). Tree = `270da487` + yesterday's sweep + this unit.**
 

@@ -39,6 +39,64 @@ long session summary. Distinct from the other logs:
 
 ---
 
+## [OPEN] FU-969 — Round-3 leftovers: server-built English date copy, quantity decimals under de-DE, `public_url_configured` in the admin UI, bulk-add to a done list, meal-plan print tests dated 2027
+- **Raised:** 2026-10-30 (autonomous QA round 3)
+- **Type:** leftover
+- **What:** (1) server-built copy still uses English day-first `strftime`: list `display_name` ("Fri 30 Oct",
+  `domain/entities/shopping_list.py`), buy-verdict dates (`get_buy_verdict.py` `'%b %d'` — US order even for AU),
+  `planned_demand.py`, `get_alerts.py`, `trim_to_budget.py`; the print views now have `domain/locale_format.py`, which
+  these could share — but whether non-English locales should change server copy at all is an owner call (D-006 scope).
+  (2) `helpers/formatQuantity.ts` / `scaleQuantity.ts` keep "." decimals under de-DE (they round-trip into inputs).
+  (3) `/api/health` now reports `features.public_url_configured`; no settings page shows the "SMTP configured but no
+  public URL" warning yet. (4) `bulk-add` to a done list returns 200 with every id in `failed_ids`; the assistant's
+  add paths count the refusal as "nothing happened" — a list-level 422 in `bulk_operations.py` would be cleaner.
+  (5) `test_data_router.py` meal-plan print tests hard-code 2027-03-01/08 (a past `scheduled_for` is refused) — they
+  break after March 2027; make them relative. (6) The `locale_format.py` tables were generated from Node's ICU by a
+  scratch script; committing that generator under `scripts/` as a drift check is worth considering.
+  (7) Components that call `daysFromToday` / `localTodayIso` directly (MealPlanCalendar, MealPlanMobileFocus,
+  ShoppingListOverviewCard, useMealPlanner, expiryIndicator, MealReconcileRunner, DoraChat) don't re-render when the
+  household timezone arrives from `/health` after first paint — only the `useDateFormat` helpers subscribe; a stale
+  "Today" is possible for the first second of a cold load on a household whose zone differs from the device.
+- **Why deferred:** each is small but outside the obvious-bug remit, and (1) needs a decision.
+- **Recommended resolution:** (5) now-ish (a time bomb); the rest opportunistic.
+
+## [OPEN] FU-968 — My Products renders every product row at once (2,859 cards, ~5.6 s of main-thread work, 125 MB heap on a 2000-item pantry)
+- **Raised:** 2026-10-30 (autonomous QA round 3, UI scale run against a 2000-item bulk seed)
+- **Type:** finding (performance)
+- **What:** `/my-products` mounts a card per product with no virtual scrolling (no `q-virtual-scroll`), so a companion
+  that has pushed a few thousand products makes the page take seconds to become interactive and holds every card in
+  memory; `/stock` (2,029 rows) and `/cookbook` (281) stayed fine. Also the stock-overview search matched ANY typed
+  word (fixed this round to every word) — under 2,000 "Load item NNNN" rows "item 17" matched all 2,000.
+- **Why deferred:** virtualising the grid is a layout unit (card heights vary with images and chips).
+- **Recommended resolution:** when a real companion dataset passes ~500 products; `QVirtualScroll` with a fixed-height
+  compact row, or server paging with the existing `fetchAllPages` dropped for that page.
+
+## [OPEN] FU-967 — Two devices editing the same planner week: the whole-plan PATCH silently drops the other device's change
+- **Raised:** 2026-10-30 (autonomous QA round 3, two-device concurrency run)
+- **Type:** finding (needs a design call)
+- **What:** `PATCH /meal-plans/<id>` replaces the entry list wholesale (FU-878). Two devices that each read the week,
+  add one meal and save at the same moment both get 204 and the week ends with **one** meal — the later write's
+  snapshot wins, with no error on either device (proven live: 2 adds → 1 entry). The same shape applies to any
+  two-device edit of one week (servings, cook day, template apply vs a manual add). Shopping lists are per-line and
+  survived the same test (two devices ticking different lines kept both). Options: (a) optimistic concurrency —
+  the plan DTO carries `updated_at`/`version`, the PATCH sends it back as `If-Match`, a mismatch is a 409 the SPA
+  resolves by refetching and replaying the one change; (b) per-entry endpoints (add/remove/patch one entry) so the
+  planner stops rebuilding the list client-side (also closes FU-878's id churn and FU-953's queue coverage).
+- **Why deferred:** both change the planner's write contract; (b) is the structural fix the finalisation review
+  wanted but is a unit of its own.
+- **Recommended resolution:** owner picks (a) as a cheap guard now, (b) as the real fix later during the next
+  planner unit.
+
+## [OPEN] FU-966 — Draft list counts disagree between the rail (7) and the overview card (6) while a line is set aside by budget
+- **Raised:** 2026-10-30 (autonomous QA round 3, journey screenshots)
+- **Type:** finding (same family as FU-958)
+- **What:** after the 2026-10-29 fix the overview card counts only the active lines the shop will show, while the
+  rail's badge and the "N items" summary come from the server's `line_count`, which includes `deferred_by_budget`
+  lines — so the same list reads "6" on the card and "7" in the rail. Whichever way FU-958 is decided, one count
+  rule has to live on the server and feed both (R-003 / R-041).
+- **Why deferred:** depends on the FU-958 decision.
+- **Recommended resolution:** with FU-958.
+
 ## [OPEN] FU-965 — ⚠️ SQLite migrations ran batch rebuilds with foreign keys ON: earlier upgrades may have cascade-deleted child rows in the production DB
 - **Raised:** 2026-10-30 (autonomous QA round 2, migration repair)
 - **Type:** finding (data integrity — owner check)

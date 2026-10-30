@@ -120,9 +120,7 @@ def test__create__cook_batch_two_recipes__rejected(api):
 
 def test__create__cook_batch_two_slots__rejected(api):
     slots = _slot_names()
-    if len(slots) < 2:
-        import pytest
-        pytest.skip("needs >=2 configured meal slots")
+    assert len(slots) >= 2, "the seed ships 2+ meal slots; this test needs two"
     today = _household_today()
     recipe = _make_recipe()
     txt = _bad([
@@ -220,7 +218,7 @@ def test__update__BatchStraddlingTodayWithOneForwardDay__IsAccepted(api):
 #    linked batch equals the demand for the same entries unlinked — cooking once
 #    vs three times buys the same food. Pins that the aggregation ignores linking
 #    (PROPOSAL_MEAL_PLANS_PART_2 §6 correction). Uses a seeded recipe that has
-#    ingredients so the comparison is non-trivial; skips if none is found.
+#    ingredients so the comparison is non-trivial.
 
 def _ingredients(meal_plan_id: str) -> list:
     # Envelope since 2026-08-27 — `{items, unlinked}`; unlinked rows have no
@@ -253,9 +251,7 @@ def _recipe_with_ingredients() -> str | None:
 
 def test__ingredient_demand__is_identical_linked_vs_unlinked(api):
     recipe = _recipe_with_ingredients()
-    if recipe is None:
-        import pytest
-        pytest.skip("no seeded recipe with ingredients to compare against")
+    assert recipe is not None, "the seed ships recipes with ingredients"
     today = _household_today()
     slot = _slot_names()[0]
     days = [(today + timedelta(days=d)).isoformat() for d in (0, 1, 2)]

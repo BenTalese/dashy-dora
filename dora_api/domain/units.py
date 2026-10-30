@@ -17,7 +17,9 @@ codegen'd from this file via ``scripts/dump_units.py`` — never hand-edited.
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 
@@ -490,14 +492,43 @@ NO_SPACE_UNITS: frozenset[str] = frozenset({
 _NO_SPACE_UNITS = NO_SPACE_UNITS
 
 
+_MAX_QUANTITY_DECIMALS = 2
+
+
+def _format_number(quantity: Any) -> str:
+    if quantity is None or quantity == "":
+        return ""
+    if isinstance(quantity, Decimal):
+        quantity = float(quantity)
+    if isinstance(quantity, bool) or not isinstance(quantity, (int, float)):
+        return str(quantity)
+    if not math.isfinite(quantity):
+        return ""
+    # Fixed-point then strip, like `Number(v.toFixed(2)).toString()`: a
+    # `round(v, 2)` alone can still print float artefacts. Decimal(float) is
+    # exact and ROUND_HALF_UP matches `toFixed` on ties (0.125 → "0.13"; the
+    # f-string's half-even gave "0.12" and the print disagreed with the screen).
+    text = str(Decimal(quantity).quantize(Decimal(1).scaleb(-_MAX_QUANTITY_DECIMALS), rounding=ROUND_HALF_UP))
+    if "." in text:
+        text = text.rstrip("0").rstrip(".")
+    return "0" if text in ("-0", "") else text
+
+
 def format_quantity(quantity: Any, unit: Any) -> str:
     """Pretty-print a quantity + unit pair using the DEC-3 spacing rule.
 
     Mass/volume abbreviations sit tight against the number ("250g", "2ml");
     everything else gets a space ("1 tbsp", "2 cloves"). Either side may be
     None / empty.
+
+    R-079: this function also owns the *precision*. A numeric quantity is
+    written to at most two decimals with trailing zeros dropped ("2.0" -> "2",
+    94/3 -> "31.33", 0.25 stays "0.25"), matching the SPA's
+    `formatQuantity.ts`. It used to be `str(quantity)`, so every print view and
+    CSV wrote "2.0 tbsp" / "100.0g". A non-finite number renders as nothing; a
+    string (e.g. "1/2") passes through untouched.
     """
-    qty = "" if quantity is None or quantity == "" else str(quantity)
+    qty = _format_number(quantity)
     trimmed_unit = "" if unit is None else str(unit).strip()
     if not qty and not trimmed_unit:
         return ""

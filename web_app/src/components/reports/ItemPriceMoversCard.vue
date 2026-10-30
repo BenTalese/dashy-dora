@@ -55,7 +55,7 @@
                                          budget card, which has a threshold to
                                          breach. The arrow carries direction. -->
                                     <q-icon :name="ICONS.trending_up" size="16px" />
-                                    {{ signed(row.delta_pct) }}%
+                                    {{ signed(row.delta_pct) }}
                                 </span>
                                 <span class="pm-row__detail">{{ priceLine(row) }}</span>
                             </button>
@@ -77,7 +77,7 @@
                                 <span class="pm-row__name">{{ row.name }}</span>
                                 <span class="pm-row__figures">
                                     <q-icon :name="ICONS.trending_down" size="16px" />
-                                    {{ signed(row.delta_pct) }}%
+                                    {{ signed(row.delta_pct) }}
                                 </span>
                                 <span class="pm-row__detail">{{ priceLine(row) }}</span>
                             </button>
@@ -150,7 +150,7 @@
     import DashboardCard from 'src/components/dashboard/DashboardCard.vue';
     import PriceHistoryChart from 'src/components/PriceHistoryChart.vue';
     import { stockItemHistoryToChart } from 'src/composables/usePriceChartSeries';
-    import { formatMoney } from 'src/composables/useMoney';
+    import { formatMoney, formatPercent, formatUnitPrice } from 'src/composables/useMoney';
     import StockItemApiService from 'src/services/api/stockItemApiService';
     import type { StockItemPriceHistory } from 'src/services/api/priceHistoryApiService';
     import type {
@@ -201,10 +201,10 @@
     });
 
     function signed(pct: number): string {
-        return `${pct > 0 ? '+' : ''}${pct}`;
+        return formatPercent(pct, { signed: true });
     }
     function priceLine(row: ItemPriceMoverRow): string {
-        return `${formatMoney(row.first_price)} → ${formatMoney(row.last_price)}/${row.unit}`;
+        return `${formatMoney(row.first_price)} → ${formatUnitPrice(row.last_price, row.unit)}`;
     }
 
     // ── Drill-in chart ──────────────────────────────────────────────────

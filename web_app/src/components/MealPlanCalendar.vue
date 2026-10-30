@@ -105,7 +105,7 @@
 <script lang="ts" setup>
     import BaseTooltip from 'src/components/BaseTooltip.vue';
     import { ICONS } from 'src/style/icons';
-    import { formatDate as formatLocaleDate } from 'src/composables/useDateFormat';
+    import { formatDate as formatLocaleDate, formatMonthYear, weekdayLetters } from 'src/composables/useDateFormat';
     import BaseButton from 'src/components/BaseButton.vue';
     import MealPlanDayPips from 'src/components/MealPlanDayPips.vue';
     import { storeToRefs } from 'pinia';
@@ -133,12 +133,10 @@
     const GRID_WEEKS = 6;
 
 
-    const DOW_LETTERS = [
-        { key: 'mon', letter: 'M' }, { key: 'tue', letter: 'T' },
-        { key: 'wed', letter: 'W' }, { key: 'thu', letter: 'T' },
-        { key: 'fri', letter: 'F' }, { key: 'sat', letter: 'S' },
-        { key: 'sun', letter: 'S' },
-    ];
+    // D-006 — weekday initials come from the household locale (de-DE reads
+    // "M D M D F S S"), not a hard-coded English row. Computed so a late-landing
+    // locale policy re-renders them.
+    const DOW_LETTERS = computed(() => weekdayLetters());
 
     const { batchEnabled } = useBatchEnabled();
     const mealPlanStore = useMealPlanStore();
@@ -276,11 +274,10 @@
         return out;
     });
 
-    const monthBanner = computed(() => {
-        const [y, m, d] = viewMonth.value.split('-').map(Number);
-        return formatLocaleDate(new Date(Date.UTC(y!, m! - 1, d)), { month: 'long', year: 'numeric' })
-            .toUpperCase();
-    });
+    // Formatted from the YYYY-MM-DD itself (parsed as local midnight by the
+    // formatter). The old `new Date(Date.UTC(...))` was UTC midnight, which
+    // west of Greenwich is the previous local day — October read "SEPTEMBER".
+    const monthBanner = computed(() => formatMonthYear(viewMonth.value).toUpperCase());
 
     // ── Selection ──────────────────────────────────────────────────────────
     function selectDay(dayIso: string) {

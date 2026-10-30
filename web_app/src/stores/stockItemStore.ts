@@ -102,6 +102,15 @@ export const useStockItemStore = defineStore('stockItem', () => {
         }, OVERLAY_REFRESH_DELAY_MS);
     }
 
+    /** A price observation or product link moves what the item costs: the
+     *  recipe list's cost figures and the buy verdict's deal axis. Those
+     *  writes go straight to the API (they don't change the stock row), so
+     *  each write site calls this once. */
+    function invalidatePriceFacts(stockItemId: string): void {
+        invalidateDerivedRecipeFacts();
+        invalidateBuyVerdict(stockItemId);
+    }
+
     let hydrated = false;
     let inflight: Promise<void> | null = null;
 
@@ -129,6 +138,13 @@ export const useStockItemStore = defineStore('stockItem', () => {
         inflight ??= getStockItemsAsync().finally(() => { inflight = null; });
         return inflight;
     };
+
+    /** Refetch the list only if it's been loaded. A server-side write that
+     *  bypassed the store makes a hydrated list stale; an unhydrated one has
+     *  nothing to correct (`ensureLoadedAsync` fetches fresh when `/stock`
+     *  first needs it), so pulling the whole pantry would be wasted. */
+    const refreshIfLoadedAsync = (): Promise<void> =>
+        hydrated ? getStockItemsAsync() : Promise.resolve();
 
     const createStockItemAsync = async (
         stockItemToCreate: CreateStockItemCommand,
@@ -237,6 +253,22 @@ export const useStockItemStore = defineStore('stockItem', () => {
         return expiry_date;
     };
 
+    /** Re-read one row after a write made outside this store (an alert
+     *  action, the assistant) and mark the facts derived from it stale. */
+    const refreshStockItemAsync = async (stockItemId: string): Promise<void> => {
+        // The derived facts go stale whether or not the row is loaded here.
+        invalidateDerivedRecipeFacts();
+        invalidateLevelOverlays(stockItemId);
+        // Only GET when there's a loaded row to replace — otherwise the fetch
+        // is wasted (and can only fail, e.g. 404 after a delete). `/stock`
+        // fetches fresh rows when it hydrates.
+        if (!stockItems.value.some((si) => si.stock_item_id === stockItemId)) return;
+        const refreshed = await stockItemApiService.getAsync(stockItemId);
+        // Re-find after the await: the list may have changed underneath.
+        const idx = stockItems.value.findIndex((si) => si.stock_item_id === stockItemId);
+        if (idx >= 0) stockItems.value[idx] = refreshed;
+    };
+
     const deleteStockItemAsync = async (stockItemID: string) => {
         await stockItemApiService.deleteAsync(stockItemID);
         stockItems.value = stockItems.value.filter((si) => si.stock_item_id !== stockItemID);
@@ -248,11 +280,14 @@ export const useStockItemStore = defineStore('stockItem', () => {
         stockItems: readonly(stockItems),
         getStockItemsAsync,
         ensureLoadedAsync,
+        refreshIfLoadedAsync,
         createStockItemAsync,
         updateStockLevelAsync,
         invalidateLevelOverlays,
+        invalidatePriceFacts,
         updateStockItemAsync,
         pushExpiryAsync,
+        refreshStockItemAsync,
         deleteStockItemAsync,
     };
 });

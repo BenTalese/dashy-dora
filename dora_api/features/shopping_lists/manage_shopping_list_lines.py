@@ -75,6 +75,7 @@ class AddLineResponse:
     product_not_found: bool = False
     no_anchor: bool = False
     already_on_list: bool = False
+    list_done: bool = False
 
 
 class AddLineHandler:
@@ -95,6 +96,11 @@ class AddLineHandler:
         lst: ShoppingList | None = self.repository.get(ShoppingList).by_id(shopping_list_id)
         if lst is None:
             return AddLineResponse(list_not_found=True)
+        # A done list is a receipt of what was bought — `/finish` already
+        # restocked from it and froze its names and prices. Adding a line now
+        # would rewrite history, so it's refused rather than silently stored.
+        if lst.is_done:
+            return AddLineResponse(list_done=True)
 
         item: StockItem | None = None
         if request.stock_item_id is not None:
@@ -164,6 +170,11 @@ def add_line(shopping_list_id: UUID):
     _Response = AddLineHandler(SqlAlchemyRepository()).handle(_Request, shopping_list_id)
     if _Response.list_not_found:
         return not_found("ShoppingList", shopping_list_id)
+    if _Response.list_done:
+        return business_rule_violation(
+            "This list is finished — its lines are a receipt and can't be "
+            "added to. Start a new list instead."
+        )
     if _Response.no_anchor:
         return business_rule_violation(
             "A line needs at least one of stock_item_id or product_id."
@@ -592,6 +603,10 @@ class QuickAddToDraftHandler:
         )
         if added.item_not_found:
             return QuickAddResponse(result="item_not_found")
+        if added.list_done:
+            # The target was finished between the pick and the add (a race);
+            # the next quick-add resolves to the next open list.
+            return QuickAddResponse(result="hint_invalid")
         return QuickAddResponse(
             result="added",
             line_id=added.line_id,

@@ -48,12 +48,19 @@ for (const route of ROUTES) {
 }
 
 test('the dashboard actually talks to the API (real handshake)', async ({ page }) => {
-    // Prove the built SPA reaches the backend over the shared origin — a
-    // successful authenticated /api response while the dashboard loads.
-    const apiOk = page.waitForResponse(
-        (r) => r.url().includes('/api/') && r.status() >= 200 && r.status() < 300,
+    // Prove the built SPA reaches the backend over the shared origin with a
+    // live session. Any /api 2xx isn't enough — the public capabilities probe
+    // answers 200 on the login page too — so wait for the session read itself
+    // (`GET /api/auth/me` only 200s for an authenticated cookie).
+    const meOk = page.waitForResponse(
+        (r) => new URL(r.url()).pathname === '/api/auth/me'
+            && r.request().method() === 'GET'
+            && r.status() === 200,
         { timeout: 15_000 },
     );
-    await page.goto('/');
-    await apiOk;
+    await page.goto('/#/');
+    await meOk;
+    // And the handshake landed on the app, not the login form.
+    await expect(page.locator('input[autocomplete="current-password"]')).toHaveCount(0);
+    await expect(page.locator('.q-layout').first()).toBeVisible();
 });

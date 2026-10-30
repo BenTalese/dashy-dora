@@ -799,13 +799,11 @@ def _first_seeded_shopping_list_id() -> str:
     return summaries[0]["shopping_list_id"]
 
 
-def _first_seeded_recipe_id() -> str | None:
+def _first_seeded_recipe_id() -> str:
     response = requests.get("http://localhost:5170/api/recipes")
     assert response.status_code == 200, response.text
-    body = response.json()
-    items = body.get("items") if isinstance(body, dict) else body
-    if not items:
-        return None
+    items = response.json()["items"]
+    assert items, "the seed ships recipes"
     return items[0]["recipe_id"]
 
 
@@ -839,8 +837,6 @@ def test__shopping_list_print_view__returns_html_with_list_name(api):
 
 def test__recipe_export_csv__returns_csv_when_recipes_exist(api):
     recipe_id = _first_seeded_recipe_id()
-    if recipe_id is None:
-        return  # No seeded recipes in this install — skip silently.
     response = requests.get(
         f"http://localhost:5170/api/recipes/{recipe_id}/export?format=csv",
     )
@@ -853,8 +849,6 @@ def test__recipe_export_csv__returns_csv_when_recipes_exist(api):
 
 def test__recipe_print_view__returns_html_with_recipe_name(api):
     recipe_id = _first_seeded_recipe_id()
-    if recipe_id is None:
-        return
     recipe = requests.get(
         f"http://localhost:5170/api/recipes/{recipe_id}",
     ).json()
@@ -1200,7 +1194,7 @@ def test__stock_overview_print_view__post_selection__prints_only_those_items(api
     assert response.status_code == 200, response.text
     assert response.headers["Content-Type"].startswith("text/html")
     assert "Stock overview" in response.text
-    assert "1 item(s)" in response.text
+    assert "1 item across" in response.text
     assert picked["name"] in response.text
     assert other["name"] not in response.text
 
@@ -1215,9 +1209,8 @@ def test__meal_plan_export_csv__endpoint_removed__is_404(api):
     # meal-plan CSV export was removed (a plan is a calendar, not a
     # table); print-view → "Save as PDF" is the export path. The /export route
     # is gone, so it 404s.
-    plans = requests.get("http://localhost:5170/api/meal-plans").json().get("items") or []
-    if not plans:
-        return  # No seeded meal plans on this install.
+    plans = requests.get("http://localhost:5170/api/meal-plans").json()["items"]
+    assert plans, "the seed ships meal plans"
     plan_id = plans[0]["meal_plan_id"]
     response = requests.get(
         f"http://localhost:5170/api/meal-plans/{plan_id}/export?format=csv",
@@ -1226,9 +1219,8 @@ def test__meal_plan_export_csv__endpoint_removed__is_404(api):
 
 
 def test__meal_plan_print_view__returns_html(api):
-    plans = requests.get("http://localhost:5170/api/meal-plans").json().get("items") or []
-    if not plans:
-        return
+    plans = requests.get("http://localhost:5170/api/meal-plans").json()["items"]
+    assert plans, "the seed ships meal plans"
     plan_id = plans[0]["meal_plan_id"]
     response = requests.get(
         f"http://localhost:5170/api/meal-plans/{plan_id}/print-view",
@@ -1257,7 +1249,7 @@ def test__meal_plan_print_view__nameless_plan__titles_by_week_not_none(api):
     assert response.status_code == 200, response.text
     assert "None ·" not in response.text
     assert "<h1>None</h1>" not in response.text
-    assert "Week of 2027-03-01" in response.text
+    assert "Week of 1 Mar 2027" in response.text
 
 
 def test__meal_plan_print_view__slot_columns_follow_household_vocabulary(api):
@@ -1267,10 +1259,8 @@ def test__meal_plan_print_view__slot_columns_follow_household_vocabulary(api):
     # sheet ignored the household vocabulary in both directions — it printed a
     # deleted slot and would have omitted an added one. Columns now come from
     # the MealSlot table (R-003).
-    recipes = requests.get("http://localhost:5170/api/recipes").json()
-    items = recipes.get("items") if isinstance(recipes, dict) else recipes
-    if not items:
-        return  # No seeded recipes on this install; nothing to schedule.
+    items = requests.get("http://localhost:5170/api/recipes").json()["items"]
+    assert items, "the seed ships recipes"
 
     # A slot the hardcoded tuple never knew about. Deleting one of the four is
     # the reported case, but adding a fifth exercises the same seam and does
@@ -1279,7 +1269,7 @@ def test__meal_plan_print_view__slot_columns_follow_household_vocabulary(api):
     created_slot = requests.post(
         "http://localhost:5170/api/meal-slots", json={"name": slot_name},
     )
-    assert created_slot.status_code in (201, 409), created_slot.text
+    assert created_slot.status_code == 201, created_slot.text
 
     created = requests.post(
         "http://localhost:5170/api/meal-plans",
@@ -1308,6 +1298,249 @@ def test__meal_plan_print_view__slot_columns_follow_household_vocabulary(api):
     # one; assert the general rule over the whole retired tuple.
     for stale in {"Breakfast", "Lunch", "Dinner", "Snack"} - vocabulary:
         assert f"<th>{stale}</th>" not in html, stale
+
+
+# ── Rendered-document defects (print/export audit, 2026-10-30) ────────
+# Each test pins one defect an auditor found in the live app's print views
+# and CSVs. Shapes come from the API, not the seed, where the seed may lack
+# the case (a structured recipe, a cook batch, an unlinked ingredient).
+
+API = "http://localhost:5170/api"
+
+
+def _create_structured_recipe() -> str:
+    """A structured recipe in two sections with a hint, a timer, a sub-step,
+    an optional ingredient and an unlinked (raw-text only) ingredient."""
+    stock_item_id = _first_seeded_stock_item_id()
+    response = requests.post(f"{API}/recipes", json={
+        "name": "Print Audit Lasagne",
+        "servings": 1,
+        "steps_mode": "structured",
+        "instructions": "One-line summary only",
+        "sections": [
+            {"client_id": "s-sauce", "sequence": 0, "name": "Sauce"},
+            {"client_id": "s-bake", "sequence": 1, "name": "Assembly"},
+        ],
+        "ingredients": [
+            {"stock_item_id": stock_item_id, "quantity": 2.0, "unit": "tbsp",
+             "section_client_id": "s-sauce", "client_id": "i1"},
+            {"raw_text": "Crème fraîche", "quantity": 100.0, "unit": "g",
+             "section_client_id": "s-bake", "client_id": "i2", "is_optional": True},
+        ],
+        "steps": [
+            {"client_id": "st1", "sequence": 0, "text": "Brown the mince",
+             "hint": "Keep the pan hot", "timer_minutes": 10,
+             "section_client_id": "s-sauce"},
+            {"client_id": "st1a", "parent_client_id": "st1", "sequence": 0,
+             "text": "Drain the fat", "section_client_id": "s-sauce"},
+            {"client_id": "st2", "sequence": 1, "text": "Layer and bake",
+             "section_client_id": "s-bake"},
+        ],
+    })
+    assert response.status_code == 201, response.text
+    return response.json()["recipe_id"]
+
+
+def test__print_and_csv__content_type__names_the_charset_once(api):
+    # `mimetype="text/html; charset=utf-8"` made Flask append its own charset
+    # too: "text/csv; charset=utf-8; charset=utf-8" on every export.
+    list_id = _first_seeded_shopping_list_id()
+    recipe_id = _create_structured_recipe()
+    plan_id = requests.post(
+        f"{API}/meal-plans", json={"start_date": "2027-03-01", "entries": []},
+    ).json()["meal_plan_id"]
+    for url in (
+        f"{API}/shopping-lists/{list_id}/print-view",
+        f"{API}/recipes/{recipe_id}/print-view",
+        f"{API}/recipes/{recipe_id}/export?format=csv",
+        f"{API}/meal-plans/{plan_id}/print-view",
+        f"{STOCK_ITEMS_URL}/print-view",
+        f"{STOCK_ITEMS_URL}/export?format=csv",
+    ):
+        response = requests.get(url)
+        assert response.status_code == 200, (url, response.text)
+        content_type = response.headers["Content-Type"]
+        assert content_type.count("charset") == 1, (url, content_type)
+
+
+def test__csv_exports__start_with_a_utf8_bom(api):
+    # Excel on Windows read the BOM-less CSV as ANSI: "Crème" became "CrÃ¨me".
+    recipe_id = _create_structured_recipe()
+    for url, first_column in (
+        (f"{API}/recipes/{recipe_id}/export?format=csv", "ingredient"),
+        (f"{STOCK_ITEMS_URL}/export?format=csv", "location"),
+    ):
+        raw = requests.get(url).content
+        assert raw.startswith(b"\xef\xbb\xbf"), raw[:10]
+        assert raw.decode("utf-8-sig").splitlines()[0].split(",")[0] == first_column
+
+
+def test__recipe_csv__unlinked_name_and_trimmed_quantities(api):
+    import csv
+    import io
+    recipe_id = _create_structured_recipe()
+    raw = requests.get(f"{API}/recipes/{recipe_id}/export?format=csv").content
+    rows = list(csv.DictReader(io.StringIO(raw.decode("utf-8-sig"))))
+    by_unit = {row["unit"]: row for row in rows}
+    # An unlinked row exported a blank name; quantities exported as "100.0".
+    assert by_unit["g"]["ingredient"] == "Crème fraîche"
+    assert by_unit["g"]["quantity"] == "100"
+    assert by_unit["tbsp"]["quantity"] == "2"
+    assert all(row["ingredient"] for row in rows), rows
+
+
+def test__recipe_print_view__structured_recipe_prints_sections_steps_and_tags(api):
+    recipe_id = _create_structured_recipe()
+    html = requests.get(f"{API}/recipes/{recipe_id}/print-view").text
+    # Steps, hint, timer and sub-step, not the one-line `instructions` blob.
+    for text in ("Brown the mince", "Keep the pan hot", "Timer: 10 min",
+                 "Drain the fat", "Layer and bake"):
+        assert text in html, text
+    assert "One-line summary only" not in html
+    # Ingredients and steps grouped under their section headings, in order.
+    assert html.count("<h3>Sauce</h3>") == 2
+    assert html.count("<h3>Assembly</h3>") == 2
+    assert html.index("<h3>Sauce</h3>") < html.index("<h3>Assembly</h3>")
+    # The unlinked row by its pasted text (it printed "None"), tagged
+    # optional, and quantities without float tails ("2.0 tbsp" / "100.0g").
+    assert ">None<" not in html
+    assert "Crème fraîche" in html
+    assert "(optional)" in html
+    assert "2 tbsp" in html and "100g" in html
+    assert "2.0 tbsp" not in html and "100.0g" not in html
+    # A real plural, not "serving(s)".
+    assert "1 serving<" in html and "(s)" not in html
+
+
+def test__recipe_print_view__image_mode_embeds_the_step_photos(api):
+    png = (
+        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlE"
+        "QVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+    )
+    response = requests.post(f"{API}/recipes", json={
+        "name": "Print Audit Photo Recipe",
+        "steps_mode": "image",
+        "instructions": "See the photos.",
+        "step_images": [png, png],
+    })
+    assert response.status_code == 201, response.text
+    recipe_id = response.json()["recipe_id"]
+    html = requests.get(f"{API}/recipes/{recipe_id}/print-view").text
+    # The sheet said "See the photos." and showed none.
+    assert html.count('src="data:image/png;base64,') == 2
+    assert "See the photos." not in html
+
+
+def test__meal_plan_print_view__seven_days_batches_and_print_dates(api):
+    recipes = requests.get(f"{API}/recipes").json()
+    items = recipes.get("items") if isinstance(recipes, dict) else recipes
+    if not items:
+        return  # No seeded recipes on this install; nothing to schedule.
+    slot = requests.get(f"{API}/meal-slots").json()[0]["name"]
+    created = requests.post(f"{API}/meal-plans", json={
+        "start_date": "2027-03-01",
+        "entries": [
+            {"recipe_id": items[0]["recipe_id"], "scheduled_for": day,
+             "servings": 2, "slot": slot, "cook_key": "b1"}
+            for day in ("2027-03-01", "2027-03-02", "2027-03-03")
+        ],
+    })
+    assert created.status_code == 201, created.text
+    html = requests.get(
+        f"{API}/meal-plans/{created.json()['meal_plan_id']}/print-view",
+    ).text
+    # One cook and two leftovers, not three separate cooks.
+    assert html.count("Cook (batch of 3)") == 1
+    assert html.count("Leftovers") == 2
+    # All seven days print, the empty ones included.
+    assert html.count('class="day-header"') == 7
+    assert "Sun, 7 Mar" in html  # en-AU, the seeded household locale
+    # Household-style dates and real plurals, never ISO or "(s)".
+    assert "starts 1 Mar 2027" in html
+    assert "2027-03-01" not in html
+    assert "(s)" not in html and "entr(y" not in html
+    assert "2 servings" in html
+
+
+def test__stock_overview_print_view__expiry_and_counts_read_naturally(api):
+    item_id = _first_seeded_stock_item_id()
+    patched = requests.patch(
+        f"{STOCK_ITEMS_URL}/{item_id}", json={"expiry_date": "2026-12-29"},
+    )
+    assert patched.status_code in (200, 204), patched.text
+    html = requests.get(f"{STOCK_ITEMS_URL}/print-view?ids={item_id}").text
+    assert "29 Dec 2026" in html
+    assert "2026-12-29" not in html
+    assert "1 item across 1 location" in html
+    assert "(s)" not in html
+
+
+def test__stock_overview_csv__filename_uses_the_household_day(api):
+    from dora_api.app import app
+    from dora_api.features.app_settings.clock import household_today
+    from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
+    response = requests.get(f"{STOCK_ITEMS_URL}/export?format=csv")
+    with app.app_context():
+        today = household_today(SqlAlchemyRepository()).isoformat()
+    disposition = response.headers["Content-Disposition"]
+    assert f'filename="stock-overview-{today}.csv"' in disposition
+
+
+def test__shopping_list_print_view__prices_and_totals_match_the_app(api):
+    # The sheet priced each line from the selected offer's `price_now` alone
+    # and summed its own total, so it disagreed with the list page (50.30 in
+    # the app, $19.79 printed). It now prints the detail DTO's own figures.
+    list_id = _first_seeded_shopping_list_id()
+    detail = requests.get(f"{API}/shopping-lists/{list_id}").json()
+    line = next(l for l in detail["lines"] if not l["deferred_by_budget"])
+    patched = requests.patch(
+        f"{API}/shopping-lists/{list_id}/lines/{line['line_id']}",
+        json={"actual_unit_price": 3.25, "is_ticked": True},
+    )
+    assert patched.status_code in (200, 204), patched.text
+    detail = requests.get(f"{API}/shopping-lists/{list_id}").json()
+    html = requests.get(f"{API}/shopping-lists/{list_id}/print-view").text
+
+    assert f"${detail['totals']['total_price']:.2f}" in html
+    assert "$3.25" in html
+    # A picked line prints ticked, matching the "picked up" count.
+    ticked = detail["totals"]["ticked_count"]
+    assert ticked >= 1
+    assert html.count("✓</span>") == ticked
+    assert f"<strong>{ticked}</strong> picked up" in html
+    # The resolved store (the store ladder), not only the chosen offer's.
+    for l in detail["lines"]:
+        if l["resolved_store_name"] and not l["deferred_by_budget"]:
+            assert l["resolved_store_name"] in html
+    assert "item(s)" not in html
+
+
+def test__shopping_list_print_view__set_aside_lines_leave_the_active_list(api):
+    import dataclasses
+
+    from dora_api.app import app
+    from zoneinfo import ZoneInfo
+
+    from dora_api.features.data.export_shared import PrintFormat
+    from dora_api.features.data.export_shopping_list import _render_print_view
+    from dora_api.features.shopping_lists.get_shopping_list_detail import \
+        GetShoppingListDetailHandler
+    from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
+
+    list_id = _first_seeded_shopping_list_id()
+    with app.test_request_context():
+        detail = GetShoppingListDetailHandler(SqlAlchemyRepository()).handle(list_id)
+        assert detail.lines, "seed list should have lines"
+        deferred = dataclasses.replace(
+            detail.lines[0], deferred_by_budget=True,
+            stock_item_name="Zz Deferred Thing", estimated_unit_price=4.0,
+        )
+        detail = dataclasses.replace(detail, lines=[deferred, *detail.lines[1:]])
+        html = _render_print_view(detail, PrintFormat("en-GB", "GBP", ZoneInfo("UTC")))
+    assert html.index("Zz Deferred Thing") > html.index("Set aside to fit the budget")
+    # The install currency, not a hard-coded "$".
+    assert "£4.00" in html
+    assert "$" not in html
 
 
 # the library now owns "when was

@@ -10,6 +10,8 @@
 //     the same loop (network vs generic message split),
 //   * sign-out AND a silent 401 both clear the user and wipe per-page list
 //     state (FU-355 shared-device hygiene) — logout even when the call fails,
+//     and drop the per-user overlay caches (buy verdicts, pantry beliefs,
+//     planned demand),
 //   * updateMe only busts the avatar cache when an image field was sent.
 //
 // API service + useListState mocked at the module boundary; the real
@@ -55,6 +57,21 @@ vi.mock('src/services/api/authApiService', () => ({
 const listState = vi.hoisted(() => ({ clearAllListState: vi.fn() }));
 vi.mock('src/composables/useListState', () => ({
     clearAllListState: listState.clearAllListState,
+}));
+
+const overlays = vi.hoisted(() => ({
+    clearBuyVerdictCache: vi.fn(),
+    clearBeliefs: vi.fn(),
+    clearDemand: vi.fn(),
+}));
+vi.mock('src/composables/useBuyVerdict', () => ({
+    clearBuyVerdictCache: overlays.clearBuyVerdictCache,
+}));
+vi.mock('src/composables/usePantryBeliefs', () => ({
+    usePantryBeliefs: () => ({ clear: overlays.clearBeliefs }),
+}));
+vi.mock('src/composables/usePlannedDemand', () => ({
+    usePlannedDemand: () => ({ clear: overlays.clearDemand }),
 }));
 
 // Keep the real NormalisedApiError (the store branches on `isNetworkError`),
@@ -296,6 +313,22 @@ describe('authStore — sign-out + session expiry (FU-355)', () => {
 
         expect(store.currentUser).toBeNull();
         expect(listState.clearAllListState).toHaveBeenCalledTimes(1);
+    });
+
+    it('logout and a silent 401 both drop the per-user overlay caches', async () => {
+        const store = useAuthStore();
+        await store.loginAsync({ username: 'ben', password: 'pw' });
+
+        await store.logoutAsync();
+        expect(overlays.clearBuyVerdictCache).toHaveBeenCalledTimes(1);
+        expect(overlays.clearBeliefs).toHaveBeenCalledTimes(1);
+        expect(overlays.clearDemand).toHaveBeenCalledTimes(1);
+
+        await store.loginAsync({ username: 'ben', password: 'pw' });
+        m.unauthorizedHandler?.();
+        expect(overlays.clearBuyVerdictCache).toHaveBeenCalledTimes(2);
+        expect(overlays.clearBeliefs).toHaveBeenCalledTimes(2);
+        expect(overlays.clearDemand).toHaveBeenCalledTimes(2);
     });
 });
 

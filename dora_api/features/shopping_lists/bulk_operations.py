@@ -28,7 +28,7 @@ from dora_api.domain.entities.shopping_list import ShoppingList, ShoppingListLin
 from dora_api.features.routers import SHOPPING_LIST_ROUTER
 from dora_api.features.shopping_lists.manage_shopping_list_lines import (
     AddLineHandler, AddLineRequest, RemoveLineByStockItemHandler)
-from dora_api.infrastructure.api_response import (bad_request, no_content,
+from dora_api.infrastructure.api_response import (bad_request, business_rule_violation, no_content,
                                                   not_found, ok)
 from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.utils import get_request_body
@@ -60,6 +60,7 @@ class BulkAddLinesRequest(BaseModel):
 @dataclass(slots=True)
 class BulkAddLinesResponse:
     list_not_found: bool = False
+    list_done: bool = False
     added: int = 0
     already_on_list: int = 0
     failed_ids: List[UUID] = field(default_factory=list)
@@ -80,6 +81,9 @@ class BulkAddLinesHandler:
             # rather than reporting it once per item.
             if result.list_not_found:
                 return BulkAddLinesResponse(list_not_found=True)
+            # Same shape for a finished list: its lines are a receipt.
+            if result.list_done:
+                return BulkAddLinesResponse(list_done=True)
             if result.already_on_list:
                 response.already_on_list += 1
             elif result.line_id is not None:
@@ -97,6 +101,10 @@ def bulk_add_lines(shopping_list_id: UUID):
     _Response = BulkAddLinesHandler(SqlAlchemyRepository()).handle(_Request, shopping_list_id)
     if _Response.list_not_found:
         return not_found("ShoppingList", shopping_list_id)
+    if _Response.list_done:
+        return business_rule_violation(
+            "This list is finished — its lines are a receipt. Start a new list to add to it."
+        )
     _LOGGER.info(
         f"Bulk-add on list {shopping_list_id}: added {_Response.added}, "
         f"already-on {_Response.already_on_list}, "

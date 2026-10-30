@@ -95,8 +95,13 @@
                         :key="`${o.store_name}-${i}`"
                     >
                         <span v-if="i > 0"> · </span>
-                        <strong>{{ formatMoney(o.price_per_unit) }}</strong>
-                        <span class="dora-text-muted">/ {{ o.unit }}</span>
+                        <!-- The space lives INSIDE the span: Vue's whitespace
+                             condense drops a newline-only gap between elements,
+                             which rendered "$1.37/ qt" beside the "$1.89 / qt"
+                             the lines above use. -->
+                        <strong>{{ formatMoney(o.price_per_unit) }}</strong><span
+                            class="dora-text-muted"
+                        > / {{ o.unit }}</span>
                         at {{ o.store_name }}
                     </span>
                 </div>

@@ -46,6 +46,7 @@
     import RowActionButton from 'src/components/RowActionButton.vue';
     import { ICONS } from 'src/style/icons';
     import StockItemApiService from 'src/services/api/stockItemApiService';
+    import { useStockItemStore } from 'src/stores/stockItemStore';
     import { useStoresStore } from 'src/stores/storesStore';
     import type { PriceEntryPrefill } from 'src/models/stockItemDetail';
 
@@ -60,6 +61,7 @@
 
     const stockItemApi = new StockItemApiService();
     const storesStore = useStoresStore();
+    const stockItemStore = useStockItemStore();
     const storesList = computed(() => storesStore.stores);
 
     const dialogOpen = ref(false);
@@ -94,6 +96,7 @@
         submitting.value = true;
         try {
             await stockItemApi.addPriceObservationAsync(props.stockItemId, value);
+            stockItemStore.invalidatePriceFacts(props.stockItemId);
             emit('logged');
             dialogOpen.value = false;
         } finally {

@@ -38,6 +38,8 @@ from alembic.config import Config
 from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, inspect
 
+from tests.db_backend import IS_POSTGRES, postgres_url
+
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _MIGRATIONS_DIR = _REPO_ROOT / "dora_api" / "persistence" / "migrations"
 _VERSIONS_DIR = _MIGRATIONS_DIR / "versions"
@@ -486,13 +488,22 @@ def test__migrations__sqlite_rebuilds_keep_rows_and_convert_string_ids(temp_db_p
     assert items == 2
 
 
+# A dedicated disposable URL wins; otherwise, when the suite itself is already
+# running on Postgres (`DORA_TEST_DB=postgres`), use that database.
+_POSTGRES_MIGRATION_URL = os.environ.get("DORA_TEST_POSTGRES_URL") or (
+    postgres_url() if IS_POSTGRES else None
+)
+
+
 @pytest.mark.skipif(
-    "DORA_TEST_POSTGRES_URL" not in os.environ,
-    reason="needs a disposable Postgres (set DORA_TEST_POSTGRES_URL) — gate on FU-405 CI matrix",
+    _POSTGRES_MIGRATION_URL is None,
+    reason="needs Postgres (DORA_TEST_POSTGRES_URL, or DORA_TEST_DB=postgres) — gate on FU-405 CI matrix",
 )
 def test__migrations__upgrade_head_runs_on_postgres():
     """R-005 portability: the full stack must apply on Postgres too. Gated on
-    a disposable Postgres URL provided by CI (FU-405)."""
+    a disposable Postgres URL provided by CI (FU-405), or the suite's own
+    Postgres when it runs with `DORA_TEST_DB=postgres` (where the schema is
+    usually already at head, so this proves `upgrade head` is a clean no-op)."""
     code = (
         "import flask_migrate\n"
         "from dora_api.app import app\n"
@@ -500,7 +511,7 @@ def test__migrations__upgrade_head_runs_on_postgres():
         "    flask_migrate.upgrade()\n"
         "print('MIGRATION_OK')\n"
     )
-    env = {**os.environ, "DORA_DB_URL": os.environ["DORA_TEST_POSTGRES_URL"]}
+    env = {**os.environ, "DORA_DB_URL": _POSTGRES_MIGRATION_URL}
     result = subprocess.run(
         [sys.executable, "-c", code], cwd=str(_REPO_ROOT), env=env,
         capture_output=True, text=True, timeout=300,

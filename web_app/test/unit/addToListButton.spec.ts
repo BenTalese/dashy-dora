@@ -12,7 +12,7 @@
  * the states, so the model logic is exercised too.
  */
 import { flushPromises, mount } from '@vue/test-utils';
-import { Notify, QBtn, QIcon, QItem, QItemSection, QPopupProxy, Quasar } from 'quasar';
+import { QBtn, QIcon, QItem, QItemSection, QPopupProxy, Quasar } from 'quasar';
 import type { Membership } from 'src/models/shoppingList';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -27,12 +27,21 @@ const m = vi.hoisted(() => ({
     openQuickAdd: vi.fn(),
     addLineAsync: vi.fn(),
     refreshAsync: vi.fn(),
+    notify: vi.fn(),
     state: {
         membership: null as Membership | null,
         stockItems: [] as Array<{ stock_item_id: string; linked_product_count?: number }>,
     },
 }));
 
+// The toasts go through `useQuasar().notify`. The real Notify plugin arms a
+// 5 s auto-dismiss timer per toast that fires after jsdom tears down
+// ("unhandled error from a timer"), so swap only `useQuasar` for a spy and
+// keep the real components.
+vi.mock('quasar', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('quasar')>()),
+    useQuasar: () => ({ notify: m.notify }),
+}));
 vi.mock('src/composables/useStockItemActions', () => ({
     useStockItemActions: () => ({ addToList: m.addToList }),
 }));
@@ -83,8 +92,7 @@ function mountButton(props: Record<string, unknown> = {}) {
     return mount(AddToListButton, {
         props,
         global: {
-            // Notify installed for the inline-product flow's toasts.
-            plugins: [[Quasar, { plugins: { Notify } }]],
+            plugins: [Quasar],
             components: { QBtn, QIcon, QItem, QItemSection, QPopupProxy },
             stubs: { QTooltip: TooltipStub },
         },
@@ -360,6 +368,9 @@ describe('AddToListButton — inline-product variant', () => {
 
         expect(m.addLineAsync).toHaveBeenCalledWith('L1', { product_id: PRODUCT });
         expect(m.refreshAsync).toHaveBeenCalled();
+        expect(m.notify).toHaveBeenCalledWith(expect.objectContaining({
+            type: 'positive', message: 'Added as product line.',
+        }));
     });
 
     it('does nothing but nudge when no draft list exists', async () => {
@@ -377,5 +388,9 @@ describe('AddToListButton — inline-product variant', () => {
         await flushPromises();
 
         expect(m.addLineAsync).not.toHaveBeenCalled();
+        expect(m.notify).toHaveBeenCalledWith(expect.objectContaining({
+            type: 'info',
+            message: 'No draft list yet. Create one first to add this product.',
+        }));
     });
 });

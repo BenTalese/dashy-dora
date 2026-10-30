@@ -128,6 +128,23 @@ def api():
 
 
 @pytest.fixture(autouse=True)
+def _clear_rate_limit_buckets():
+    """Every test starts with empty in-memory rate-limit buckets.
+
+    The limiter (`auth_helpers._buckets`) is process-lifetime and keyed per
+    IP — and every test-client request comes from the same 127.0.0.1 — so
+    without this, auth calls accumulate across tests and a later test's 400
+    or 401 can become a 429 depending on run order. A test that pins the
+    limit builds its own burst inside the test.
+    """
+    from dora_api.infrastructure import auth_helpers
+    with auth_helpers._buckets_lock:
+        auth_helpers._buckets.clear()
+        auth_helpers._bucket_windows.clear()
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _db_rollback():
     """FU-169 Phase 2 — per-test DB rollback via SQLite file snapshot.
 

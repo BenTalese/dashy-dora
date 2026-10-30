@@ -173,6 +173,100 @@ def test__subject__is_singular_for_one_deal():
     assert subject_line(digest) == "1 deal this week"
 
 
+# ── Sizeless products and the plain-text body ──────────────────────────
+
+def test__deal_line__sizeless_product_carries_no_size():
+    lines = build_deal_lines([_Dto(size=None)], "AUD", 10)
+    assert lines[0].size is None
+
+
+def test__text_line__never_prints_none_for_a_missing_size():
+    # The text body read "Milk (None): $2.00 ...".
+    from dora_api.features.deals.deals_digest import text_line
+    line = build_deal_lines([_Dto(name="Milk", size=None)], "AUD", 10)[0]
+    assert text_line(line).startswith("- Milk: $2.00")
+    assert "None" not in text_line(line)
+
+
+def test__text_line__does_not_repeat_a_size_the_name_already_ends_with():
+    # "Spaghetti No.5 500g (500g)".
+    from dora_api.features.deals.deals_digest import text_line
+    line = build_deal_lines([_Dto(name="Spaghetti No.5 500g", size="500g")], "AUD", 10)[0]
+    assert text_line(line).startswith("- Spaghetti No.5 500g: ")
+    other = build_deal_lines([_Dto(name="Milk", size="2L")], "AUD", 10)[0]
+    assert text_line(other).startswith("- Milk (2L): ")
+
+
+def test__card_template__omits_a_missing_size_instead_of_printing_none():
+    # The expanded card rendered "None · Coles".
+    from dora_api.infrastructure.email_sender import render_template
+    digest = build_digest([_Dto(size=None, brand="Brand")], "AUD", compact=False)
+    for compact in (False, True):
+        html = render_template(
+            "weekly_deals.html", subject="s", display_name="Ben", lines=digest.lines,
+            compact=compact, deals_url="https://x/#/my-products",
+            unsubscribe_url="https://x/#/settings/notifications",
+        )
+        assert "None" not in html
+    assert "Brand · Coles" in render_template(
+        "weekly_deals.html", subject="s", display_name="Ben", lines=digest.lines,
+        compact=False, deals_url="u", unsubscribe_url="u",
+    )
+
+
+def test__build_digest__writes_prices_in_the_household_locale():
+    digest = build_digest([_Dto(price_now=7.99, price_was=9.99)], "EUR", compact=False, locale="de-DE")
+    assert digest.lines[0].price_now == "7,99 €"
+
+
+# ── No public URL ⇒ no send ─────────────────────────────────────────────
+
+def test__public_url_ready__needs_a_public_url_outside_a_request(monkeypatch):
+    """A scheduler tick has no request Origin, so `public_base_url()` would
+    fall back to localhost and every link in the mail would be dead."""
+    from types import SimpleNamespace
+
+    from dora_api.app import app
+    from dora_api.features.deals import send_deals_email as job
+
+    monkeypatch.setattr(job, "resolved_operational_config", lambda: SimpleNamespace(public_url=""))
+    with app.app_context():
+        assert job.public_url_ready() is False
+    with app.test_request_context(headers={"Origin": "https://dora.example"}):
+        assert job.public_url_ready() is True
+    monkeypatch.setattr(
+        job, "resolved_operational_config",
+        lambda: SimpleNamespace(public_url="https://dora.example"),
+    )
+    with app.app_context():
+        assert job.public_url_ready() is True
+
+
+def test__send_deals_email__skips_and_warns_without_a_public_url(monkeypatch, caplog):
+    from datetime import datetime, timezone
+    from types import SimpleNamespace
+    from zoneinfo import ZoneInfo
+
+    from dora_api.features.deals import send_deals_email as job
+
+    now = datetime(2026, 8, 31, WEEKLY_DEALS_HOUR, 5, tzinfo=timezone.utc)  # a Monday
+    monkeypatch.setattr(job, "SqlAlchemyRepository", lambda: None)
+    monkeypatch.setattr(job, "get_or_create_app_setting", lambda r: SimpleNamespace(currency="AUD", locale="en-AU"))
+    monkeypatch.setattr(job, "household_timezone", lambda r: ZoneInfo("UTC"))
+    monkeypatch.setattr(job, "_opted_in_users", lambda r: [SimpleNamespace(id=1, send_deals_on_day=0)])
+    monkeypatch.setattr(job, "resolved_operational_config", lambda: SimpleNamespace(public_url=""))
+
+    def _must_not_run(*args, **kwargs):
+        raise AssertionError("the deals pool must not be built without a public URL")
+
+    monkeypatch.setattr(job, "GetBestDealsHandler", _must_not_run)
+    sent: list = []
+    with caplog.at_level("WARNING"):
+        assert job.send_deals_email(now=now, _send_email=lambda **kw: sent.append(kw)) == 0
+    assert sent == []
+    assert "public URL is not set" in caplog.text
+
+
 def test__mail_links__target_declared_spa_routes():
     """The "See all deals" button used to link `/products`, a route the SPA
     never had, so every weekly mail landed on the 404 page."""

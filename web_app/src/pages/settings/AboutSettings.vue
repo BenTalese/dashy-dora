@@ -261,7 +261,7 @@
     import { useAuthStore } from 'src/stores/authStore';
     import DashboardApiService from 'src/services/api/dashboardApiService';
     import type { UsageStats } from 'src/services/api/dashboardApiService';
-    import { formatMoney } from 'src/composables/useMoney';
+    import { formatMoney, formatNumber } from 'src/composables/useMoney';
     import { PRIMARY_DONATION } from 'src/config/donationLinks';
     import { getBackendBaseUrl } from 'src/services/api/backendUrl';
     import { isNativePlatform } from 'src/helpers/platform';
@@ -338,9 +338,9 @@
 
     /** Thousands-separated, because these are the numbers that get big —
      *  "1208 prices recorded" is the one figure on this page a user might
-     *  actually want to read aloud. Locale-aware via the browser, matching how
-     *  `formatMoney` defers to the install's region. */
-    const formatCount = (n: number) => n.toLocaleString();
+     *  actually want to read aloud. Household locale via `formatNumber`
+     *  (D-006), the same authority `formatMoney` uses — not the browser's. */
+    const formatCount = (n: number) => formatNumber(n, { digits: 0 });
 
     onMounted(async () => {
         try {

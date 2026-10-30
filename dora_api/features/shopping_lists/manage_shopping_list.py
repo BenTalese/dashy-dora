@@ -11,6 +11,7 @@ from datetime import date, datetime, timezone
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import update
 
 from dora_api.domain.entities.shopping_list import (
     SHOPPING_LIST_STATUS_DONE, SHOPPING_LIST_STATUS_DRAFT,
@@ -230,6 +231,26 @@ class FinishShoppingListHandler:
         if lst.is_done:
             return FinishShoppingListResponse()
 
+        # The `is_done` read above is only the fast path — on its own it is
+        # check-then-act, and two devices finishing at the same instant both
+        # passed it and both restocked + harvested. Claim the transition with
+        # a conditional UPDATE instead: the database serialises the two
+        # writers on the row, and only the one that actually flips the status
+        # goes on to restock. The loser gets the idempotent "nothing
+        # restocked" answer, same as a late double-tap.
+        now = datetime.now(timezone.utc)
+        claimed = self.repository.session.execute(
+            update(ShoppingList)
+            .where(
+                (ShoppingList.id == shopping_list_id)
+                & (ShoppingList.status != SHOPPING_LIST_STATUS_DONE)
+            )
+            .values(status=SHOPPING_LIST_STATUS_DONE, completed_at=now)
+        )
+        if (claimed.rowcount or 0) == 0:
+            self.repository.session.rollback()
+            return FinishShoppingListResponse()
+
         ticked_lines = self.repository.get(ShoppingListLine).all(
             EntityField(ShoppingListLine, "shopping_list_id").eq(shopping_list_id)
             & EntityField(ShoppingListLine, ShoppingListLine.Fields.IS_TICKED).eq(True)
@@ -259,7 +280,6 @@ class FinishShoppingListHandler:
             stock_items = self.repository.get(StockItem).all(
                 EntityField(StockItem, "id").in_(stock_item_ids)
             ) if stock_item_ids else []
-            now = datetime.now(timezone.utc)
             for item in stock_items:
                 item.stock_level = stocked
                 item.stock_level_last_updated = now
@@ -282,9 +302,8 @@ class FinishShoppingListHandler:
         )
         snapshot_line_display_names(self.repository, all_lines)
 
-        lst.status = SHOPPING_LIST_STATUS_DONE
-        lst.completed_at = datetime.now(timezone.utc)
-
+        # status + completed_at were written by the claiming UPDATE above;
+        # this commit lands them together with the restock and the harvest.
         self.repository.save_changes()
         return FinishShoppingListResponse(ticked_lines=updated)
 

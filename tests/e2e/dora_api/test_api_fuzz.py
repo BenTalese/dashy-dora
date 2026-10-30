@@ -250,34 +250,13 @@ KNOWN_FU528_UUID_500_RULES: frozenset[tuple[str, str]] = frozenset({
     ("GET", "/api/users/<user_id>/image"),
     ("POST", "/api/users/<user_id>/reset-password"),
 })
-_FU528_LABELS = frozenset({"non-uuid", "very-long"})
 
-# BUG 2 — GET /api/recipes/unlinked-ingredients 500s on EVERY request
-# (garbage params irrelevant): unlinked_ingredients.py:103 queries
-# `EntityField(RecipeIngredient, "stock_item_id")` but the imperative
-# mapping (persistence/table_mappings.py:1288) names the attribute
-# `_stock_item_id` → AttributeError at query build. The POST bulk-link
-# path (:166) has the same bug but is shielded by middleware validation
-# in this suite. Excluded from the query sweep for ALL labels.
-_BROKEN_UNLINKED_INGREDIENTS = "/api/recipes/unlinked-ingredients"
-
-# BUG 3 — GET /api/meal-plans/reconcile-queue 500s whenever the response
-# paginates (rows > limit): reconcile.py:303 hands `_encode_cursor` the
-# raw-SQL row's `scheduled_for`, which SQLite returns as a str →
-# `AttributeError: 'str' object has no attribute 'isoformat'`
-# (reconcile.py:243). `_row_to_dict` (:334) defends against exactly this;
-# `_encode_cursor` doesn't. The sweep trips it via `limit=-3` → clamped
-# to 1 < seeded queue size. Not garbage-specific: `?limit=1` (a perfectly
-# valid request) reproduces. Excluded for the "surface-garbage" label.
-_BROKEN_RECONCILE_QUEUE = "/api/meal-plans/reconcile-queue"
-
-
-def _query_sweep_excluded(url: str, label: str) -> bool:
-    if url == _BROKEN_UNLINKED_INGREDIENTS:
-        return True  # BUG 2 — 500s regardless of params
-    if url == _BROKEN_RECONCILE_QUEUE and label == "surface-garbage":
-        return True  # BUG 3 — limit=-3 clamps to 1 and trips cursor encode
-    return False
+# Formerly-broken endpoints with dedicated regression guards below. Both were
+# excluded from the query sweep until their 2026-07-12 fixes (BUG 2: the
+# unlinked-ingredients FK attribute name; BUG 3: the reconcile cursor encoding
+# a str date) — the sweep fuzzes them again like any other GET.
+_UNLINKED_INGREDIENTS = "/api/recipes/unlinked-ingredients"
+_RECONCILE_QUEUE = "/api/meal-plans/reconcile-queue"
 
 
 # ── A. Malformed-body sweep ────────────────────────────────────────────
@@ -348,8 +327,6 @@ def test__garbage_query_params_on_every_get_route__never_500s(api):
             continue
         url = _fill(rule.rule)
         for label, query in _GARBAGE_QUERIES:
-            if _query_sweep_excluded(url, label):
-                continue  # KNOWN BUG exclusion — see BUG 2 / BUG 3 above
             swept += 1
             _probe("GET", f"{url}?{query}", failures, label)
 
@@ -382,9 +359,6 @@ def test__garbage_path_params_on_every_parameterised_route__never_500s(api):
             continue
         for method in sorted(rule.methods & _SUPPORTED_METHODS):
             for label, value in _PATH_PARAM_VALUES:
-                if (label in _FU528_LABELS
-                        and (method, rule.rule) in KNOWN_FU528_UUID_500_RULES):
-                    continue  # KNOWN BUG exclusion — FU-528 family (BUG 1)
                 url = _fill(rule.rule, value)
                 swept += 1
                 if _is_auth_rule(rule):
@@ -599,16 +573,20 @@ def test__unlinked_ingredients__does_not_500(api):
     every request because unlinked_ingredients.py referenced the FK as
     `stock_item_id`, but the imperative mapping binds it to `_stock_item_id`
     → AttributeError. Fixed to `_stock_item_id`; this guards the fix."""
-    response = requests.get(f"{BASE}{_BROKEN_UNLINKED_INGREDIENTS}")
-    assert response.status_code < 500, (
-        f"GET {_BROKEN_UNLINKED_INGREDIENTS} -> {response.status_code}: "
+    response = requests.get(f"{BASE}{_UNLINKED_INGREDIENTS}")
+    assert response.status_code == 200, (
+        f"GET {_UNLINKED_INGREDIENTS} -> {response.status_code}: "
         f"{response.text[:300]}"
     )
-    assert response.status_code == 200, response.text
-    # Shape sanity: the DTO must carry the unlinked set (was never reachable
-    # before the fix, so no prior test ever exercised the response body).
+    # Shape: the DTO carries the grouped unlinked set, and the seed ships
+    # unlinked ingredient rows, so it must not be empty.
     body = response.json()
-    assert isinstance(body, dict)
+    assert set(body) == {"unlinked"}
+    assert body["unlinked"], "the seed ships unlinked recipe ingredients"
+    for group in body["unlinked"]:
+        assert set(group) == {"raw_text", "used_in_recipe_ids", "count"}
+        assert group["raw_text"] and group["count"] >= 1
+        assert group["used_in_recipe_ids"]
 
 
 def test__reconcile_queue__paginates_without_500(api):
@@ -618,17 +596,31 @@ def test__reconcile_queue__paginates_without_500(api):
     (limit=1 with >1 seeded row forces the next_cursor branch; any real
     household with >50 unresolved entries hits it). Fixed by coercing str →
     date at the boundary (R-005 portability). This guards the fix."""
-    response = requests.get(f"{BASE}{_BROKEN_RECONCILE_QUEUE}?limit=1")
-    assert response.status_code < 500, (
-        f"GET {_BROKEN_RECONCILE_QUEUE}?limit=1 -> {response.status_code}: "
+    # The deterministic seed's queue is empty, so make two unresolved entries
+    # (past-day plan entries the sweep drops a receipt for) — more than the
+    # page limit, so the next_cursor branch (the one that 500'd) always runs.
+    from tests.e2e.dora_api.test_reconcile_verbs import (
+        _create_past_day_entry, _pick_recipe, _set_auto_drain, _trigger_sweep)
+    _set_auto_drain(False)
+    recipe_id = _pick_recipe()["recipe_id"]
+    for days_ago in (2, 3):
+        _create_past_day_entry(recipe_id, days_ago=days_ago, servings=1)
+    _trigger_sweep()
+
+    response = requests.get(f"{BASE}{_RECONCILE_QUEUE}?limit=1")
+    assert response.status_code == 200, (
+        f"GET {_RECONCILE_QUEUE}?limit=1 -> {response.status_code}: "
         f"{response.text[:300]}"
     )
-    assert response.status_code == 200, response.text
-    # The next_cursor must be present + round-trip decodable when the queue
-    # has more rows than the page limit — proving the cursor actually encoded.
+    # The cursor must then round-trip to a different entry.
     body = response.json()
-    if body.get("next_cursor"):
-        follow = requests.get(
-            f"{BASE}{_BROKEN_RECONCILE_QUEUE}?limit=1&cursor={body['next_cursor']}"
-        )
-        assert follow.status_code == 200, follow.text
+    assert body["total"] >= 2
+    assert len(body["entries"]) == 1
+    assert body["next_cursor"]
+    follow = requests.get(
+        f"{BASE}{_RECONCILE_QUEUE}?limit=1&cursor={body['next_cursor']}"
+    )
+    assert follow.status_code == 200, follow.text
+    next_entries = follow.json()["entries"]
+    assert len(next_entries) == 1
+    assert next_entries[0]["entry_id"] != body["entries"][0]["entry_id"]

@@ -312,7 +312,9 @@ def test__dashboard_layout__set_and_clear(api):
     assert cleared.json()["dashboard_layout"] is None
 
 
-def test__login__rate_limit_returns_429_eventually(api):
+def test__login__OverRateLimit__Returns429WithRetryAfter(api):
+    # Start from empty buckets so the burst below is the only traffic counted.
+    _reset_rate_buckets()
     s = _fresh_session()
     # The endpoint allows 5/min per IP. Spam past the limit.
     for _ in range(6):
@@ -322,9 +324,8 @@ def test__login__rate_limit_returns_429_eventually(api):
     response = s.post(f"{BASE}/login", json={
         "username": "rate-probe", "password": "wrong",
     })
-    assert response.status_code in (401, 429)
-    if response.status_code == 429:
-        assert "Retry-After" in response.headers
+    assert response.status_code == 429, response.text
+    assert "Retry-After" in response.headers
 
 
 # ── FU-547 / FU-537 / FU-522 — token lifecycle security pins ──────────
@@ -364,6 +365,7 @@ def _reset_rate_buckets() -> None:
     from dora_api.infrastructure import auth_helpers
     with auth_helpers._buckets_lock:
         auth_helpers._buckets.clear()
+        auth_helpers._bucket_windows.clear()
 
 
 _GOOD_PW = "Abcdefghij1"

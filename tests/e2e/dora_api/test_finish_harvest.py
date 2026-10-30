@@ -95,6 +95,38 @@ def test__finish__OnAlreadyDoneList__RestocksNothing(api):
     assert _detail(item)["stock_level_id"] == out_level
 
 
+def test__finish__OnStaleNotDoneRead__LoserOfTheRaceRestocksNothing(api, monkeypatch):
+    # Two devices finishing at the same instant both read `status != done`
+    # before either committed, and both restocked + harvested (observed
+    # `items_restocked` [1, 1]). The e2e client can't interleave real threads
+    # (see test_concurrency.py), so reproduce the loser's view directly: the
+    # list is already done in the DB, but the handler's read says it isn't.
+    # The conditional UPDATE that claims the transition must then match no
+    # row, and the loser must answer like an idempotent double-tap.
+    from dora_api.domain.entities.shopping_list import ShoppingList
+
+    item = _new_stock_item()
+    list_id, _ = _list_with_priced_ticked_line(item, price=2.0)
+    assert requests.post(f"{SHOPPING_LISTS}/{list_id}/finish").json()["items_restocked"] == 1
+    out_level = max(
+        requests.get(f"{BASE}/stock-levels").json()["items"], key=lambda l: l["sequence"],
+    )["stock_level_id"]
+    assert requests.patch(
+        f"{STOCK_ITEMS}/{item}", json={"stock_level_id": out_level},
+    ).status_code == 204
+    completed_at = requests.get(f"{SHOPPING_LISTS}/{list_id}").json()["completed_at"]
+
+    monkeypatch.setattr(ShoppingList, "is_done", property(lambda self: False))
+    resp = requests.post(f"{SHOPPING_LISTS}/{list_id}/finish")
+    monkeypatch.undo()
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["items_restocked"] == 0
+    assert _detail(item)["stock_level_id"] == out_level
+    assert len(_detail(item)["price_observations"]) == 1
+    assert requests.get(f"{SHOPPING_LISTS}/{list_id}").json()["completed_at"] == completed_at
+
+
 def test__finish__unpriced_ticked_line_is_not_harvested(api):
     item = _new_stock_item()
     list_id = requests.post(

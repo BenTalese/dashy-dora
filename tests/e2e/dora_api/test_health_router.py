@@ -46,4 +46,24 @@ def test__health_check__publishes_the_product_search_url_for_every_user(api):
         requests.patch("http://localhost:5170/api/app-settings", json={"product_search_url": ""})
 
 
+def test__health_check__locale_policy_carries_the_household_timezone(api):
+    """The SPA's "Today" / "Tomorrow" fell back to the device clock because
+    `locale_policy` had no zone; it now carries the household's IANA name."""
+    settings = "http://localhost:5170/api/app-settings"
+    assert requests.patch(settings, json={"timezone": "Europe/Berlin"}).status_code == 200
+    assert requests.get(base_route).json()["locale_policy"]["timezone"] == "Europe/Berlin"
+
+
+def test__health_check__flags_whether_the_public_url_is_set(api):
+    """Scheduled mail can't borrow a request Origin, so an unset public URL
+    means dead links; `/health` lets the admin page warn about it."""
+    settings = "http://localhost:5170/api/app-settings"
+    assert requests.patch(settings, json={"public_url": ""}).status_code == 200
+    assert requests.get(base_route).json()["features"]["public_url_configured"] is False
+    assert requests.patch(
+        settings, json={"public_url": "https://dora.example"},
+    ).status_code == 200
+    assert requests.get(base_route).json()["features"]["public_url_configured"] is True
+
+
 #endregion health_check tests

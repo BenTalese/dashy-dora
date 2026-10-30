@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+//
 // Store-layer coverage — locationStore, the Locations tree cache. The two
 // tree-walking helpers (`findNode`, `breadcrumb`) are real client logic —
 // they power "Pantry > Middle shelf > Left side" everywhere a location is
@@ -9,12 +11,18 @@ import type { LocationKind, LocationNode } from 'src/models/location';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useLocationStore } from 'src/stores/locationStore';
+import { useStockFilters } from 'src/composables/useStockFilters';
 
 const m = vi.hoisted(() => ({
     getTreeAsync: vi.fn(),
     createAsync: vi.fn(),
     updateAsync: vi.fn(),
     deleteAsync: vi.fn(),
+}));
+
+const stock = vi.hoisted(() => ({ refreshIfLoadedAsync: vi.fn() }));
+vi.mock('src/stores/stockItemStore', () => ({
+    useStockItemStore: () => ({ refreshIfLoadedAsync: stock.refreshIfLoadedAsync }),
 }));
 
 vi.mock('src/services/api/locationApiService', () => ({
@@ -66,6 +74,7 @@ beforeEach(() => {
     m.createAsync.mockResolvedValue(undefined);
     m.updateAsync.mockResolvedValue(undefined);
     m.deleteAsync.mockResolvedValue(undefined);
+    stock.refreshIfLoadedAsync.mockResolvedValue(undefined);
 });
 
 describe('locationStore — findNode', () => {
@@ -134,6 +143,38 @@ describe('locationStore — refresh + error handling', () => {
         expect(m.updateAsync).toHaveBeenCalledWith('Z1', { name: 'Big pantry' });
         expect(m.deleteAsync).toHaveBeenCalledWith('Z2');
         expect(m.getTreeAsync).toHaveBeenCalledTimes(4); // seed + one per mutation
+    });
+
+    it('delete refetches stock and drops a stock filter naming the deleted subtree', async () => {
+        const store = useLocationStore();
+        await store.refreshAsync();
+        const filters = useStockFilters({
+            stockItems: () => [],
+            stockLevels: () => [],
+            locationTree: () => [],
+            recipes: () => [],
+            stockGroups: () => [],
+            membership: () => null,
+        }, { persistScope: 'location-delete-test' });
+        filters.locationFilter.value = 'S1';
+
+        await store.deleteAsync('Z2');
+        expect(filters.locationFilter.value).toBe('S1'); // unrelated zone
+
+        await store.deleteAsync('A1'); // S1's parent area
+        expect(filters.locationFilter.value).toBeNull();
+        expect(stock.refreshIfLoadedAsync).toHaveBeenCalledTimes(2);
+    });
+
+    it('a failed refresh after a successful delete does not reject', async () => {
+        const store = useLocationStore();
+        await store.refreshAsync();
+        m.getTreeAsync.mockRejectedValueOnce(new Error('blip'));
+        stock.refreshIfLoadedAsync.mockRejectedValueOnce(new Error('blip'));
+
+        await expect(store.deleteAsync('Z2')).resolves.toBeUndefined();
+        expect(m.deleteAsync).toHaveBeenCalledWith('Z2');
+        expect(store.loadError).toContain('blip');
     });
 });
 

@@ -88,6 +88,9 @@ def test__health_locale_policy__defaults_to_au_shipping_values():
         # the same reason currency does: every session's unit pickers are
         # built from it, not just an admin's. Metric is the shipping default.
         "measurement_system": _DEFAULT_MEASUREMENT_SYSTEM,
+        # 2026-10-30 — the household's IANA zone, so the client names
+        # "Today" on the household calendar (additive; mirrors /app-settings).
+        "timezone": requests.get(f"{BASE}/app-settings").json()["timezone"],
     }
 
 

@@ -6,6 +6,8 @@ import { useMealPlanExport } from 'src/composables/useMealPlanExport';
 import { useReducedMotion } from 'src/composables/useReducedMotion';
 import { useBatchEnabled } from 'src/composables/useBatchEnabled';
 import { useMoneyEnabled } from 'src/composables/useMoneyEnabled';
+import { usePlannedDemand } from 'src/composables/usePlannedDemand';
+import { invalidateReconcileQueue } from 'src/composables/useReconcileQueue';
 import { useStockStatus } from 'src/composables/useStockStatus';
 import { isDateOnly, isoDate as toIso, localTodayIso, mondayOf, shiftDays } from 'src/helpers/weekDates';
 import type {
@@ -131,10 +133,13 @@ export function useMealPlanner() {
     const focusedPlan = computed<MealPlan | null>(
         () => mealPlans.value.find((p) => mondayOf(p.start_date) === focusedMonday.value) ?? null,
     );
-    const weekDays = computed<WeekDay[]>(() => {
-        const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-        return labels.map((label, i) => ({ label, iso: shiftDays(focusedMonday.value, i) }));
-    });
+    // Weekday names come from the household locale, like the dashboard strip.
+    const weekDays = computed<WeekDay[]>(() =>
+        Array.from({ length: 7 }, (_, i) => {
+            const iso = shiftDays(focusedMonday.value, i);
+            return { label: formatLocaleDate(iso, { weekday: 'short' }), iso };
+        }),
+    );
     const weekRangeLabel = computed(
         () => `${formatDate(focusedMonday.value)} – ${formatDate(shiftDays(focusedMonday.value, 6))}`,
     );
@@ -290,6 +295,10 @@ export function useMealPlanner() {
     // `meals_shortfall` tool reads it, and it answers a genuinely different
     // question (how many SERVINGS short each recipe is).
     async function refreshAfterMutation() {
+        // Planned demand and the cook-reconcile queue both derive from the
+        // plan's entries.
+        usePlannedDemand().invalidate();
+        invalidateReconcileQueue();
         await Promise.all([
             loadIngredients(),
             recipeStore.getRecipesAsync(),

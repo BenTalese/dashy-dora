@@ -34,15 +34,20 @@ import logging
 from datetime import datetime, timezone
 from typing import Callable, List
 
+from flask import has_request_context
+
 from dora_api.app import app
 from dora_api.domain.entities.alert_interaction import AlertInteraction
 from dora_api.domain.entities.user import User
 from dora_api.features.app_settings.access import get_or_create_app_setting
 from dora_api.features.app_settings.clock import household_timezone
+from dora_api.features.app_settings.operational_config import (
+    resolved_operational_config,
+)
 from dora_api.features.deals.deals_digest import (DealsDigest, build_digest,
                                                   deals_ledger_key,
                                                   is_deals_hour, is_send_day,
-                                                  subject_line)
+                                                  subject_line, text_line)
 from dora_api.features.products.get_products import GetBestDealsHandler
 from dora_api.infrastructure.auth_helpers import spa_deep_link
 from dora_api.infrastructure.email_sender import (email_sender_configured,
@@ -103,10 +108,26 @@ def send_deals_email(
             if not recipients:
                 return 0
 
+            # Every link in the mail is built on the public URL. A scheduler
+            # tick has no request to borrow an Origin from, so with no
+            # `public_url` set `public_base_url()` falls back to the dev
+            # server's localhost address and every link is dead on a real
+            # deploy. Skip, loudly, and don't stamp the ledger: once the admin
+            # sets the URL the mail goes out on the next tick. `/health`
+            # publishes `public_url_configured` so the admin page can say why.
+            if not public_url_ready():
+                _LOGGER.warning(
+                    "deals_email: not sending — SMTP is configured but the public "
+                    "URL is not set (Settings → Admin → System), so the mail's "
+                    "links would point at localhost",
+                )
+                return 0
+
             # One ranked pool per tick, shared across recipients — the deals
             # are install-wide facts, and re-running the scan per user would
             # walk every product N times to produce the same list.
             currency = getattr(setting, "currency", None) or "AUD"
+            locale = getattr(setting, "locale", None) or None
             product_dtos = GetBestDealsHandler(repository).handle(DEAL_POOL_SIZE)
 
             deals_url = spa_deep_link(DEALS_ROUTE)
@@ -115,7 +136,7 @@ def send_deals_email(
             for user in recipients:
                 try:
                     sent += _process_user(
-                        repository, user, product_dtos, currency, today, now,
+                        repository, user, product_dtos, currency, locale, today, now,
                         deals_url, unsubscribe_url, _send_email,
                     )
                 except Exception as exc:  # noqa: BLE001
@@ -128,6 +149,15 @@ def send_deals_email(
     except Exception as exc:  # noqa: BLE001
         _LOGGER.warning("deals_email: job failed: %s", exc)
     return sent
+
+
+def public_url_ready() -> bool:
+    """Whether a mail built now can carry working links: inside a request the
+    Origin header stands in (`public_base_url`), outside one only an explicit
+    `AppSetting.public_url` will do."""
+    if has_request_context():
+        return True
+    return bool((resolved_operational_config().public_url or "").strip())
 
 
 def _opted_in_users(repository: SqlAlchemyRepository) -> List[User]:
@@ -164,6 +194,7 @@ def _process_user(
     user: User,
     product_dtos,
     currency: str,
+    locale: str | None,
     today,
     now: datetime,
     deals_url: str,
@@ -176,7 +207,7 @@ def _process_user(
         return 0
 
     digest = build_digest(
-        product_dtos, currency, compact=bool(user.deals_email_compact),
+        product_dtos, currency, compact=bool(user.deals_email_compact), locale=locale,
     )
     if digest.is_empty:
         # No specials running. Deliberately does not stamp — see the module
@@ -217,11 +248,7 @@ def _text_body(digest: DealsDigest, unsubscribe_url: str) -> str:
     keeps the mail out of a spam folder and readable in a text client, and
     building it from the same `DealLine`s means it cannot disagree with the
     HTML about a price."""
-    rows = [
-        f"- {line.name} ({line.size}): {line.price_now} "
-        f"was {line.price_was}, {line.discount_percent}% off at {line.store_name}"
-        for line in digest.lines
-    ]
+    rows = [text_line(line) for line in digest.lines]
     return (
         "This week's deals from your Dora install:\n\n"
         + "\n".join(rows)

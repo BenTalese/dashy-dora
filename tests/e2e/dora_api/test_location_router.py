@@ -149,11 +149,10 @@ def test__create_location__SectionUnderZone__422(api):
     })
 
     body = assert_problem(resp, 422, title="Business rule violation.")
-    # NOTE — pinned copy bug: the message names the *valid* parent kind,
-    # so it reads "A section cannot live under a area parent." even though
-    # area is exactly where a section belongs. Functional behaviour (422)
-    # is correct; the copy is misleading. Reported as a finding.
-    assert "section" in resp.text
+    # The message names the parent actually chosen (zone) and where a
+    # section belongs (an area) — it used to name the *valid* kind as the
+    # offender ("cannot live under a area parent").
+    assert "A section can't live under a zone — it belongs under an area." in str(body)
 
 
 def test__create_location__SectionUnderSection__422(api):

@@ -9,7 +9,7 @@ import type { StockGroup } from 'src/models/stockGroup';
 import type { StockItem } from 'src/models/stockItem';
 import type { LocationNode } from 'src/models/location';
 import type { StockLevel } from 'src/models/stockLevel';
-import { computed, ref, type DeepReadonly } from 'vue';
+import { computed, ref, type DeepReadonly, type Ref } from 'vue';
 import { useListState } from 'src/composables/useListState';
 import type { SortAxisFor } from 'src/components/filters/SortControl.vue';
 
@@ -106,6 +106,17 @@ export function attentionBand(
     return 1;
 }
 
+/** The session-persisted location filter of each scope, so a location delete
+ *  can drop a filter that names a location which no longer exists. */
+const persistedLocationFilters = new Map<string, Ref<string | null>>();
+
+/** Clears any persisted location filter naming one of `locationIds`. */
+export function forgetDeletedLocations(locationIds: ReadonlySet<string>): void {
+    for (const filter of persistedLocationFilters.values()) {
+        if (filter.value !== null && locationIds.has(filter.value)) filter.value = null;
+    }
+}
+
 /**
  * All filter / sort / summary state for the pantry. Reusable wherever a list
  * of stock items needs the canonical filter UI — currently StockOverview but
@@ -170,6 +181,9 @@ export function useStockFilters(sources: {
         openOnly, hasAlertOnly, expiringSoonOnly, cartFilter,
         recipeFilter, sortBy, sortDir,
     } = state;
+    if (options.persistScope) {
+        persistedLocationFilters.set(options.persistScope, locationFilter);
+    }
 
     // A session persisted before the axis/direction split holds a combined key
     // ('level_lowest'); translate it in place so the saved intent survives.
@@ -275,8 +289,10 @@ export function useStockFilters(sources: {
             if (hasAlertOnly.value && !hasAlert(item)) return false;
             if (expiringSoonOnly.value && !isExpiryFlagged(item)) return false;
             if (tokens.length > 0) {
+                // Every word must match ("full cream" is one search, not two):
+                // `some` made a two-word query wider than either word alone.
                 const haystack = item.name.toLowerCase();
-                if (!tokens.some((t) => haystack.includes(t))) return false;
+                if (!tokens.every((t) => haystack.includes(t))) return false;
             }
             if (recipeFilterContext.value && !recipeFilterContext.value.ids.has(item.stock_item_id))
                 return false;

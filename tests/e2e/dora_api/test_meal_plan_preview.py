@@ -33,9 +33,7 @@ def test_preview_ingredients_summarises_bands_and_cost():
     the bands read the stock levels behind the aggregate, the money comes from
     the app's one pricing ladder."""
     recipe_id = _recipe_with_ingredients()
-    if recipe_id is None:
-        import pytest
-        pytest.skip("no seeded recipe with ingredients")
+    assert recipe_id is not None, "the seed ships recipes with ingredients"
     body = requests.post(f"{MEAL_PLANS}/preview-ingredients", json={
         "recipes": [{"recipe_id": recipe_id, "servings": 2}],
     }).json()
@@ -69,9 +67,7 @@ def test_preview_ingredients_with_unlinked_ingredient_reports_it():
     *named* in `unlinked` rather than dropped, which is how the picker-driven
     add keeps FU-505's promise now that it no longer calls auto-generate."""
     recipe_id = _recipe_with_unlinked_ingredient()
-    if recipe_id is None:
-        import pytest
-        pytest.skip("no seeded recipe with an unlinked ingredient")
+    assert recipe_id is not None, "the seed ships a recipe with an unlinked ingredient"
     resp = requests.post(f"{MEAL_PLANS}/preview-ingredients", json={
         "recipes": [{"recipe_id": recipe_id, "servings": 2}],
     })

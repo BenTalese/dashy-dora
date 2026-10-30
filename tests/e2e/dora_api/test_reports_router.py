@@ -295,13 +295,14 @@ def test__price_drops__InactiveProduct__Excluded(api):
 
 
 def test__price_drops__LimitClampsToOneThroughTwenty__DefaultFive(api):
-    # Six genuine drops on the board so the default-5 slice is observable.
-    for i in range(6):
+    # 21 genuine drops on the board, so both the default-5 slice and the
+    # ceiling of 20 are observable (fewer would let `limit=999` pass unclamped).
+    for i in range(21):
         _seed_drop(10.0 + i, 5.0)
 
     assert len(requests.get(f"{REPORTS}/price-drops", params={"limit": "0"}).json()["rows"]) == 1
     assert len(requests.get(f"{REPORTS}/price-drops", params={"limit": "-3"}).json()["rows"]) == 1
-    assert len(requests.get(f"{REPORTS}/price-drops", params={"limit": "999"}).json()["rows"]) <= 20
+    assert len(requests.get(f"{REPORTS}/price-drops", params={"limit": "999"}).json()["rows"]) == 20
     # Missing or unparseable limit → the default 5.
     assert len(requests.get(f"{REPORTS}/price-drops").json()["rows"]) == 5
     assert len(requests.get(f"{REPORTS}/price-drops", params={"limit": "abc"}).json()["rows"]) == 5

@@ -17,7 +17,9 @@ test('an unauthenticated visitor can log in and reach the dashboard', async ({ p
     await page.getByRole('button', { name: 'Sign In' }).click();
 
     // Redirected to the dashboard; the login form is gone.
-    await expect(page).toHaveURL(/\/$/);
+    // Hash-mode router: the dashboard is `/#/` (a bare `/$` also matched
+    // the server root before the router had moved anywhere).
+    await expect(page).toHaveURL(/#\/$/);
     await expect(page.locator('input[autocomplete="current-password"]')).toHaveCount(0);
     await expect(page.locator('.q-layout').first()).toBeVisible();
 });

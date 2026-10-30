@@ -1,8 +1,15 @@
+import { ref } from 'vue';
 import {
     currentLocale,
     ensureLocalePolicy,
 } from 'src/composables/useMoney';
-import { daysFromToday, parseLocalIso } from 'src/helpers/weekDates';
+import {
+    daysFromToday,
+    householdTimezone,
+    onHouseholdTimezoneChange,
+    parseLocalIso,
+    shiftDays,
+} from 'src/helpers/weekDates';
 
 // DR-14 / D-006 — the single date/time formatting authority. Every
 // user-facing date goes through here so the whole app renders in the
@@ -12,15 +19,40 @@ import { daysFromToday, parseLocalIso } from 'src/helpers/weekDates';
 // never drift apart (R-003). Templates never call `.toLocaleDateString()` /
 // `.toLocaleString()` directly.
 //
-// Timezone: `locale_policy` carries locale only. Date-only values (the vast
-// majority of Dora's renders — expiry, planned-for, effective dates) are
-// tz-independent *as data*, but they must be PARSED as local midnight to render
-// as the calendar day they name — see `toDate` below, and R-021's client-side
-// counterpart. Datetime renders use the browser tz, which matches "when this
-// happened on my clock". If a household tz is later added to the policy, it is
-// wired in one place here.
+// Timezone: date-only values (the vast majority of Dora's renders — expiry,
+// planned-for, effective dates) are tz-independent *as data*, but they must be
+// PARSED as local midnight to render as the calendar day they name — see
+// `toDate` below, and R-021's client-side counterpart. Instants (a string that
+// carries a time, or an epoch number — audit `occurred_at`, `created_at`)
+// render in the **household** timezone once `locale_policy.timezone` is known
+// (`householdTimezone()`), so every member sees the household's wall clock
+// rather than their device's; before that, the browser tz. `Date` objects are
+// left in the browser tz: callers build them from local parts, and re-zoning
+// them would shift the day they meant.
 
 type DateInput = string | number | Date | null | undefined;
+
+// Reactive mirror of the household zone. `weekDates.ts` holds the zone in a
+// plain (Vue-free) variable; this version ref is bumped whenever it changes and
+// read by the formatters below, so a template that rendered "Tomorrow" (or an
+// instant) before `/health` landed re-renders once the zone is known.
+const tzVersion = ref(0);
+onHouseholdTimezoneChange(() => {
+    tzVersion.value++;
+});
+
+/** The household zone, read through the reactive version so callers track it. */
+function reactiveHouseholdTimezone(): string | null {
+    void tzVersion.value;
+    return householdTimezone();
+}
+
+/** True when `value` names an instant (rather than a calendar day or a
+ *  caller-built local `Date`) and so should render in the household zone. */
+function isInstant(value: DateInput): boolean {
+    if (typeof value === 'number') return true;
+    return typeof value === 'string' && parseLocalIso(value) === null;
+}
 
 function toDate(value: DateInput): Date | null {
     if (value === null || value === undefined || value === '') return null;
@@ -74,7 +106,8 @@ export function formatDate(value: DateInput, opts: Intl.DateTimeFormatOptions = 
     void ensureLocalePolicy();
     const d = toDate(value);
     if (!d) return '';
-    return getFormatter(opts).format(d);
+    const tz = isInstant(value) ? reactiveHouseholdTimezone() : null;
+    return getFormatter(tz && !opts.timeZone ? { ...opts, timeZone: tz } : opts).format(d);
 }
 
 /** Date + time, in the household locale (replaces bare `.toLocaleString()`).
@@ -95,6 +128,9 @@ export function formatDateTime(value: DateInput): string {
  *
  *  `now` is injectable for tests only. */
 export function formatRelativeDay(value: string, now: Date = new Date()): string {
+    // Track the household zone: "Today"/"Tomorrow" don't pass through
+    // `formatDate`, so without this they'd never recompute when it lands.
+    void reactiveHouseholdTimezone();
     const diff = daysFromToday(value, now);
     // Not a bare calendar date — fall back to the plain formatter rather than
     // guessing at a relative label for an instant.
@@ -108,11 +144,33 @@ export function formatRelativeDay(value: string, now: Date = new Date()): string
     return formatDate(value);
 }
 
+/** "October 2026" / "Oktober 2026" for the month containing a YYYY-MM-DD date —
+ *  the calendar heading. Parsed as that calendar day (never `Date.UTC`, which
+ *  rendered October as "September" west of Greenwich). */
+export function formatMonthYear(value: string): string {
+    return formatDate(value, { month: 'long', year: 'numeric' });
+}
+
+// 2024-01-01 is a Monday; the seven days from it give Mon..Sun in order.
+const A_MONDAY = '2024-01-01';
+
+/** Narrow weekday letters Monday-first in the household locale — en "M T W T F
+ *  S S", de "M D M D F S S". Keyed so a template can `v-for` them even though
+ *  letters repeat. */
+export function weekdayLetters(): { key: string; letter: string }[] {
+    return Array.from({ length: 7 }, (_, i) => {
+        const iso = shiftDays(A_MONDAY, i);
+        return { key: iso, letter: formatDate(iso, { weekday: 'narrow' }) };
+    });
+}
+
 export function useDateFormat() {
     void ensureLocalePolicy();
     return {
         formatDate,
         formatDateTime,
         formatRelativeDay,
+        formatMonthYear,
+        weekdayLetters,
     };
 }

@@ -35,4 +35,32 @@ describe('createOverlayCache', () => {
         expect(cache.entryFor('a')).toBeNull();
         expect(cache.loaded.value).toBe(false);
     });
+
+    it('drops a load that resolves after clear() (sign-out race)', async () => {
+        const resolvers: ((r: Result) => void)[] = [];
+        const fetch = vi.fn(() => new Promise<Result>((r) => { resolvers.push(r); }));
+        const cache = cacheOver(fetch);
+        const stale = cache.loadAsync();   // previous user's load
+        cache.clear();                     // sign-out
+        // `clear()` resets the in-flight flag, so the next user's load starts.
+        const fresh = cache.loadAsync();
+        expect(fetch).toHaveBeenCalledTimes(2);
+        resolvers[1]!({ enabled: true, map: { b: 2 } });
+        await fresh;
+        resolvers[0]!({ enabled: true, map: { a: 1 } });
+        await stale;
+        expect(cache.entryFor('b')).toBe(2);
+        expect(cache.entryFor('a')).toBeNull();
+    });
+
+    it('leaves the cache empty when the only load resolves after clear()', async () => {
+        let resolve!: (r: Result) => void;
+        const cache = cacheOver(() => new Promise<Result>((r) => { resolve = r; }));
+        const pending = cache.loadAsync();
+        cache.clear();
+        resolve({ enabled: true, map: { a: 1 } });
+        await pending;
+        expect(cache.result.value).toBeNull();
+        expect(cache.loaded.value).toBe(false);
+    });
 });

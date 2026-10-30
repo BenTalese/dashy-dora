@@ -618,8 +618,10 @@
     async function refreshProducts(): Promise<void> {
         await productStore.getProductsAsync();
     }
-    /** A link lives on the stock item, so both sides refresh. */
-    async function refreshLinks(): Promise<void> {
+    /** A link lives on the stock item, so both sides refresh, and the
+     *  touched items' price-derived facts go stale. */
+    async function refreshLinks(stockItemIds: string[]): Promise<void> {
+        stockItemIds.forEach((id) => stockItemStore.invalidatePriceFacts(id));
         await Promise.all([productStore.getProductsAsync(), stockItemStore.getStockItemsAsync()]);
     }
 
@@ -892,7 +894,7 @@
                     product.linked_stock_item_id!, product.product_id,
                 );
             }
-            await refreshLinks();
+            await refreshLinks(targets.map((p) => p.linked_stock_item_id!));
             $q.notify({
                 type: 'positive',
                 message: `Unlinked ${targets.length} product${targets.length === 1 ? '' : 's'}.`,
@@ -985,10 +987,8 @@
         if (!ok) return;
         bulkBusy.value = true;
         try {
-            for (const product of targets) {
-                await productApi.deleteAsync(product.product_id);
-            }
-            await Promise.all([refreshProducts(), loadWatches()]);
+            await productStore.deleteProductsAsync(targets.map((p) => p.product_id));
+            await loadWatches();
             $q.notify({
                 type: 'positive',
                 message: `Deleted ${targets.length} product${targets.length === 1 ? '' : 's'}.`,
@@ -1012,7 +1012,7 @@
             await stockItemApi.unlinkProductAsync(
                 product.linked_stock_item_id, product.product_id,
             );
-            await refreshLinks();
+            await refreshLinks([product.linked_stock_item_id]);
             $q.notify({ type: 'positive', message: 'Unlinked.' });
         } catch (err) {
             $q.notify({
@@ -1105,7 +1105,7 @@
                 linkChoiceStockItemId.value, linkTarget.value.product_id,
             );
             linkOpen.value = false;
-            await refreshLinks();
+            await refreshLinks([linkChoiceStockItemId.value]);
             $q.notify({
                 type: 'positive', message: 'Product linked.',
             });

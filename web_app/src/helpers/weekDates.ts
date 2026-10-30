@@ -9,7 +9,83 @@ export function isoDate(value: string): string {
     return new Date(value).toISOString().slice(0, 10);
 }
 
-/** Today as YYYY-MM-DD from the browser's *local* calendar parts.
+// ── Household timezone (R-021) ────────────────────────────────────────────
+// The household's IANA zone, from `/api/health` `locale_policy.timezone`.
+// `useMoney` (the locale authority, which already reads `locale_policy`) pushes
+// it in here once the probe lands; this module stays Vue-free so the pure date
+// helpers keep running in a node test environment (`useDateFormat` subscribes
+// via `onHouseholdTimezoneChange` to make templates re-render). `null` = not
+// known (or an older backend, or not configured) ⇒ fall back to the device
+// clock, exactly as before.
+let householdTz: string | null = null;
+const tzListeners = new Set<() => void>();
+
+// `AppSetting.timezone` is NOT NULL with a server default of 'UTC', and
+// `/health` always sends a zone — so the server can't tell "the household chose
+// UTC" from "nobody ever set it" (installs set up before the wizard's timezone
+// step, or "Skip everything"). Adopting the default would render every instant
+// in UTC wall-clock and shift "Today" before ~10 am in Australia. So UTC is read
+// as "not configured" ⇒ device clock. A household that genuinely lives in UTC
+// loses nothing: its devices' clocks are UTC too.
+const UNCONFIGURED_ZONES = new Set(['UTC', 'ETC/UTC']);
+
+/** Set (or clear, with `null`/empty/'UTC') the household timezone. An
+ *  unrecognised zone name is ignored rather than thrown on: a bad setting must
+ *  degrade to the device clock, not break every date render. */
+export function setHouseholdTimezone(tz: string | null | undefined): void {
+    const name = (tz ?? '').trim();
+    let next: string | null = null;
+    if (name && !UNCONFIGURED_ZONES.has(name.toUpperCase())) {
+        try {
+            new Intl.DateTimeFormat('en-CA', { timeZone: name });
+            next = name;
+        } catch {
+            next = null;
+        }
+    }
+    if (next === householdTz) return;
+    householdTz = next;
+    tzListeners.forEach((fn) => fn());
+}
+
+/** Subscribe to household-timezone changes (returns an unsubscribe). Lets a
+ *  reactive layer re-render without this module importing Vue. */
+export function onHouseholdTimezoneChange(fn: () => void): () => void {
+    tzListeners.add(fn);
+    return () => tzListeners.delete(fn);
+}
+
+/** The household IANA timezone, or `null` when it isn't known. */
+export function householdTimezone(): string | null {
+    return householdTz;
+}
+
+const zoneDayFormatters = new Map<string, Intl.DateTimeFormat>();
+
+/** YYYY-MM-DD of `instant` on the household's calendar (device-local when the
+ *  household zone is unknown). 'en-CA' is used purely because its short date IS
+ *  YYYY-MM-DD; it is a data shape here, never a display locale. */
+function calendarDayIso(instant: Date): string {
+    const tz = householdTz;
+    if (tz) {
+        let fmt = zoneDayFormatters.get(tz);
+        if (!fmt) {
+            fmt = new Intl.DateTimeFormat('en-CA', {
+                timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+            });
+            zoneDayFormatters.set(tz, fmt);
+        }
+        const parts = fmt.formatToParts(instant);
+        const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
+        return `${get('year')}-${get('month')}-${get('day')}`;
+    }
+    const month = String(instant.getMonth() + 1).padStart(2, '0');
+    const day = String(instant.getDate()).padStart(2, '0');
+    return `${instant.getFullYear()}-${month}-${day}`;
+}
+
+/** Today as YYYY-MM-DD — on the **household's** calendar when its timezone is
+ *  known (`setHouseholdTimezone`), else from the browser's local parts.
  *
  *  R-021 carve-out — display-only, pre-server-response fallback. The
  *  household "today" is owned by the server (`AppSetting.timezone` →
@@ -17,13 +93,15 @@ export function isoDate(value: string): string {
  *  must use that. This helper exists so the calendar can paint a "today"
  *  cell on the very first frame before the store has hydrated — once the
  *  server response lands, the binding flips and any one-day discrepancy
- *  resolves automatically. Never use this to gate persisted state, build
- *  a server payload, or decide which day a value belongs to. */
-export function localTodayIso(): string {
-    const d = new Date();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${d.getFullYear()}-${month}-${day}`;
+ *  resolves automatically. Reading the household zone here means a device
+ *  whose clock sits on a different calendar day from the household (a
+ *  traveller, a remote admin) no longer labels the household's today
+ *  "Yesterday". Never use this to gate persisted state, build a server
+ *  payload, or decide which day a value belongs to.
+ *
+ *  `now` is injectable for tests only. */
+export function localTodayIso(now: Date = new Date()): string {
+    return calendarDayIso(now);
 }
 
 /** A YYYY-MM-DD date string, matched exactly (no time part). */
@@ -60,16 +138,20 @@ export function parseLocalIso(value: string): Date | null {
     return Number.isFinite(parsed.getTime()) ? parsed : null;
 }
 
-/** Whole-day delta from *local today* to a YYYY-MM-DD date. 0 = today,
- *  1 = tomorrow, -1 = yesterday. Both sides are normalised to local midnight so
- *  the result is a calendar-day count, not an elapsed-hours division. */
+/** Whole-day delta from *today* to a YYYY-MM-DD date. 0 = today, 1 = tomorrow,
+ *  -1 = yesterday. "Today" is the household's calendar day when its timezone is
+ *  known, else the device's (see `localTodayIso`). Both sides are reduced to
+ *  calendar dates and compared with UTC arithmetic, so the result is a
+ *  calendar-day count — never an elapsed-hours division, and immune to DST. */
 export function daysFromToday(value: string, now: Date = new Date()): number | null {
-    const target = parseLocalIso(value);
-    if (!target) return null;
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    // Both operands are local midnight, so the difference is a whole number of
-    // days except across a DST boundary — round to absorb the ±1h.
-    return Math.round((target.getTime() - today.getTime()) / 86_400_000);
+    if (!parseLocalIso(value)) return null;
+    return dayNumber(value) - dayNumber(calendarDayIso(now));
+}
+
+/** Days since the epoch for a YYYY-MM-DD string (UTC math — exact). */
+function dayNumber(iso: string): number {
+    const [y, m, d] = iso.split('-').map(Number);
+    return Math.round(Date.UTC(y!, m! - 1, d) / 86_400_000);
 }
 
 /** Shift a YYYY-MM-DD date by N days (may be negative). */

@@ -14,12 +14,17 @@ Hangs off the existing SHOPPING_LIST_ROUTER:
   GET /api/shopping-lists/<id>/print-view
 """
 import logging
-from datetime import datetime, timezone
 from uuid import UUID
 
 from flask import Response, render_template_string
 
-from dora_api.features.data.export_shared import PRINT_CSS, PRINT_TOOLBAR
+from dora_api.domain.entities.shopping_list import SHOPPING_LIST_STATUS_DONE
+from dora_api.features.data.export_shared import (
+    PRINT_CSS,
+    PRINT_TOOLBAR,
+    PrintFormat,
+    print_format,
+)
 from dora_api.features.routers import SHOPPING_LIST_ROUTER
 from dora_api.features.shopping_lists.get_shopping_list_detail import (
     GetShoppingListDetailHandler,
@@ -27,33 +32,22 @@ from dora_api.features.shopping_lists.get_shopping_list_detail import (
     ShoppingListLineDto,
 )
 from dora_api.infrastructure.api_response import not_found
+from dora_api.infrastructure.utils import pluralize
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 
 _LOGGER = logging.getLogger(__name__)
 
 
 # ── Shared row prep ────────────────────────────────────────────────────
-
-def _line_unit_price(line: ShoppingListLineDto) -> float | None:
-    """Selected offer's `price_now` if there is one — `None` when the
-    user hasn't picked an offer (we don't guess preferred/cheapest at
-    export time; the CSV stays an honest snapshot of what's been chosen).
-    """
-    if line.selected_product_id is None:
-        return None
-    for offer in line.offers:
-        if offer.product_id == line.selected_product_id:
-            return offer.price_now
-    return None
-
+# Prices and stores are NOT re-derived here (R-003). The detail handler has
+# already run the money ladder onto `estimated_unit_price` and the store ladder
+# onto `resolved_store_name`, and summed `totals`; the sheet prints those, so
+# it can't disagree with the list page. It used to price a line from the
+# selected offer's `price_now` alone, counting set-aside lines too, and printed
+# a different total from the app on every seeded list.
 
 def _line_store(line: ShoppingListLineDto) -> str:
-    if line.selected_product_id is None:
-        return ""
-    for offer in line.offers:
-        if offer.product_id == line.selected_product_id:
-            return offer.store_name
-    return ""
+    return line.resolved_store_name or line.purchased_store_name or ""
 
 
 def _line_location(line: ShoppingListLineDto) -> str:
@@ -64,16 +58,16 @@ def _line_location(line: ShoppingListLineDto) -> str:
 
 
 def _grouped_by_location(
-    detail: ShoppingListDetailDto,
+    lines: list[ShoppingListLineDto],
 ) -> list[tuple[str, list[ShoppingListLineDto]]]:
     """Group lines by their location, alphabetised within each group.
     The "(no location)" bucket sorts last so it doesn't dominate.
     """
     buckets: dict[str, list[ShoppingListLineDto]] = {}
-    for line in detail.lines:
+    for line in lines:
         buckets.setdefault(_line_location(line), []).append(line)
-    for lines in buckets.values():
-        lines.sort(key=lambda l: l.stock_item_name.lower())
+    for group in buckets.values():
+        group.sort(key=lambda l: l.stock_item_name.lower())
 
     def _sort_key(name: str) -> tuple[int, str]:
         return (1, "") if name == "(no location)" else (0, name.lower())
@@ -95,42 +89,51 @@ _PRINT_TEMPLATE = """<!doctype html>
   <div class="page">
     <h1>{{ detail.display_name }}</h1>
     <div class="meta">
-      Generated {{ generated_at }} · {{ detail.lines | length }} item(s)
+      Generated {{ generated_at }} · {{ item_count_label }}
     </div>
     <div class="totals">
-      <span><strong>{{ remaining_count }}</strong> remaining</span>
-      <span><strong>{{ ticked_count }}</strong> picked up</span>
-      {% if estimated_total is not none %}
-        <span>Est. total <strong>${{ '%.2f' % estimated_total }}</strong></span>
+      <span><strong>{{ totals.unticked_count }}</strong> remaining</span>
+      <span><strong>{{ totals.ticked_count }}</strong> picked up</span>
+      {% if total_label %}
+        <span>{{ total_caption }} <strong>{{ total_label }}</strong></span>
       {% endif %}
     </div>
-    {% if detail.lines | length == 0 %}
+    {% macro line_table(lines) %}
+      <table>
+        <tbody>
+          {% for line in lines %}
+            <tr class="{{ 'picked' if line.is_ticked else '' }}">
+              <td class="box">
+                <span class="checkbox">{{ '✓' if line.is_ticked else '' }}</span>
+              </td>
+              <td>
+                <span class="item-name">{{ line.stock_item_name }}</span>
+                {% if store_of(line) %}
+                  <div class="item-store">{{ store_of(line) }}</div>
+                {% endif %}
+              </td>
+              <td class="qty">{{ line.quantity if line.quantity is not none else '' }}</td>
+              <td class="price">
+                {% if line.estimated_unit_price is not none %}
+                  {{ money(line.estimated_unit_price) }}{% if line.quantity and line.quantity > 1 %} ea{% endif %}
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endmacro %}
+    {% if active_count == 0 and set_aside | length == 0 %}
       <p><em>This shopping list is empty.</em></p>
     {% else %}
       {% for location, lines in groups %}
         <h2>{{ location }}</h2>
-        <table>
-          <tbody>
-            {% for line in lines %}
-              <tr>
-                <td class="box"><span class="checkbox"></span></td>
-                <td>
-                  <span class="item-name">{{ line.stock_item_name }}</span>
-                  {% if line_extras[line.line_id].store %}
-                    <div class="item-store">{{ line_extras[line.line_id].store }}</div>
-                  {% endif %}
-                </td>
-                <td class="qty">{{ line.quantity if line.quantity is not none else '' }}</td>
-                <td class="price">
-                  {% if line_extras[line.line_id].unit_price is not none %}
-                    ${{ '%.2f' % line_extras[line.line_id].unit_price }}
-                  {% endif %}
-                </td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+        {{ line_table(lines) }}
       {% endfor %}
+      {% if set_aside %}
+        <h2>Set aside to fit the budget</h2>
+        {{ line_table(set_aside) }}
+      {% endif %}
     {% endif %}
   </div>
 </body>
@@ -138,32 +141,37 @@ _PRINT_TEMPLATE = """<!doctype html>
 """
 
 
-def _render_print_view(detail: ShoppingListDetailDto) -> str:
-    groups = _grouped_by_location(detail)
-    ticked = sum(1 for l in detail.lines if l.is_ticked)
-    remaining = len(detail.lines) - ticked
-
-    line_extras: dict = {}
-    totals: list[float] = []
-    for line in detail.lines:
-        unit = _line_unit_price(line)
-        store = _line_store(line)
-        line_extras[line.line_id] = {"unit_price": unit, "store": store}
-        if unit is not None:
-            totals.append(unit * (line.quantity if line.quantity is not None else 1))
-
-    estimated_total = round(sum(totals), 2) if totals else None
-    generated_at = datetime.now(timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M")
+def _render_print_view(detail: ShoppingListDetailDto, fmt: PrintFormat) -> str:
+    # Lines the trim-to-budget pass set aside aren't on the active list (the
+    # totals skip them too); they print in their own trailing section.
+    active = [l for l in detail.lines if not l.deferred_by_budget]
+    set_aside = sorted(
+        (l for l in detail.lines if l.deferred_by_budget),
+        key=lambda l: l.stock_item_name.lower(),
+    )
+    totals = detail.totals
+    is_done = detail.status == SHOPPING_LIST_STATUS_DONE
+    # A done list's total sums only the lines that were bought (ticked), so a
+    # price on a skipped line must not open the Total row onto "$0.00".
+    priced = any(
+        l.estimated_unit_price is not None and (l.is_ticked or not is_done) for l in active
+    )
 
     return render_template_string(
         _PRINT_TEMPLATE,
         detail=detail,
-        groups=groups,
-        line_extras=line_extras,
-        remaining_count=remaining,
-        ticked_count=ticked,
-        estimated_total=estimated_total,
-        generated_at=generated_at,
+        groups=_grouped_by_location(active),
+        set_aside=set_aside,
+        active_count=len(active),
+        totals=totals,
+        item_count_label=f"{totals.line_count} {pluralize(totals.line_count, 'item')}",
+        # A finished list's total is what was spent (ticked lines only);
+        # before that it's a projection.
+        total_caption="Total" if is_done else "Est. total",
+        total_label=fmt.money(totals.total_price) if priced else None,
+        store_of=_line_store,
+        money=fmt.money,
+        generated_at=fmt.generated_at(),
         css=PRINT_CSS,
         toolbar=PRINT_TOOLBAR,
     )
@@ -173,12 +181,15 @@ def _render_print_view(detail: ShoppingListDetailDto) -> str:
 
 @SHOPPING_LIST_ROUTER.route("/<uuid:shopping_list_id>/print-view", methods=["GET"])
 def print_view_shopping_list(shopping_list_id: UUID):
-    detail = GetShoppingListDetailHandler(SqlAlchemyRepository()).handle(shopping_list_id)
+    repository = SqlAlchemyRepository()
+    detail = GetShoppingListDetailHandler(repository).handle(shopping_list_id)
     if detail is None:
         return not_found("ShoppingList", shopping_list_id)
-    html = _render_print_view(detail)
+    html = _render_print_view(detail, print_format(repository))
     _LOGGER.info(
         "Rendered print view for shopping list %s (%d lines)",
         shopping_list_id, len(detail.lines),
     )
-    return Response(html, mimetype="text/html; charset=utf-8")
+    # `mimetype`, not a hand-written charset: Flask appends `; charset=utf-8`
+    # itself, and spelling it out doubled it (same fix as barcodes.py).
+    return Response(html, mimetype="text/html")

@@ -104,7 +104,7 @@
 
     import BaseButton from 'src/components/BaseButton.vue';
     import BaseDialog from 'src/components/BaseDialog.vue';
-    import { formatMoney } from 'src/composables/useMoney';
+    import { formatMoney, formatUnitPrice } from 'src/composables/useMoney';
     import { formatQuantity } from 'src/helpers/formatQuantity';
     import { requoteUnitPrice } from 'src/helpers/unitPriceDisplay';
     import { useMeasurementSystem } from 'src/composables/useMeasurementSystem';
@@ -166,8 +166,8 @@
         const quoted = requoteUnitPrice(
             line.unit_price, line.priced_unit, measurementSystem.value,
         );
-        if (quoted === null) return `${formatMoney(line.unit_price)} / ${line.priced_unit}`;
-        return `${formatMoney(quoted.amount)} / ${quoted.unit}`;
+        if (quoted === null) return formatUnitPrice(line.unit_price, line.priced_unit);
+        return formatUnitPrice(quoted.amount, quoted.unit);
     }
 
     const coveragePct = computed(() => {

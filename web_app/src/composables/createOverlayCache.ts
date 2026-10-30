@@ -17,17 +17,27 @@ export function createOverlayCache<R, T>(options: {
     const loaded = ref(false);
     const loading = ref(false);
 
+    // Bumped by `clear()`. A load started before sign-out can resolve after
+    // it; the generation check drops that response instead of writing the
+    // previous user's overlay back with `loaded = true`.
+    let generation = 0;
+
     async function loadAsync(force = false): Promise<void> {
         if (loading.value) return;
         if (loaded.value && !force) return;
+        const gen = generation;
         loading.value = true;
         try {
-            result.value = await options.fetch();
+            const fetched = await options.fetch();
+            if (gen !== generation) return;
+            result.value = fetched;
             loaded.value = true;
         } catch {
+            if (gen !== generation) return;
             result.value = null;
         } finally {
-            loading.value = false;
+            // `clear()` already reset `loading`; a newer load may own it now.
+            if (gen === generation) loading.value = false;
         }
     }
 
@@ -46,5 +56,16 @@ export function createOverlayCache<R, T>(options: {
         loaded.value = false;
     }
 
-    return { result: readonly(result), loaded: readonly(loaded), isEnabled, loadAsync, entryFor, invalidate };
+    /** Drop the loaded result too — on sign-out it belongs to someone else. */
+    function clear(): void {
+        generation++;
+        result.value = null;
+        loaded.value = false;
+        loading.value = false;
+    }
+
+    return {
+        result: readonly(result), loaded: readonly(loaded),
+        isEnabled, loadAsync, entryFor, invalidate, clear,
+    };
 }

@@ -28,6 +28,7 @@ from sqlalchemy import and_, desc, func, select
 
 from dora_api.app import db
 from dora_api.domain.entities.audit_event import AuditEvent
+from dora_api.persistence.aware import as_utc
 from dora_api.features.auth.admin_gate import require_admin
 from dora_api.features.routers import AUDIT_ROUTER
 from dora_api.infrastructure.api_response import (
@@ -136,7 +137,9 @@ def _row_to_dto(row: dict, username_by_id: dict[UUID, str]) -> AuditEventDto:
     occurred = row.get("occurred_at")
     return AuditEventDto(
         audit_event_id=str(row.get("id")),
-        occurred_at=occurred.isoformat() if isinstance(occurred, datetime) else str(occurred),
+        # R-098: SQLite hands the instant back naive; without the offset the
+        # SPA parsed it as local time and the audit log read hours off.
+        occurred_at=as_utc(occurred).isoformat() if isinstance(occurred, datetime) else str(occurred),
         source=row.get("source") or "",
         severity=row.get("severity") or "",
         action=row.get("action") or "",

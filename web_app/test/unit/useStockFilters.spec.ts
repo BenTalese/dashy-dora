@@ -171,10 +171,14 @@ describe('useStockFilters — filtering', () => {
         expect(f.activeFilterCount.value).toBe(0);
     });
 
-    it('search is case-insensitive and matches ANY whitespace-separated token', () => {
+    it('search is case-insensitive and every whitespace-separated token must match', () => {
+        // "full cream" is one search, not two: matching ANY token made a
+        // two-word query wider than either word alone (QA 2026-10-30).
         const f = makeFilters();
         f.searchText.value = '  APP   egg ';
-        expect(names(f)).toEqual(['Apple', 'Egg']);
+        expect(names(f)).toEqual([]);
+        f.searchText.value = ' ap LE ';
+        expect(names(f)).toEqual(['Apple']);
     });
 
     it('search with no hits yields an empty list, not an error', () => {

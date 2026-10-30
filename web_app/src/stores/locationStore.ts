@@ -4,6 +4,8 @@ import LocationApiService, {
     type CreateLocationCommand,
     type UpdateLocationCommand
 } from 'src/services/api/locationApiService';
+import { forgetDeletedLocations } from 'src/composables/useStockFilters';
+import { useStockItemStore } from 'src/stores/stockItemStore';
 import { computed, readonly, ref } from 'vue';
 
 const api = new LocationApiService();
@@ -51,9 +53,22 @@ export const useLocationStore = defineStore('location', () => {
         await refreshAsync();
     };
 
+    /** The server un-locates every item in the deleted subtree, so the
+     *  stock rows refetch (only if `/stock` has loaded them — otherwise they
+     *  arrive fresh on first load) and a stock filter naming any of those
+     *  locations is dropped (it would otherwise match nothing, invisibly).
+     *  The delete has succeeded by the time the refreshes run, so a refresh
+     *  failure must not reject to the caller as if the delete failed:
+     *  `refreshAsync` records its own `loadError`, the stock refetch is
+     *  swallowed (the list self-heals on the next load). */
     const deleteAsync = async (locationId: string) => {
+        const removedIds = new Set(subtreeIds(locationId));
         await api.deleteAsync(locationId);
-        await refreshAsync();
+        forgetDeletedLocations(removedIds);
+        await Promise.all([
+            refreshAsync(),
+            useStockItemStore().refreshIfLoadedAsync().catch(() => undefined),
+        ]);
     };
 
     // Walks the tree to find a node by id. Returns null if not found.
@@ -65,6 +80,19 @@ export const useLocationStore = defineStore('location', () => {
             for (const child of node.children) stack.push(child);
         }
         return null;
+    };
+
+    const subtreeIds = (locationId: string): string[] => {
+        const root = findNode(locationId);
+        if (!root) return [locationId];
+        const ids: string[] = [];
+        const stack: LocationNode[] = [root];
+        while (stack.length) {
+            const node = stack.pop()!;
+            ids.push(node.location_id);
+            for (const child of node.children) stack.push(child);
+        }
+        return ids;
     };
 
     // Parent and name per node, built once per tree load: `breadcrumb` runs

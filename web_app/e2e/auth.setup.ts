@@ -13,7 +13,7 @@ setup('authenticate as the seeded admin', async ({ page }) => {
     await page.getByRole('button', { name: 'Sign In' }).click();
 
     // Landed on the dashboard (login form gone, at the app root).
-    await expect(page).toHaveURL(/\/$/);
+    await expect(page).toHaveURL(/#\/$/);
     await expect(page.locator('input[autocomplete="current-password"]')).toHaveCount(0);
 
     await page.context().storageState({ path: AUTH_FILE });

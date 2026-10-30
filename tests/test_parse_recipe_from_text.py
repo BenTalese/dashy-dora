@@ -52,13 +52,7 @@ def test__parse_recipe_from_text__meets_minimum_shape(fixture_name: str) -> None
     text = (_FIXTURE_DIR / f"{fixture_name}.txt").read_text(encoding="utf-8")
     expected = EXPECTATIONS[fixture_name]
 
-    try:
-        result = parse_recipe_from_text(text)
-    except NotImplementedError:
-        pytest.skip(
-            "parse_recipe_from_text stub — implementation lands in Chunk 2 "
-            "(IMPL_PLAN_RECIPE_IMPORTER.md)"
-        )
+    result = parse_recipe_from_text(text)
 
     # Name: substring match, case-insensitive. Guards against the parser
     # grabbing a nav crumb or related-post link as the title.

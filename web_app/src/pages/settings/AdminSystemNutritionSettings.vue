@@ -84,7 +84,7 @@
                                 size="sm"
                                 class="dora-bg-positive-soft text-positive"
                             >
-                                {{ source.food_count.toLocaleString() }} foods
+                                {{ formatNumber(source.food_count, { digits: 0 }) }} {{ source.food_count === 1 ? 'food' : 'foods' }}
                             </q-chip>
                         </div>
                         <div class="dataset-row__status dora-text-muted">
@@ -215,6 +215,7 @@
     import { ICONS } from 'src/style/icons';
     import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
     import { useSettingsSave } from 'src/composables/useSettingsSave';
+    import { formatNumber } from 'src/composables/useMoney';
     import { useFeatureFlags } from 'src/composables/useFeatureFlags';
     import type { UpdateAppSettingsCommand } from 'src/services/api/appSettingsApiService';
     import { useAppSettingsStore } from 'src/stores/appSettingsStore';
@@ -290,7 +291,7 @@
     }
 
     function formatMb(bytes: number): string {
-        return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+        return `${formatNumber(bytes / (1024 * 1024), { digits: 1, minDigits: 1 })} MB`;
     }
 
     function statusLine(source: NutritionSourceStatus): string {
@@ -309,13 +310,13 @@
                 const rows = source.rows_done ?? 0;
                 // No total to offer; the count alone is what proves it's moving.
                 return rows > 0
-                    ? `Reading the data, ${rows.toLocaleString()} rows`
+                    ? `Reading the data, ${formatNumber(rows, { digits: 0 })} rows`
                     : 'Reading the data…';
             }
             case 'saving': {
                 const foods = source.foods ?? 0;
                 return foods > 0
-                    ? `Saving ${foods.toLocaleString()} foods…`
+                    ? `Saving ${formatNumber(foods, { digits: 0 })} foods…`
                     : 'Saving foods…';
             }
             case 'error': return source.error ?? 'That download failed.';

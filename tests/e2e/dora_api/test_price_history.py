@@ -47,8 +47,7 @@ def test__price_history__series_carries_your_prices_and_observations(api):
     linked stock item). The seeded Woolworths milk product links to the milk
     stock item, which has price observations in L."""
     product_id = _find_product_by_name("Woolworths Full Cream Milk 2L")
-    if product_id is None:
-        return  # seed shape changed
+    assert product_id is not None, "the seed ships 'Woolworths Full Cream Milk 2L'"
     response = requests.get(f"{BASE}?product_ids={product_id}&range=all")
     assert response.status_code == 200
     series = response.json()["series"]
@@ -68,10 +67,8 @@ def test__price_history__series_carries_your_prices_and_observations(api):
 
 
 def test__price_alerts__crud_round_trip(api):
-    # Pick any existing product from the search API or skip when none.
-    products = requests.get("http://localhost:5170/api/products").json().get("items") or []
-    if not products:
-        return
+    products = requests.get("http://localhost:5170/api/products").json()["items"]
+    assert products, "the seed ships products"
     product_id = products[0]["product_id"]
 
     # Create
@@ -102,9 +99,8 @@ def test__price_alerts__create_for_unknown_product__is_404(api):
 
 
 def test__price_alerts__zero_threshold__is_422(api):
-    products = requests.get("http://localhost:5170/api/products").json().get("items") or []
-    if not products:
-        return
+    products = requests.get("http://localhost:5170/api/products").json()["items"]
+    assert products, "the seed ships products"
     response = requests.post(f"{BASE}/alerts", json={
         "product_id": products[0]["product_id"], "threshold_unit_price": 0,
     })

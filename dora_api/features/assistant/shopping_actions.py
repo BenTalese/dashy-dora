@@ -139,7 +139,9 @@ def commit_add(shopping_list_id: UUID, resolved_items: list[dict[str, Any]]) -> 
         except (ValueError, TypeError):
             continue
         response = handler.handle(request, shopping_list_id)
-        if response.item_not_found or response.list_not_found:
+        if response.item_not_found or response.list_not_found or response.list_done:
+            # A finished list refuses lines; count it with the misses so the
+            # reply says something rather than nothing.
             missing += 1
         elif response.already_on_list:
             already += 1

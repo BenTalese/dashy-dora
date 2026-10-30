@@ -391,6 +391,18 @@ def test__complete_stocktake_session__StampsTheWatermark__AndIsReadBack(api):
     assert after != before
 
 
+def test__complete_stocktake_session__SeededSweep__EmptiesSweepOnNextRead(api):
+    """The watermark's whole job: once a run completes, the drop-outs it showed
+    are not shown again. The seed's Sweep fixture puts a past session and items
+    that left rotation since, so Sweep starts non-empty."""
+    assert requests.get(SESSION).json()["sweep"], "the seed ships a non-empty Sweep"
+
+    resp = requests.post(SESSION_COMPLETE, json={})
+    assert resp.status_code == 200, resp.text
+
+    assert requests.get(SESSION).json()["sweep"] == []
+
+
 def test__get_stocktake_session__MutedUnengagedItem__StaysOutOfSweep(api):
     """Mute already says "don't nag me about this one" — reporting that Dora
     has stopped tracking it would be telling the user something they said

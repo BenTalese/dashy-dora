@@ -362,6 +362,7 @@
     import { useQuasar } from 'quasar';
     import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { useMoneyEnabled } from 'src/composables/useMoneyEnabled';
+    import { usePantryBeliefs } from 'src/composables/usePantryBeliefs';
     import { useSettingsSave } from 'src/composables/useSettingsSave';
     import SettingsSection from 'src/components/settings/SettingsSection.vue';
     import SettingsRow from 'src/components/settings/SettingsRow.vue';
@@ -668,6 +669,8 @@
                 : 'Inference off.',
             () => authStore.updateMeAsync({ inferred_pantry_enabled: value }),
         );
+        // The beliefs endpoint answers `enabled` from this pref.
+        usePantryBeliefs().invalidate();
     }
 
     // D-12 — "should I buy this?", per-user since 2026-08-19 (it was an

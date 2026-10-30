@@ -7,6 +7,7 @@ LC-2 source-blind sample_count (offers never bump it even when products are
 on).
 """
 import uuid
+from datetime import UTC, datetime, timedelta
 
 import requests
 
@@ -22,6 +23,12 @@ def _new_stock_item() -> str:
     })
     assert resp.status_code == 201, resp.text
     return resp.json()["stock_item_id"]
+
+
+def _days_ago(days: int) -> str:
+    # Observation dates are relative to now: the baseline is a trailing
+    # 365-day window measured from `now`, so fixed dates age out of it.
+    return (datetime.now(UTC) - timedelta(days=days)).isoformat()
 
 
 def _log(item: str, *, total_price: float, total_measure: float, unit: str, observed_at: str | None = None) -> None:
@@ -69,11 +76,11 @@ def test__your_prices__two_samples__baseline_null_current_set(api):
 def test__your_prices__three_samples__median_correct_odd(api):
     item = _new_stock_item()
     _log(item, total_price=2.0, total_measure=1.0, unit="L",
-         observed_at="2026-01-01T00:00:00+00:00")
+         observed_at=_days_ago(180))
     _log(item, total_price=3.0, total_measure=1.0, unit="L",
-         observed_at="2026-02-01T00:00:00+00:00")
+         observed_at=_days_ago(150))
     _log(item, total_price=5.0, total_measure=1.0, unit="L",
-         observed_at="2026-03-01T00:00:00+00:00")
+         observed_at=_days_ago(120))
     yp = _yp(item)
     assert yp["baseline"] == 0.3          # median of [2, 3, 5] per L, per 100ml
     assert yp["baseline_unit"] == "100ml"
@@ -84,7 +91,7 @@ def test__your_prices__four_samples__median_correct_even(api):
     item = _new_stock_item()
     for i, p in enumerate([2.0, 3.0, 4.0, 5.0], start=1):
         _log(item, total_price=p, total_measure=1.0, unit="L",
-             observed_at=f"2026-0{i}-01T00:00:00+00:00")
+             observed_at=_days_ago(210 - 30 * i))
     yp = _yp(item)
     # Median of [2, 3, 4, 5] per L = 3.5, quoted per 100ml
     assert abs(yp["baseline"] - 0.35) < 1e-6
@@ -94,13 +101,13 @@ def test__your_prices__current_above_threshold__chip_fires(api):
     item = _new_stock_item()
     # Median = 2.0, threshold = 2.0 * 1.15 = 2.3. Current must be > 2.3.
     _log(item, total_price=2.0, total_measure=1.0, unit="L",
-         observed_at="2026-01-01T00:00:00+00:00")
+         observed_at=_days_ago(180))
     _log(item, total_price=2.0, total_measure=1.0, unit="L",
-         observed_at="2026-02-01T00:00:00+00:00")
+         observed_at=_days_ago(150))
     _log(item, total_price=2.0, total_measure=1.0, unit="L",
-         observed_at="2026-03-01T00:00:00+00:00")
+         observed_at=_days_ago(120))
     _log(item, total_price=3.0, total_measure=1.0, unit="L",
-         observed_at="2026-06-01T00:00:00+00:00")
+         observed_at=_days_ago(30))
     yp = _yp(item)
     # median of [2, 2, 2, 3] = 2.0; current = 3.0 > 2.0 * 1.15 = 2.3 → above
     assert yp["above_baseline"] is True
@@ -111,13 +118,13 @@ def test__your_prices__current_exactly_at_threshold__not_above(api):
     """C2 edge case: current == baseline * 1.15 is NOT above (strict >)."""
     item = _new_stock_item()
     _log(item, total_price=2.0, total_measure=1.0, unit="L",
-         observed_at="2026-01-01T00:00:00+00:00")
+         observed_at=_days_ago(180))
     _log(item, total_price=2.0, total_measure=1.0, unit="L",
-         observed_at="2026-02-01T00:00:00+00:00")
+         observed_at=_days_ago(150))
     _log(item, total_price=2.0, total_measure=1.0, unit="L",
-         observed_at="2026-03-01T00:00:00+00:00")
+         observed_at=_days_ago(120))
     _log(item, total_price=2.30, total_measure=1.0, unit="L",
-         observed_at="2026-06-01T00:00:00+00:00")
+         observed_at=_days_ago(30))
     yp = _yp(item)
     # median = 2.0, current = 2.30 == 2.0 * 1.15 → NOT above
     assert yp["above_baseline"] is False
@@ -132,7 +139,7 @@ def test__your_prices__ml_observations_display_per_100ml(api):
     item = _new_stock_item()
     for i in range(1, 4):
         _log(item, total_price=3.0, total_measure=500.0, unit="ml",
-             observed_at=f"2026-0{i}-01T00:00:00+00:00")
+             observed_at=_days_ago(210 - 30 * i))
     yp = _yp(item)
     assert yp["baseline_unit"] == "100ml"
     # $6/L / 10 = $0.60/100ml
@@ -145,7 +152,7 @@ def test__your_prices__litre_observations_display_per_100ml(api):
     item = _new_stock_item()
     for i in range(1, 4):
         _log(item, total_price=3.0, total_measure=1.0, unit="L",
-             observed_at=f"2026-0{i}-01T00:00:00+00:00")
+             observed_at=_days_ago(210 - 30 * i))
     yp = _yp(item)
     assert yp["baseline_unit"] == "100ml"
     assert abs(yp["baseline"] - 0.3) < 1e-6
@@ -156,7 +163,7 @@ def test__your_prices__g_observations_display_per_100g(api):
     item = _new_stock_item()
     for i in range(1, 4):
         _log(item, total_price=5.0, total_measure=250.0, unit="g",
-             observed_at=f"2026-0{i}-01T00:00:00+00:00")
+             observed_at=_days_ago(210 - 30 * i))
     yp = _yp(item)
     assert yp["baseline_unit"] == "100g"
     # $20/kg / 10 = $2.00/100g
@@ -168,7 +175,7 @@ def test__your_prices__kg_observations_display_per_100g(api):
     item = _new_stock_item()
     for i in range(1, 4):
         _log(item, total_price=10.0, total_measure=1.0, unit="kg",
-             observed_at=f"2026-0{i}-01T00:00:00+00:00")
+             observed_at=_days_ago(210 - 30 * i))
     yp = _yp(item)
     assert yp["baseline_unit"] == "100g"
     assert abs(yp["baseline"] - 1.0) < 1e-6
@@ -181,10 +188,10 @@ def test__your_prices__bigger_latest_pack_keeps_the_denominator(api):
     # Three 500ml buys → would otherwise be /100ml.
     for i in range(1, 4):
         _log(item, total_price=3.0, total_measure=500.0, unit="ml",
-             observed_at=f"2026-0{i}-01T00:00:00+00:00")
+             observed_at=_days_ago(210 - 30 * i))
     # Latest = 1L; the denominator doesn't move.
     _log(item, total_price=6.0, total_measure=1.0, unit="L",
-         observed_at="2026-04-01T00:00:00+00:00")
+         observed_at=_days_ago(90))
     yp = _yp(item)
     assert yp["baseline_unit"] == "100ml"
     # Median over per-L prices [6, 6, 6, 6] = 6.0/L = 0.60/100ml.
@@ -199,7 +206,7 @@ def test__your_prices__count_dimension_baseline_in_ea(api):
     item = _new_stock_item()
     for i in range(1, 4):
         _log(item, total_price=7.50, total_measure=12.0, unit="ea",
-             observed_at=f"2026-0{i}-01T00:00:00+00:00")
+             observed_at=_days_ago(210 - 30 * i))
     yp = _yp(item)
     assert yp["baseline_unit"] == "ea"
     assert abs(yp["baseline"] - 0.625) < 1e-6
@@ -214,14 +221,14 @@ def test__your_prices__old_observations_excluded_from_window(api):
     item = _new_stock_item()
     # One ancient outlier — would skew the median if not filtered.
     _log(item, total_price=100.0, total_measure=1.0, unit="L",
-         observed_at="2023-01-01T00:00:00+00:00")
-    # Three recent samples (assuming "now" is around 2026-06).
+         observed_at=_days_ago(1200))
+    # Three recent samples, well inside the trailing year.
     _log(item, total_price=2.0, total_measure=1.0, unit="L",
-         observed_at="2026-04-01T00:00:00+00:00")
+         observed_at=_days_ago(90))
     _log(item, total_price=3.0, total_measure=1.0, unit="L",
-         observed_at="2026-05-01T00:00:00+00:00")
+         observed_at=_days_ago(60))
     _log(item, total_price=4.0, total_measure=1.0, unit="L",
-         observed_at="2026-06-01T00:00:00+00:00")
+         observed_at=_days_ago(30))
     yp = _yp(item)
     # Sample count excludes the >12mo outlier; median over the 3 recent obs = 3/L.
     assert yp["sample_count"] == 3
@@ -237,18 +244,18 @@ def test__your_prices__mixed_dimensions__most_recent_dimension_wins(api):
     item = _new_stock_item()
     # 3 L-dim observations (older).
     _log(item, total_price=2.0, total_measure=1.0, unit="L",
-         observed_at="2026-01-01T00:00:00+00:00")
+         observed_at=_days_ago(180))
     _log(item, total_price=2.0, total_measure=1.0, unit="L",
-         observed_at="2026-02-01T00:00:00+00:00")
+         observed_at=_days_ago(150))
     _log(item, total_price=2.0, total_measure=1.0, unit="L",
-         observed_at="2026-03-01T00:00:00+00:00")
+         observed_at=_days_ago(120))
     # 3 ea-dim observations (newer — active dim should switch to ea).
     _log(item, total_price=5.0, total_measure=1.0, unit="ea",
-         observed_at="2026-04-01T00:00:00+00:00")
+         observed_at=_days_ago(90))
     _log(item, total_price=6.0, total_measure=1.0, unit="ea",
-         observed_at="2026-05-01T00:00:00+00:00")
+         observed_at=_days_ago(60))
     _log(item, total_price=7.0, total_measure=1.0, unit="ea",
-         observed_at="2026-06-01T00:00:00+00:00")
+         observed_at=_days_ago(30))
     yp = _yp(item)
     assert yp["baseline_unit"] == "ea"
     assert yp["sample_count"] == 3
@@ -262,18 +269,15 @@ def test__your_prices__last_seen_store_name_resolved(api):
     """A2: when the most-recent obs has a store_id, the widget gets the
     resolved name. R-003 — server resolves, client renders a string."""
     item = _new_stock_item()
-    stores = requests.get(f"{BASE}/stores").json().get("items") or requests.get(f"{BASE}/stores").json()
-    if not stores:
-        return
-    store_id = stores[0].get("store_id") if isinstance(stores[0], dict) else None
-    if not store_id:
-        return
+    stores = requests.get(f"{BASE}/stores").json()["items"]
+    assert stores, "the seed ships stores"
+    store_id = stores[0]["store_id"]
     _log(item, total_price=3.0, total_measure=1.0, unit="L",
-         observed_at="2026-06-01T00:00:00+00:00")
+         observed_at=_days_ago(30))
     requests.post(f"{STOCK_ITEMS}/{item}/price-observations", json={
         "total_price": 3.0, "total_measure": 1.0, "unit": "L",
         "store_id": store_id,
-        "observed_at": "2026-06-15T00:00:00+00:00",
+        "observed_at": _days_ago(15),
     })
     yp = _yp(item)
     assert yp["last_seen_store_name"]  # non-empty string
@@ -290,7 +294,7 @@ def test__your_prices__offers_sidecar_does_not_affect_sample_count(api):
     item = _new_stock_item()
     for i in range(1, 4):
         _log(item, total_price=2.0, total_measure=1.0, unit="L",
-             observed_at=f"2026-0{i}-01T00:00:00+00:00")
+             observed_at=_days_ago(210 - 30 * i))
     yp = _yp(item)
     assert yp["sample_count"] == 3
     # No linked products → sidecar empty.
@@ -353,16 +357,13 @@ def _set_locale(system: str) -> None:
 
 def test__your_prices__us_locale_displays_per_lb(api):
     """At-or-above 1 lb (0.4536 kg), US locale displays /lb."""
-    try:
-        _set_locale("us")
-    except Exception:
-        return
+    _set_locale("us")
     try:
         item = _new_stock_item()
         # 1 kg ≈ 2.2 lb → above the flip threshold.
         for i in range(1, 4):
             _log(item, total_price=10.0, total_measure=1.0, unit="kg",
-                 observed_at=f"2026-0{i}-01T00:00:00+00:00")
+                 observed_at=_days_ago(210 - 30 * i))
         yp = _yp(item)
         assert yp["baseline_unit"] == "lb"
         # $10/kg × 0.4536 ≈ $4.54/lb
@@ -373,16 +374,13 @@ def test__your_prices__us_locale_displays_per_lb(api):
 
 def test__your_prices__us_locale_displays_per_oz(api):
     """Below 1 lb under US locale displays /oz."""
-    try:
-        _set_locale("us")
-    except Exception:
-        return
+    _set_locale("us")
     try:
         item = _new_stock_item()
         # 100 g ≈ 0.22 lb → below the flip threshold; should land on /oz.
         for i in range(1, 4):
             _log(item, total_price=2.0, total_measure=100.0, unit="g",
-                 observed_at=f"2026-0{i}-01T00:00:00+00:00")
+                 observed_at=_days_ago(210 - 30 * i))
         yp = _yp(item)
         assert yp["baseline_unit"] == "oz"
         # $20/kg × 0.02835 ≈ $0.567/oz

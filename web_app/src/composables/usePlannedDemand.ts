@@ -21,5 +21,6 @@ export function usePlannedDemand() {
         loadAsync: cache.loadAsync,
         demandFor: cache.entryFor,
         invalidate: cache.invalidate,
+        clear: cache.clear,
     };
 }

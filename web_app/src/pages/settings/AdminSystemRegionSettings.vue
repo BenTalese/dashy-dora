@@ -359,6 +359,10 @@
         try {
             const result = await settingsStore.saveAsync({ timezone: value });
             timezoneDraft.value = result.timezone;
+            // Same as the currency/locale saves: the date helpers take the
+            // household zone from the health probe, so re-read it now rather
+            // than rendering in the old zone until a reload.
+            await refreshMoneyPolicy();
         } catch (err) {
             timezoneDraft.value = previous;
             $q.notify({

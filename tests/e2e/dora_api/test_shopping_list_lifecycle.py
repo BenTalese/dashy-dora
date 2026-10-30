@@ -9,7 +9,10 @@ from uuid import uuid4
 
 import requests
 
-SHOPPING_LISTS = "http://localhost:5170/api/shopping-lists"
+from tests.support import assert_problem
+
+BASE = "http://localhost:5170/api"
+SHOPPING_LISTS = f"{BASE}/shopping-lists"
 
 
 def _create_list(name: str) -> str:
@@ -70,3 +73,85 @@ def test__unfinish_endpoint_is_removed(api):
     assert requests.post(f"{SHOPPING_LISTS}/{list_id}/finish").status_code == 200
     assert _detail(list_id)["status"] == "done"
     assert requests.post(f"{SHOPPING_LISTS}/{list_id}/unfinish").status_code == 404
+
+
+def _new_stock_item() -> str:
+    level = requests.get(f"{BASE}/stock-levels").json()["items"][0]["stock_level_id"]
+    resp = requests.post(f"{BASE}/stock-items", json={
+        "name": f"Lifecycle item {uuid4().hex[:8]}", "stock_level_id": level,
+    })
+    assert resp.status_code == 201, resp.text
+    return resp.json()["stock_item_id"]
+
+
+def _finished_list() -> str:
+    list_id = _create_list(f"Lifecycle done {uuid4()}")
+    assert requests.post(f"{SHOPPING_LISTS}/{list_id}/finish").status_code == 200
+    assert _detail(list_id)["status"] == "done"
+    return list_id
+
+
+def test__add_line__OnDoneList__Returns422AndAddsNothing(api):
+    # A done list is a receipt — /finish already restocked from it.
+    list_id = _finished_list()
+
+    resp = requests.post(
+        f"{SHOPPING_LISTS}/{list_id}/lines", json={"stock_item_id": _new_stock_item()},
+    )
+
+    assert_problem(resp, 422, title="Business rule violation.")
+    assert _detail(list_id)["lines"] == []
+
+
+def test__bulk_add__OnDoneList__IsRefusedForTheWholeList(api):
+    list_id = _finished_list()
+    item_id = _new_stock_item()
+
+    resp = requests.post(
+        f"{SHOPPING_LISTS}/{list_id}/lines/bulk-add", json={"stock_item_ids": [item_id]},
+    )
+
+    # A finished list is a list-level answer (like a missing one), not a
+    # per-item failure: 422 with the same copy as the single-line route.
+    assert resp.status_code == 422, resp.text
+    assert "finished" in resp.text
+    assert _detail(list_id)["lines"] == []
+
+
+def test__quick_add__HintAtDoneList__Returns422(api):
+    list_id = _finished_list()
+
+    resp = requests.post(f"{SHOPPING_LISTS}/quick-add/lines", json={
+        "stock_item_id": _new_stock_item(), "shopping_list_id": list_id,
+    })
+
+    assert_problem(resp, 422, title="Business rule violation.")
+    assert _detail(list_id)["lines"] == []
+
+
+def test__discard_unticked__MixedLines__RemovesOnlyTheUntickedOnes(api):
+    # The finish dialog's "I didn't want them after all" branch: the ticked
+    # line is what was bought and must survive; the unticked ones go.
+    list_id = _create_list(f"Lifecycle discard {uuid4()}")
+    for _ in range(3):
+        added = requests.post(
+            f"{SHOPPING_LISTS}/{list_id}/lines", json={"stock_item_id": _new_stock_item()},
+        )
+        assert added.status_code == 200, added.text
+    lines = _detail(list_id)["lines"]
+    kept = lines[0]["line_id"]
+    ticked = requests.patch(
+        f"{SHOPPING_LISTS}/{list_id}/lines/{kept}", json={"is_ticked": True},
+    )
+    assert ticked.status_code == 204, ticked.text
+
+    resp = requests.post(f"{SHOPPING_LISTS}/{list_id}/discard-unticked")
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"removed_count": 2}
+    assert [l["line_id"] for l in _detail(list_id)["lines"]] == [kept]
+
+
+def test__discard_unticked__UnknownList__Returns404(api):
+    resp = requests.post(f"{SHOPPING_LISTS}/{uuid4()}/discard-unticked")
+    assert_problem(resp, 404)

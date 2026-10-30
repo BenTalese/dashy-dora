@@ -18,6 +18,7 @@
 import { SUBSTITUTE_ALIASES, SUBSTITUTES } from 'src/generated/substitutes_table';
 import type { DoraMood } from 'src/components/dora/doraTypes';
 import { LOW_STOCK_SEQUENCE, OUT_OF_STOCK_SEQUENCE } from 'src/helpers/stockStatus';
+import { daysFromToday } from 'src/helpers/weekDates';
 import {
     currentSupportChannel,
     supportHref,
@@ -312,13 +313,11 @@ const FALLBACK_REPLIES = [
 // it keeps a fallback of its own; the live window comes in on the context.
 const EXPIRY_HORIZON_FALLBACK_DAYS = 7;
 
+// Calendar-day count from the household's today (device today until the zone
+// is known) — the shared helper, not a naive local-midnight division.
 function daysUntil(iso: string | null): number | null {
     if (!iso) return null;
-    const target = new Date(iso + 'T00:00:00');
-    if (Number.isNaN(target.getTime())) return null;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return Math.round((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    return daysFromToday(iso);
 }
 
 function expiryPhrase(iso: string | null): string {

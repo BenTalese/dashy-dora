@@ -687,7 +687,9 @@ def commit_add_recipe_to_list(payload: dict[str, Any]) -> dict[str, Any]:
             # ValueError); anything else is a real failure and raises.
             missing += 1
             continue
-        if response.item_not_found or response.list_not_found:
+        if response.item_not_found or response.list_not_found or response.list_done:
+            # A finished list refuses lines; count it with the misses so the
+            # reply says something rather than nothing.
             missing += 1
         elif response.already_on_list:
             already += 1

@@ -6,6 +6,7 @@ renders the order it is given — so they're worth pinning here rather than
 re-checking by hand every time the picker is touched.
 """
 import uuid
+from datetime import UTC, datetime, timedelta
 
 import requests
 
@@ -32,13 +33,18 @@ def _log_price(item_id: str, observed_at: str) -> None:
     assert resp.status_code == 204, resp.text
 
 
+def _days_ahead(days: int) -> str:
+    # Ahead of now — and so of anything the today-relative seed holds — so
+    # these rows sit at the head of the list however much price history the
+    # database already has. Relative, so it never falls behind the seed.
+    return (datetime.now(UTC) + timedelta(days=days)).isoformat()
+
+
 def test__recently_priced__orders_by_most_recent_observation(api):
     oldest, middle, newest = (_new_stock_item() for _ in range(3))
-    # Dates deliberately ahead of anything the seed holds, so these three sit at
-    # the head of the list however much price history the database already has.
-    _log_price(middle, "2027-06-01T00:00:00+00:00")
-    _log_price(oldest, "2027-05-01T00:00:00+00:00")
-    _log_price(newest, "2027-07-01T00:00:00+00:00")
+    _log_price(middle, _days_ahead(60))
+    _log_price(oldest, _days_ahead(30))
+    _log_price(newest, _days_ahead(90))
 
     resp = requests.get(RECENTLY_PRICED, params={"limit": 50})
     assert resp.status_code == 200, resp.text
@@ -50,7 +56,7 @@ def test__recently_priced__orders_by_most_recent_observation(api):
 def test__recently_priced__skips_items_with_no_observation(api):
     priced = _new_stock_item()
     unpriced = _new_stock_item()
-    _log_price(priced, "2027-07-02T00:00:00+00:00")
+    _log_price(priced, _days_ahead(91))
 
     rows = requests.get(RECENTLY_PRICED, params={"limit": 50}).json()
     ids = [row["stock_item_id"] for row in rows]
@@ -64,7 +70,7 @@ def test__recently_priced__skips_items_with_no_observation(api):
 
 def test__recently_priced__honours_the_limit(api):
     for _ in range(3):
-        _log_price(_new_stock_item(), "2027-07-03T00:00:00+00:00")
+        _log_price(_new_stock_item(), _days_ahead(92))
 
     rows = requests.get(RECENTLY_PRICED, params={"limit": 2}).json()
     assert len(rows) == 2

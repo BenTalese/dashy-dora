@@ -140,6 +140,7 @@
     import MoneyInput from 'src/components/MoneyInput.vue';
     import StoreLogo from 'src/components/StoreLogo.vue';
     import ProductApiService from 'src/services/api/productApiService';
+    import { useFeatureFlags } from 'src/composables/useFeatureFlags';
     import StoresApiService from 'src/services/api/storesApiService';
     import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { useQuasar } from 'quasar';
@@ -151,6 +152,7 @@
     const emit = defineEmits<{ (e: 'created'): void }>();
 
     const $q = useQuasar();
+    const { refresh: refreshFeatureFlags } = useFeatureFlags();
     const productApi = new ProductApiService();
     const storesApi = new StoresApiService();
 
@@ -274,6 +276,9 @@
                 merchant_stockcode: null,
                 web_url: null,
             });
+            // The `products` flag is data-presence: the first product turns
+            // the surface on.
+            void refreshFeatureFlags();
             $q.notify({
                 type: 'positive',
                 message: 'Custom product added.',

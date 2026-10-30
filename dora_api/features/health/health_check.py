@@ -135,6 +135,13 @@ def _feature_flags(setting) -> dict[str, bool]:
         "email": False,
         "email_smtp_configured": False,
         "push_vapid_configured": False,
+        # True iff `AppSetting.public_url` is set. Scheduled mail (the weekly
+        # deals email) has no request to take an Origin from, so without it
+        # every link would point at localhost and the job skips the send.
+        # `email_smtp_configured and not public_url_configured` is the
+        # "SMTP configured but public URL not set" warning for the admin
+        # Email page. Resolved below.
+        "public_url_configured": False,
         # NB: there is deliberately no `assistant` flag — AI mode has no
         # install-wide gate (it's a per-user opt-in), so the server has no
         # availability fact to publish. The old flag (formerly
@@ -215,6 +222,7 @@ def _feature_flags(setting) -> dict[str, bool]:
         op_config = resolved_operational_config()
         flags["email"] = bool(op_config.email_enabled)
         flags["email_smtp_configured"] = bool(op_config.smtp_username)
+        flags["public_url_configured"] = bool((op_config.public_url or "").strip())
         flags["push_vapid_configured"] = bool(
             op_config.vapid_public_key and op_config.vapid_private_key
         )
@@ -243,14 +251,24 @@ def _locale_policy(setting) -> dict[str, str]:
     *every* user's unit dropdowns are built from it. The client filters its
     picker vocabulary by this and never re-derives which units belong to which
     system (R-003 — the mapping is `units.UNIT_SYSTEMS`, mirrored into the
-    generated `units_table.ts`)."""
-    fallback = {"currency": "AUD", "locale": "en-AU", "measurement_system": "metric"}
+    generated `units_table.ts`).
+
+    `timezone` (the household's IANA zone, resolved exactly as
+    `clock.household_timezone` resolves it, so an invalid stored value reads
+    "UTC" here too) lets the client name "Today" / "Tomorrow" on the
+    household's calendar rather than the device's (R-021). Additive."""
+    fallback = {
+        "currency": "AUD", "locale": "en-AU", "measurement_system": "metric",
+        "timezone": "UTC",
+    }
     if setting is None:
         return fallback
+    from dora_api.features.app_settings.clock import resolve_timezone
     return _safe("locale_policy", lambda: {
         "currency": (setting.currency or "").strip() or fallback["currency"],
         "locale": (setting.locale or "").strip() or fallback["locale"],
         "measurement_system": (setting.measurement_system or "").strip() or fallback["measurement_system"],
+        "timezone": resolve_timezone(setting.timezone).key,
     }, fallback)
 
 

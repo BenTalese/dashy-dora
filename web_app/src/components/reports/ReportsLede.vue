@@ -28,7 +28,7 @@
     import { computed } from 'vue';
     import { ICONS } from 'src/style/icons';
     import { rangePriorWords, rangeWindowWords } from 'src/helpers/reportRangeWords';
-    import { formatMoney } from 'src/composables/useMoney';
+    import { formatMoney, formatPercent } from 'src/composables/useMoney';
     import DashboardCard from 'src/components/dashboard/DashboardCard.vue';
     import type {
         ReportRange,
@@ -60,7 +60,7 @@
         if (yoy && yoy.delta_pct !== null && rangePriorWords(props.range)) {
             const direction = yoy.delta_pct >= 0 ? 'more' : 'less';
             parts.push(
-                `, ${Math.abs(yoy.delta_pct)}% ${direction} than ${rangePriorWords(props.range)}`,
+                `, ${formatPercent(Math.abs(yoy.delta_pct))} ${direction} than ${rangePriorWords(props.range)}`,
             );
         }
         parts.push('.');

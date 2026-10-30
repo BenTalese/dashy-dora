@@ -19,12 +19,13 @@
             class="rhs__star"
             :class="{ 'rhs__star--empty': stars < star - 0.5 }"
         />
-        <span v-if="showValue" class="rhs__value">{{ stars.toFixed(1) }}</span>
+        <span v-if="showValue" class="rhs__value">{{ formatNumber(stars, { digits: 1, minDigits: 1 }) }}</span>
     </span>
 </template>
 
 <script lang="ts" setup>
     import { computed } from 'vue';
+    import { formatNumber } from 'src/composables/useMoney';
     import { ICONS } from 'src/style/icons';
 
     const props = withDefaults(defineProps<{
@@ -55,7 +56,7 @@
 
     const ariaLabel = computed(() => {
         const suffix = props.qualifier ? ` (${props.qualifier})` : '';
-        return `Health Star Rating ${props.stars.toFixed(1)} out of 5${suffix}`;
+        return `Health Star Rating ${formatNumber(props.stars, { digits: 1, minDigits: 1 })} out of 5${suffix}`;
     });
 </script>
 

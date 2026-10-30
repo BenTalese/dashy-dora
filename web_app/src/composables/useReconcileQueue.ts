@@ -5,6 +5,7 @@ import MealPlanApiService, {
     type ReconcileVerbCommand,
     type ReconcileVerbResult,
 } from 'src/services/api/mealPlanApiService';
+import { useRecipeStore } from 'src/stores/recipeStore';
 
 /** FU-317 Chunk 5 — one composable powers three surfaces: the reconcile
  *  page (runner), the dashboard chip (count only), and the meal-plans
@@ -73,6 +74,11 @@ async function submitVerb(
     command: ReconcileVerbCommand,
 ): Promise<ReconcileVerbResult> {
     const result = await api.submitReconcileVerbAsync(entryId, command);
+    // A verb moves the recipe's meal pool; the server returns the new value.
+    const recipeId = entries.value.find((e) => e.entry_id === entryId)?.recipe.id;
+    const recipeStore = useRecipeStore();
+    if (recipeId) recipeStore.setAvailableMeals(recipeId, result.new_pool);
+    else recipeStore.invalidateRecipes();
     // Remove the entry from the local queue on any non-skip terminal
     // resolution. Skip writes a `resolved_deferred` receipt whose queue
     // filter still shows it, so keep it visible until the next explicit

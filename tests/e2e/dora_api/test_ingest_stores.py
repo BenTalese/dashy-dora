@@ -48,12 +48,15 @@ def test__ingest_stores__lists_dora_stores(api):
 
 
 def test__ingest_store_image__404_when_no_logo(api):
+    # A fresh store has no logo, whatever the seed's stores carry.
+    created = requests.post(f"{BASE}/stores", json={"name": f"Bare {uuid.uuid4().hex[:8]}"})
+    assert created.status_code == 201, created.text
+    bare_id = created.json()["store_id"]
     key = _mint_key()
     stores = requests.get(f"{INGEST}/stores", headers=_auth(key)).json()["items"]
-    bare = next((s for s in stores if not s["has_image"]), None)
-    if bare is None:
-        return
-    resp = requests.get(f"{INGEST}/stores/{bare['store_id']}/image", headers=_auth(key))
+    assert next(s for s in stores if s["store_id"] == bare_id)["has_image"] is False
+
+    resp = requests.get(f"{INGEST}/stores/{bare_id}/image", headers=_auth(key))
     assert resp.status_code == 404
 
 

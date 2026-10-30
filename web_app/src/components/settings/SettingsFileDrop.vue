@@ -45,7 +45,7 @@
             <q-icon :name="ICONS.attach_file" size="22px" class="file-drop__icon" />
             <div class="file-drop__file">
                 <span class="file-drop__filename">{{ modelValue.name }}</span>
-                <span class="file-drop__filesize">{{ formatSize(modelValue.size) }}</span>
+                <span class="file-drop__filesize">{{ formatFileSize(modelValue.size) }}</span>
             </div>
             <BaseButton
                 variant="icon"
@@ -82,6 +82,7 @@
     import BaseButton from 'src/components/BaseButton.vue';
     import { ICONS } from 'src/style/icons';
     import { computed, ref } from 'vue';
+    import { formatFileSize } from 'src/composables/useMoney';
 
     const props = defineProps<{
         modelValue: File | null;
@@ -135,14 +136,6 @@
         emit('clear');
     }
 
-    function formatSize(bytes: number): string {
-        if (bytes < 1024) return `${bytes} B`;
-        const kb = bytes / 1024;
-        if (kb < 1024) return `${kb.toFixed(1)} KB`;
-        const mb = kb / 1024;
-        if (mb < 1024) return `${mb.toFixed(1)} MB`;
-        return `${(mb / 1024).toFixed(2)} GB`;
-    }
 </script>
 
 <style scoped lang="scss">

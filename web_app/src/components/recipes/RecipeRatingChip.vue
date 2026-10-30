@@ -25,7 +25,7 @@
     -->
     <span v-if="stars" class="rating-chip rating-chip--score">
         <q-icon :name="ICONS.star" class="rating-chip__glyph" />
-        <span class="rating-chip__value">{{ stars.stars.toFixed(1) }}</span>
+        <span class="rating-chip__value">{{ formatNumber(stars.stars, { digits: 1, minDigits: 1 }) }}</span>
         <!-- A rating built from part of the recipe is marked, not hidden nor
              dimmed. The old treatment was `opacity: .55` on the whole block,
              which reads as "disabled" rather than "approximate" and dies
@@ -60,6 +60,7 @@
     import RecipeHealthStars from 'src/components/recipes/RecipeHealthStars.vue';
     import RecipeNutriScore from 'src/components/recipes/RecipeNutriScore.vue';
     import { useNutritionRating } from 'src/composables/useNutritionRating';
+    import { formatNumber } from 'src/composables/useMoney';
     import type { Recipe } from 'src/models/recipe';
     import { ICONS } from 'src/style/icons';
 
@@ -89,7 +90,7 @@
             ? ''
             : ' (from only part of this recipe)';
         if (stars.value) {
-            return `Health Star Rating ${stars.value.stars.toFixed(1)} of 5${thin}`;
+            return `Health Star Rating ${formatNumber(stars.value.stars, { digits: 1, minDigits: 1 })} of 5${thin}`;
         }
         if (nutriScore.value) {
             return `Nutri-Score ${nutriScore.value.grade}, on a scale of A to E${thin}`;

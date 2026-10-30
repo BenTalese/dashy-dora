@@ -22,5 +22,6 @@ export function usePantryBeliefs() {
         loadAsync: cache.loadAsync,
         beliefFor: cache.entryFor,
         invalidate: cache.invalidate,
+        clear: cache.clear,
     };
 }

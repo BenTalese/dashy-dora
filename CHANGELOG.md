@@ -14,6 +14,61 @@ semver — major bumps signal schema or breaking-config changes.
   guide they name directly.
 
 ### Fixed
+- **Autonomous QA sweep, round 3 (2026-10-30).** Pathways through the app
+  rather than pages: end-to-end journeys with state checks, the rendered
+  documents (print views, CSV exports, emails), regional formats under
+  three households, two devices editing at once, a fresh install, offline
+  use, and a 2000-item pantry in the browser.
+  - *Print views and exports:* the shopping-list print now shows the same
+    prices and total as the app (it priced lines from offers alone and so
+    disagreed on every list, and printed nothing for lists with only logged
+    prices), marks picked lines, shows the resolved store and lists lines set
+    aside by the budget separately; the recipe print follows the method
+    (sections, numbered steps with hints and timers, step photos) instead of
+    a one-line summary, groups ingredients by section, tags optional ones and
+    names unlinked ingredients instead of "None"; the meal-plan print shows
+    all seven days and marks cook batches and leftovers; quantities read
+    "2 tbsp" not "2.0 tbsp"; dates, times and money in every print view
+    follow the household's region (they were ISO, server-local and `$`);
+    CSV exports open correctly in Excel (UTF-8 BOM) and no longer send a
+    doubled charset header; the stock CSV filename uses the household's day.
+  - *Emails:* the weekly deals email no longer prints "None" for a product
+    without a size or repeats the size, and it is skipped with a logged
+    warning when no public URL is configured (its links pointed at
+    `localhost`); `/api/health` reports `public_url_configured`.
+  - *Regional formats:* the audit log showed UTC times as local (the server
+    omitted the offset); the planner's mini calendar named the previous
+    month in timezones west of UTC; percentages on Reports kept the English
+    decimal point under de-DE; planner weekday labels and the calendar's
+    letters were hard-coded English; "Today / Tomorrow / Yesterday" labels
+    now follow the household timezone (the server now publishes it) instead
+    of the device clock; counts and file sizes in Settings use the household
+    locale; "$1.37/ qt" spacing.
+  - *Stale screens after an action elsewhere:* finishing a shop now updates
+    recipe cookability and the pantry/demand overlays; a Dora chat action
+    (level, expiry, move, tick, plan, cook, trim) refreshes the rows, lists
+    and recipes it touched; "Extend expiry" from the bell updates the stock
+    row and cookbook; "Put away" updates the stock rows; a dashboard deep
+    link lands on a clean filter (it used to stack on the saved filters and
+    Back re-applied it); logging a price, linking or unlinking a product
+    marks recipe costs stale; the first product added (or the last deleted)
+    switches the product-aware surfaces without a reload; a deleted location
+    drops out of stock rows and the saved filter; reconcile verbs update the
+    cookbook's prepared-meals count; sign-out clears the per-user overlays;
+    the "finish setting up" banner is per user, not per device.
+  - *Shopping lists:* a finished list no longer accepts new lines; finishing
+    from two devices at once restocks and harvests once; the stock search
+    requires every typed word ("full cream" no longer matches everything
+    with either word); an empty cookbook says "No recipes yet".
+  - *Copy:* the location error names the actual parent kind; "serving(s)",
+    "item(s)" and "event(s)" are real plurals.
+  - *Tests:* stale skips and either-or assertions removed, 2027 time bombs
+    in price tests made relative, the login rate-limit test made strict with
+    a per-test bucket reset, the Playwright "real handshake" check now waits
+    for an authenticated call, and `discard-unticked` / stocktake complete
+    gained behavioural tests.
+
+### Fixed
 - **Autonomous QA sweep, round 2 (2026-10-30).** Different angles this time:
   a fresh-install walk on an empty household, an authorization matrix over
   every route, fault injection, an accessibility audit, a security review, a

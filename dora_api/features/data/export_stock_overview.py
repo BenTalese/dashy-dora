@@ -19,8 +19,6 @@ counts.
 import csv
 import io
 import logging
-from datetime import datetime, timezone
-
 from uuid import UUID
 
 from flask import Response, render_template_string, request
@@ -28,12 +26,13 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from dora_api.domain.entities.stock_item import StockItem
 from dora_api.features.data.export_shared import (
-    PRINT_CSS, PRINT_TOOLBAR, csv_safe_row,
+    CSV_BOM, PRINT_CSS, PRINT_TOOLBAR, csv_safe_row, export_filename,
+    print_format,
 )
 from dora_api.features.routers import STOCK_ITEM_ROUTER
 from dora_api.infrastructure.api_response import bad_request
 from dora_api.infrastructure.decorators import has_request_body
-from dora_api.infrastructure.utils import get_request_body
+from dora_api.infrastructure.utils import get_request_body, pluralize
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 
@@ -74,7 +73,7 @@ def _build_csv(items) -> str:
                 "true" if item.is_open else "false",
                 item.notes or "",
             ]))
-    return buffer.getvalue()
+    return CSV_BOM + buffer.getvalue()
 
 
 _PRINT_TEMPLATE = """<!doctype html>
@@ -89,8 +88,7 @@ _PRINT_TEMPLATE = """<!doctype html>
   <div class="page">
     <h1>Stock overview</h1>
     <div class="meta">
-      Generated {{ generated_at }} · {{ total }} item(s) across
-      {{ groups | length }} location(s)
+      Generated {{ generated_at }} · {{ count_label }}
     </div>
     {% if total == 0 %}
       <p><em>No stock items yet.</em></p>
@@ -117,7 +115,7 @@ _PRINT_TEMPLATE = """<!doctype html>
                   {% endif %}
                 </td>
                 <td>{{ item.stock_level.name if item.stock_level else '–' }}</td>
-                <td>{{ item.expiry_date.isoformat() if item.expiry_date else '–' }}</td>
+                <td>{{ format_date(item.expiry_date) if item.expiry_date else '–' }}</td>
               </tr>
             {% endfor %}
           </tbody>
@@ -194,28 +192,39 @@ def _export_csv_response(ids: list[UUID] | None) -> Response:
         )
     items = _all_items(ids)
     body = _build_csv(items)
-    today = datetime.now(timezone.utc).date().isoformat()
-    filename = f"stock-overview-{today}.csv"
+    # R-021 — the household's calendar day, not UTC's (`export_filename`).
+    filename = export_filename("stock", "overview", "csv")
     _LOGGER.info(
         "Exported stock overview as %s (%d items)", fmt, len(items),
     )
-    response = Response(body, mimetype="text/csv; charset=utf-8")
+    # `mimetype`, not a hand-written charset: Flask appends `; charset=utf-8`
+    # itself, and spelling it out doubled it (same fix as barcodes.py).
+    response = Response(body, mimetype="text/csv")
     response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
     return response
 
 
 def _print_view_response(ids: list[UUID] | None) -> Response:
+    # R-044: the settings read may commit (first access creates the row),
+    # which would expire the items' noload relationships — read it first.
+    fmt = print_format(SqlAlchemyRepository())
     items = _all_items(ids)
-    generated_at = datetime.now(timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M")
+    groups = _group_by_location(items)
+    count_label = (
+        f"{len(items)} {pluralize(len(items), 'item')} across "
+        f"{len(groups)} {pluralize(len(groups), 'location')}"
+    )
     html = render_template_string(
         _PRINT_TEMPLATE,
-        groups=_group_by_location(items),
+        groups=groups,
         total=len(items),
-        generated_at=generated_at,
+        count_label=count_label,
+        format_date=fmt.date,
+        generated_at=fmt.generated_at(),
         css=PRINT_CSS,
         toolbar=PRINT_TOOLBAR,
     )
-    return Response(html, mimetype="text/html; charset=utf-8")
+    return Response(html, mimetype="text/html")
 
 
 @STOCK_ITEM_ROUTER.route("/export", methods=["GET"])

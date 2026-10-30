@@ -52,7 +52,7 @@
           {% if line.url %}<a href="{{ line.url }}" style="color:#222;text-decoration:none;">{{ line.name }}</a>{% else %}{{ line.name }}{% endif %}
         </div>
         <div style="font-size:13px;color:#888;margin-top:2px;">
-          {% if line.brand %}{{ line.brand }} · {% endif %}{{ line.size }} · {{ line.store_name }}
+          {% if line.brand %}{{ line.brand }} · {% endif %}{% if line.size %}{{ line.size }} · {% endif %}{{ line.store_name }}
         </div>
         <div style="margin-top:10px;font-size:14px;">
           <span style="font-size:18px;font-weight:700;color:#2e7d32;">{{ line.price_now }}</span>

@@ -179,7 +179,7 @@
                 @click="reload(page - 1)"
             />
             <div class="text-caption dora-text-muted">
-                Page {{ page }} of {{ pageCount }} ({{ total.toLocaleString() }} event(s))
+                Page {{ page }} of {{ pageCount }} ({{ formatNumber(total) }} {{ total === 1 ? 'event' : 'events' }})
             </div>
             <BaseButton
                 variant="ghost"
@@ -256,6 +256,7 @@
 <script lang="ts" setup>
     import BaseButton from 'src/components/BaseButton.vue';
     import { formatDateTime as formatLocaleDateTime } from 'src/composables/useDateFormat';
+    import { formatNumber } from 'src/composables/useMoney';
     import BaseDialog from 'src/components/BaseDialog.vue';
     import { ICONS } from 'src/style/icons';
     import { useQuasar } from 'quasar';

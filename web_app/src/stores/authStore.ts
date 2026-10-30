@@ -14,6 +14,9 @@ import { hasBackendBaseUrl } from 'src/services/api/backendUrl';
 import { isNativePlatform } from 'src/helpers/platform';
 import { NormalisedApiError, setUnauthorizedHandler } from 'src/services/api/axiosHttpClient';
 import { clearAllListState } from 'src/composables/useListState';
+import { clearBuyVerdictCache } from 'src/composables/useBuyVerdict';
+import { usePantryBeliefs } from 'src/composables/usePantryBeliefs';
+import { usePlannedDemand } from 'src/composables/usePlannedDemand';
 import { computed, readonly, ref } from 'vue';
 
 const authApiService = new AuthApiService();
@@ -174,36 +177,38 @@ export const useAuthStore = defineStore('auth', () => {
         await authApiService.changePasswordAsync(command);
     };
 
+    /** Sign-out is a soft router push, not a full reload, so every
+     *  module-level cache would otherwise hand the next person on a shared
+     *  device the previous session's state. */
+    const dropSessionState = () => {
+        currentUser.value = null;
+        // Per-page filter / search / sort state cached by `useListState`.
+        clearAllListState();
+        // The service worker's `dora-api` cache holds this user's actual
+        // content (pantry, lists, recipes) keyed by URL alone, with no idea
+        // who it belonged to, and it outlives a sign-out.
+        void clearApiResponseCache();
+        // Per-user overlays: the beliefs are gated on a per-user pref, and
+        // the verdicts and planned demand are this user's own facts.
+        clearBuyVerdictCache();
+        usePantryBeliefs().clear();
+        usePlannedDemand().clear();
+    };
+
     const logoutAsync = async () => {
         try {
             await authApiService.logoutAsync();
         } finally {
-            currentUser.value = null;
-            // FU-355 — clear any per-page filter / search / sort state that
-            // `useListState` cached in its module-level Map. Sign-out is a
-            // soft router push, not a full reload, so without this the next
-            // user on a shared device would inherit the previous session's
-            // list-page UI shape. The fallout is minor (per-page view
-            // knobs, no sensitive data) but honest is better.
-            clearAllListState();
-            // The service worker's `dora-api` cache holds this user's actual
-            // content (pantry, lists, recipes) keyed by URL alone, with no
-            // idea who it belonged to. Now that offline is read-only, that
-            // cache IS the offline story and it outlives a sign-out — so drop
-            // it, or the next person on this device reads the last one's data.
-            void clearApiResponseCache();
+            dropSessionState();
         }
     };
 
     // Called by the axios interceptor when any non-auth-probe request returns
     // 401 — typically means the cookie expired or was cleared server-side.
     const handleSessionExpired = () => {
-        currentUser.value = null;
-        // FU-355 — same reasoning as `logoutAsync`. A silent 401 could
-        // also mean "someone else's session started" on a shared device;
-        // don't hand them the previous user's filter shape.
-        clearAllListState();
-        void clearApiResponseCache();
+        // A silent 401 could also mean "someone else's session started" on
+        // a shared device.
+        dropSessionState();
         // Send them to sign in with a way back (finalisation 15-R5): clearing
         // the user alone left emptied cards on screen until the next
         // navigation. A hash assignment, because the store can't import the

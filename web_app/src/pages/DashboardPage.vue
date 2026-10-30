@@ -493,6 +493,7 @@
         type PriceDropsResponse,
     } from 'src/services/api/reportsApiService';
     import { useAuthStore } from 'src/stores/authStore';
+    import { onboardingSkippedAt, clearOnboardingSkipped } from 'src/helpers/onboardingSkip';
     import { useShoppingListStore } from 'src/stores/shoppingListStore';
     import { useStockLevelStore } from 'src/stores/stockLevelStore';
     import {
@@ -576,7 +577,7 @@
     // an existing install has nothing left to hide.
 
     // ── 24h "you skipped the wizard" reminder (F1) ───────────────────
-    // The wizard writes `dora.onboarding.skipped_at` on Skip-everything;
+    // The wizard stamps the skip (per user) on Skip-everything;
     // we surface a soft banner on the dashboard for 24 hours after that
     // moment. Dismissing it sets a session-scoped flag so the banner
     // stays hidden for this tab.
@@ -584,15 +585,9 @@
     const skipReminderDismissed = ref(false);
     const showSkipReminder = computed(() => {
         if (skipReminderDismissed.value) return false;
-        try {
-            const raw = localStorage.getItem('dora.onboarding.skipped_at');
-            if (!raw) return false;
-            const stamped = new Date(raw).getTime();
-            if (!Number.isFinite(stamped)) return false;
-            return Date.now() - stamped < SKIP_REMINDER_WINDOW_MS;
-        } catch {
-            return false;
-        }
+        const stamped = onboardingSkippedAt(currentUser.value?.user_id);
+        if (!stamped) return false;
+        return Date.now() - stamped.getTime() < SKIP_REMINDER_WINDOW_MS;
     });
     function dismissSkipReminder() {
         skipReminderDismissed.value = true;
@@ -612,12 +607,7 @@
         try {
             await onboardingApi.restartAsync();
             await authStore.refreshAsync();
-            try {
-                localStorage.removeItem('dora.onboarding.skipped_at');
-            } catch {
-                // Ignore — banner hides on the next render anyway once
-                // the guard sends us to /welcome.
-            }
+            clearOnboardingSkipped(currentUser.value?.user_id);
             void router.push('/welcome');
         } finally {
             continuingOnboarding.value = false;
