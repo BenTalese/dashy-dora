@@ -3593,20 +3593,6 @@ Resolved entries carry one extra line, and live in `DORA_FOLLOWUPS_RESOLVED.md`:
   vitamins" instead of "we haven't downloaded them". That makes the one-line hint on
   the admin Nutrition page more worth doing, not less.
 
-## [OPEN] FU-644 — Preferred buys are hidden when Products is on, with no migration path for existing rows
-- **Raised:** 2026-08-16 (stock-item detail feedback batch — owner decision).
-- **Type:** finding.
-- **What:** the owner ruled the two systems mutually exclusive and chose "Products
-  wins". Implemented as a pure `v-if` — rows are kept, never deleted, and reappear if
-  Products is switched off. But an install that has been curating preferred buys and
-  then enables Products loses sight of that text with no notice and no way to carry it
-  across into a real product link.
-- **Why deferred:** the right answer isn't obvious (a one-time "you have N preferred
-  buys hidden — review them?" nudge? a read-only list on the Products tab? nothing at
-  all?) and it only bites installs that used both, which may be none.
-- **Recommended resolution:** when the Products overlay's Phase-F tail is next picked
-  up (alongside FU-214). Decide then; nothing is lost in the meantime.
-
 ## [OPEN] FU-643 — The nutrition matcher has no vocabulary layer: regional synonyms score zero
 - **Raised:** 2026-08-15 (nutrition auto-suggest build).
 - **Type:** finding.

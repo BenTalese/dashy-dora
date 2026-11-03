@@ -10,6 +10,21 @@ resolutions go at the **top**.
 
 ---
 
+## [RESOLVED] FU-644 — Preferred buys are hidden when Products is on, with no migration path for existing rows
+- **Raised:** 2026-08-16 (stock-item detail feedback batch — owner decision).
+- **Type:** finding.
+- **What:** the owner ruled the two systems mutually exclusive and chose "Products
+  wins". Implemented as a pure `v-if` — rows are kept, never deleted, and reappear if
+  Products is switched off. But an install that has been curating preferred buys and
+  then enables Products loses sight of that text with no notice and no way to carry it
+  across into a real product link.
+- **Why deferred:** the right answer isn't obvious (a one-time "you have N preferred
+  buys hidden — review them?" nudge? a read-only list on the Products tab? nothing at
+  all?) and it only bites installs that used both, which may be none.
+- **Recommended resolution:** when the Products overlay's Phase-F tail is next picked
+  up (alongside FU-214). Decide then; nothing is lost in the meantime.
+- **State:** 2026-11-03, superseded: owner ruled preferred buys and products coexist per item (`usesOffers`), so existing preferred-buy rows show and work again; no migration needed.
+
 ## [RESOLVED] FU-928 — QA run 2 findings: 44 numbered items await fixing (9 High)
 - **Raised:** 2026-10-23 (independent QA run 2; report at
   `docs/05_investigations/QA_RUN_2_2026-10-23.md`)
