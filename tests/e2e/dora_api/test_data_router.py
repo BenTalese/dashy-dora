@@ -13,6 +13,7 @@ button, but the inspect + external-file restore endpoints remain as
 before.
 """
 import json
+from datetime import date, timedelta
 import uuid  # register_product_barcode tests used uuid without importing it.
 
 import requests
@@ -21,6 +22,21 @@ from tests.e2e.dora_api._error_assertions import domain_err
 
 
 LIBRARY_URL = "http://localhost:5170/api/data/backups"
+
+
+def _future_monday(weeks_ahead: int = 8) -> date:
+    """A Monday comfortably in the future: a past `scheduled_for` is refused,
+    so fixed calendar dates in these tests expired with time (FU-969). Skips
+    September, whose en-AU short month is "Sept", not strftime's "Sep"."""
+    day = date.today() + timedelta(weeks=weeks_ahead)
+    day -= timedelta(days=day.weekday())
+    while day.month == 9 or (day + timedelta(days=13)).month == 9:
+        day += timedelta(weeks=1)
+    return day
+
+
+def _short_date(day: date) -> str:
+    return f"{day.day} {day.strftime('%b')} {day.year}"
 
 
 def _create_backup(sections: list[str] | None = None) -> tuple[dict, dict]:
@@ -100,6 +116,32 @@ def test__get_backup__happy_path__returns_attachment_with_expected_sections(api)
         "app_settings",
     ):
         assert excluded not in payload, f"{excluded} should not be in backup"
+
+
+def test__library_backup__tampered_file__download_and_restore_refuse_and_mark_failed(api):
+    """FU-977 — only Download checked the recorded checksum, so Restore of a
+    file edited on disk went through. Both now refuse, and the row reads
+    `failed` so the library can show it."""
+    from pathlib import Path
+
+    from dora_api.app import app
+    from dora_api.domain.entities.backup import Backup
+    from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
+
+    row, _ = _create_backup()
+    backup_id = row["backup_id"]
+    with app.app_context():
+        stored = SqlAlchemyRepository().get(Backup).by_id(uuid.UUID(backup_id))
+        path = Path(stored.storage_path)
+    path.write_text(path.read_text(encoding="utf-8") + " ", encoding="utf-8")
+
+    restore = requests.post(f"{LIBRARY_URL}/{backup_id}/restore")
+    assert restore.status_code == 409
+    download = requests.get(f"{LIBRARY_URL}/{backup_id}/download")
+    assert download.status_code == 409
+
+    listed = requests.get(LIBRARY_URL).json()["items"]
+    assert next(r for r in listed if r["backup_id"] == backup_id)["status"] == "failed"
 
 
 def test__get_backup__without_auth__is_unauthorized(api):
@@ -1264,9 +1306,10 @@ def test__meal_plan_print_view__nameless_plan__titles_by_week_not_none(api):
     # "None" as both the page <title> and the <h1> on every planner print.
     # Create the nameless plan explicitly: the seeded plans all carry a name,
     # so keying off seed data silently skips this.
+    monday = _future_monday()
     created = requests.post(
         "http://localhost:5170/api/meal-plans",
-        json={"start_date": "2027-03-01", "entries": []},
+        json={"start_date": monday.isoformat(), "entries": []},
     )
     assert created.status_code == 201, created.text
     plan_id = created.json()["meal_plan_id"]
@@ -1277,7 +1320,7 @@ def test__meal_plan_print_view__nameless_plan__titles_by_week_not_none(api):
     assert response.status_code == 200, response.text
     assert "None ·" not in response.text
     assert "<h1>None</h1>" not in response.text
-    assert "Week of 1 Mar 2027" in response.text
+    assert f"Week of {_short_date(monday)}" in response.text
 
 
 def test__meal_plan_print_view__slot_columns_follow_household_vocabulary(api):
@@ -1299,13 +1342,14 @@ def test__meal_plan_print_view__slot_columns_follow_household_vocabulary(api):
     )
     assert created_slot.status_code == 201, created_slot.text
 
+    monday = (_future_monday() + timedelta(weeks=1)).isoformat()
     created = requests.post(
         "http://localhost:5170/api/meal-plans",
         json={
-            "start_date": "2027-03-08",
+            "start_date": monday,
             "entries": [{
                 "recipe_id": items[0]["recipe_id"],
-                "scheduled_for": "2027-03-08",
+                "scheduled_for": monday,
                 "servings": 1,
                 "slot": slot_name,
             }],
@@ -1375,7 +1419,7 @@ def test__print_and_csv__content_type__names_the_charset_once(api):
     list_id = _first_seeded_shopping_list_id()
     recipe_id = _create_structured_recipe()
     plan_id = requests.post(
-        f"{API}/meal-plans", json={"start_date": "2027-03-01", "entries": []},
+        f"{API}/meal-plans", json={"start_date": _future_monday().isoformat(), "entries": []},
     ).json()["meal_plan_id"]
     for url in (
         f"{API}/shopping-lists/{list_id}/print-view",
@@ -1465,12 +1509,17 @@ def test__meal_plan_print_view__seven_days_batches_and_print_dates(api):
     if not items:
         return  # No seeded recipes on this install; nothing to schedule.
     slot = requests.get(f"{API}/meal-slots").json()[0]["name"]
+    monday = _future_monday()
     created = requests.post(f"{API}/meal-plans", json={
-        "start_date": "2027-03-01",
+        "start_date": monday.isoformat(),
         "entries": [
             {"recipe_id": items[0]["recipe_id"], "scheduled_for": day,
              "servings": 2, "slot": slot, "cook_key": "b1"}
-            for day in ("2027-03-01", "2027-03-02", "2027-03-03")
+            for day in (
+                monday.isoformat(),
+                (monday + timedelta(days=1)).isoformat(),
+                (monday + timedelta(days=2)).isoformat(),
+            )
         ],
     })
     assert created.status_code == 201, created.text
@@ -1482,10 +1531,12 @@ def test__meal_plan_print_view__seven_days_batches_and_print_dates(api):
     assert html.count("Leftovers") == 2
     # All seven days print, the empty ones included.
     assert html.count('class="day-header"') == 7
-    assert "Sun, 7 Mar" in html  # en-AU, the seeded household locale
+    sunday = monday + timedelta(days=6)
+    # en-AU, the seeded household locale.
+    assert f"{sunday.strftime('%a')}, {sunday.day} {sunday.strftime('%b')}" in html
     # Household-style dates and real plurals, never ISO or "(s)".
-    assert "starts 1 Mar 2027" in html
-    assert "2027-03-01" not in html
+    assert f"starts {_short_date(monday)}" in html
+    assert monday.isoformat() not in html
     assert "(s)" not in html and "entr(y" not in html
     assert "2 servings" in html
 

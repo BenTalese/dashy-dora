@@ -237,5 +237,7 @@ export type AutoBuildResponse = {
     slots_used: string[];
     cost_total: number | null;
     budget_amount: number | null;
+    /** What was left of the budget period the days start in. */
+    budget_remaining: number | null;
     projected_over: boolean;
 };

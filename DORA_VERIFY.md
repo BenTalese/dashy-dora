@@ -22,6 +22,11 @@ top-to-bottom.
 
 ---
 
+## Pre-ship fixes (2026-11-03) — origin FU-976, FU-977
+- [ ] Edit a saved backup file on disk, then press Restore on it: refused, and the row shows Damaged.
+- [ ] Stop the API with the app open and go to a page not visited yet (Cookbook): the shell and "Can't reach Dora" banner stay, no error screen.
+- [ ] Build my week with a small budget and Keep under budget off: the review step says the week is over what's left.
+
 ## Owner decisions built (2026-11-01)
 - [ ] Flip the Basic/AI switch in Dora chat: one glow round the pill per flip.
 - [ ] With money off: My Products and Price history show no price-alert controls.

@@ -340,16 +340,9 @@ def download_backup(backup_id: UUID):
     path = Path(row.storage_path)
     if not path.exists():
         return not_found("Backup file", backup_id)
-    # The checksum captured on write is checked on read — the entity's own
-    # promise ("the library can flag corruption"), which nothing honoured
-    # (finalisation 18-R14). A mismatch marks the row failed and refuses.
-    if row.sha256 and _sha256_of(path) != row.sha256:
-        repository = SqlAlchemyRepository()
-        failed = repository.get(Backup).by_id(backup_id)
-        if failed is not None:
-            failed.status = STATUS_FAILED
-            repository.save_changes()
-        return conflict("This backup file on disk doesn't match its recorded checksum.")
+    mismatch = _refuse_on_checksum_mismatch(row, path)
+    if mismatch is not None:
+        return mismatch
 
     filename = f"dora-backup-{row.created_at.date().isoformat()}.json"
     return send_file(
@@ -373,6 +366,9 @@ def restore_saved_backup(backup_id: UUID):
     path = Path(row.storage_path)
     if not path.exists():
         return not_found("Backup file", backup_id)
+    mismatch = _refuse_on_checksum_mismatch(row, path)
+    if mismatch is not None:
+        return mismatch
 
     # Route through the existing restore handler. Its request shape
     # accepts either `upload_id` (external-file path) OR a document body;
@@ -424,6 +420,20 @@ def _resolve_backup(backup_id: UUID) -> Backup | Response:
     if row is None:
         return not_found("Backup", backup_id)
     return row
+
+
+def _refuse_on_checksum_mismatch(row: Backup, path: Path) -> Response | None:
+    # The checksum captured on write is checked on every read, download and
+    # restore alike (finalisation 18-R14, FU-977). A mismatch marks the row
+    # failed and refuses.
+    if not row.sha256 or _sha256_of(path) == row.sha256:
+        return None
+    repository = SqlAlchemyRepository()
+    failed = repository.get(Backup).by_id(row.id)
+    if failed is not None:
+        failed.status = STATUS_FAILED
+        repository.save_changes()
+    return conflict("This backup file on disk doesn't match its recorded checksum.")
 
 
 def _read_json(path: Path) -> dict | Response:

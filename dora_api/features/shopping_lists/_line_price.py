@@ -17,6 +17,9 @@ all share one definition (R-003 — no domain rule lives in two places):
   nothing could test it.
 * :func:`spend_lines`: "what was bought in this window", the one read every
   spend figure (budget, Reports) is built from (finalisation 12-R10).
+* :func:`latest_purchases`: each item's last price paid on a finished list,
+  the money ladder's `historic` rung for the list detail, the budget
+  projection and trim-to-budget alike (FU-976).
 """
 from __future__ import annotations
 
@@ -30,6 +33,7 @@ from dora_api.domain import units
 from dora_api.domain.entities.shopping_list import (SHOPPING_LIST_STATUS_DONE,
                                                     ShoppingList,
                                                     ShoppingListLine)
+from dora_api.persistence.field import EntityField
 
 
 def lifetime_spend(session) -> float:
@@ -155,6 +159,54 @@ def line_paid_unit_price(line: ShoppingListLine) -> float | None:
     if line.picked_offer_price is not None:
         return float(line.picked_offer_price)
     return None
+
+
+LastPurchase = tuple[datetime, float, "UUID | None"]
+
+
+def latest_purchases(
+    repository,
+    stock_item_ids: list[UUID],
+    exclude_list_id: UUID | None = None,
+) -> dict[UUID, LastPurchase]:
+    """The most recent *actual purchase* of each item on a finished list, as
+    ``(completed_at, unit_price, purchased_store_id)``, priced via
+    :func:`line_paid_unit_price`. Manual price observations are per-measure
+    and feed "Your prices", not this per-item figure.
+
+    Loads every ticked line ever for these items; a `MAX(completed_at)` join
+    would bound it, but the repository port has no join, so it waits until a
+    household's history makes it measurable (finalisation 03-R48)."""
+    latest: dict[UUID, LastPurchase] = {}
+    if not stock_item_ids:
+        return latest
+    prior_lines = repository.get(ShoppingListLine).all(
+        EntityField(ShoppingListLine, ShoppingListLine.Fields.STOCK_ITEM_ID).in_(stock_item_ids)
+        & EntityField(ShoppingListLine, ShoppingListLine.Fields.IS_TICKED).eq(True)
+    )
+    # Compare as str: the path param may arrive as a string while the FK is a UUID.
+    excluded = str(exclude_list_id) if exclude_list_id is not None else None
+    prior_list_ids = {
+        l.shopping_list_id for l in prior_lines if str(l.shopping_list_id) != excluded
+    }
+    done_at: dict[UUID, datetime] = {}
+    if prior_list_ids:
+        for sl in repository.get(ShoppingList).all(
+            EntityField(ShoppingList, "id").in_(list(prior_list_ids))
+        ):
+            if sl.is_done:
+                done_at[sl.id] = sl.completed_at or sl.created_at
+    for l in prior_lines:
+        completed = done_at.get(l.shopping_list_id)
+        if completed is None:
+            continue
+        paid = line_paid_unit_price(l)
+        if paid is None:
+            continue
+        prev = latest.get(l.stock_item_id)
+        if prev is None or completed > prev[0]:
+            latest[l.stock_item_id] = (completed, paid, l.purchased_store_id)
+    return latest
 
 
 def harvest_observation_fields(

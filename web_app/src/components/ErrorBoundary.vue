@@ -24,15 +24,32 @@
     // page recovers automatically (no "click X to dismiss" friction).
 
     import PageErrorState from 'src/components/PageErrorState.vue';
+    import { useNetworkStatus } from 'src/composables/useNetworkStatus';
     import { NormalisedApiError } from 'src/services/api/axiosHttpClient';
     import { onErrorCaptured, ref, watch } from 'vue';
     import { useRoute } from 'vue-router';
 
     const route = useRoute();
     const caughtError = ref<Error | null>(null);
+    const networkStatus = useNetworkStatus();
+
+    // A request that never reached the API, or a proxy saying the API is
+    // down, is not a broken page: the offline banner owns that state, so the
+    // shell stays up and a probe brings the banner in now (FU-977).
+    const UNREACHABLE_STATUSES = new Set([502, 503, 504]);
+
+    function isUnreachable(err: unknown): boolean {
+        return err instanceof NormalisedApiError
+            && (err.isNetworkError || UNREACHABLE_STATUSES.has(err.status));
+    }
 
     onErrorCaptured((err, _instance, info) => {
-         
+        if (isUnreachable(err)) {
+            console.warn('[ErrorBoundary] API unreachable', info, err);
+            void networkStatus.retryNow();
+            return false;
+        }
+
         console.error('[ErrorBoundary] caught', info, err);
         caughtError.value = err instanceof Error ? err : new Error(String(err));
         // Returning false stops the error from propagating further; the

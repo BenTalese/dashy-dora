@@ -239,6 +239,18 @@ def test__budget_cap__no_cheaper_alternative__unchanged():
     assert swapped == set()
 
 
+def test__budget_cap__compares_the_rounded_entry_costs_the_response_sums():
+    # FU-976: one serving of a $10.01, 3-serving recipe is $3.34 in the
+    # response. Unrounded, three such meals were $10.01 and passed a $10.015
+    # budget, then summed to $10.02 once each entry rounded: over.
+    picks = [_cand(name, cost=10.01, servings=3) for name in ("a", "b", "c")]
+    cheap = _cand("cheap", cost=1.0)
+    selected, _ = apply_budget_cap(
+        picks, [cheap], budget_remaining=10.015, servings_per_meal=1,
+    )
+    assert "cheap" in {c.name for c in selected}
+
+
 # ── cost per serving ────────────────────────────────────────────────────────
 
 

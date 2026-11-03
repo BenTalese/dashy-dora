@@ -41,6 +41,30 @@ next.
 
 ---
 
+## 2026-11-03 (evening): **Pre-ship fixes, budget fixes, backlog truth sweep (uncommitted)**
+
+**Owner:** "whats left to do? lets finalise the app"; picked pre-deploy fixes + budget fixes + backlog truth sweep.
+
+**Built:** FU-977 (1) `_refuse_on_checksum_mismatch` shared by library download and restore; Damaged chip on
+`status === 'failed'` rows, library reloads after a refused download/restore. FU-977 (3) `ErrorBoundary` passes
+`NormalisedApiError` network/502/503/504 to `useNetworkStatus().retryNow()` and keeps the slot (the cookbook's
+`onMounted` try/finally rejected into the App-level boundary, which wraps MainLayout). FU-969 (5) `_future_monday`
+in `test_data_router.py`. FU-976 (2) + QA2-15: `latest_purchases` moved into `_line_price.py` (detail handler
+delegates); `projected_unit_price` takes `last_paid_by_item`, read by budget status and trim (`_Ctx.last_paid_by_item`).
+QA2-14: budget status skips `deferred_by_budget`. FU-976 (1): the swap loop is already optimal for its pool; the cap
+now compares rounded `_entry_cost`s, auto-build returns `budget_remaining`, review step shows an over-budget notice.
+QA2-34: cytoscape/konva/vue-konva/@types/cytoscape uninstalled. QA2-35: unscaled counts returned as written.
+
+**Ledger:** FU-928 and FU-642 resolved (sweep found QA2-01..10, 13, 22..24, 28, 29, 33, 41..43 already fixed);
+FU-978 holds what's still live or unchecked. FU-972..977 had been written inside the template's code fence; moved out.
+
+**Gates:** pytest 2749 passed (full run, final tree); vitest 867;
+vue-tsc + eslint clean. Not driven in a browser: three lines in DORA_VERIFY "Pre-ship fixes".
+
+**Next up:** owner: FU-965 prod DB check, build + tag v1.0.0, deploy both repos, FU-918. Commit when the owner says.
+
+---
+
 ## 2026-11-03 (later): **Colour-board picks applied (uncommitted)**
 
 **Owner:** pasted picks from the board (FU-622).

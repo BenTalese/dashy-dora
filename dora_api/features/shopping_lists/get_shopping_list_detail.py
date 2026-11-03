@@ -22,7 +22,7 @@ from dora_api.domain.entities.preferred_buy import PreferredBuy
 from dora_api.domain.entities.stock_item import StockItem
 from dora_api.domain.entities.stock_location import StockLocation
 from dora_api.features.routers import SHOPPING_LIST_ROUTER
-from dora_api.features.shopping_lists._line_price import (line_paid_unit_price,
+from dora_api.features.shopping_lists._line_price import (latest_purchases,
                                                         resolve_store_id)
 from dora_api.features.stock_items.inference_overlay import (
     SURFACE_SHOPPING, divergent_items, surface_enabled)
@@ -526,47 +526,9 @@ class GetShoppingListDetailHandler:
     def _prior_purchases(
         self, shopping_list_id: UUID, stock_item_ids: List[UUID],
     ) -> dict[UUID, tuple[datetime, float, UUID | None]]:
-        """The most recent *actual purchase* of each item on a prior finished
-        list, priced via the shared actual→picked ladder: the till prefill,
-        the money ladder's `historic` rung and the store ladder's "where you
-        bought it last time" rung. Manual price observations are per-measure
-        and feed "Your prices", not this per-item figure.
-
-        Loads every ticked line ever for these items; a `MAX(completed_at)`
-        join would bound it, but the repository port has no join and the
-        ladders are now pinned end to end (FU-725), so it waits until a
-        household's history makes it measurable (finalisation 03-R48)."""
-        latest: dict[UUID, tuple[datetime, float, UUID | None]] = {}
-        if not stock_item_ids:
-            return latest
-        prior_lines = self.repository.get(ShoppingListLine).all(
-            EntityField(ShoppingListLine, ShoppingListLine.Fields.STOCK_ITEM_ID).in_(stock_item_ids)
-            & EntityField(ShoppingListLine, ShoppingListLine.Fields.IS_TICKED).eq(True)
-        )
-        # Exclude the list being viewed (compare as str — the path param may
-        # arrive as a string while the FK is a UUID).
-        current_id = str(shopping_list_id)
-        prior_list_ids = {
-            l.shopping_list_id for l in prior_lines if str(l.shopping_list_id) != current_id
-        }
-        done_at: dict[UUID, datetime] = {}
-        if prior_list_ids:
-            for sl in self.repository.get(ShoppingList).all(
-                EntityField(ShoppingList, "id").in_(list(prior_list_ids))
-            ):
-                if sl.is_done:
-                    done_at[sl.id] = sl.completed_at or sl.created_at
-        for l in prior_lines:
-            completed = done_at.get(l.shopping_list_id)
-            if completed is None:
-                continue
-            paid = line_paid_unit_price(l)
-            if paid is None:
-                continue
-            prev = latest.get(l.stock_item_id)
-            if prev is None or completed > prev[0]:
-                latest[l.stock_item_id] = (completed, paid, l.purchased_store_id)
-        return latest
+        """The till prefill, the money ladder's `historic` rung and the store
+        ladder's "where you bought it last time" rung, all from one read."""
+        return latest_purchases(self.repository, stock_item_ids, shopping_list_id)
 
     def _line_dto(self, line: ShoppingListLine, ctx: _DetailContext) -> ShoppingListLineDto:
         item = ctx.stock_items.get(line.stock_item_id) if line.stock_item_id else None

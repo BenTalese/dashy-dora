@@ -161,6 +161,22 @@
                         </div>
                     </div>
 
+                    <div v-if="moneyEnabled && buildOverBudget" class="builder-hint">
+                        <q-icon :name="ICONS.warning" size="18px" class="builder-hint__icon" />
+                        <div>
+                            As built, these meals come to {{ money(buildOverBudget.total) }},
+                            over the {{ money(buildOverBudget.remaining) }} left in this
+                            period's budget.
+                            <template v-if="buildOverBudget.capped">
+                                There weren't cheaper recipes to swap in.
+                            </template>
+                            <template v-else>
+                                Go back and turn on <strong>Keep the week under budget</strong>
+                                to swap in cheaper recipes.
+                            </template>
+                        </div>
+                    </div>
+
                     <div v-if="proposed.length === 0" class="dora-text-muted text-center q-py-md text-caption">
                         No meals yet. Reshuffle, or add your own below.
                     </div>
@@ -562,6 +578,10 @@
         && proposed.value.length < lastBuildRequested.value,
     );
 
+    // The last build's own verdict (server `projected_over`), so the review
+    // step says when the week it proposed doesn't fit (FU-976).
+    const buildOverBudget = ref<{ total: number; remaining: number; capped: boolean } | null>(null);
+
     // ── Guidance inputs ─────────────────────────────────────────────────────
     // Two independent toggle sets — the days to plan and the meal slots to fill
     // — whose cross-product is the plan (one meal per day × slot). There is no
@@ -772,6 +792,9 @@
             // Cells the toggles asked for vs. what the ranker could place (FU-611).
             lastBuildRequested.value = res.days_used.length * res.slots_used.length;
             lastBuildPlaced.value = res.entries.length;
+            buildOverBudget.value = res.projected_over && res.cost_total !== null && res.budget_remaining !== null
+                ? { total: res.cost_total, remaining: res.budget_remaining, capped: budgetCap.value }
+                : null;
             step.value = 2;
             built = true;
         } catch {
@@ -918,6 +941,7 @@
         previewUnlinked.value = [];
         lastBuildRequested.value = 0;
         lastBuildPlaced.value = 0;
+        buildOverBudget.value = null;
         doneState.value = false;
         recipeSearch.value = '';
         emphasis.value = 'use_up_stock';

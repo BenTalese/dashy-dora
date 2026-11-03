@@ -85,6 +85,9 @@ export function scaleQuantity(
     const scaled = quantity * (target / base);
 
     if (isCountableUnit(unit)) {
+        // Unscaled, the recipe's own "½ onion" stands as written (QA2-35);
+        // only a scaled count rounds to whole items.
+        if (target === base) return quantity;
         return Math.max(1, Math.round(scaled));
     }
     return formatContinuous(scaled);

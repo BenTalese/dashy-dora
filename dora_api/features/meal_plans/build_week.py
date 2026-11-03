@@ -148,6 +148,9 @@ class AutoBuildResponse:
     slots_used: List[str]
     cost_total: Optional[float]
     budget_amount: Optional[float]
+    # What was left of the budget period the days start in; the review step
+    # states it beside the total when the week is over.
+    budget_remaining: Optional[float]
     projected_over: bool
 
 
@@ -283,10 +286,12 @@ def apply_budget_cap(
     """
 
     def cost(c: RecipeCandidate) -> Optional[float]:
-        per_serving = cost_per_serving(c)
-        if per_serving is None:
+        # Per entry, rounded the way `_entry_cost` prices the response, so a
+        # week the cap passes can't come back a few cents over (FU-976).
+        per_entry = _entry_cost(c, servings_per_meal)
+        if per_entry is None:
             return None
-        return per_serving * servings_per_meal * meals_per_pick
+        return per_entry * meals_per_pick
 
     def total(items: List[RecipeCandidate]) -> float:
         return sum((cost(x) or 0.0) for x in items)
@@ -626,6 +631,7 @@ def compute_auto_build(
         slots_used=allowed_slots,
         cost_total=cost_total,
         budget_amount=budget.amount if budget is not None else None,
+        budget_remaining=round(remaining, 2) if remaining is not None else None,
         projected_over=projected_over,
     )
 
@@ -652,6 +658,7 @@ def _response_payload(r: AutoBuildResponse) -> dict:
         "slots_used": r.slots_used,
         "cost_total": r.cost_total,
         "budget_amount": r.budget_amount,
+        "budget_remaining": r.budget_remaining,
         "projected_over": r.projected_over,
     }
 

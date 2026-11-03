@@ -56,6 +56,10 @@ describe('scaleQuantity — countable units round to whole numbers', () => {
     it('treats a bare count (no unit) as countable', () => {
         expect(scaleQuantity(2, 2, 3, null)).toBe(3);
     });
+
+    it('leaves an unscaled count as written (QA2-35: ½ onion stayed 1)', () => {
+        expect(scaleQuantity(0.5, 4, 4, null)).toBe(0.5);
+    });
 });
 
 describe('scaleQuantity — continuous units snap to kitchen fractions', () => {

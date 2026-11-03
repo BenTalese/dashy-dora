@@ -25,7 +25,13 @@ vi.mock('src/components/PageErrorState.vue', () => ({
     },
 }));
 
+const retryNow = vi.hoisted(() => vi.fn(() => Promise.resolve(false)));
+vi.mock('src/composables/useNetworkStatus', () => ({
+    useNetworkStatus: () => ({ retryNow }),
+}));
+
 import ErrorBoundary from 'src/components/ErrorBoundary.vue';
+import { NormalisedApiError } from 'src/services/api/axiosHttpClient';
 
 // A child whose render throws only while `boom` is true, so we can drive both
 // the crash and the post-reset recovery from one component.
@@ -93,5 +99,33 @@ describe('ErrorBoundary — reset on navigation (FU-357)', () => {
 
         expect(wrapper.find('.page-error-stub').exists()).toBe(false);
         expect(wrapper.find('.child-ok').exists()).toBe(true);
+    });
+});
+
+describe('ErrorBoundary — API unreachable', () => {
+    it('keeps the slot and asks the network probe instead of showing the fallback', async () => {
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const Failing = defineComponent({
+            setup() {
+                return () => {
+                    throw new NormalisedApiError({
+                        status: 0,
+                        code: 'network_error',
+                        message: 'Network request failed',
+                        details: null,
+                        correlationId: '',
+                        isNetworkError: true,
+                        method: 'GET',
+                        url: '/recipes',
+                    });
+                };
+            },
+        });
+        const wrapper = mount(ErrorBoundary, { slots: { default: () => h(Failing) } });
+        await flushPromises();
+
+        expect(wrapper.find('.page-error-stub').exists()).toBe(false);
+        expect(retryNow).toHaveBeenCalled();
+        warnSpy.mockRestore();
     });
 });

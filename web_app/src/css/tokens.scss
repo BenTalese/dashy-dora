@@ -195,7 +195,7 @@
     /* Six categorical hues per theme. Read through
        `useThemePalette.seriesColour()` by the price chart's series, the
        pickers whose chips have to match them, and Reports' categorical
-       buckets; also cytoscape group colouring (Substitutes). (The ECharts
+       buckets. (The ECharts
        reference this comment used to carry went with the dependency —
        FU-833.) Keep them
        distinct hue-wise within each theme — values shouldn't be too

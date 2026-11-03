@@ -33,6 +33,8 @@ from dora_api.features.app_settings.clock import household_today
 from dora_api.features.budget.budget import (projected_unit_price,
                                              period_headroom)
 from dora_api.features.routers import SHOPPING_LIST_ROUTER
+from dora_api.features.shopping_lists._line_price import (LastPurchase,
+                                                        latest_purchases)
 from dora_api.features.shopping_lists._frequently_added import (
     DEFAULT_FREQUENTLY_ADDED_LIMIT, frequently_added_id_set)
 from dora_api.domain.stock_status import is_low_stock, is_out_of_stock
@@ -125,6 +127,7 @@ class _Ctx:
     today: date
     stock_items_by_id: Dict[UUID, StockItem]
     offer_by_product_id: Dict[UUID, ProductOffer]
+    last_paid_by_item: Dict[UUID, LastPurchase]
     # (stock_item_id → demand). Keys present only when demand exists.
     demand: Dict[UUID, _MealDemand]
     # Cached buy-verdicts by stock_item_id — computed lazily inside the
@@ -196,6 +199,8 @@ class TrimToBudgetHandler:
             for offer in offers:
                 offer_by_product_id[offer._product_id] = offer
 
+        last_paid_by_item = latest_purchases(self.repository, item_ids)
+
         demand = _load_meal_demand(
             self.repository, today, SHORT_TERM_DEMAND_DAYS,
         )
@@ -204,6 +209,7 @@ class TrimToBudgetHandler:
             today=today,
             stock_items_by_id=stock_items_by_id,
             offer_by_product_id=offer_by_product_id,
+            last_paid_by_item=last_paid_by_item,
             demand=demand,
             habit_item_ids=frequently_added_id_set(
                 self.repository.session, DEFAULT_FREQUENTLY_ADDED_LIMIT,
@@ -218,7 +224,7 @@ class TrimToBudgetHandler:
             if line.is_ticked or line.deferred_by_budget:
                 continue
             active_lines.append(line)
-            projected_total += _line_projected_total(line, offer_by_product_id)
+            projected_total += _line_projected_total(line, ctx)
 
         # No budget set (target is None) or already under → nothing to do.
         overshoot = 0.0
@@ -352,13 +358,10 @@ def _load_meal_demand(
 # ── Classification ────────────────────────────────────────────────────
 
 
-def _line_projected_total(
-    line: ShoppingListLine,
-    offer_by_product_id: Dict[UUID, ProductOffer],
-) -> float:
+def _line_projected_total(line: ShoppingListLine, ctx: _Ctx) -> float:
     """Full-line price (unit × qty) with the same fallback ladder the
-    budget projection uses — actual > picked-offer > current-offer."""
-    unit = projected_unit_price(line, offer_by_product_id)
+    budget projection uses: actual > picked-offer > current-offer > last paid."""
+    unit = projected_unit_price(line, ctx.offer_by_product_id, ctx.last_paid_by_item)
     if unit is None:
         return 0.0
     qty = line.quantity or 1
@@ -447,7 +450,7 @@ def _classify_lines(
         if item is None:
             continue
 
-        saved = _line_projected_total(line, ctx.offer_by_product_id)
+        saved = _line_projected_total(line, ctx)
         if saved < MIN_LINE_VALUE:
             # Brief §4 never-cut: sub-$2 lines aren't worth the chip.
             continue

@@ -1,6 +1,6 @@
 ﻿# Dashy Dora — Project State
 
-**Last reviewed: 2026-11-03: version 1.0.0 is code-complete and QA'd. Finish-off plan done except the owner's production steps (FU-965 check, then deploy).**
+**Last reviewed: 2026-11-03 (evening): version 1.0.0 is code-complete and QA'd; the pre-ship fixes are in. Left: the owner's production steps (FU-965 check, then deploy).**
 
 This is the single front door: where every phase and workstream is up
 to, and what needs your attention. For *where things stand* this doc
@@ -24,7 +24,9 @@ Status key: ✅ done-clean · ➗ done-with-carve-outs · 🟡 active/in-progres
 
 **The colour work is closed.** The options board (FU-622) produced your picks: a `--primary-ink` text shade, deeper Pesto/Blueberry primaries, new dark-theme secondaries, a Pesto Dark wordmark and the tinted expiring chip. Probed live in seven themes. FU-674/801/621/777/963 resolved.
 
-**Tests:** pytest 2746 passed, vitest 865, vue-tsc and eslint clean. Everything up to 11-03 is committed and pushed in both repos.
+**11-03 evening: pre-ship fixes.** Restore now refuses a backup changed on disk (and the library marks it Damaged); with the API down, an unvisited page keeps the shell and the offline banner instead of the error screen; the budget projection and trim price lines the same way the list total does (last price paid included, set-aside lines excluded); Build my week says when its week is over budget. A truth sweep closed FU-928 (most QA run 2 items were already fixed) and moved what's still live to FU-978.
+
+**Tests:** pytest 2749 passed, vitest 867, vue-tsc and eslint clean. The 11-03 evening work is not committed yet.
 
 ---
 
@@ -76,13 +78,13 @@ Status key: ✅ done-clean · ➗ done-with-carve-outs · 🟡 active/in-progres
 
 **⚠️ FU-965 first: check the production DB for cascade-deleted rows** before deploying 1.0.0. Run the row counts in `DORA_VERIFY.md` ("Autonomous QA round 2", the ⚠️ Operator line) against the live DB or its newest backup; restore an older backup if counts are short.
 
-**Total open backlog: 216 items in `DORA_FOLLOWUPS.md`.** None blocks the release. The list below is what needs you or a running install.
+**Total open backlog: 215 items in `DORA_FOLLOWUPS.md`.** None blocks the release. The list below is what needs you or a running install.
 
 1. 🟢 **Ship 1.0.0:** build the Docker image (`DORA_BUILD_ID=$(git rev-parse --short HEAD) docker compose build`), run the "Release prep" checks in `DORA_VERIFY.md`, tag `v1.0.0`, deploy to Altair, run onboarding. Compose defaults to Secure cookies: set `DORA_SECURE_COOKIES=false` only if prod is plain http. Configuration is env-only now; an old `appsettings.json` is ignored.
 2. 🟢 **FU-918:** confirm a companion push lands on production (the companion now sends `is_available` too, so deploy both).
 3. 🟢 **Recheck the walk fixes in `DORA_VERIFY.md`** on the rebuilt app (the lines kept "for recheck": delete-blocked dialog, Separate this cook, dark day chip, Help deep links, What's new, Small text, splash dialog, member Product Search buttons, Basic-mode answers).
 4. 🟢 **Device and operator checks** that no agent can do: the Android app and iOS lines, voice with a real mic (FU-722/751/853), camera, wake lock, install prompt; AI chat with a hosted provider key; Postgres `upgrade head`; gunicorn export.
-5. 🟡 **Leftovers from the walks, when convenient:** FU-976 (Build my week can exceed a budget it could meet; trim ignores estimates), FU-977 (a tampered backup isn't flagged and still restores; uploads not cleaned; uncached page with the API down shows the error screen), FU-973 (split-host CSRF; only matters for an app./api. deploy), FU-974 (two /health calls), FU-972 (scheduled backups, later).
+5. 🟡 **Leftovers, when convenient:** FU-978 (QA run 2 items still live: "1 pack" priced as one item, recipe not-found dead end, buy-verdict pack sizes), FU-976 (3)(4) and FU-977 (2)(4)-(6) minors, FU-973 (split-host CSRF; only matters for an app./api. deploy), FU-974 (two /health calls), FU-972 (scheduled backups, later).
 6. 🟡 **FU-946 (2)–(5):** assistant capabilities endpoint, DoraChat split, price-stat dedupe, current example model ids (your pick).
 7. 🟢 **Reported defects still awaiting a confirm:** FU-710, FU-769, FU-715, FU-736, FU-797, FU-729/739.
 

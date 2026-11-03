@@ -109,6 +109,21 @@ semver — major bumps signal schema or breaking-config changes.
   guide they name directly.
 
 ### Fixed
+- **A saved backup that was changed on disk can't be restored (2026-11-03).**
+  Only Download checked the file against the checksum taken when it was saved;
+  Restore went ahead. Both refuse now, and the library marks the backup Damaged.
+- **With the server down, opening a page you hadn't visited keeps the app on
+  screen.** It used to replace everything with the error screen; now the
+  "Can't reach Dora" banner shows and the rest of the app stays usable.
+- **The budget projection and trim-to-budget price lines the way the list does.**
+  A line priced only from what you paid last time counted toward the list total
+  but not toward the budget, so a list could read over budget with no trim
+  offer. Lines the trim set aside also stopped counting toward projected spend.
+- **Build my week says when the week it built is over budget,** and its budget
+  cap compares the same rounded meal costs it reports, so it no longer lands a
+  few cents over.
+- **Cook mode leaves an unscaled "½ onion" as written** instead of rounding it to 1.
+- Dropped three unused packages left over from removed features (cytoscape, konva).
 - **Fixes from the 1.0.0 browser walk (2026-11-02).** "Separate this cook" now
   separates the days instead of re-linking them. The selected day on the phone
   planner stays readable after a tap in dark themes. Deleting a stock item a

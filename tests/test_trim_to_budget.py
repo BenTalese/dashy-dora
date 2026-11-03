@@ -90,6 +90,7 @@ def _ctx(items, *, demand=None, verdicts=None, cover=None, habits=None):
         today=TODAY,
         stock_items_by_id={it.id: it for it in items},
         offer_by_product_id={},
+        last_paid_by_item={},
         demand=demand or {},
         habit_item_ids=set(habits or []),
     )

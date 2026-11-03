@@ -109,3 +109,29 @@ def test__store_ladder__intent_beats_history_and_bought_from_beats_all(api):
     line = _line(list_id)
     assert line["resolved_store_id"] == bought
     assert line["purchased_store_name"].startswith("LadderBought-")
+
+
+def test__money_ladder__budget_projection_and_trim_use_the_historic_rung(api):
+    # FU-976: the list total priced a line off its last receipt, while the
+    # budget projection and trim stopped at the offer rung, so a list could
+    # read over budget with no trim banner.
+    item = _item()
+    _bought_before(item, price=4.0, store_id=_store(f"LadderLast-{_suffix()}"))
+    baseline = requests.get(f"{BASE}/budget/status").json()["projected_active"]
+
+    list_id, _ = _list_with(item)
+    assert requests.get(f"{LISTS}/{list_id}").json()["totals"]["total_price"] == 4.0
+
+    status = requests.get(f"{BASE}/budget/status").json()
+    assert status["projected_active"] == round(baseline + 4.0, 2)
+    trim = requests.post(f"{LISTS}/{list_id}/trim-to-budget", json={"budget_target": 0})
+    assert trim.status_code == 200, trim.text
+    assert trim.json()["projected_total"] == 4.0
+
+    # QA2-14: a line the trim deferred is off the shop, so it leaves the
+    # projection the way it leaves the list's own total.
+    applied = requests.post(
+        f"{LISTS}/{list_id}/trim-to-budget", json={"budget_target": 0, "mode": "apply"},
+    ).json()
+    assert len(applied["trimmed"]) == 1
+    assert requests.get(f"{BASE}/budget/status").json()["projected_active"] == baseline

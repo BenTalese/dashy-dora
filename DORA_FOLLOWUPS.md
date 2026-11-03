@@ -29,6 +29,31 @@ long session summary. Distinct from the other logs:
 ## Entry template
 
 ```
+## [OPEN] FU-NNN — short title
+- **Raised:** YYYY-MM-DD (prompt id / task)
+- **Type:** follow-up | deferred job | leftover | finding
+- **What:** one or two lines.
+- **Why deferred:** the reason it wasn't done in-line.
+- **Recommended resolution:** now | later during <Phase/Prompt X> | when <trigger> | opportunistic
+```
+
+---
+
+
+## [OPEN] FU-978 — QA run 2 items still live or never re-checked (from FU-928)
+- **Raised:** 2026-11-03 (truth sweep of `docs/05_investigations/QA_RUN_2_2026-10-23.md`)
+- **Type:** findings
+- **What:** still live in code: QA2-17 (buy-verdict price samples are per pack across pack sizes), QA2-18 ("1 pack"
+  of a counted product is priced as one item from the pack; `UnitPrice` has no whole-pack price, `recipe_cost.py`
+  counted branch), QA2-19 (the recipe page's load-error banner shows the server's string with no heading or way back;
+  the list page has a heading), QA2-21 (no `VITE_API_BASE_URL` means `<host>:5170/api`; fine for the shipped
+  split-port compose, wrong for a single-origin deploy), QA2-12 (household timezone defaults to UTC if onboarding is
+  skipped; onboarding now sets it from the device), QA2-32 (cookbook cost chip says "per serving" only in its
+  tooltip), QA2-44 (unknown recipe yield counts as 1, owner call). Not re-checked, phone or live only: QA2-11, 16,
+  20, 25, 26, 27, 30, 31, 36, 37.
+- **Recommended resolution:** opportunistic; QA2-18 and QA2-19 first (wrong money, dead end). The not-re-checked
+  ones on the next phone walk.
+
 ## [OPEN] FU-977 — Walk C leftovers: tampered backups, staged uploads, API-down crash, import template, feature-import guard
 - **Raised:** 2026-11-01 (finish-off walk C)
 - **Type:** findings
@@ -40,7 +65,11 @@ long session summary. Distinct from the other logs:
   "In stock", which isn't a seeded level, and its comment has an em dash. (5) a broken feature package fails first in
   `dora_api/jobs.py:26` with a bare traceback, so the "Feature package … failed to import" guard never speaks; an empty
   `__init__.py` removed just imports as a namespace package. (6) Store mappings' store picker isn't sorted.
-- **Recommended resolution:** (1) and (3) before the next deploy if cheap; the rest opportunistic.
+- **Recommended resolution:** opportunistic.
+- **Progress (2026-11-03):** (1) fixed: Restore checks the checksum too (one `_refuse_on_checksum_mismatch` for both
+  routes) and the library row shows a Damaged chip, refreshed after a refused download or restore. (3) fixed: the
+  error boundary hands unreachable-API errors (network, 502/503/504) to the offline banner and keeps the shell. Open:
+  (2), (4), (5), (6).
 
 ## [OPEN] FU-976 — Walk D leftovers: build-my-week over budget, trim ignores estimates, per-card dashboard errors, minors
 - **Raised:** 2026-11-01 (finish-off walk D)
@@ -53,7 +82,11 @@ long session summary. Distinct from the other logs:
   toasts for one price-save failure; the waste dialog's focus leaves the dialog after the last tile; Pantry staples and
   Fruit & Veg hash to the same bar colour; "Find a lighter option" is offered on batched entries but always returns
   nothing.
-- **Recommended resolution:** (1) and (2) are the user-visible ones, next planner/budget unit; the rest opportunistic.
+- **Recommended resolution:** opportunistic.
+- **Progress (2026-11-03):** (2) fixed: one shared `latest_purchases` read gives the budget projection and trim the
+  same last-paid rung the list total uses. (1): the swap loop already finds the cheapest week the pool allows; the gap
+  was comparing unrounded costs while the response sums rounded entries (now the same), and the review step now says
+  when the built week is over what's left (`budget_remaining` on the auto-build response). Open: (3), (4).
 
 ## [OPEN] FU-974 — A cold load makes two `/api/health` requests
 - **Raised:** 2026-11-01 (finish-off walk E; unit 13 promised one)
@@ -80,16 +113,6 @@ long session summary. Distinct from the other logs:
   APScheduler job beside the other nightly jobs: take a library backup when any table changed since the last one, keep
   the last N.
 - **Recommended resolution:** later, after 1.0.0 ships.
-
-## [OPEN] FU-NNN — short title
-- **Raised:** YYYY-MM-DD (prompt id / task)
-- **Type:** follow-up | deferred job | leftover | finding
-- **What:** one or two lines.
-- **Why deferred:** the reason it wasn't done in-line.
-- **Recommended resolution:** now | later during <Phase/Prompt X> | when <trigger> | opportunistic
-```
-
----
 
 ## [OPEN] FU-970 — Dashboard greeting uses the device's weekday, not the household's
 - **Raised:** 2026-10-30 (finish-off walk A, Pago Pago household on a Sydney device)
@@ -123,7 +146,8 @@ long session summary. Distinct from the other logs:
   `GET /stock-items/<deleted>/detail` (404, console only) in the scripted journey; a hand-built repro did not show it —
   confirm in the browser.
 - **Why deferred:** each is small but outside the obvious-bug remit, and (1) needs a decision.
-- **Recommended resolution:** (5) now-ish (a time bomb); the rest opportunistic.
+- **Recommended resolution:** opportunistic.
+- **Progress (2026-11-03):** (5) fixed: the print tests use a future Monday (`_future_monday`).
 
 ## [OPEN] FU-968 — My Products renders every product row at once (2,859 cards, ~5.6 s of main-thread work, 125 MB heap on a 2000-item pantry)
 - **Raised:** 2026-10-30 (autonomous QA round 3, UI scale run against a 2000-item bulk seed)
@@ -494,34 +518,6 @@ long session summary. Distinct from the other logs:
   is a latent trap, not a live bug.
 - **Recommended resolution:** when an iOS build is first attempted — add the key
   before the first device run, not after the first crash.
-## [OPEN] FU-928 — QA run 2 findings: 44 numbered items await fixing (9 High)
-- **Raised:** 2026-10-23 (independent QA run 2; report at
-  `docs/05_investigations/QA_RUN_2_2026-10-23.md`)
-- **Type:** finding (umbrella)
-- **What:** a full-app QA pass: 75-route crawl on desktop and phone, a probe of all 304 API routes,
-  a fresh install built by migrations, and four static sub-audits. It produced 44 numbered findings,
-  tagged LIVE / CODE / STATIC, plus ~35 static-only leads.
-  - **High:** QA2-01 stored XSS through image data-URL mimetypes; QA2-02 open self-registration;
-    QA2-03 reset-link `Origin` poisoning; QA2-04 password change keeps old sessions;
-    QA2-05 stock-value report inverted (Stocked counts $0); QA2-06 trim-to-budget never sees meal
-    demand (`noload`); QA2-07 meal-plan aggregate sums mixed units; QA2-08 expiry icon goes red at
-    10:00 on the expiry day; QA2-09 CSP blocks `blob:` media, so server voice can't play (extends
-    FU-853).
-  - **Overlap:** the report has a table mapping duplicates with QA agent 1
-    (`QA_RUN_AGENT1_2026-10-22.md`). Fix each defect once.
-- **Why deferred:** this was a QA-only run by owner instruction ("write your results down for another
-  agent to fix later"). No code was changed.
-- **Recommended resolution:** now / during finalisation. Split into per-surface FUs, or fix in the
-  report's suggested order, as the fixing agent picks them up. Tick items in the report as they land.
-  QA2-41..44 need owner decisions first.
-- **Progress (2026-10-30):** **SEC-2, SEC-3 and SEC-4 fixed** (QA2-02/03/04). SEC-3: `AppSetting.registration_enabled`
-  (migration `a8d3e6f1b2c9`, off by default and on upgrade), enforced in `register_user`, surfaced through
-  `/auth/capabilities`, admin switch on Settings → Users. SEC-4: one `resolve_session_user` (`infrastructure/session_user.py`)
-  run by the middleware on every protected route, and by `/auth/me` and `require_admin`. SEC-2: `public_base_url()`
-  never reads request headers; link mails skip on a production install without a public URL
-  (`try_send_link_mail`). Tests in `test_auth_flows.py` + `test_auth_link_builders.py`.
-- **Progress (2026-10-24):** **QA2-01 / SEC-1 fixed** — every image route serves through `infrastructure/data_url.py`, which only serves raster image types (`text/html`, SVG etc. read as no image); pinned by `tests/test_data_url.py` + a recipe-route e2e test. Also fixed in the finalisation sweep: QA2-13 budget UTC bounds (12-R2, 2026-10-23). The rest stay open here.
-
 ## [OPEN] FU-926 — `normalise_unit` idempotence property failed once, passed on rerun
 - **Raised:** 2026-10-17 (full pytest during the owner batch; nothing unit-related changed)
 - **Type:** finding
@@ -3628,19 +3624,6 @@ Resolved entries carry one extra line, and live in `DORA_FOLLOWUPS_RESOLVED.md`:
 - **Recommended resolution:** when the owner has walked the matching page against a
   real USDA import (see the `DORA_VERIFY.md` item) and can say how often it actually
   bites — that read should decide whether this is a 30-word constant or a real feature.
-
-## [OPEN] FU-642 — `stockLevelDot.spec.ts` has 2 failing tests on the working tree
-- **Raised:** 2026-08-15 (mobile-header task — hit while running the frontend suite).
-- **Type:** finding.
-- **What:** `web_app/test/unit/stockLevelDot.spec.ts` fails 2 of 3 cases: the
-  out-of-stock / unknown avatar is expected to carry `dora-bg-neutral` but renders
-  `bg-negative`. Suite is otherwise green (434 passing).
-- **Why deferred:** Pre-existing — reproduced identically on a `git stash`ed tree,
-  so it belongs to the in-flight stock-row work, not the header change. Out of scope
-  to fix blind (the spec or the component is the stale one; that's a call for whoever
-  owns the current `StockLevelDot` colour semantics, and D-001 governs it).
-- **Recommended resolution:** now — it's a red suite, and whoever is mid-flight on
-  the stock-row rework can settle it in a minute.
 
 ## [OPEN] FU-639 — Camera scanning needs HTTPS on the **web** build; pick the self-host TLS story
 - **Raised:** 2026-08-15 (stock-overview feedback round)

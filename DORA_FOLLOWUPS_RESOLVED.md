@@ -10,6 +10,55 @@ resolutions go at the **top**.
 
 ---
 
+## [RESOLVED] FU-928 — QA run 2 findings: 44 numbered items await fixing (9 High)
+- **Raised:** 2026-10-23 (independent QA run 2; report at
+  `docs/05_investigations/QA_RUN_2_2026-10-23.md`)
+- **Type:** finding (umbrella)
+- **What:** a full-app QA pass: 75-route crawl on desktop and phone, a probe of all 304 API routes,
+  a fresh install built by migrations, and four static sub-audits. It produced 44 numbered findings,
+  tagged LIVE / CODE / STATIC, plus ~35 static-only leads.
+  - **High:** QA2-01 stored XSS through image data-URL mimetypes; QA2-02 open self-registration;
+    QA2-03 reset-link `Origin` poisoning; QA2-04 password change keeps old sessions;
+    QA2-05 stock-value report inverted (Stocked counts $0); QA2-06 trim-to-budget never sees meal
+    demand (`noload`); QA2-07 meal-plan aggregate sums mixed units; QA2-08 expiry icon goes red at
+    10:00 on the expiry day; QA2-09 CSP blocks `blob:` media, so server voice can't play (extends
+    FU-853).
+  - **Overlap:** the report has a table mapping duplicates with QA agent 1
+    (`QA_RUN_AGENT1_2026-10-22.md`). Fix each defect once.
+- **Why deferred:** this was a QA-only run by owner instruction ("write your results down for another
+  agent to fix later"). No code was changed.
+- **Recommended resolution:** now / during finalisation. Split into per-surface FUs, or fix in the
+  report's suggested order, as the fixing agent picks them up. Tick items in the report as they land.
+  QA2-41..44 need owner decisions first.
+- **Progress (2026-10-30):** **SEC-2, SEC-3 and SEC-4 fixed** (QA2-02/03/04). SEC-3: `AppSetting.registration_enabled`
+  (migration `a8d3e6f1b2c9`, off by default and on upgrade), enforced in `register_user`, surfaced through
+  `/auth/capabilities`, admin switch on Settings → Users. SEC-4: one `resolve_session_user` (`infrastructure/session_user.py`)
+  run by the middleware on every protected route, and by `/auth/me` and `require_admin`. SEC-2: `public_base_url()`
+  never reads request headers; link mails skip on a production install without a public URL
+  (`try_send_link_mail`). Tests in `test_auth_flows.py` + `test_auth_link_builders.py`.
+- **Progress (2026-10-24):** **QA2-01 / SEC-1 fixed** — every image route serves through `infrastructure/data_url.py`, which only serves raster image types (`text/html`, SVG etc. read as no image); pinned by `tests/test_data_url.py` + a recipe-route e2e test. Also fixed in the finalisation sweep: QA2-13 budget UTC bounds (12-R2, 2026-10-23). The rest stay open here.
+- **State:** 2026-11-03, truth sweep against the code. Fixed by the later sweeps (the report was never ticked):
+  QA2-01..10, 13, 22..24, 28, 29, 33 (zero meals documented as a `last_made_on` bump), 41..43 (owner calls built:
+  SEC-3 registration switch, done lists refuse lines, inline email edit kept by design). Fixed this session: QA2-14
+  (projection skips deferred lines), QA2-15 (one ladder for list total, projection and trim), QA2-34 (cytoscape,
+  konva, vue-konva dropped), QA2-35 (unscaled counts stand as written). QA2-39 is FU-952, QA2-40 is FU-926. Every
+  item still live or never re-checked moved to FU-978.
+
+
+## [RESOLVED] FU-642 — `stockLevelDot.spec.ts` has 2 failing tests on the working tree
+- **Raised:** 2026-08-15 (mobile-header task — hit while running the frontend suite).
+- **Type:** finding.
+- **What:** `web_app/test/unit/stockLevelDot.spec.ts` fails 2 of 3 cases: the
+  out-of-stock / unknown avatar is expected to carry `dora-bg-neutral` but renders
+  `bg-negative`. Suite is otherwise green (434 passing).
+- **Why deferred:** Pre-existing — reproduced identically on a `git stash`ed tree,
+  so it belongs to the in-flight stock-row work, not the header change. Out of scope
+  to fix blind (the spec or the component is the stale one; that's a call for whoever
+  owns the current `StockLevelDot` colour semantics, and D-001 governs it).
+- **Recommended resolution:** now — it's a red suite, and whoever is mid-flight on
+  the stock-row rework can settle it in a minute.
+- **State:** 2026-11-03, stale: `stockLevelDot.spec.ts` passes in the full vitest run (866/866).
+
 ## [RESOLVED] FU-963 — Accessibility: colour contrast and nested interactive rows (axe-core, 2026-10-30)
 - **Raised:** 2026-10-30 (autonomous QA round 2, axe-core WCAG 2.1 AA at 1280 and 375)
 - **Type:** finding (design-level; the mechanical defects — names, labels, roles, scroll focus, 44px settings nav —

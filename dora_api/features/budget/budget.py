@@ -56,7 +56,9 @@ from dora_api.domain.entities.app_setting import (ALLOWED_BUDGET_PERIODS,
                                                   BUDGET_PERIOD_MONTHLY,
                                                   BUDGET_PERIOD_WEEKLY)
 from dora_api.features.routers import BUDGET_ROUTER
-from dora_api.features.shopping_lists._line_price import (line_paid_unit_price,
+from dora_api.features.shopping_lists._line_price import (LastPurchase,
+                                                         latest_purchases,
+                                                         line_paid_unit_price,
                                                          spend_lines)
 from dora_api.persistence.aware import as_utc
 from dora_api.infrastructure.api_response import bad_request, ok, unauthorized
@@ -187,19 +189,23 @@ def period_headroom(
 
 # ── Line-price ladder ────────────────────────────────────────────────────
 # The actual→picked ladder lives in `shopping_lists._line_price`
-# (`line_paid_unit_price`, K2 extract). Budget's projection adds one more
-# rung (the selected product's *current* offer) on top of it.
+# (`line_paid_unit_price`, K2 extract). Budget's projection adds the
+# selected product's *current* offer, then the item's last price paid,
+# the same rungs the list detail's total uses.
 
 
 def projected_unit_price(
     line: ShoppingListLine,
     current_offer_lookup: dict[UUID, ProductOffer],
+    last_paid_by_item: dict[UUID, LastPurchase],
 ) -> float | None:
     """Price for a line on an active list. Tries actual → snapshot →
-    current offer of the selected product. Lines without any of those
-    don't contribute. Public — the trim-to-budget optimiser reads the
-    same ladder so the projected figure it constrains against matches
-    the dashboard's projection to the cent."""
+    current offer of the selected product → last price paid for the item.
+    Lines without any of those don't contribute. Public — the
+    trim-to-budget optimiser reads the same ladder, so the figure it
+    constrains against matches the dashboard's projection and the list's
+    own total (FU-976: without the historic rung a list priced off your
+    receipts showed a total over budget and no trim banner)."""
     direct = line_paid_unit_price(line)
     if direct is not None:
         return direct
@@ -207,6 +213,8 @@ def projected_unit_price(
         offer = current_offer_lookup[line.selected_product_id]
         if offer.price_now is not None:
             return float(offer.price_now)
+    if line.stock_item_id and line.stock_item_id in last_paid_by_item:
+        return last_paid_by_item[line.stock_item_id][1]
     return None
 
 
@@ -294,12 +302,21 @@ class GetBudgetStatusHandler:
                 # ProductOffer's FK is mapped as `_product_id` (table_mappings).
                 offer_lookup[offer._product_id] = offer
 
+        last_paid = latest_purchases(
+            self.repository,
+            list({l.stock_item_id for l in active_lines if l.stock_item_id}),
+        )
+
         projected_active = 0.0
         for line in active_lines:
+            # A line trim-to-budget deferred is off the shop (QA2-14), the
+            # same rule `compute_list_totals` applies to the list's own total.
+            if line.deferred_by_budget:
+                continue
             qty = line.quantity if line.quantity is not None else 1
             if qty <= 0:
                 continue
-            price = projected_unit_price(line, offer_lookup)
+            price = projected_unit_price(line, offer_lookup, last_paid)
             if price is not None:
                 projected_active += price * qty
 

@@ -45,6 +45,18 @@
                         <div class="backup-row__title">
                             {{ formatBackupTimestamp(row.created_at) }}
                             <q-chip
+                                v-if="row.status === 'failed'"
+                                dense
+                                size="sm"
+                                class="dora-chip--tint-negative"
+                                :icon="ICONS.error"
+                            >
+                                Damaged
+                                <BaseTooltip max-width="300px">
+                                    This file no longer matches the copy Dora saved, so it can't be downloaded or restored.
+                                </BaseTooltip>
+                            </q-chip>
+                            <q-chip
                                 v-if="rowIncludesSensitive(row)"
                                 dense
                                 size="sm"
@@ -729,6 +741,7 @@
                 message: "Couldn't download backup.",
                 caption: toastCaption(err),
             });
+            await loadLibrary();
         }
     }
 
@@ -757,6 +770,7 @@
                 message: "Restore failed.",
                 caption: toastCaption(err),
             });
+            await loadLibrary();
         }
     }
 
