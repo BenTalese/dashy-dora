@@ -39,25 +39,23 @@ class MealSlotDto:
     name: str
     sequence: int
     # Slots are not FKs; count usages by matching the stored label string on
-    # both meal-plan entries and recipe `time_of_day` values.
+    # meal-plan entries (the number the delete reports; recipe `time_of_day`
+    # labels are kept either way).
     usage_count: int
 
 
 # ───── List ──────────────────────────────────────────────────────────────
 
 def _slot_usage_counts() -> dict[str, int]:
-    """Label -> uses across meal-plan entries and recipe `time_of_day`.
-    R-005 carve-out: grouped counts the generic repository has no port for."""
-    entry = db.metadata.tables["MealPlanEntry"]
-    recipe = db.metadata.tables["Recipe"]
-    counts: dict[str, int] = {}
-    for column in (entry.c.slot, recipe.c.time_of_day):
-        rows = db.session.execute(
-            select(column, func.count()).where(column.is_not(None)).group_by(column)
-        ).all()
-        for label, n in rows:
-            counts[label] = counts.get(label, 0) + int(n)
-    return counts
+    """Label -> planned meals using it. Recipe `time_of_day` used to be added
+    in, so Settings said "24 entries" where the planner held 14 (walk D,
+    2026-11-01). R-005 carve-out: a grouped count the generic repository has
+    no port for."""
+    column = db.metadata.tables["MealPlanEntry"].c.slot
+    rows = db.session.execute(
+        select(column, func.count()).where(column.is_not(None)).group_by(column)
+    ).all()
+    return {label: int(n) for label, n in rows}
 
 
 class GetMealSlotsHandler:

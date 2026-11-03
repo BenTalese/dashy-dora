@@ -29,6 +29,58 @@ long session summary. Distinct from the other logs:
 ## Entry template
 
 ```
+## [OPEN] FU-977 — Walk C leftovers: tampered backups, staged uploads, API-down crash, import template, feature-import guard
+- **Raised:** 2026-11-01 (finish-off walk C)
+- **Type:** findings
+- **What:** (1) a backup whose file no longer matches its checksum is marked `failed` by Download, but the library row
+  never shows the status (`AdminDataBackupRestore.vue:42-67`), and Restore of the same file succeeds (only Download
+  checks). (2) staged upload `.bin` files stay in `<data>/uploads` after a successful restore. (3) with the API down and
+  the service worker controlling, opening a page whose data isn't cached (Cookbook) shows the full-screen error boundary
+  instead of the shell with the "Can't reach Dora" banner. (4) the import template's example row uses the level
+  "In stock", which isn't a seeded level, and its comment has an em dash. (5) a broken feature package fails first in
+  `dora_api/jobs.py:26` with a bare traceback, so the "Feature package … failed to import" guard never speaks; an empty
+  `__init__.py` removed just imports as a namespace package. (6) Store mappings' store picker isn't sorted.
+- **Recommended resolution:** (1) and (3) before the next deploy if cheap; the rest opportunistic.
+
+## [OPEN] FU-976 — Walk D leftovers: build-my-week over budget, trim ignores estimates, per-card dashboard errors, minors
+- **Raised:** 2026-11-01 (finish-off walk D)
+- **Type:** findings
+- **What:** (1) Build my week's budget cap is best-effort: at $38 one run went over a budget it could meet, and the
+  review step never says it is over (`projected_over` isn't read by `MealPlanBuilderDialog.vue`). (2) trim-to-budget and
+  the budget projection count only actual/offer prices, while the list total also uses historic-price estimates
+  (`budget/budget.py:194-210`), so a $59.50 list can show no trim banner. (3) with the summary call failing the whole
+  dashboard collapses to one "couldn't load your dashboard" panel rather than per-card errors. (4) minors: two error
+  toasts for one price-save failure; the waste dialog's focus leaves the dialog after the last tile; Pantry staples and
+  Fruit & Veg hash to the same bar colour; "Find a lighter option" is offered on batched entries but always returns
+  nothing.
+- **Recommended resolution:** (1) and (2) are the user-visible ones, next planner/budget unit; the rest opportunistic.
+
+## [OPEN] FU-974 — A cold load makes two `/api/health` requests
+- **Raised:** 2026-11-01 (finish-off walk E; unit 13 promised one)
+- **Type:** finding
+- **What:** the network-status probe (`useNetworkStatus.probeOnce`, a `cache: 'no-store'` fetch) and
+  `healthApiService.getInfoAsync` (XHR) each fetch `/api/health` at boot. The probe has to bypass the service worker, so
+  the fix is letting the info load count as the first reachability answer, not merging them blindly.
+- **Recommended resolution:** opportunistic, next time `useNetworkStatus` is open.
+
+## [OPEN] FU-973 — Split host (app. / api.): every write is refused for CSRF
+- **Raised:** 2026-11-01 (finish-off walk E, simulated app.dora.test + api.dora.test)
+- **Type:** finding (real bug for a split-host deploy)
+- **What:** the `dora_csrf` cookie is set on the API host only, so the SPA on the app host can't read it to echo the
+  header; push-expiry and trim-to-budget return 403 "Missing or invalid CSRF token". Login and reads work. Needs a
+  cookie-domain setting (e.g. `DORA_COOKIE_DOMAIN=.dora.test`) or the token returned in a response body/header.
+  (`axiosHttpClient.readCsrfCookie`, `csrf.py ensure_cookie`.)
+- **Recommended resolution:** before anyone deploys app and API on separate hosts; same-origin (the shipped compose)
+  is unaffected.
+
+## [OPEN] FU-972 — Scheduled backups (nightly if anything changed)
+- **Raised:** 2026-11-01 (finalisation 18-D1; owner: "later yes")
+- **Type:** deferred job
+- **What:** `BackupRecord.trigger_kind` was added for scheduled backups (FU-342) but nothing schedules one. A small
+  APScheduler job beside the other nightly jobs: take a library backup when any table changed since the last one, keep
+  the last N.
+- **Recommended resolution:** later, after 1.0.0 ships.
+
 ## [OPEN] FU-NNN — short title
 - **Raised:** YYYY-MM-DD (prompt id / task)
 - **Type:** follow-up | deferred job | leftover | finding
@@ -38,22 +90,6 @@ long session summary. Distinct from the other logs:
 ```
 
 ---
-
-## [OPEN] FU-971 — Finish-off step 3 cut short: browser-verify walks B–E not done (~165 checks since 10-23)
-- **Raised:** 2026-10-30 (finish-off session; owner asked to wrap up and continue later)
-- **Type:** deferred job
-- **What:** step 3 of the finish-off plan (walk the browser checks, fix what fails, delete what passes) was split
-  into five agent slices. Walk A finished (17 deleted, evidence in `DORA_VERIFY_TRIAGE.md`). Walks B–E were stopped
-  mid-run with no results kept: **B** = "Autonomous QA round 2" + "Autonomous QA sweep (2026-10-29)"; **C** = "Help
-  area redesign" + finalisation units 24–30; **D** = units 16–23; **E** = units 11–14 + units 1–10 (all sections in
-  `DORA_VERIFY.md`). Recipe that worked: one seeded backend per walker
-  (`DORA_DEBUG=true DORA_ALLOW_DESTRUCTIVE=true DORA_DB_PATH=<scratch>/walk.db DORA_API_PORT=518N
-  DORA_SPA_DIR=<repo>/web_app/dist/spa python web_app/e2e/serve.py`), scratch Playwright on Chrome, verify-only
-  agents reporting PASS/FAIL/NEEDS-*; the coordinator fixes and deletes. Traps: use `127.0.0.1`, not `localhost`
-  (another project's Vite answers on `::1`); **rebuild the SPA in PWA mode first (`npm run build`)**. The current
-  `dist/spa` was built with `-m spa`, so it has no service worker and the unit-27 offline checks can't pass.
-- **Recommended resolution:** next session, as the continuation of the finish-off plan; then step 4's open items
-  (pick the release version, tag), then step 5 (owner: FU-965 prod check, deploy).
 
 ## [OPEN] FU-970 — Dashboard greeting uses the device's weekday, not the household's
 - **Raised:** 2026-10-30 (finish-off walk A, Pago Pago household on a Sydney device)
@@ -115,21 +151,6 @@ long session summary. Distinct from the other logs:
   (`StockItemProduct`), price observations, shopping-list lines, recipe ingredients/steps on the production DB against
   a pre-upgrade backup; the `DORA_VERIFY` operator line names the queries.
 - **Recommended resolution:** **now** — one look at the production DB (or its last backup) before the next deploy.
-
-## [OPEN] FU-963 — Accessibility: colour contrast and nested interactive rows (axe-core, 2026-10-30)
-- **Raised:** 2026-10-30 (autonomous QA round 2, axe-core WCAG 2.1 AA at 1280 and 375)
-- **Type:** finding (design-level; the mechanical defects — names, labels, roles, scroll focus, 44px settings nav —
-  were fixed in the same round)
-- **What:** (1) **color-contrast** fails on 132 page×width combinations: the header's `.dora-brand-text` on every page,
-  plus muted text on /stock (9 nodes), /my-products (14), reports and settings — the FU-674 / FU-801 / FU-850 token
-  family. Re-run the scratch `a11y.mjs` against a seeded backend to regenerate `violations.json`. (2)
-  **nested-interactive**: the planner's slot row (`<button class="slot-row">` with focusable children), the shopping
-  run row (`div[role=button]` wrapping buttons; the plan row's quantity input inside a button, reported 2026-10-29) and
-  the templates card (`role=button` card with its own buttons) — keyboard users can't reach the inner controls
-  predictably. Fix shape: the row is a plain container with one explicit "open" control, or the inner controls move
-  out of the clickable area (the stock row's `openFocused` pattern).
-- **Why deferred:** contrast is a palette decision (D-rules + themes); the rows are layout restructures.
-- **Recommended resolution:** contrast with FU-674; rows one surface at a time, planner first.
 
 ## [OPEN] FU-962 — Native shell: Android cleartext (plain http:// home servers) and downloads in the WebView
 - **Raised:** 2026-10-30 (autonomous QA round 2)
@@ -194,15 +215,6 @@ long session summary. Distinct from the other logs:
   through the 2026-10-29 dup-key map); (2) needs a topological sort or a second pass for self-FKs.
 - **Recommended resolution:** with the next backup/restore unit; before any cross-install restore is advertised.
 
-## [OPEN] FU-954 — `scanning_enabled` is a client-only gate; the barcode routes don't check it
-- **Raised:** 2026-10-29 (autonomous QA sweep)
-- **Type:** finding (question)
-- **What:** the install-wide `scanning_enabled` flag hides the scan + QR surface in the SPA, but `data/barcodes.py` and
-  the QR routes serve regardless. Harmless for a household install; wrong if the flag is meant as a policy (the same
-  shape FU-866 calls out for the ingest route's flag).
-- **Why deferred:** intent question — hide-only (R-029) or enforce.
-- **Recommended resolution:** opportunistic, alongside FU-866.
-
 ## [OPEN] FU-953 — Planner leftovers from the QA sweep: only add/adjust are queued; the stepper isn't disabled while a save is pending
 - **Raised:** 2026-10-29 (autonomous QA sweep; R-101)
 - **Type:** leftover
@@ -252,24 +264,6 @@ long session summary. Distinct from the other logs:
 - **Recommended resolution:** (1) next time `CollapsibleCard` or the stock-item page is open; (2) when a list with many
   linked products makes the buy-verdict page slow, or with FU-947's `product_id` mapping change.
 
-## [OPEN] FU-949 — `pywebview==5.4` is pinned but nothing imports it; the ops design calls (19-D1..D4)
-- **Raised:** 2026-10-27 (finalisation 19-R15 / 19-D1–D4; noticed while dropping the `webview.platforms.gtk` hidden import)
-- **Type:** leftover + decision
-- **What:** (1) `requirements.txt:10` pins `pywebview==5.4` and the three packaging scripts describe a pywebview window,
-  but `desktop_app.py:314` opens the default browser instead and no module imports `webview`; the pin pulls a native-UI
-  dependency into every image and venv. Drop it (and the GTK/WebView2 notes in `packaging/build-*.sh|ps1`) or revive the
-  window — owner call. (2) **19-D1:** the shipped compose boots production with `DORA_SECURE_COOKIES=false`, so the
-  "deliberate opt-out" banner fires on every default boot; recommend keep `false` (LAN-first), keep the banner once, and
-  add the TLS/proxy recipe (15-R1) to README. (3) **19-D2:** after 19-R13 `appsettings.json` carries `API_HOST` /
-  `API_PORT` / `LOG_LEVEL` only, all env-overridable — retire the file (env-only, FU-333's direction) with a one-boot
-  "ignored" warning. (4) **19-D3:** `/api/health` can't say "degraded" (a DB outage still answers `ok: true`) — add
-  `"db": "ok" | "unreachable"`. (5) **19-D4 / FU-640:** log 4xx on mutating routes at WARNING and default the container to
-  INFO.
-- **Why deferred:** (1) touches the desktop packaging story; (2)–(5) are owner policy calls the finalisation review
-  recorded as decisions, not findings.
-- **Recommended resolution:** (1) now (one line + three comments) once the owner picks; (2)–(5) owner, with the
-  Stage 2 close-out.
-
 ## [OPEN] FU-948 — Backup / import leftovers from the finalisation review: inspect dedupe, the two page splits
 - **Raised:** 2026-10-27 (finalisation 18-R10, 18-R18, 18-R19; noticed while landing 18-R7)
 - **Type:** leftover (R-001 / R-003)
@@ -299,6 +293,7 @@ long session summary. Distinct from the other logs:
   (4) was outside the 12-R3 finding's listed sites.
 - **Recommended resolution:** (1) chunk 20; (2) with FU-831; (3) owner, now; (4) opportunistic, next time `spend.py` is
   open.
+- **Progress (2026-11-01):** (3) answered: owner confirms Reports as it stands is in the 90%.
 
 ## [OPEN] FU-946 — Assistant leftovers from the finalisation review: help corpus, capabilities, page split, example ids
 - **Raised:** 2026-10-27 (finalisation 11-R25, 11-R26, 11-R30, 11-R42, 11-R16, 11-D1, 11-D4)
@@ -318,6 +313,7 @@ long session summary. Distinct from the other logs:
 - **Recommended resolution:** (1)+(2) together after 20-D4; (3) with FU-934's page splits; (4) opportunistic; (5)/(6)
   owner.
 - **2026-10-29:** **20-D4 is decided and built** (one page per topic + Common questions + screenshot slot; see the worklog). The help corpus is now data in `web_app/src/help/helpContent.ts` (`HELP_TOPICS`), so item (1)'s `app_help(topic)` tool has a source to read; item (2) is moot — `DoraHelpPage.vue` is deleted and the Dora topic holds the user-facing copy without a tool list.
+- **Progress (2026-11-01):** (1) built on owner 11-D1: `app_help(topic)` data tool over `dora_api/features/help/help_corpus.json`, exported from `helpContent.ts` with the drift spec `helpCorpusExport.spec.ts`; APP_OVERVIEW cut to a routing guide. (6) built: one-shot glow on the slider flip. (2)-(5) remain.
 
 ## [OPEN] FU-945 — `ConsumptionEvent.from_sequence` / `to_sequence` are written but never read
 - **Raised:** 2026-10-24 (finalisation 07-R10, 07-D2)
@@ -583,19 +579,6 @@ long session summary. Distinct from the other logs:
 - **Why deferred:** a rename across seven call sites is unrelated churn in a
   feedback batch.
 - **Recommended resolution:** opportunistic.
-
-## [OPEN] FU-919 — Dora's name-based store mapping is now unused by the companion
-- **Raised:** 2026-10-15 (companion store mapping moved companion-side)
-- **Type:** finding
-- **What:** the companion now pushes by Dora `store_id` and keeps its own
-  scraper → store map. `IngestionStoreMapping`, the quarantine path and the
-  "Store mappings" section on Dora's API access page only serve producers that
-  push by name. None exist besides the companion. Decide whether to keep the
-  name path for third-party producers or remove it (and the API page section).
-- **Why deferred:** it is a contract decision (PROPOSAL_INGESTION_API), not a
-  cleanup.
-- **Recommended resolution:** owner decision, later during Phase 2.
-- **2026-10-23 (finalisation Stage 1):** recorded as owner decision **16-D1** in CHUNK_16; recommendation: keep the name-based path (third-party producers, the power-user guide). Stage 2's 16-R6 refactor waits on this call.
 
 ## [OPEN] FU-918 — Companion "Push failed (502)" reported; root cause found, confirm with real data
 - **Raised:** 2026-10-15 (owner batch, product search)
@@ -1726,26 +1709,6 @@ long session summary. Distinct from the other logs:
 - **Recommended resolution:** opportunistic, with FU-791 — this entry exists only
   so the next reader of FU-791 knows the file moved since it was written.
 
-## [OPEN] FU-801 — `--brand-primary` fails the same ink test as the accent did (R-069)
-- **Raised:** 2026-09-01 (accent-ink sweep)
-- **Type:** finding
-- **What:** measured while fixing the accent. As *ink* on its own theme's
-  component/page surfaces, `--brand-primary` lands at **1.63:1** (lemon-tart),
-  **2.34:1** (sourdough), **3.89:1** (pesto) and **4.01:1** (blueberry) — only
-  cherry-cola clears 4.5. Same class of bug as the accent, same fix shape
-  (`--primary-ink` + split call sites by ground, per R-069).
-- **Why deferred:** different size of job. The accent was consumed through CSS
-  vars at ~20 sites, so it was a contained sweep. Primary is consumed
-  overwhelmingly through Quasar's own `color="primary"` / `text-primary`
-  machinery (buttons, chips, icons, links) rather than through `var(--…)`, so
-  fixing it properly means deciding how the ink token reaches Quasar's classes —
-  not a change to bolt onto an owner-feedback batch.
-- **Impact check first:** many `color="primary"` sites are *fills* (a solid
-  button paints `--text-on-primary` over it) and are perfectly fine. The job
-  starts with an inventory of primary-as-ink sites, not with a blanket swap.
-- **Recommended resolution:** later, as its own unit — pair it with the next
-  theme/contrast pass.
-
 ## [OPEN] FU-800 — the burger glyph wants an eyes-on pass at 12–14px
 - **Raised:** 2026-09-01 (Dora-voice icon unification)
 - **Type:** follow-up
@@ -2067,30 +2030,6 @@ long session summary. Distinct from the other logs:
 - **Recommended resolution:** **opportunistic** — next time `AddToListButton` or
   its spec is touched. Likely fixed by awaiting the dialog's close (or a
   `vi.useFakeTimers()` drain) before the test ends.
-
-## [OPEN] FU-777 — `ExpiringChip`'s neutral state uses a numbered Quasar palette class
-- **Raised:** 2026-08-28 (found by the widened R-002 detector during the toast fix)
-- **Type:** finding
-- **What:** [ExpiringChip.vue:67](web_app/src/components/recipes/ExpiringChip.vue)'s
-  default branch returns `{ color: 'grey-7', textColor: 'white' }`. `grey-7` is a
-  numbered Quasar palette class, which **R-002 names explicitly** as a violation —
-  it's a fixed mid-grey that ignores the theme, so the "at risk but not urgent"
-  chip reads the same in every palette and sits wrong on the dark ones. R-002's
-  own **Apply** clause prescribes the fix: route the neutral branch through
-  `dora-bg-sunken dora-text-secondary` and keep only the saturated
-  `negative`/`warning` branches on `color=`/`text-color="white"`.
-- **Why deferred:** scope — the session that found it was fixing toasts, and this
-  is a different component on a different surface. Pre-existing, not introduced.
-- **Recommended resolution:** **needs an owner call, then one-line.** Updated
-  2026-09-01: the recipe-view chip batch touched the adjacent run and did *not*
-  fix this, deliberately. There are now two shared chip classes in
-  `colours.scss` and this chip sits between them — `.dora-chip--neutral`
-  (yesterday's answer for the cookbook's dietary + belief chips, which this
-  chip sits beside) and `.dora-chip--tint` (today's answer for the recipe
-  row's missing / "Use soon" pair, which says the same *thing*). Picking one is
-  a design decision on a surface the owner signed off two days ago, not a
-  cleanup, so it wasn't taken unasked. Either target fixes the R-002 violation,
-  since both are token-driven. Ask which, then it's a one-line change.
 
 ## [OPEN] FU-773 — The desktop filter row wraps to three lines at 1280px, not the two the owner asked for
 - **Raised:** 2026-08-28 (cookbook rating + kcal batch)
@@ -3332,25 +3271,6 @@ Resolved entries carry one extra line, and live in `DORA_FOLLOWUPS_RESOLVED.md`:
   glance at the page afterwards — a mechanical all-at-once sweep across 64 sites
   is exactly where a dropped slot or prop would hide.
 
-## [OPEN] FU-674 — `--text-on-primary` fails the D-002 contrast floor in three themes
-- **Raised:** 2026-08-19 (cookbook feedback batch — segmented-control fix)
-- **Type:** finding
-- **What:** fixing the unreadable sort toggle moved every segmented control's
-  active label onto `--text-on-primary`. **Measured live** against each theme's
-  `--brand-primary`: pesto-dark **5.18:1** ✅, lemon-tart **9.47:1** ✅, but
-  **pesto 3.88:1**, **blueberry 4.21:1**, **midnight 2.86:1** — all below
-  D-002's 4.5 floor. Those three define the token as pure white over a
-  mid-brightness primary. The reported bug (pesto-dark, measured at **1.0:1** —
-  literally invisible) is fixed; this is a pre-existing token-level problem the
-  measurement exposed, and it affects **anything** painting `--text-on-primary`
-  over `--brand-primary`, not just segmented controls.
-- **Why deferred:** the fix is either darkening those themes' ink (changes every
-  primary button's look in three themes) or darkening their `--brand-primary`
-  (changes the brand colour) — a design call the owner should make, not a
-  side-effect of a filter-toggle fix. Same family as [[FU-671]].
-- **Recommended resolution:** now-ish — it's a one-decision fix once the owner
-  picks which lever; worth doing before the next design-remediation chunk.
-
 ## [OPEN] FU-673 — three test files carry pre-existing lint errors
 - **Raised:** 2026-08-19 (cookbook feedback batch)
 - **Type:** finding
@@ -3722,27 +3642,6 @@ Resolved entries carry one extra line, and live in `DORA_FOLLOWUPS_RESOLVED.md`:
 - **Recommended resolution:** now — it's a red suite, and whoever is mid-flight on
   the stock-row rework can settle it in a minute.
 
-## [OPEN] FU-640 — A user-visible failure produced an empty log bundle: 4xx responses aren't logged
-- **Raised:** 2026-08-15 (FU-639 investigation — the owner's log bundle contained nothing useful).
-- **Type:** finding.
-- **What:** The owner hit two hard failures (dataset download, food linking) and
-  collected logs. The bundle held: `compose-logs.txt` = 7 lines of boot output,
-  `app-logs/dapi.log` = **0 bytes**, health = ok. Cause: both failures were
-  **400 responses**, and a `bad_request(...)` return isn't logged at all — while
-  the container's default `DORA_LOG_LEVEL=ERROR` suppresses the INFO request
-  line that would at least have shown the endpoint being hit. So the app failed
-  loudly in the UI and left no trace on disk, and the diagnosis had to be done
-  by reproducing locally instead.
-- **Why deferred:** the fix is a policy call, not a bug fix — (a) log 4xx on
-  mutating endpoints at WARNING with the reason, and/or (b) raise the container's
-  default log level to WARNING. Both change operator-facing behaviour and touch
-  R-030 territory, so they're the owner's call rather than something to slip in
-  alongside a bug hunt.
-- **Recommended resolution:** now-ish — this is the difference between a log
-  bundle that answers the question and one that costs a session. Pairs naturally
-  with FU-405 (ops/observability).
-- **2026-10-23 (finalisation Stage 1):** policy options restated in CHUNK_19 **19-D4**; the Stage-1 read favours (a) log 4xx on mutating routes at WARNING plus a container default of `INFO` (gunicorn already writes an access line per request). Still the owner's call.
-
 ## [OPEN] FU-639 — Camera scanning needs HTTPS on the **web** build; pick the self-host TLS story
 - **Raised:** 2026-08-15 (stock-overview feedback round)
 - **Type:** deferred job
@@ -3871,6 +3770,7 @@ Resolved entries carry one extra line, and live in `DORA_FOLLOWUPS_RESOLVED.md`:
   as DR-7 → FU-624, DR-9 → FU-631.
 - **Recommended resolution:** #48 opportunistically or in a Phase-4 onboarding pass; #7b
   in a theming turn. Cross-ref: `DESIGN_REMEDIATION_PLAN.md` DR-14, D-006, [[FU-578]].
+- **Progress (2026-11-01):** (1) done: onboarding now asks timezone (device default) and Language & format (device default, 14-D6). (2) remains.
 
 ## [OPEN] FU-631 — DR-9 carve-outs: mobile toolbar tidy, stock-row overflow menu, stranded dashboard cards
 - **Raised:** 2026-08-13 (design-remediation DR-9; carved from FU-578 #15b/#19/#30).
@@ -3982,15 +3882,6 @@ Resolved entries carry one extra line, and live in `DORA_FOLLOWUPS_RESOLVED.md`:
 
 ---
 
-## [OPEN] FU-625 — Per-user LLM provider config is not round-tripped by shared backups
-- **Raised:** 2026-08-12 (Assistant redesign / multi-provider).
-- **Type:** finding (backup coverage gap).
-- **What:** The Assistant redesign moved per-user LLM config off the `User` row into a new `UserLlmProvider` table. That table is **not** a section in `restore_shared.py SECTIONS`, so a shared backup no longer round-trips a user's provider settings (base URL, model). The **API key was never backed up** (deliberately excluded, FU-387) and still isn't — no secret regression. Only the non-secret provider prefs are now dropped from backups; before, they rode along in the `User` section.
-- **Why deferred:** minor pre-release preference loss; adding a `UserLlmProvider` backup section (with `api_key_encrypted` in `excluded_columns` for the same FU-387 defence-in-depth) is a clean but out-of-scope addition, and the restore-time secret-exclusion pattern must be mirrored.
-- **Recommended resolution:** opportunistic — when next touching `restore_shared.py` or backup coverage. Add a `UserLlmProvider` section keyed on (user, provider) with `api_key_encrypted` excluded.
-
----
-
 ## [OPEN] FU-624 — Toast lifecycle: single-column `notify()` wrapper + dismiss-on-route-change
 - **Raised:** 2026-08-12 (FU-578 DR-7 carve-out).
 - **Type:** deferred job (cross-cutting tidy).
@@ -4004,22 +3895,6 @@ Resolved entries carry one extra line, and live in `DORA_FOLLOWUPS_RESOLVED.md`:
 - **What:** DR-3 fixed ~15 files where `$q.dialog` buttons rendered ALL-CAPS by converting every `cancel: true` / string-shorthand `ok:`/`cancel:` to `{ label, noCaps: true }`. That matches the ~15 sites that already spelled `noCaps` out, but the app now has **~30 hand-rolled `$q.dialog` calls each re-stating `noCaps`** — R-039 is enforced by convention, not code. A thin composable (e.g. `useDoraDialog()` returning a wrapper that injects `noCaps: true` into `ok`/`cancel` unless already set, passing `{ component }` dialogs straight through, and preserving the returned `DialogChainObject` so `.onOk().onCancel().onDismiss()` chains are untouched) would make R-039 structural.
 - **Why deferred / not done in-audit:** a **half-migrated** wrapper (some sites through it, some raw) is worse than the current consistent explicit pattern; migrating all ~30 sites — including `options`/`prompt`/`component` dialogs and chained resolvers — is its own unit with real regression surface, out of scope for a casing detail-audit.
 - **Recommended resolution:** opportunistic — when next touching dialog code in bulk, or as a dedicated tidy. Cross-ref: R-039 / ADR-035 in `ENGINEERING_STANDARDS.md`, `DESIGN_REMEDIATION_PLAN.md` DR-3.
-
-## [OPEN] FU-622 — Build an app-wide colour options / assessment board (visual tool)
-- **Raised:** 2026-08-12 (FU-578 DR-1b; owner: "build this options board, i want to assess all the colours in the app with it").
-- **Type:** deferred job (tooling / design aid). **Not now** — owner wants it logged, built in a later turn.
-- **What:** an interactive visual board (Artifact / standalone page) for assessing **every colour token in the app**, not just brand-secondary. Per theme (all 10 = 5 families × light/dark), render each token in its **real roles** (surface, text-on-surface, toolbar bg with its ink, button bg with label, chip, edge-stripe, badge) with **live WCAG contrast ratios** and a pass/fail against the D-002 floors. Support **candidate values side-by-side** (current vs proposed) so the owner can react and pick. Pull token values straight from `web_app/src/css/tokens.scss` + `themes.scss` so it stays in sync.
-- **Serves / supersedes-as-vehicle:** the resolution vehicle for [[FU-621]] (brand-secondary rethink), [[FU-224]] (app-wide colour-usage assessment — primary vs secondary vs accent/info), and [[FU-010]] (late-game holistic theme/colour review). Those are "look at the colours and decide"; this board is *how* you look.
-- **Reuse:** the WCAG ratio probe already written for DR-1 lives in the session scratchpad (`contrast_probe.mjs` / `ratio.mjs`) — fold its hsl→sRGB→luminance→ratio math into the board. The DR-1 muted-ramp fix + DR-1b badge fixes are already probe-verified, so the board should show them green.
-- **Recommended resolution:** a dedicated design turn — build the board, owner walks all tokens with it, decisions flow back into `tokens.scss`/`themes.scss` (and close FU-621/224/010 as they're settled).
-
-## [OPEN] FU-621 — Rethink the brand-secondary colour (feels off; invisible as text on dark themes)
-- **Raised:** 2026-08-12 (FU-578 DR-1b contrast pass; owner: "adjust the secondary colour, it has been feeling off for a while, not sure what to make it").
-- **Type:** finding + design task.
-- **What:** `--brand-secondary` is doing two incompatible jobs. In **light** themes it's a dark colour that works as both a toolbar background (white text on it) and as accent text on white cards. In **dark** themes it's set to a near-black mud (e.g. cherry-cola-dark `hsl(2 16% 19%)` sitting on a `hsl(2 16% 16%)` component) that reads as almost nothing — which is why the **Stock "Essential" footer count** (renders in brand-secondary via `PageCountsFooter` `tone:'secondary'` → Quasar `text-secondary`) measured **1.10:1** on Cherry-Cola-Dark, 2.26 Pesto-Dark, 2.94 Sourdough-Dark (probe, 2026-08-12). Light themes pass (5.7–14.5).
-- **Two coupled fixes:** (1) **lift the dark-theme `--brand-secondary` values** into legible accents (like the dark-theme `--text-secondary` were lifted) — mind that secondary is also used as `-soft` chip bg + secondary-button bg, so check those roles don't invert; (2) give the **Essential footer count** a proper text ink (either the corrected secondary if it becomes legible, or a dedicated legible tone) so it stops using a dark accent as small text.
-- **Why deferred / not blind-edited:** brand-secondary is an interlocking token (toolbar bg / accent / soft / button) and the owner is unsure of the target hue — this needs **visual iteration**, not a computed blind swap. Plan: render a per-theme options board (current secondary in its roles + candidate values with contrast ratios) for the owner to react to, then apply the chosen values.
-- **Recommended resolution:** next design turn — driven via the app-wide colour options board [[FU-622]] (get the owner's pick there), then apply + re-probe. Cross-ref: `DESIGN_REMEDIATION_PLAN.md` DR-1b, [[FU-578]], [[FU-224]], [[FU-010]].
 
 ## [OPEN] FU-608 — Owner checklist: stand up the open-source + donation infrastructure, then swap the in-app placeholders
 - **Raised:** 2026-07-31 (donation / open-source pivot — [[FU-562]]/[[FU-567]] resolved; part of the reframed [[FU-406]] release readiness).

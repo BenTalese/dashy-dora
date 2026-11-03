@@ -54,6 +54,7 @@ from dora_api.persistence.bool_operation import BoolOperation
 from dora_api.persistence.field import EntityField
 from dora_api.features.app_settings.access import get_or_create_app_setting
 from dora_api.features.app_settings.clock import household_timezone, household_today
+from dora_api.features.help.help_corpus import search_help
 from dora_api.persistence.aware import as_utc
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 
@@ -199,6 +200,26 @@ TOOL_SCHEMAS: list[dict] = [
                     },
                 },
                 "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "app_help",
+            "description": (
+                "Look up Dora's own Help guides. Use for any how-to or "
+                "'what does this mean' question about the app itself: where "
+                "a feature lives, what a setting does, what an icon or colour "
+                "means. Answer from the guides returned, naming the page or "
+                "setting they mention."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "topic": {"type": "string", "description": "What the user is asking about, in a few words, e.g. 'add to shopping list', 'dashed ring on stock', 'price alerts'."},
+                },
+                "required": ["topic"],
             },
         },
     },
@@ -1291,6 +1312,12 @@ def suggest_recipes(args: dict) -> list[dict]:
 # is the assistant tool-call adapter: same return shape the LLM expects.
 from dora_api.domain import units as _units
 from dora_api.infrastructure.session_user import current_user_id
+
+
+def app_help(args: dict) -> list[dict]:
+    """11-D1: the Help guides that answer a how-to question, from the same
+    copy the Help pages render."""
+    return search_help(str(args.get("topic") or ""))
 
 
 def convert_measurement(args: dict) -> list[dict]:
@@ -2562,6 +2589,7 @@ _TOOLS: dict[str, Callable[[dict], list[dict]]] = {
     "search_products": search_products,
     "search_recipes": search_recipes,
     "suggest_recipes": suggest_recipes,
+    "app_help": app_help,
     "convert_measurement": convert_measurement,
     "suggest_substitution": suggest_substitution,
     "whats_expiring": whats_expiring,
@@ -2630,6 +2658,7 @@ _TOOL_NAV: dict[str, dict[str, str]] = {
     "meals_cooked_in_range": {"path": "/reports", "label": "Open Reports"},
     "spend_by_category": {"path": "/reports", "label": "Open Reports"},
     "spend_year_over_year": {"path": "/reports", "label": "Open Reports"},
+    "app_help": {"path": "/help", "label": "Open Help"},
     # convert_measurement / suggest_substitution need no nav.
 }
 

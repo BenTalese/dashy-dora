@@ -68,7 +68,7 @@
             />
 
             <span class="product-row__price q-ml-sm">
-                {{ formatMoney(product.price_now) }}
+                {{ hasPrice(product) ? formatMoney(product.price_now) : NO_PRICE_YET }}
             </span>
 
             <!-- OD-1: the row carries the two *safe* everyday actions only.
@@ -114,6 +114,7 @@
     import StoreLogo from 'src/components/StoreLogo.vue';
     import { formatMoney } from 'src/composables/useMoney';
     import type { Product } from 'src/models/product';
+    import { NO_PRICE_YET, hasPrice } from 'src/helpers/offerLogic';
     import { useProductStoreLink } from 'src/composables/useProductStoreLink';
 
     const props = defineProps<{

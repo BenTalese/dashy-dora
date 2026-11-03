@@ -97,6 +97,24 @@ def _resolve_db_schema_version() -> str | None:
 _DB_SCHEMA_VERSION: str | None = None
 
 
+def _db_status() -> str:
+    """19-D3: "ok" when the database answers a trivial query, else
+    "unreachable". The probe still returns 200 so the container stays up
+    while the operator looks; clients read this field to say so."""
+    # R-005 carve-out: a connectivity probe, not data access; it has to touch
+    # the engine itself, like `_resolve_db_schema_version` above.
+    try:
+        from sqlalchemy import text
+
+        from dora_api.app import db
+        with db.engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        return "ok"
+    except Exception as exc:  # noqa: BLE001
+        _LOGGER.warning("health: database unreachable: %s", exc)
+        return "unreachable"
+
+
 def _feature_flags(setting) -> dict[str, bool]:
     """Surface what the backend can do, for client capability gating.
     Reads runtime state cheaply — DB-backed flags pull from the
@@ -390,6 +408,7 @@ def health_check():
     setting = _safe("app_settings", lambda: get_or_create_app_setting(SqlAlchemyRepository()), None)
     return jsonify({
         "ok": True,
+        "db": _db_status(),
         "version": CURRENT_VERSION,
         # FU-861 — which build of that version; None from a source checkout.
         "build": build_id(),

@@ -1342,6 +1342,12 @@
         try {
             // Small delay so the spinner registers visually even on instant
             // responses — keeps the "I'm thinking" affordance honest.
+            // The rule engine reads the stores synchronously, so they must be
+            // loaded first: on a fresh login from the dashboard they aren't,
+            // and "where is the rice", "what's expiring" and "what can I cook"
+            // answered from empty lists (walks D and E, 2026-11-01). Each
+            // store skips the call when already loaded.
+            await ensureRecipeData();
             const [reply] = await Promise.all([
                 runIntent(intent, context(), rawText),
                 new Promise((r) => setTimeout(r, 220)),

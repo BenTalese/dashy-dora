@@ -140,10 +140,13 @@
 </script>
 
 <style scoped>
+    /* Above the app shell (header and drawers sit near 2000-3000) but under
+       Quasar's dialogs (6000): the "Change instance URL" dialog opens from
+       here and was hidden behind it at 9000 (walk C, 2026-11-01). */
     .splash-overlay {
         position: fixed;
         inset: 0;
-        z-index: 9000;
+        z-index: 5500;
     }
     .splash-inner {
         min-height: 100vh;

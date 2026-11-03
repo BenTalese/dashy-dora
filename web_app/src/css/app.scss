@@ -228,3 +228,19 @@ body .q-dialog__inner--minimized > div {
 body .q-dialog__inner--bottom > div {
     max-height: calc(100vh - var(--vv-inset-top, 0px) - var(--vv-inset-bottom, 0px));
 }
+
+/* D-003 caption floor (finalisation 20-R12): Quasar's own small text is a
+   plain 0.75rem, which the "small" text size takes to 10.5px. Route it through
+   the floored token like Dora's own captions (walk C, 2026-11-01). */
+.text-caption,
+.q-badge,
+.q-item__label--caption {
+    font-size: var(--font-size-xs);
+}
+
+/* FU-801 (picks 2026-11-03): Quasar's `.text-primary` (flat and outline
+   buttons, icons, links with color="primary") is the primary colour as text,
+   so it takes the text shade; fills (`.bg-primary`) keep --brand-primary. */
+.text-primary {
+    color: var(--primary-ink) !important;
+}

@@ -34,9 +34,13 @@ op.batch_alter_table = _batch_alter_table_with_convention
 # access to the values within the .ini file in use.
 config = context.config
 
-# Interpret the config file for Python logging.
-# This line sets up loggers basically.
-fileConfig(config.config_file_name)
+# Interpret the config file for Python logging, but only when nothing has
+# configured logging yet (the `flask db` / alembic CLI). Inside the app's boot
+# migration this used to reset the root logger and disable every existing
+# logger, so a production boot lost its INFO lines and the router/job counts
+# (walk C, 2026-11-01).
+if config.config_file_name and not logging.getLogger().handlers:
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 logger = logging.getLogger('alembic.env')
 
 

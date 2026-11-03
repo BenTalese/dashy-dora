@@ -146,6 +146,32 @@ def emit_audit_event(response):
 
 
 @MIDDLEWARE.after_app_request
+def log_rejected_mutation(response):
+    """FU-640 / 19-D4: a refused write (4xx on a mutating /api route) is
+    logged at WARNING with the reason the user was shown, so a failure the
+    UI reported leaves a trace on disk. Only the problem body's title,
+    detail and field messages are logged, never the request body."""
+    if not (400 <= response.status_code < 500):
+        return response
+    if not request_under_api() or not request_is_mutating():
+        return response
+    reason = ""
+    try:
+        body = response.get_json(silent=True) if response.is_json else None
+        if isinstance(body, dict):
+            parts = [str(body.get(k)) for k in ("title", "detail") if body.get(k)]
+            for field, entries in (body.get("errors") or {}).items():
+                msgs = [e.get("msg") if isinstance(e, dict) else str(e) for e in entries or []]
+                parts.append(f"{field}: {'; '.join(m for m in msgs if m)}")
+            reason = " | ".join(parts)
+    except Exception:  # noqa: BLE001
+        reason = ""
+    _LOGGER.warning("%s %s -> %s %s", request.method, request.path,
+                    response.status_code, reason)
+    return response
+
+
+@MIDDLEWARE.after_app_request
 def attach_csrf_cookie(response):
     """FU-197 — seed the `dora_csrf` cookie on any response when the
     incoming request didn't carry one. This makes the cookie present

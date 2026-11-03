@@ -111,6 +111,8 @@ class UpdateMeHandler:
         self,
         request: UpdateMeRequest,
         user_id: UUID,
+        *,
+        commit: bool = True,
     ) -> tuple[AuthenticatedUserDto | None, str | None]:
         """Returns (dto, error_message). Error is set when the change is
         rejected (e.g. username collision or invalid enum value)."""
@@ -285,7 +287,10 @@ class UpdateMeHandler:
                     f"connection in Settings → Assistant first."
                 )
 
-        self.repository.save_changes()
+        if commit:
+            self.repository.save_changes()
+        else:
+            self.repository.flush()
         active_provider = (
             get_provider_config(self.repository, user_id, _User.llm_provider)
             if _User.llm_provider else None

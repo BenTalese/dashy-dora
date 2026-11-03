@@ -313,6 +313,34 @@ def test__get_backup__never_exports_password_hashes(api):
         assert "password_hash" not in row, "password_hash must never round-trip"
 
 
+def test__backup__assistant_providers__round_trip_without_keys(api):
+    """FU-625 / 18-D5 — provider settings (base URL, model) ride along with
+    the account; the API key and the verified flag never do. Restoring onto
+    an install where the account already has that provider keeps its own."""
+    providers = "http://localhost:5170/api/assistant/providers"
+    patched = requests.patch(f"{providers}/openai", json={
+        "base_url": "https://llm.example.test/v1", "model": "gpt-test", "api_key": "sk-secret-123",
+    })
+    assert patched.status_code == 200, patched.text
+
+    _, payload = _create_backup(sections=["users", "user_llm_providers"])
+    rows = [r for r in payload["user_llm_providers"] if r["provider"] == "openai"]
+    assert rows and rows[0]["model"] == "gpt-test"
+    for row in payload["user_llm_providers"]:
+        assert "api_key_encrypted" not in row
+        assert "verified" not in row and "verified_at" not in row
+    assert "sk-secret-123" not in json.dumps(payload)
+
+    response = requests.post(
+        RESTORE_URL,
+        json={"backup": payload, "selection": {}, "mode": "all_skip_duplicates"},
+    )
+    assert response.status_code == 200, response.text
+    summary = response.json()
+    assert summary["created"]["user_llm_providers"] == 0, summary
+    assert summary["skipped"]["user_llm_providers"] >= 1, summary
+
+
 def test__get_backup__unknown_section__is_rejected(api):
     response = requests.post(
         LIBRARY_URL,
@@ -1692,3 +1720,9 @@ def test__restore_backup__ProductLinkRemappedOntoAnExistingPair__IsSkippedNotAnE
     body = response.json()
     assert body["created"]["product_stock_item_links"] == 0, body
     assert body["skipped"]["product_stock_item_links"] == 1, body
+
+
+def test__backup_library__created_at_carries_the_utc_offset(api):
+    # The SPA showed a 5:32 pm backup as 6:32 am: the instant went out naive.
+    row, _ = _create_backup(sections=["stock_levels"])
+    assert row["created_at"].endswith("+00:00"), row["created_at"]

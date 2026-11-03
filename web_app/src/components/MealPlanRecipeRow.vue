@@ -286,7 +286,7 @@
         min-width: 0;
     }
     .mp-row__meta--reason {
-        color: var(--brand-primary);
+        color: var(--primary-ink);
     }
 
     /* The mini quantity cluster. Mirrors `.sl-row__qty` on the shopping list:

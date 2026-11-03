@@ -235,7 +235,7 @@
     }
     .loop-node-icon {
         font-size: 22px;
-        color: var(--brand-primary);
+        color: var(--primary-ink);
         transition: color var(--motion-fast) var(--motion-ease);
     }
     .loop-node-label {

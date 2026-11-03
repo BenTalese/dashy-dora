@@ -46,28 +46,6 @@ def migrate_legacy_db(target_db: Path) -> bool:
     return True
 
 
-def migrate_legacy_appsettings(target_path: Path) -> bool:
-    """D3: appsettings.json used to live at `./config/dapi.appsettings.json`
-    (CWD-relative). It now lives under `<DATA_DIR>/config/`. Move it
-    once on first boot so dev installs that customised the legacy
-    file don't silently lose their tweaks."""
-    legacy = Path.cwd() / "config" / "dapi.appsettings.json"
-    if not legacy.is_file():
-        return False
-    if legacy.resolve() == target_path.resolve():
-        return False
-    if target_path.exists():
-        _LOGGER.warning(
-            "Legacy appsettings %s exists but target %s is already populated. "
-            "Leaving legacy in place.", legacy, target_path,
-        )
-        return False
-    target_path.parent.mkdir(parents=True, exist_ok=True)
-    shutil.move(str(legacy), str(target_path))
-    _LOGGER.info("Migrated legacy appsettings %s → %s", legacy, target_path)
-    return True
-
-
 def migrate_legacy_uploads(uploads_dir: Path) -> int:
     """Move `./data/uploads/*` into the new uploads dir if the legacy
     path differs from the resolved one. Returns count of files moved."""

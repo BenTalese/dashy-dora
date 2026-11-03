@@ -28,11 +28,13 @@ from dora_api.domain.entities.price_alert import PriceAlert
 from dora_api.domain.entities.product import Product
 from dora_api.domain.product_offer import discount_percent
 from dora_api.features._ranges import RANGE_DAYS, range_start
+from dora_api.features.app_settings.access import money_features_enabled
 from dora_api.features.routers import PRICE_HISTORY_ROUTER
 from dora_api.features.stock_items.your_prices import (
     build_product_observation_series, build_your_prices_for_product)
-from dora_api.infrastructure.api_response import (bad_request, no_content,
-                                                  not_found, ok, unauthorized)
+from dora_api.infrastructure.api_response import (bad_request, forbidden,
+                                                  no_content, not_found, ok,
+                                                  unauthorized)
 from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.field import EntityField
@@ -207,6 +209,20 @@ def get_price_history():
 
 # ── Alerts ────────────────────────────────────────────────────────────
 
+# 10-R3 (owner 2026-11-01): a watch is a pack-price threshold, so it is a
+# money surface (R-058) and refuses at the endpoint when money is off. The
+# bell already stops firing watches in that state (`get_alerts`).
+WATCHES_MONEY_DISABLED_DETAIL = (
+    "Price alerts are in dollars, and money features are turned off for this install."
+)
+
+
+def _watches_refused():
+    if money_features_enabled(SqlAlchemyRepository()):
+        return None
+    return forbidden(WATCHES_MONEY_DISABLED_DETAIL)
+
+
 class CreatePriceAlertRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     product_id: UUID
@@ -219,6 +235,9 @@ def create_price_alert():
     user_id = current_user_id()
     if user_id is None:
         return unauthorized()
+    refused = _watches_refused()
+    if refused is not None:
+        return refused
     body: CreatePriceAlertRequest = get_request_body()
 
     repo = SqlAlchemyRepository()
@@ -256,6 +275,9 @@ def list_price_alerts():
     user_id = current_user_id()
     if user_id is None:
         return unauthorized()
+    refused = _watches_refused()
+    if refused is not None:
+        return refused
     # R-005 carve-out: a three-table projection (watch + product + store) for
     # one list; core SQL is portable to Postgres and SQLite alike.
     alert_table = db.metadata.tables["PriceAlert"]
@@ -296,6 +318,9 @@ def delete_price_alert(alert_id: UUID):
     user_id = current_user_id()
     if user_id is None:
         return unauthorized()
+    refused = _watches_refused()
+    if refused is not None:
+        return refused
     repo = SqlAlchemyRepository()
     # Scope by user so one account can't delete another's alerts.
     alert = repo.get(PriceAlert).one(

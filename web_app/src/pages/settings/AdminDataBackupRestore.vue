@@ -1071,7 +1071,7 @@
         text-align: center;
     }
     .backup-empty__icon {
-        color: var(--brand-primary);
+        color: var(--primary-ink);
         margin-bottom: var(--space-1);
     }
     .backup-empty__hint {
@@ -1100,7 +1100,7 @@
         background: color-mix(in srgb, var(--brand-primary) 4%, var(--surface-component));
     }
     .backup-row__icon {
-        color: var(--brand-primary);
+        color: var(--primary-ink);
         flex: 0 0 auto;
     }
     .backup-row__main {

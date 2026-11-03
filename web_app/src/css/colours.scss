@@ -186,6 +186,17 @@
     .q-icon { color: var(--semantic-positive); }
 }
 
+// A tint variant on a bare `q-chip` (no `.dora-chip--tint` base): the words
+// take the page ink like the base class, not Quasar's fixed dark/white chip
+// text, so they read on the translucent dark-theme tints too.
+.q-chip.dora-chip--tint-negative,
+.q-chip.dora-chip--tint-warning,
+.q-chip.dora-chip--tint-positive {
+    color: var(--text-primary);
+    border-width: 1px;
+    border-style: solid;
+}
+
 // "Not set / unknown" — the one case D-001 reserves grey for. A custom level
 // beyond the seeded three lands here too rather than borrowing a semantic
 // tone it hasn't earned.

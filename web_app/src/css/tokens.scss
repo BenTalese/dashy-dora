@@ -60,6 +60,11 @@
     /* ────────────────────────────── Brand defaults (Pesto) ───────── */
     --brand-primary: hsl(150 76% 39%);            /* #17b073 */
     --brand-primary-soft: hsl(150 70% 92%);
+    /* The primary colour as TEXT (links, flat buttons, icons, `.text-primary`)
+       on cards, sunken strips and the page (FU-801, picks 2026-11-03). Fills
+       keep --brand-primary. A theme whose primary already reads as text
+       leaves this pointing at it. */
+    --primary-ink: var(--brand-primary);
     --brand-secondary: hsl(189 100% 26%);         /* #006a80 */
     --brand-secondary-soft: hsl(189 35% 88%);
     /* Secondary at *indicator* strength — the tone used when secondary
@@ -76,6 +81,9 @@
     --brand-secondary-strong: var(--brand-secondary);
     --brand-accent: hsl(50 99% 56%);              /* #fed224 */
     --brand-accent-soft: hsl(50 95% 92%);
+    /* The "Dashy Dora" wordmark on the toolbar (FU-963). The accent unless a
+       theme's accent doesn't read on its toolbar. */
+    --brand-wordmark: var(--brand-accent);
     /* Accent at *ink* strength — the accent hue darkened until it clears
        D-002's 4.5:1 floor on the whole light-surface ladder (component /
        page / elevated / sunken). --brand-accent is tuned as a **fill**: as
@@ -303,7 +311,7 @@
     --font-size-lg: 1.125rem;
     --font-size-xl: 1.25rem;
     --font-size-2xl: 1.5rem;
-    --font-size-3xl: 1.875;
+    --font-size-3xl: 1.875rem;
 
     /* ────────────────────────────── Elevation ────────────────────── */
     --elevation-1: 0 1px 2px hsla(0, 0%, 0%, 0.06);

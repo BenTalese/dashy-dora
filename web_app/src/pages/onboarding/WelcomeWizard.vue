@@ -237,6 +237,20 @@
                                 @filter="onTimezoneFilter"
                             />
                         </label>
+                        <label class="household-field household-field--grow">
+                            <span class="household-field__label">Language &amp; format</span>
+                            <q-select
+                                dark
+                                v-model="household.locale"
+                                :options="localeOptions"
+                                outlined
+                                dense
+                                emit-value
+                                map-options
+                                options-dense
+                                :disable="!featuresLoaded"
+                            />
+                        </label>
                     </div>
                     <div class="welcome-font household-units">
                         <div class="welcome-font__label">Units</div>
@@ -530,14 +544,18 @@
     import { useMeasurementSystem } from 'src/composables/useMeasurementSystem';
     import type { DoraSegmentedOption } from 'src/components/settings/DoraSegmented.vue';
     import {
-        MEASUREMENT_SYSTEM_CHOICES, TIMEZONE_CHOICES, deviceTimezone, filterTimezones,
+        MEASUREMENT_SYSTEM_CHOICES, TIMEZONE_CHOICES, deviceLocale, deviceTimezone,
+        filterTimezones, localeOptionsWith,
     } from 'src/models/regionChoices';
     import { normaliseHeadcount } from 'src/models/household';
     import type { MeasurementSystem } from 'src/generated/units_table';
     import type { FontFamilyPreference, ThemePreference } from 'src/models/auth';
     import type {
+        FinishOnboardingRequest,
         OnboardingCatalog,
         OnboardingState,
+        SeedItemInput,
+        SeedRequest,
         StarterPackItem,
     } from 'src/models/onboarding';
     import { NARRATIVE_SCENES } from 'src/pages/onboarding/onboardingContent';
@@ -833,18 +851,21 @@
     const featureBaseline = ref<Record<FeatureKey, boolean> | null>(null);
 
     // ── Your household (features step) ───────────────────────────────
-    // Three install-wide values every household should set once. Diffed
+    // Four install-wide values every household should set once. Diffed
     // against `householdBaseline` on Finish like the feature cards. A fresh
     // install's timezone is UTC, which puts "today" on the wrong day for most
-    // people, so it starts on this device's timezone instead.
+    // people, so it starts on this device's timezone instead; the language
+    // (dates, money and decimal format) starts on this device's too (14-D6).
     type HouseholdDraft = {
         headcount: number | null;
         timezone: string;
+        locale: string;
         measurementSystem: MeasurementSystem;
     };
     const household = reactive<HouseholdDraft>({
-        headcount: null, timezone: 'UTC', measurementSystem: 'metric',
+        headcount: null, timezone: 'UTC', locale: 'en-AU', measurementSystem: 'metric',
     });
+    const localeOptions = computed(() => localeOptionsWith(household.locale));
     const householdBaseline = ref<HouseholdDraft | null>(null);
     let savedHousehold: Partial<HouseholdDraft> | null = null;
     const UNIT_OPTIONS: DoraSegmentedOption<MeasurementSystem>[] =
@@ -864,6 +885,9 @@
         if (headcount !== base.headcount) out.household_headcount = headcount;
         if (household.timezone && household.timezone !== base.timezone) {
             out.timezone = household.timezone;
+        }
+        if (household.locale && household.locale !== base.locale) {
+            out.locale = household.locale;
         }
         if (household.measurementSystem !== base.measurementSystem) {
             out.measurement_system = household.measurementSystem;
@@ -885,11 +909,13 @@
             const householdNow: HouseholdDraft = {
                 headcount: settings.household_headcount,
                 timezone: settings.timezone,
+                locale: settings.locale,
                 measurementSystem: settings.measurement_system,
             };
             householdBaseline.value = householdNow;
             Object.assign(household, householdNow, {
                 timezone: settings.timezone === 'UTC' ? deviceTimezone() : settings.timezone,
+                locale: deviceLocale() ?? settings.locale,
             }, savedHousehold ?? {});
         } catch {
             // Leave the step unloaded (cards disabled); Finish then sends
@@ -912,7 +938,7 @@
     );
 
     // ── Finish recap — what Finish is about to apply ─────────────────
-    // Built from the same draft `applyDraft` reads, so it can't promise
+    // Built from the same draft `buildFinishRequest` reads, so it can't promise
     // something Finish won't do. `step` lets each row jump back to change it.
     function stepIndexOf(id: StepId): number | undefined {
         const i = visibleSteps.value.findIndex((st) => st.id === id);
@@ -935,14 +961,14 @@
         if (householdBaseline.value) {
             const headcount = normaliseHeadcount(household.headcount);
             rows.push({ key: 'household', icon: ICONS.people, step: stepIndexOf('features'),
-                text: `${headcount ? plural(headcount, 'person', 'people') : 'Recipe servings'}, ${household.timezone}, ${UNIT_OPTIONS.find((o) => o.value === household.measurementSystem)?.label ?? ''} units` });
+                text: `${headcount ? plural(headcount, 'person', 'people') : 'Recipe servings'}, ${household.timezone}, ${household.locale}, ${UNIT_OPTIONS.find((o) => o.value === household.measurementSystem)?.label ?? ''} units` });
         }
         if (featureBaseline.value) {
             const on = FEATURE_CARDS.filter((c) => featurePicks[c.key]).map((c) => c.title);
             rows.push({ key: 'features', icon: ICONS.tune, step: stepIndexOf('features'),
                 text: on.length > 0 ? `Features on: ${on.join(', ')}` : 'All optional features off' });
         }
-        // Stock seeding is first-user only (applyDraft gates it the same
+        // Stock seeding is first-user only (buildFinishRequest gates it the same
         // way), so a later household member's recap never promises it.
         if (state.value?.first_user) {
             const seedParts: string[] = [];
@@ -1309,81 +1335,68 @@
         if (await complete()) void router.push(destination);
     }
 
-    // Apply everything the user chose, once, in dependency order: prefs →
-    // persona → seed catalogues → stock items (pack picks + queued first
-    // items), so the items resolve against the groups/locations just seeded.
-    async function applyDraft() {
-        await persistPreferences();
-        // Features before seeding so anything the seed or items pass reads
-        // (e.g. stocktake defaults) sees the household's choice.
-        const featureUpdates = changedFeatureSettings.value;
-        const householdUpdates = changedHouseholdSettings.value;
-        if (Object.keys(featureUpdates).length > 0 || Object.keys(householdUpdates).length > 0) {
-            const saved = await appSettingsStore.saveAsync({ ...featureUpdates, ...householdUpdates });
-            featureBaseline.value = { ...featurePicks };
-            householdBaseline.value = {
-                headcount: saved.household_headcount,
-                timezone: saved.timezone,
-                measurementSystem: saved.measurement_system,
-            };
-            // `refreshMoneyPolicy` re-reads `locale_policy`, which carries the
-            // household timezone the date helpers use — without it dates stay
-            // in the old zone until a reload.
-            await Promise.all([
-                refreshFeatureFlags(), refreshScanning(),
-                refreshCookingPolicy(), reloadMeasurementSystem(),
-                refreshMoneyPolicy(),
-            ]);
-        }
+    // Everything the user chose, as one request (14-D2): the server applies it
+    // in dependency order (prefs → household settings → catalogues → stock
+    // items → demo) inside one transaction, so a failure part-way leaves
+    // nothing half set up.
+    function buildFinishRequest(): FinishOnboardingRequest {
+        const request: FinishOnboardingRequest = {};
+        const preferences = changedPreferences();
+        if (Object.keys(preferences).length > 0) request.preferences = preferences;
+        const settings = { ...changedFeatureSettings.value, ...changedHouseholdSettings.value };
+        if (Object.keys(settings).length > 0) request.app_settings = settings;
         // Seeding defaults + starter items is the FIRST user's job only. A
         // later household member (or anyone re-running the tour from About)
         // must never re-create defaults the admin deleted or renamed — the
         // stock step isn't even shown to them, but the pick maps would still
         // default to "everything ticked" without this gate.
         if (state.value?.first_user) {
-            await applyStockSeed();
+            const seed = stockSeedRequest();
+            if (seed) request.seed = seed;
+            const items = starterItems();
+            if (items.length > 0) request.items = { items };
         }
-        // optional demo dataset. After the items pass so the demo
-        // can reuse a starter-pack "Spaghetti pasta" / "Garlic" / "Olive oil"
-        // if the user picked them; otherwise the demo creates its own. The
-        // server is idempotent (`seeded: false` when the demo recipe already
-        // exists) so a re-finish never duplicates.
-        if (form.seedDemo) {
-            await onboardingApi.seedDemoAsync();
-        }
+        // optional demo dataset, applied after the items so the demo can
+        // reuse a starter-pack "Spaghetti pasta" / "Garlic" / "Olive oil".
+        if (form.seedDemo) request.seed_demo = true;
+        return request;
     }
 
-    async function applyStockSeed() {
+    function stockSeedRequest(): SeedRequest | null {
         // send the actual picked names/paths. Master bool is
         // implicit: it's true whenever any pick under it survives.
         const groupsWanted = groupPickCount.value > 0;
         const locationsWanted = locationPickCount.value > 0;
         const ownGroups = customGroups.value.map((n) => n.trim()).filter(Boolean);
         const ownLocations = customLocations.value.map((n) => n.trim()).filter(Boolean);
-        if (groupsWanted || locationsWanted || ownGroups.length > 0 || ownLocations.length > 0) {
-            const totalGroups = catalog.value?.groups.length ?? 0;
-            const totalLocations = locationLeafPaths.value.length;
-            const allGroupsPicked = groupPickCount.value === totalGroups;
-            const allLocationsPicked = locationPickCount.value === totalLocations;
-            await onboardingApi.seedAsync({
-                groups: groupsWanted,
-                locations: locationsWanted,
-                // Null when the user wants everything → matches the "seed
-                // all defaults" semantic on the server (and keeps the wire
-                // payload tiny in the common case).
-                group_names: groupsWanted && !allGroupsPicked
-                    ? pickedGroupNames.value : null,
-                location_paths: locationsWanted && !allLocationsPicked
-                    ? pickedLocationPaths.value : null,
-                // The user's own entries, in the same unit of work and deduped
-                // by name server-side (finalisation 14-R19).
-                extra_group_names: ownGroups.length > 0 ? ownGroups : null,
-                extra_location_names: ownLocations.length > 0 ? ownLocations : null,
-            });
+        if (!groupsWanted && !locationsWanted && ownGroups.length === 0 && ownLocations.length === 0) {
+            return null;
         }
-        // Pack picks + own items, created by NAME (server resolves group /
-        // location against the just-seeded catalogues — FU-191 — and dedupes).
-        const items = [
+        const totalGroups = catalog.value?.groups.length ?? 0;
+        const totalLocations = locationLeafPaths.value.length;
+        const allGroupsPicked = groupPickCount.value === totalGroups;
+        const allLocationsPicked = locationPickCount.value === totalLocations;
+        return {
+            groups: groupsWanted,
+            locations: locationsWanted,
+            // Null when the user wants everything → matches the "seed
+            // all defaults" semantic on the server (and keeps the wire
+            // payload tiny in the common case).
+            group_names: groupsWanted && !allGroupsPicked
+                ? pickedGroupNames.value : null,
+            location_paths: locationsWanted && !allLocationsPicked
+                ? pickedLocationPaths.value : null,
+            // The user's own entries, in the same unit of work and deduped
+            // by name server-side (finalisation 14-R19).
+            extra_group_names: ownGroups.length > 0 ? ownGroups : null,
+            extra_location_names: ownLocations.length > 0 ? ownLocations : null,
+        };
+    }
+
+    // Pack picks + own items, created by NAME (server resolves group /
+    // location against the just-seeded catalogues — FU-191 — and dedupes).
+    function starterItems(): SeedItemInput[] {
+        return [
             ...selectedPackItemsList.value.map((it) => ({
                 name: it.name,
                 group_name: it.group,
@@ -1395,9 +1408,6 @@
                 location_name: d.location_name,
             })),
         ];
-        if (items.length > 0) {
-            await onboardingApi.seedItemsAsync({ items });
-        }
     }
 
     function handleApplyError(err: unknown) {
@@ -1408,7 +1418,7 @@
             "Couldn't finish setting up. Please try again.";
     }
 
-    async function persistPreferences() {
+    function changedPreferences(): Record<string, unknown> {
         // Display name is no longer collected here — it's fixed at account
         // creation (the username picked at register time). Onboarding only
         // touches personal look (theme + font); household cooking config
@@ -1423,8 +1433,7 @@
         if (form.avatarDataUrl) {
             updates.image = form.avatarDataUrl;
         }
-        if (Object.keys(updates).length === 0) return;
-        await authStore.updateMeAsync(updates);
+        return updates;
     }
 
     function onShowMe(path: string) {
@@ -1463,14 +1472,35 @@
         completing.value = true;
         loadError.value = null;
         try {
-            await applyDraft();
-            await onboardingApi.completeAsync();
+            const request = buildFinishRequest();
+            await onboardingApi.finishAsync(request);
             // Refresh the cached user so the router guard sees the new
             // `onboarding_completed_at`. Without this, Finish / Show-me-X
             // navigations bounce straight back to /welcome on the first
             // attempt (the guard reads stale null); user only escapes
             // after a hard refresh re-bootstraps the auth state.
             await authStore.refreshAsync();
+            if (request.preferences?.image && currentUser.value) {
+                authStore.bumpImageVersion(currentUser.value.user_id);
+            }
+            if (request.app_settings) {
+                const saved = await appSettingsStore.refreshAsync();
+                featureBaseline.value = { ...featurePicks };
+                householdBaseline.value = {
+                    headcount: saved.household_headcount,
+                    timezone: saved.timezone,
+                    locale: saved.locale,
+                    measurementSystem: saved.measurement_system,
+                };
+                // `refreshMoneyPolicy` re-reads `locale_policy`, which carries
+                // the household timezone the date helpers use — without it
+                // dates stay in the old zone until a reload.
+                await Promise.all([
+                    refreshFeatureFlags(), refreshScanning(),
+                    refreshCookingPolicy(), reloadMeasurementSystem(),
+                    refreshMoneyPolicy(),
+                ]);
+            }
             // The picture is saved now; drop the draft copy so a re-run of
             // the wizard doesn't re-upload it.
             form.avatarDataUrl = null;
@@ -1503,7 +1533,7 @@
             // Pre-fill from the user's saved prefs. If their stored theme
             // isn't one of the three onboarding options (e.g. they picked a
             // richer palette in Preferences on a re-run), the select shows
-            // blank and persistPreferences leaves it untouched — we never
+            // blank and changedPreferences leaves it untouched — we never
             // clobber a real choice. A stored key is read through the
             // theme helpers (R-003) so the legacy bare 'system' (and the
             // other legacy aliases) lands on the card that now represents it.
@@ -1519,7 +1549,7 @@
         // Pre-load existing groups/locations (so the first-item name pickers
         // include what's already there) + the starter catalogue (default
         // names + packs to preview and pick from). The catalogue (and its
-        // every-default-ticked picks) is first-user only — see applyDraft.
+        // every-default-ticked picks) is first-user only — see buildFinishRequest.
         await Promise.all([
             loadStockGroups(),
             stockLocationStore.stockLocations.length === 0
@@ -1786,7 +1816,7 @@
     }
     .feature-card--on .feature-card__icon {
         background: var(--brand-primary-soft);
-        color: var(--brand-primary);
+        color: var(--primary-ink);
     }
     .feature-card__body {
         flex: 1 1 auto;
@@ -1813,7 +1843,7 @@
         color: var(--text-muted);
     }
     .feature-card--on .feature-card__state {
-        color: var(--brand-primary);
+        color: var(--primary-ink);
     }
     .feature-card__state-label {
         font-size: 0.7rem;
@@ -1942,7 +1972,7 @@
         align-items: center;
         justify-content: center;
         background: var(--brand-primary-soft);
-        color: var(--brand-primary);
+        color: var(--primary-ink);
     }
     .finish-recap__text {
         flex: 1 1 auto;
@@ -1993,7 +2023,7 @@
         align-items: center;
         justify-content: center;
         background: var(--brand-primary-soft);
-        color: var(--brand-primary);
+        color: var(--primary-ink);
     }
     .finish-tile__body {
         flex: 1 1 auto;

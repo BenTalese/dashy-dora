@@ -234,7 +234,7 @@ export const HELP_TOPICS: HelpTopic[] = [
                 slug: 'preferred-buys',
                 title: 'Preferred buys',
                 summary: 'A note of what you actually buy, with no price or store.',
-                note: 'Hidden when Products is on, because linked products answer the same question with real prices.',
+                note: 'An item with a linked product uses that product instead, since it answers the same question with real prices.',
             },
             {
                 slug: 'nutrition-item',
@@ -575,7 +575,7 @@ export const HELP_TOPICS: HelpTopic[] = [
             {
                 slug: 'offers-preferred',
                 title: 'Picking which one',
-                summary: 'The item’s name on a row is a menu of its offers (products on) or its preferred buys. Picking an offer moves the line to that store.',
+                summary: 'The item’s name on a row is a menu of its linked products’ offers, or its preferred buys when it has no linked product. Picking an offer moves the line to that store.',
             },
             {
                 slug: 'line-cost-store',
@@ -666,6 +666,7 @@ export const HELP_TOPICS: HelpTopic[] = [
                 slug: 'tracking',
                 title: 'Tracking prices',
                 summary: 'Stop tracking hides a product from deals and the weekly email without deleting it.',
+                note: 'On a product you added yourself the menu says Hide from deals, since nothing refreshes its price.',
             },
             {
                 slug: 'bulk-products',
@@ -676,6 +677,8 @@ export const HELP_TOPICS: HelpTopic[] = [
                 slug: 'watch-price',
                 title: 'Watch a price',
                 summary: 'From a product’s menu, Alert me on a price drop. A new offer at or below your figure raises a bell alert, once per offer.',
+                setting: MONEY,
+                note: 'Price alerts need money features on.',
             },
             {
                 slug: 'price-history',

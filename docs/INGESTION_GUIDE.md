@@ -132,6 +132,7 @@ source's id if omitted). Empty arrays are fine — push only what you have.
 | `web_url`             | no       |                                    |
 | `source`              | no       | Provenance string                  |
 | `image`               | no       | The product picture as a `data:image/…;base64,…` URL (≤ 6 MB). A later push with one replaces it; absent leaves the stored picture alone. |
+| `is_available`        | no       | `false` when the store doesn't have it right now (out of stock, no price). Dora shows it as out of stock. Absent keeps the stored value; a new product defaults to `true`. |
 
 Dedupe — a product is matched on **`(store_id, merchant_stockcode)`** first;
 failing that, **`(store_id, name)`**. Hand-entered (custom) products are never

@@ -55,7 +55,7 @@
         font-size: 0.95rem;
         font-weight: 600;
         letter-spacing: 0.02em;
-        color: var(--brand-primary);
+        color: var(--primary-ink);
         animation: scene-rise var(--motion-slow) var(--motion-ease-out) both;
         animation-delay: 80ms;
     }

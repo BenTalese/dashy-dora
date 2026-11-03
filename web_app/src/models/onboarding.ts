@@ -1,3 +1,4 @@
+import type { UpdateAppSettingsCommand } from 'src/services/api/appSettingsApiService';
 // Mirrors OnboardingStateDto / SeedResultDto from
 // dora_api/features/onboarding/onboarding.py.
 
@@ -81,6 +82,21 @@ export type SeedItemsResult = {
 // current-week MealPlan with one entry). The handler is idempotent; `seeded`
 // is `false` when the demo recipe already existed (so a re-finish never
 // duplicates rows).
+/** 14-D2 — the wizard's whole draft, applied in one transaction. */
+export type FinishOnboardingRequest = {
+    preferences?: Record<string, unknown>;
+    app_settings?: UpdateAppSettingsCommand;
+    seed?: SeedRequest;
+    items?: SeedItemsRequest;
+    seed_demo?: boolean;
+};
+
+export type FinishOnboardingResult = {
+    seed: SeedResult | null;
+    items: SeedItemsResult | null;
+    demo: SeedDemoResult | null;
+};
+
 export type SeedDemoResult = {
     seeded: boolean;
     items_created: number;

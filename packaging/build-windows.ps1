@@ -1,15 +1,11 @@
 # Build the Dashy Dora desktop bundle for Windows.
 #
 # Produces `dist\Dora\Dora.exe` plus its sibling tree of DLLs +
-# bundled data. Windows uses WebView2 via pywebview at runtime;
-# the WebView2 runtime is shipped by Windows 10/11 out of the box,
-# so no separate install step here.
+# bundled data. The app opens the SPA in the default browser.
 #
 # Prerequisites:
 #   - Python 3.11 + a venv with `pip install -r requirements.txt`
 #   - Node + npm
-#   - WebView2 Runtime (comes with Windows 11; Windows 10 users
-#     may need https://developer.microsoft.com/microsoft-edge/webview2)
 #
 # Flags:
 #   -SkipSpa            reuse an existing `web_app\dist\spa\` build

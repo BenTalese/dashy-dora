@@ -173,7 +173,7 @@
         align-items: center;
         justify-content: center;
         background: var(--brand-primary-soft);
-        color: var(--brand-primary);
+        color: var(--primary-ink);
     }
     .pick-panel__heading {
         flex: 1 1 auto;
@@ -252,7 +252,7 @@
         color: var(--text-muted);
     }
     .pick-chip--on .pick-chip__mark {
-        color: var(--brand-primary);
+        color: var(--primary-ink);
     }
     .pick-chip__text {
         display: flex;

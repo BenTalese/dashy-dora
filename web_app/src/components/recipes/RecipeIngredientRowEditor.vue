@@ -101,7 +101,7 @@
                     v-if="choiceOptions.length > 0"
                     v-model="pickedChoice"
                     class="col"
-                    :label="productsEnabled ? 'Product' : 'Preferred buy'"
+                    :label="offersMode ? 'Product' : 'Preferred buy'"
                     :options="choiceOptions"
                     emit-value
                     map-options
@@ -242,6 +242,7 @@
      * user backed out of.
      */
     import { computed, ref, watch } from 'vue';
+    import { usesOffers } from 'src/models/shoppingList';
     import { QSelect, useQuasar } from 'quasar';
     import { storeToRefs } from 'pinia';
 
@@ -343,8 +344,9 @@
 
     // ── Which one ───────────────────────────────────────────────────────
     // The item's preferred buys and linked products, fetched when the item is
-    // picked. Which list is offered follows the install, as on a shopping
-    // line: products when it has them, preferred buys otherwise.
+    // picked. Which list is offered follows the item, as on a shopping line
+    // (`usesOffers`): its linked products when it has any, else its
+    // preferred buys.
     const preferredBuys = ref<PreferredBuy[]>([]);
     const linkedProducts = ref<LinkedProduct[]>([]);
     const loadingChoices = ref(false);
@@ -381,7 +383,8 @@
         { immediate: true },
     );
 
-    const choiceOptions = computed(() => (productsEnabled.value
+    const offersMode = computed(() => usesOffers(linkedProducts.value.length, productsEnabled.value));
+    const choiceOptions = computed(() => (offersMode.value
         ? linkedProducts.value.map((p) => ({
             label: p.size ? `${p.name} · ${p.size}` : p.name,
             value: p.product_id,
@@ -394,7 +397,7 @@
         }))));
 
     const pickedChoice = computed<string | null>({
-        get: () => (productsEnabled.value
+        get: () => (offersMode.value
             ? draft.value?.selected_product_id
             : draft.value?.preferred_buy_id) ?? null,
         set: (id) => {
@@ -408,7 +411,7 @@
             const after = choiceOptions.value.find((o) => o.value === id)?.name ?? null;
             const label = (d.label ?? '').trim();
             if (label === '' || label === before) d.label = after;
-            if (productsEnabled.value) d.selected_product_id = id;
+            if (offersMode.value) d.selected_product_id = id;
             else d.preferred_buy_id = id;
         },
     });

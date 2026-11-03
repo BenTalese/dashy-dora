@@ -6,6 +6,7 @@
             'dora-mode-slider--basic': !modelValue,
             'dora-mode-slider--disabled': disabled,
             'dora-mode-slider--actionable': disabled && disabledIsActionable,
+            'dora-mode-slider--flipped': flipped,
         }"
         role="switch"
         :aria-checked="modelValue"
@@ -17,7 +18,7 @@
     >
         <!-- FU-663 / D-004: the root is the 44px hit area; the visible pill
              is the 32px track inside it. -->
-        <span class="dora-mode-slider__track">
+        <span class="dora-mode-slider__track" @animationend="flipped = false">
             <span class="dora-mode-slider__label dora-mode-slider__label--basic">
                 <q-icon :name="ICONS.chat_bubble_outline" size="14px" />
                 Basic
@@ -51,7 +52,7 @@
     // element on purpose — a leading template comment makes the SFC
     // multi-root, which breaks `wrapper.classes()` / `.trigger()` in the spec.
     import { ICONS } from 'src/style/icons';
-    import { computed } from 'vue';
+    import { computed, ref, watch } from 'vue';
 
     const props = defineProps<{
         modelValue: boolean;
@@ -82,6 +83,13 @@
         return props.modelValue
             ? 'AI mode on. Tap to switch to Basic.'
             : 'Basic mode on. Tap to switch to AI.';
+    });
+
+    // 11-D4: one glow pulse each time the mode actually changes.
+    const flipped = ref(false);
+    watch(() => props.modelValue, () => {
+        flipped.value = false;
+        requestAnimationFrame(() => { flipped.value = true; });
     });
 
     function onToggle() {
@@ -197,5 +205,16 @@
     // AI side: knob slides to the right, brand-primary glow returns.
     .dora-mode-slider--ai .dora-mode-slider__knob {
         transform: translateX(100%) skewX(-12deg);
+    }
+
+    // 11-D4: a single glow pulse round the pill when the mode flips.
+    .dora-mode-slider--flipped .dora-mode-slider__track {
+        // Token-timed, so the app's reduced-motion block collapses it.
+        animation: dora-mode-slider-flip calc(var(--motion-slow) * 2) var(--motion-ease-out);
+    }
+    @keyframes dora-mode-slider-flip {
+        0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--brand-primary) 60%, transparent); }
+        40% { box-shadow: 0 0 14px 4px color-mix(in srgb, var(--brand-primary) 45%, transparent); }
+        100% { box-shadow: 0 0 0 0 transparent; }
     }
 </style>

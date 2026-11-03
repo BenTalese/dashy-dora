@@ -36,7 +36,14 @@ export const useAppSettingsStore = defineStore('appSettings', () => {
         return row;
     };
 
-    return { settings: readonly(settings), ensureLoadedAsync, loadAsync, saveAsync };
+    /** Re-read the row after something other than `saveAsync` changed it
+     *  (onboarding's Finish writes it server-side, 14-D2). */
+    const refreshAsync = async (): Promise<AppSettings> => {
+        settings.value = await api.getAsync();
+        return settings.value;
+    };
+
+    return { settings: readonly(settings), ensureLoadedAsync, loadAsync, saveAsync, refreshAsync };
 });
 
 if (import.meta.hot) {

@@ -92,12 +92,11 @@
                 } else {
                     $q.notify({
                         type: 'negative',
-                        position: 'top',
                         message: err.message || 'Reset failed.',
                     });
                 }
             } else {
-                $q.notify({ type: 'negative', position: 'top', message: String(err) });
+                $q.notify({ type: 'negative', message: String(err) });
             }
         } finally {
             submitting.value = false;

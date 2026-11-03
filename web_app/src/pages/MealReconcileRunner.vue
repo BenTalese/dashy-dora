@@ -327,7 +327,6 @@
                 type: 'negative',
                 message: 'Could not save that.',
                 caption: toastCaption(err),
-                position: 'bottom',
             });
         } finally {
             busy.value = false;

@@ -289,12 +289,11 @@ Put the output into the API server's environment. Rotating the key invalidates e
 
 ### Desktop bundles
 
-The desktop app is [pywebview](https://pywebview.flowrl.com/) wrapping the SPA — GTK/WebKit on Linux, WebView2 on Windows, WKWebView on macOS. One PyInstaller spec (`dora.spec`); three thin platform build scripts under `packaging/`.
+The desktop app runs the server locally and opens the SPA in your default browser. One PyInstaller spec (`dora.spec`); three thin platform build scripts under `packaging/`.
 
 **Linux (AppImage):**
 ```bash
-sudo apt install python3.11-dev libpython3.11 python3-gi gir1.2-webkit2-4.1 \
-                 libgirepository1.0-dev libcairo2-dev
+sudo apt install python3.11-dev libpython3.11
 pip install -r requirements.txt
 ./packaging/build-linux.sh --clean --appimage
 chmod +x dist/Dora-v*-x86_64.AppImage && ./dist/Dora-v*-x86_64.AppImage
@@ -307,7 +306,7 @@ pip install -r requirements.txt
 .\packaging\build-windows.ps1 -Clean
 .\dist\Dora\Dora.exe
 ```
-Uses WebView2 (ships with Windows 10/11). Data persists to `%LOCALAPPDATA%\Dora\`.
+Data persists to `%LOCALAPPDATA%\Dora\`.
 
 **macOS:**
 ```bash

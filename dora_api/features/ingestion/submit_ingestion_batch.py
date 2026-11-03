@@ -107,6 +107,11 @@ class _ProductIn(StoreRef):
     # from the companion never reached My products, because this field didn't
     # exist and the companion never sent one).
     image: str | None = image_field()
+    # Whether the store has it right now (16-D2). The companion leaves the
+    # offer off a product that is out of stock or has no price, so without
+    # this the product landed as "available at $0.00". Absent keeps the
+    # stored value (a new product defaults to available).
+    is_available: bool | None = None
 
     @field_validator("web_url")
     @classmethod
@@ -391,15 +396,18 @@ class SubmitIngestionBatchHandler:
             if image is not None:
                 existing.image = image
             existing.is_active = True
+            if raw.is_available is not None:
+                existing.is_available = raw.is_available
             ctx.products_by_ref[raw.ref] = existing
             ctx.result.accepted.append(_AcceptedRecord(
                 kind="product", ref=raw.ref, id=str(existing.id), note="updated",
             ))
             return
 
-        # Create — initial offer mirrors the not-yet-known price; the
-        # next /ingest offer for this product moves it. v1 producers
-        # always push an offer for the same product so this is fine.
+        # Create — initial offer mirrors the not-yet-known price; the next
+        # /ingest offer for this product moves it. A producer may push a
+        # product with no offer (out of stock, no price), so a $0 offer
+        # reads as "no price yet" in the SPA, never as a real price.
         initial_offer = ProductOffer(
             offered_on=datetime.now(timezone.utc),
             price_now=0.0,
@@ -411,7 +419,7 @@ class SubmitIngestionBatchHandler:
             historic_offers=[],
             image=_ingested_image(raw.image),
             is_active=True,
-            is_available=True,
+            is_available=True if raw.is_available is None else raw.is_available,
             store=store,
             merchant_stockcode=raw.merchant_stockcode,
             name=raw.name,

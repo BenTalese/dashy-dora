@@ -175,6 +175,9 @@ PINNED_ADMIN_ENDPOINTS: list[tuple[str, str, dict | None]] = [
     # app settings — dora_api/features/app_settings/*.py
     ("GET",    "/api/app-settings", None),                              # get_app_settings.py:134
     ("PATCH",  "/api/app-settings", {}),                                # update_app_settings.py:417
+    # onboarding finish — admin only when it carries household settings
+    # (14-D2); a member's wizard sends no `app_settings`.
+    ("POST",   "/api/onboarding/finish", {"app_settings": {}}),
     # nutrition dataset import — dora_api/features/nutrition/nutrition_endpoints.py
     # (GET /api/nutrition/sources is deliberately NOT admin-gated: every member
     # needs to know whether a lookup can answer. Only the import is admin.)

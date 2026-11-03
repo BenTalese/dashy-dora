@@ -10,13 +10,13 @@ import uuid
 
 import requests
 
+from tests.e2e.dora_api._onboarding_finish import finish_demo, finish_items
+
 BASE = "http://localhost:5170/api"
 HEALTH = f"{BASE}/health"
 APP_SETTINGS = f"{BASE}/app-settings"
 ME = f"{BASE}/auth/me"
 CATALOG = f"{BASE}/onboarding/catalog"
-SEED_ITEMS = f"{BASE}/onboarding/seed-items"
-SEED_DEMO = f"{BASE}/onboarding/seed-demo"
 STOCK_ITEMS = f"{BASE}/stock-items"
 RECIPES = f"{BASE}/recipes"
 MEAL_PLANS = f"{BASE}/meal-plans"
@@ -123,7 +123,7 @@ def test__onboarding_seed_items__creates_prelocated_and_dedupes(api):
         ]
     }
 
-    first = requests.post(SEED_ITEMS, json=payload)
+    first = finish_items(payload)
     assert first.status_code == 200
     assert first.json() == {"created": 1, "skipped": 0}
 
@@ -135,7 +135,7 @@ def test__onboarding_seed_items__creates_prelocated_and_dedupes(api):
     assert item["stock_location_id"] == locations[0]["stock_location_id"]
 
     # Re-running Finish must not duplicate: same name is skipped.
-    second = requests.post(SEED_ITEMS, json=payload)
+    second = finish_items(payload)
     assert second.status_code == 200
     assert second.json() == {"created": 0, "skipped": 1}
     still_one = requests.get(f"{STOCK_ITEMS}?filter=name:eq:{unique_name}").json()["items"]
@@ -149,7 +149,7 @@ def test__onboarding_seed_demo__is_idempotent(api):
     # The dev seed already ships an "Spaghetti Aglio e Olio" recipe, so the
     # first call here lands as a no-op (`seeded: false`) AND a second call
     # behaves identically — that's the contract: never duplicate.
-    first = requests.post(SEED_DEMO)
+    first = finish_demo()
     assert first.status_code == 200
     body_one = first.json()
     assert set(body_one.keys()) == {
@@ -158,7 +158,7 @@ def test__onboarding_seed_demo__is_idempotent(api):
     # On a freshly-seeded DB the recipe already exists, so seeded=False;
     # on a clean DB (no seed) it'd be seeded=True with recipe_created=True.
     # Whichever branch we landed in, a second call must match exactly.
-    second = requests.post(SEED_DEMO)
+    second = finish_demo()
     assert second.status_code == 200
     assert second.json() == body_one
     # Either way, exactly one recipe by that name exists afterward.

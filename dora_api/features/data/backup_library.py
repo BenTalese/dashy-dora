@@ -40,6 +40,7 @@ from flask import Response, request, send_file
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 
+from dora_api.persistence.aware import as_utc
 from dora_api.domain.entities.backup import (
     Backup,
     STATUS_FAILED,
@@ -114,7 +115,9 @@ def _row_to_dto(row: Backup, username_by_id: dict[UUID, str]) -> dict:
         section_list = []
     return {
         "backup_id": str(row.id),
-        "created_at": row.created_at.isoformat() if row.created_at is not None else None,
+        # SQLite reads the instant back naive; it is UTC, and the SPA needs
+        # the offset to show it in the household's zone.
+        "created_at": as_utc(row.created_at).isoformat() if row.created_at is not None else None,
         "created_by_user_id": (
             str(row.created_by_user_id) if row.created_by_user_id is not None else None
         ),

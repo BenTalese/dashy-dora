@@ -501,10 +501,15 @@
         transition: background var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease);
         min-height: 44px;
     }
-    .mobile-focus__day-chip:hover,
-    .mobile-focus__day-chip:focus-visible {
+    /* Hover never repaints the focused chip: a touch "hover" sticks after the
+       tap and covered the primary fill, leaving its label at ~1:1 in dark
+       themes (walk D, 2026-11-01). */
+    .mobile-focus__day-chip:not(.mobile-focus__day-chip--focused):hover {
         background: var(--surface-sunken);
-        outline: none;
+    }
+    .mobile-focus__day-chip:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
     }
     .mobile-focus__day-chip--past {
         opacity: 0.55;
@@ -517,10 +522,11 @@
         color: var(--text-on-primary);
         border-color: var(--brand-primary);
     }
-    /* On the focused chip the primary fill is the ground, so the status
-       colours have to sit on it rather than under it. Only `planned` collides
-       (it is the same green family); warning and muted stay legible. */
-    .mobile-focus__day-chip--focused :deep(.mp-pips__pip--planned) {
+    /* On the focused chip the primary fill is the ground, so every pip takes
+       the label's ink: the status colours (amber measured 1.0 to 1.95:1) all
+       clash with some theme's primary. The day's detail below carries the
+       status for the focused day. */
+    .mobile-focus__day-chip--focused :deep(.mp-pips__pip) {
         background: var(--text-on-primary);
     }
     .mobile-focus__day-chip--focused :deep(.mp-pips__more) {
@@ -594,7 +600,7 @@
     }
     .mobile-focus__add:hover,
     .mobile-focus__add:focus-visible {
-        color: var(--brand-primary);
+        color: var(--primary-ink);
         border-color: var(--brand-primary);
         background: var(--surface-sunken);
     }

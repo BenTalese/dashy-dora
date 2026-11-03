@@ -2,11 +2,12 @@
 
   GET  /api/onboarding/state      — {first_user}: is this the install's first account
   GET  /api/onboarding/catalog    — the bundled groups / location tree / starter packs
-  POST /api/onboarding/seed       — create picked default groups + locations, plus the
-                                    user's own group / zone names, in one unit of work
-  POST /api/onboarding/seed-items — create stock items by name (pack picks + own items)
-  POST /api/onboarding/seed-demo  — one-off demo recipe + this week's meal-plan entry
-  POST /api/onboarding/complete   — stamp `onboarding_completed_at`
+  POST /api/onboarding/finish     — the wizard's whole draft in one transaction (14-D2):
+                                    preferences, household settings, the picked default
+                                    groups + locations and the user's own, starter items
+                                    by name, the optional demo recipe + meal-plan entry,
+                                    then the `onboarding_completed_at` stamp
+  POST /api/onboarding/complete   — stamp `onboarding_completed_at` (Skip)
   POST /api/onboarding/restart    — clear it (About → "Run the welcome tour again")
 
 Seed catalogues live as JSON next to this file so designers can edit without
@@ -22,6 +23,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
@@ -38,7 +40,12 @@ from dora_api.domain.entities.user import User
 from dora_api.domain.stock_status import StockStatus, level_for_status
 from dora_api.features.app_settings.clock import household_today
 from dora_api.features.routers import ONBOARDING_ROUTER
-from dora_api.infrastructure.api_response import (no_content, not_found, ok,
+from dora_api.features.app_settings.update_app_settings import (
+    UpdateAppSettingsHandler, UpdateAppSettingsRequest)
+from dora_api.features.auth.admin_gate import require_admin
+from dora_api.features.auth.update_me import UpdateMeHandler, UpdateMeRequest
+from dora_api.infrastructure.api_response import (business_rule_violation,
+                                                  no_content, not_found, ok,
                                                   unauthorized)
 from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.utils import get_request_body
@@ -191,7 +198,7 @@ class SeedHandler:
     def __init__(self, repository: Repository) -> None:
         self.repository = repository
 
-    def handle(self, request: SeedRequest) -> SeedResultDto:
+    def handle(self, request: SeedRequest, *, commit: bool = True) -> SeedResultDto:
         groups_created = groups_skipped = 0
         locations_created = locations_skipped = 0
 
@@ -342,7 +349,12 @@ class SeedHandler:
                 locations_created += 1
 
         # FU-512 unit-of-work: single final commit across groups + locations.
-        self.repository.save_changes()
+        # `commit=False` leaves it to `/finish`, which saves the whole wizard
+        # once (14-D2).
+        if commit:
+            self.repository.save_changes()
+        else:
+            self.repository.flush()
 
         return SeedResultDto(
             groups_created=groups_created,
@@ -352,25 +364,6 @@ class SeedHandler:
         )
 
 
-@ONBOARDING_ROUTER.route("/seed", methods=["POST"])
-@has_request_body(SeedRequest)
-def seed_onboarding():
-    user_id = current_user_id()
-    if user_id is None:
-        return unauthorized("Sign in to use the onboarding endpoints.")
-    _Request: SeedRequest = get_request_body()
-    if not (_Request.groups or _Request.locations or _Request.extra_group_names or _Request.extra_location_names):
-        # Nothing requested — return zero-counts rather than 400 so the
-        # frontend can call this unconditionally as "advance step 3".
-        return ok(SeedResultDto(0, 0, 0, 0))
-    result = SeedHandler(SqlAlchemyRepository()).handle(_Request)
-    _LOGGER.info(
-        "Onboarding seed (user %s): groups +%d/-%d, locations +%d/-%d",
-        user_id,
-        result.groups_created, result.groups_skipped,
-        result.locations_created, result.locations_skipped,
-    )
-    return ok(result)
 
 
 # ─── Starter catalogue (C-5.5) ───────────────────────────────────────
@@ -494,7 +487,7 @@ class SeedItemsHandler:
     def __init__(self, repository: Repository) -> None:
         self.repository = repository
 
-    def handle(self, request: SeedItemsRequest) -> SeedItemsResultDto:
+    def handle(self, request: SeedItemsRequest, *, commit: bool = True) -> SeedItemsResultDto:
         if not request.items:
             return SeedItemsResultDto(0, 0)
 
@@ -549,23 +542,13 @@ class SeedItemsHandler:
             ))
             existing.add(name.lower())
             created += 1
-        self.repository.save_changes()
+        if commit:
+            self.repository.save_changes()
+        else:
+            self.repository.flush()
         return SeedItemsResultDto(created=created, skipped=skipped)
 
 
-@ONBOARDING_ROUTER.route("/seed-items", methods=["POST"])
-@has_request_body(SeedItemsRequest)
-def seed_items_onboarding():
-    user_id = current_user_id()
-    if user_id is None:
-        return unauthorized("Sign in to use the onboarding endpoints.")
-    _Request: SeedItemsRequest = get_request_body()
-    result = SeedItemsHandler(SqlAlchemyRepository()).handle(_Request)
-    _LOGGER.info(
-        "Onboarding seed-items (user %s): +%d/-%d",
-        user_id, result.created, result.skipped,
-    )
-    return ok(result)
 
 
 # ─── Demo recipe + meal-plan (FU-194 / L38) ──────────────────────────
@@ -615,7 +598,7 @@ class SeedDemoHandler:
     def __init__(self, repository: Repository) -> None:
         self.repository = repository
 
-    def handle(self) -> SeedDemoResultDto:
+    def handle(self, *, commit: bool = True) -> SeedDemoResultDto:
         # Idempotency: skip the whole thing if the demo recipe already
         # exists (same by-name discipline the other seed endpoints use).
         if self._find_recipe_by_name(_DEMO_RECIPE_NAME) is not None:
@@ -725,7 +708,10 @@ class SeedDemoHandler:
                 start_date=monday,
                 entries=[entry],
             ))
-        self.repository.save_changes()
+        if commit:
+            self.repository.save_changes()
+        else:
+            self.repository.flush()
         # `meal_plan_created` keeps its contract meaning — "the demo meal is on
         # this week's plan" — whether the plan row was created or joined.
         return SeedDemoResultDto(
@@ -743,15 +729,93 @@ class SeedDemoHandler:
         return None
 
 
-@ONBOARDING_ROUTER.route("/seed-demo", methods=["POST"])
-def seed_demo_onboarding():
+
+
+# ─── Finish (14-D2) ──────────────────────────────────────────────────
+# The wizard's whole draft in one request and one transaction: preferences,
+# household settings, catalogue seed, starter items, the demo dataset and the
+# completion stamp either all land or none do. It used to be five requests,
+# and a failure part-way left a half-set-up household (owner 2026-11-02).
+
+class FinishOnboardingRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    preferences: UpdateMeRequest | None = None
+    # Install-wide, so admin only; a member's wizard never sends it.
+    app_settings: UpdateAppSettingsRequest | None = None
+    seed: SeedRequest | None = None
+    items: SeedItemsRequest | None = None
+    seed_demo: bool = False
+
+
+@dataclass
+class FinishOnboardingResultDto:
+    seed: SeedResultDto | None
+    items: SeedItemsResultDto | None
+    demo: SeedDemoResultDto | None
+
+
+class FinishOnboardingHandler:
+    def __init__(self, repository: Repository) -> None:
+        self.repository = repository
+
+    def handle(
+        self, request: FinishOnboardingRequest, user_id: UUID,
+    ) -> tuple[FinishOnboardingResultDto | None, str | None]:
+        """Returns (result, error). Nothing is saved unless the whole draft
+        applies; the caller rolls back on an error."""
+        if request.preferences is not None:
+            _, error = UpdateMeHandler(self.repository).handle(
+                request.preferences, user_id, commit=False,
+            )
+            if error is not None:
+                return None, error
+        if request.app_settings is not None:
+            response = UpdateAppSettingsHandler(self.repository).handle(
+                request.app_settings, commit=False,
+            )
+            if response.invalid_reason is not None:
+                return None, response.invalid_reason
+
+        seed = None
+        if request.seed is not None and (
+            request.seed.groups or request.seed.locations
+            or request.seed.extra_group_names or request.seed.extra_location_names
+        ):
+            seed = SeedHandler(self.repository).handle(request.seed, commit=False)
+        items = None
+        if request.items is not None and request.items.items:
+            items = SeedItemsHandler(self.repository).handle(request.items, commit=False)
+        # After the items so the demo reuses a picked "Garlic" or "Olive oil".
+        demo = SeedDemoHandler(self.repository).handle(commit=False) if request.seed_demo else None
+
+        user = self.repository.get(User).by_id(user_id)
+        user.onboarding_completed_at = datetime.now(timezone.utc)
+        self.repository.save_changes()
+        return FinishOnboardingResultDto(seed=seed, items=items, demo=demo), None
+
+
+@ONBOARDING_ROUTER.route("/finish", methods=["POST"])
+@has_request_body(FinishOnboardingRequest)
+def finish_onboarding():
     user_id = current_user_id()
     if user_id is None:
         return unauthorized("Sign in to use the onboarding endpoints.")
-    result = SeedDemoHandler(SqlAlchemyRepository()).handle()
-    _LOGGER.info(
-        "Onboarding seed-demo (user %s): seeded=%s items=+%d recipe=%s plan=%s",
-        user_id, result.seeded, result.items_created,
-        result.recipe_created, result.meal_plan_created,
-    )
+    _Request: FinishOnboardingRequest = get_request_body()
+    if _Request.app_settings is not None:
+        _, err = require_admin()
+        if err is not None:
+            return err
+    repo = SqlAlchemyRepository()
+    if repo.get(User).by_id(user_id) is None:
+        return not_found("User", user_id)
+    try:
+        result, error = FinishOnboardingHandler(repo).handle(_Request, user_id)
+    except Exception:
+        repo.session.rollback()
+        raise
+    if error is not None:
+        repo.session.rollback()
+        return business_rule_violation(error)
+    _LOGGER.info("Onboarding finished for user %s", user_id)
     return ok(result)

@@ -75,6 +75,9 @@
         openSlugs.value = slug ? new Set([slug]) : new Set();
         if (!slug) return;
         await nextTick();
+        // Two frames: the opened guide and the page above it have laid out by
+        // then, so the target doesn't move after the scroll starts.
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
         document.getElementById(`guide-${slug}`)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
     }
 

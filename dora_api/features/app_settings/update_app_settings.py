@@ -139,7 +139,7 @@ class UpdateAppSettingsHandler:
     def __init__(self, repository: Repository) -> None:
         self.repository = repository
 
-    def handle(self, request: UpdateAppSettingsRequest) -> UpdateAppSettingsResponse:
+    def handle(self, request: UpdateAppSettingsRequest, *, commit: bool = True) -> UpdateAppSettingsResponse:
         setting = get_or_create_app_setting(self.repository)
         set_fields = request.model_fields_set
 
@@ -404,7 +404,10 @@ class UpdateAppSettingsHandler:
                 )
             setattr(setting, _ColumnField, token.decode("ascii"))
 
-        self.repository.save_changes()
+        if commit:
+            self.repository.save_changes()
+        else:
+            self.repository.flush()
         return UpdateAppSettingsResponse(dto=_to_dto(setting))
 
 

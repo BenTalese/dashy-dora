@@ -96,6 +96,24 @@ export function deviceTimezone(): string {
     }
 }
 
+/** The device's language tag in canonical form (`en-US`), or null when the
+ *  browser doesn't report a valid one. */
+export function deviceLocale(): string | null {
+    try {
+        const raw = (typeof navigator !== 'undefined' && navigator.language) || '';
+        return raw ? (Intl.getCanonicalLocales(raw)[0] ?? null) : null;
+    } catch {
+        return null;
+    }
+}
+
+/** The language picker's options: the shortlist, plus `extra` (a device or
+ *  saved tag the shortlist doesn't carry) so it can still be shown. */
+export function localeOptionsWith(extra: string | null): RegionChoice[] {
+    if (!extra || LOCALE_CHOICES.some((c) => c.value === extra)) return [...LOCALE_CHOICES];
+    return [{ value: extra, label: extra }, ...LOCALE_CHOICES];
+}
+
 /** The zone picker's filter: a case-insensitive substring over every choice. */
 export function filterTimezones(needle: string): string[] {
     const q = needle.trim().toLowerCase();

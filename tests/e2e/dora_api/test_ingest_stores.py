@@ -103,3 +103,31 @@ def test__ingest__store_and_store_id_together_is_a_400(api):
         "ref": "p0", "name": "Both", "store": "Woolworths", "store_id": store["store_id"],
     }]}
     assert requests.post(INGEST, json=body, headers=_auth(key)).status_code == 400
+
+
+def test__ingest__is_available_crosses_the_wire(api):
+    """16-D2 — a product pushed out of stock (no offer) lands unavailable, and a
+    later push without the field keeps what was stored."""
+    key = _mint_key()
+    store = _seeded_store()
+    name = f"Gone {uuid.uuid4().hex[:8]}"
+    sku = f"SKU-{uuid.uuid4().hex[:6]}"
+    product = {"ref": "p0", "name": name, "store_id": store["store_id"], "merchant_stockcode": sku}
+
+    resp = requests.post(INGEST, json={"products": [{**product, "is_available": False}]}, headers=_auth(key))
+    assert resp.status_code == 200, resp.text
+    product_id = resp.json()["accepted"][0]["id"]
+
+    def available() -> bool:
+        items = requests.get(f"{BASE}/products", params={"filter": f"name:eq:{name}"}).json()["items"]
+        return next(p for p in items if p["product_id"] == product_id)["is_available"]
+
+    assert available() is False
+
+    resp = requests.post(INGEST, json={"products": [product]}, headers=_auth(key))
+    assert resp.status_code == 200, resp.text
+    assert available() is False
+
+    resp = requests.post(INGEST, json={"products": [{**product, "is_available": True}]}, headers=_auth(key))
+    assert resp.status_code == 200, resp.text
+    assert available() is True

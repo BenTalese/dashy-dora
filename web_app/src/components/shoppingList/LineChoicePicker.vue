@@ -1,7 +1,7 @@
 <template>
     <!-- The name *is* the "which one" picker (owner, 2026-09-17), and what it
-         offers depends on the install (2026-09-27): with products it lists the
-         item's **offers**, without them its **preferred buys**. Shared by the
+         offers depends on the item (2026-11-03): one with linked products
+         lists its **offers**, any other its **preferred buys** (`usesOffers`). Shared by the
          list row and the template editor (2026-10-14), so a template is built
          with the same control the list is. The caller renders plain text when
          `hasLineChoices` is false. -->
@@ -24,7 +24,7 @@
                 <q-item-section>{{ choice.itemName }}</q-item-section>
             </q-item>
             <q-separator />
-            <template v-if="productsEnabled">
+            <template v-if="offersMode">
                 <q-item
                     v-for="offer in choice.offers"
                     :key="offer.product_id"
@@ -69,7 +69,7 @@
                 </q-item>
             </template>
         </q-list>
-        <BaseTooltip>{{ productsEnabled ? 'Pick an offer' : 'Pick a preferred buy' }}</BaseTooltip>
+        <BaseTooltip>{{ offersMode ? 'Pick an offer' : 'Pick a preferred buy' }}</BaseTooltip>
     </BaseDropdown>
 </template>
 
@@ -82,7 +82,7 @@
     import { formatMoney } from 'src/composables/useMoney';
     import { useMoneyEnabled } from 'src/composables/useMoneyEnabled';
     import {
-        pickedLineChoice, type LineChoice, type LineProductOffer,
+        pickedLineChoice, usesOffers, type LineChoice, type LineProductOffer,
     } from 'src/models/shoppingList';
 
     const props = defineProps<{
@@ -100,11 +100,12 @@
     const { moneyEnabled } = useMoneyEnabled();
     const { products: productsEnabled } = useFeatureFlags();
 
+    const offersMode = computed(() => usesOffers(props.choice.offers.length, productsEnabled.value));
     const picked = computed(() => pickedLineChoice(props.choice, productsEnabled.value));
 
     function onPick(id: string | null): void {
         if (id === (picked.value?.id ?? null)) return;
-        if (productsEnabled.value) emit('pick-offer', id);
+        if (offersMode.value) emit('pick-offer', id);
         else emit('pick-hint', id);
     }
 

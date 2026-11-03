@@ -1,5 +1,5 @@
 """Pins on the two env readers every boot path goes through (finalisation
-19-R5 / 19-R10): the layered log-level resolver and the one truthy parser."""
+19-R5 / 19-R10): the env-only log-level resolver and the one truthy parser."""
 import logging
 
 import pytest
@@ -16,19 +16,22 @@ def config(tmp_path, monkeypatch):
     return DoraConfig()
 
 
-def test__log_level__env_wins_over_json_and_profile(config, monkeypatch):
+def test__log_level__env_wins_over_profile(config, monkeypatch):
     monkeypatch.setenv("DORA_LOG_LEVEL", "warning")
     assert config.get_log_level() == logging.WARNING
 
 
-def test__log_level__legacy_json_error_means_profile_default(config):
-    # The generated JSON says "ERROR"; development's profile default is DEBUG.
+def test__log_level__unset_uses_profile_default(config):
     assert config.get_log_level() == logging.DEBUG
 
 
-def test__log_level__json_value_is_honoured_when_env_unset(config):
-    config._config.LOG_LEVEL = "info"
+def test__log_level__production_default_is_info(config, monkeypatch):
+    monkeypatch.setenv("DORA_ENV", "production")
     assert config.get_log_level() == logging.INFO
+
+
+def test__no_appsettings_file_is_written(config, tmp_path):
+    assert not (tmp_path / "config").exists()
 
 
 def test__log_level__unknown_name_warns_and_falls_back(config, monkeypatch, caplog):

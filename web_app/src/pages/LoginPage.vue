@@ -115,7 +115,7 @@
         // sees confirmation of the click-through.
         if (route.query.verified === '1') {
             $q.notify({
-                type: 'positive', position: 'top',
+                type: 'positive',
                 message: 'Email verified. Sign in to continue.',
                 timeout: 4000,
             });

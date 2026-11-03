@@ -1075,7 +1075,7 @@
         gap: 3px;
         font-size: var(--font-size-sm);
         font-weight: 600;
-        color: var(--brand-primary);
+        color: var(--primary-ink);
     }
     /* Leftovers are grey, never a verdict colour (owner 2026-09-12): a day you
        eat from a cook you've already made is neither a warning nor an

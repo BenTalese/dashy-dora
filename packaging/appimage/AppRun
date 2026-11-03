@@ -19,8 +19,5 @@ export APPDIR="${APPDIR:-$HERE}"
 # PyInstaller puts the binary + its sibling shared libs under
 # usr/bin in our AppDir layout (see build-appimage.sh).
 export LD_LIBRARY_PATH="${APPDIR}/usr/bin:${LD_LIBRARY_PATH:-}"
-# GI typelib lookup so pywebview's GTK backend can find its
-# repository when running outside a normal install.
-export GI_TYPELIB_PATH="${APPDIR}/usr/lib/girepository-1.0:${GI_TYPELIB_PATH:-}"
 
 exec "${APPDIR}/usr/bin/Dora" "$@"

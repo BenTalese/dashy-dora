@@ -650,15 +650,12 @@
                                  just a personal memory aid (and a future
                                  shopping-list hint).
 
-                                 Feedback 2026-08-16: hidden entirely when the
-                                 Products overlay is on. The two answer the
-                                 same question ("which one do I actually buy?")
-                                 and Products answers it with real SKUs, prices
-                                 and deals — showing both invites the user to
-                                 maintain the same fact twice. Rows already
-                                 stored are kept, not deleted; turning Products
-                                 back off brings them straight back. -->
-                            <template v-if="!productsEnabled">
+                                 Owner 2026-11-03: shown and used as normal
+                                 unless this item has a linked product, which
+                                 then answers "which one do I buy?" with real
+                                 SKUs and prices (`usesOffers`). Rows already
+                                 stored are kept; unlinking brings them back. -->
+                            <template v-if="!usesOffers(detail.products.length, productsEnabled)">
                             <!-- Feedback 2026-06-18 (round 4): the explainer
                                  ("What you actually buy for this — e.g.
                                  Vitasoy Oat Milky 1L") moves to an info-hover
@@ -820,6 +817,7 @@
                         <div class="text-subtitle1">Linked products</div>
                         <q-space />
                         <BaseButton
+                            v-if="canFindProducts"
                             variant="ghost"
                             :icon="ICONS.add"
                             label="Link another"
@@ -835,6 +833,7 @@
                             history for this stock item.
                         </div>
                         <BaseButton
+                            v-if="canFindProducts"
                             variant="primary"
                             :icon="ICONS.local_offer"
                             label="Find &amp; link a product"
@@ -1375,6 +1374,7 @@
 
 <script lang="ts" setup>
     import BaseTooltip from 'src/components/BaseTooltip.vue';
+    import { usesOffers } from 'src/models/shoppingList';
     import { ICONS } from 'src/style/icons';
     import { formatDate, formatDateTime as formatLocaleDateTime } from 'src/composables/useDateFormat';
     import { isDateOnly, parseLocalIso } from 'src/helpers/weekDates';
@@ -1414,7 +1414,8 @@
     import { useFeatureFlags } from 'src/composables/useFeatureFlags';
     import { useMoneyEnabled } from 'src/composables/useMoneyEnabled';
     import { useScanningEnabled } from 'src/composables/useScanningEnabled';
-    import { openProductSearch } from 'src/composables/useProductSearchUrl';
+    import { openProductSearch, useProductSearchUrl } from 'src/composables/useProductSearchUrl';
+    import { useAuthStore } from 'src/stores/authStore';
     import { describeQrFailure, fetchQrImageUrlAsync, openQrSheetAsync } from 'src/composables/useQrLabels';
     import { useShoppingListActions } from 'src/composables/useShoppingListActions';
     import { useStockItemActions } from 'src/composables/useStockItemActions';
@@ -2036,6 +2037,12 @@
     // "Link another" when products exist). FU-186 retired the in-app
     // `/product-search` route; both entry points now open the external
     // Product Search companion (or the Features setup page when unset).
+    // Product Search opens when a URL is set; without one only an admin has
+    // somewhere to go (the setup page), as on My products.
+    const productSearch = useProductSearchUrl();
+    const authStore = useAuthStore();
+    const canFindProducts = computed(() => productSearch.configured.value || authStore.isAdmin);
+
     function onFindAndLink() {
         openProductSearch(router);
     }

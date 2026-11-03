@@ -19,6 +19,22 @@ def test__health_check__ApiIsHealthy__GetsOkayResponse(api):
     assert _Response.json()['ok'] is True
 
 
+def test__health_check__reports_db_reachability(api, monkeypatch):
+    """19-D3 — `db` says whether the server can reach its database; the
+    probe itself stays 200 either way."""
+    assert requests.get(base_route).json()["db"] == "ok"
+
+    from dora_api.app import app, db
+
+    def _boom(*_a, **_k):
+        raise RuntimeError("db down")
+    with app.app_context():
+        monkeypatch.setattr(db.engine, "connect", _boom)
+    resp = requests.get(base_route)
+    assert resp.status_code == 200
+    assert resp.json()["db"] == "unreachable"
+
+
 def test__health_check__reports_db_schema_version_alongside_code_head(api):
     """FU-570 — the probe reports the connected DB's *actual* alembic
     revision (`schema_version_db`) next to the code-side head

@@ -22,8 +22,62 @@ semver — major bumps signal schema or breaking-config changes.
   why), and the sign-in page hides "Forgot password?" until it can.
 
 ### Changed
+- **Version 1.0.0 (2026-11-01).** The first release version.
+- **Configuration is environment variables only.** `dapi.appsettings.json` is
+  gone; an old copy under `<DORA_DATA_DIR>/config/` is ignored and safe to
+  delete. With `DORA_LOG_LEVEL` unset the container now logs at INFO (it used
+  to run at ERROR), and a refused change (a 4xx on a save) is logged at WARNING
+  with the reason the user saw, so a failure reported in the app leaves a trace.
+- **`/api/health` reports `db`** (`ok` or `unreachable`) so a monitor can tell
+  "Dora is up but its database isn't".
+- **Offline data only appears when the network actually fails.** A slow server
+  is waited for instead of answered from the cache after 5 seconds.
+- **Price alerts need money features on.** With money off the alert controls
+  are hidden and the server refuses them, the same as every other dollar
+  surface.
+- **A product you added yourself says "Hide from deals"** instead of "Stop
+  tracking prices", since nothing refreshes its price.
+- **Products pushed in by the companion carry whether the store has them.** An
+  out-of-stock product shows as out of stock, and a product with no price reads
+  "No price yet" instead of $0.00.
+- **Backups can include each person's assistant providers** (address and model,
+  never the API key). A restored provider has to answer a test again before it
+  can be picked.
+- **Onboarding asks for language and format**, pre-filled from the device, so
+  dates and money look right from the first screen.
+- **Dora answers how-to questions from the Help guides.** In AI mode she looks
+  up the guides a question needs instead of relying on a long built-in
+  description of the app that had gone out of date.
+- **Ordinary messages pop up bottom-right everywhere**, including stocktake,
+  the meal reconcile runner, the shopping run and the sign-in pages. Only
+  connection and system notices use the top.
+- **The Basic/AI switch glows once when it flips.**
+- **Theme colours retuned for legibility (2026-11-03).** Links, flat buttons
+  and other primary-coloured text use a deeper shade of the theme colour where
+  the original was too light to read (Pesto, Pesto Dark, Lemon Tart, Blueberry,
+  Cherry Cola, Sourdough); buttons keep the brand colour, and Pesto's and
+  Blueberry's primary are a touch deeper so white labels read. Pesto Dark,
+  Blueberry Dark and Cherry Cola Dark have new secondary colours, and Pesto
+  Dark's "Dashy Dora" wordmark is brighter. The "uses expiring" chip for food
+  that isn't urgent is a soft amber tint instead of a fixed grey.
+- **Preferred buys and products work side by side (2026-11-03).** An item with
+  a linked product offers that product on lists, templates and recipes; every
+  other item keeps its preferred buys, shown and used as normal even when the
+  install has product data. Linking a product to an item hides its preferred
+  buys (they're kept, and come back if you unlink).
+- **The Product Search menu item shows whenever its link is set.** It no longer
+  waits for product data to exist first.
+- **Finishing the welcome tour is all or nothing.** Your look, the household
+  settings, the groups and zones you picked, your starter items and the demo
+  recipe are saved in one go; if anything fails, nothing is half set up and
+  Finish can simply be pressed again.
+- **"Stock items without products" on My Products no longer glows.** It still
+  shows how many there are.
+- **The demo install opens on its populated dashboard** after every reset
+  instead of the first-run wizard.
+- **Desktop bundles no longer pin pywebview**, which nothing used.
 - **About names the exact build (2026-10-30).** Settings → About → Build shows
-  the version and build id (for example `v0.7.0 · 49bef96`). If this tab is
+  the version and build id (for example `v1.0.0 · 49bef96`). If this tab is
   running an older bundle than the server, it says so. `/api/health` reports
   the same `build`, and "Report a bug" includes it.
 - **The container runs the API as `PUID`/`PGID`** (default 1000:1000) instead
@@ -55,6 +109,20 @@ semver — major bumps signal schema or breaking-config changes.
   guide they name directly.
 
 ### Fixed
+- **Fixes from the 1.0.0 browser walk (2026-11-02).** "Separate this cook" now
+  separates the days instead of re-linking them. The selected day on the phone
+  planner stays readable after a tap in dark themes. Deleting a stock item a
+  recipe still uses opens the "Still used by recipes" dialog again. Help links
+  scroll to the guide they open. What's new no longer shows raw `**` and
+  backticks. The Small text size keeps captions at 12px. The "Change instance
+  URL" dialog opens above the connection splash. The dashboard shows its own
+  error panel instead of a crash when the server is down on first load. Basic
+  Dora answers "where is", "what's expiring" and "what can I cook" from your
+  data on a fresh login. Members without a Product Search link no longer see
+  buttons that led to their account page. Meal-slot settings count planned
+  meals only. A bad date in an import is that row's error, not a failed import.
+  The backup library shows the right time. A production server keeps its INFO
+  log lines after the startup migration.
 - **Autonomous QA sweep, round 3 (2026-10-30).** Pathways through the app
   rather than pages: end-to-end journeys with state checks, the rendered
   documents (print views, CSV exports, emails), regional formats under

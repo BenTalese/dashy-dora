@@ -1,11 +1,8 @@
 import type {
+    FinishOnboardingRequest,
+    FinishOnboardingResult,
     OnboardingCatalog,
     OnboardingState,
-    SeedDemoResult,
-    SeedItemsRequest,
-    SeedItemsResult,
-    SeedRequest,
-    SeedResult,
 } from 'src/models/onboarding';
 import AxiosHttpClient from './axiosHttpClient';
 
@@ -27,27 +24,15 @@ export default class OnboardingApiService {
             {},
         );
 
-    seedAsync = async (request: SeedRequest): Promise<SeedResult> =>
-        await this.httpClient.post<SeedResult, SeedRequest>(
-            '/onboarding/seed',
-            request,
-        );
-
     getCatalogAsync = async (): Promise<OnboardingCatalog> =>
         await this.httpClient.get<OnboardingCatalog>('/onboarding/catalog');
 
-    seedItemsAsync = async (request: SeedItemsRequest): Promise<SeedItemsResult> =>
-        await this.httpClient.post<SeedItemsResult, SeedItemsRequest>(
-            '/onboarding/seed-items',
+    /** 14-D2 — the wizard's whole draft (preferences, household settings,
+     *  catalogue seed, starter items, demo dataset) in one transaction, which
+     *  also stamps completion. All of it lands or none of it does. */
+    finishAsync = async (request: FinishOnboardingRequest): Promise<FinishOnboardingResult> =>
+        await this.httpClient.post<FinishOnboardingResult, FinishOnboardingRequest>(
+            '/onboarding/finish',
             request,
-        );
-
-    /** FU-194 — opt-in demo dataset (one recipe + the StockItems it needs + a
-     *  current-week MealPlan with one entry). Idempotent server-side: a
-     *  second call returns `seeded: false` if the demo recipe already exists. */
-    seedDemoAsync = async (): Promise<SeedDemoResult> =>
-        await this.httpClient.post<SeedDemoResult, Record<string, never>>(
-            '/onboarding/seed-demo',
-            {},
         );
 }

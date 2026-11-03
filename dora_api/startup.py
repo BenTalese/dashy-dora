@@ -44,7 +44,7 @@ def bootstrap(is_test_env: bool = False):
     """
     # D3: refuse to boot in production when required env vars are
     # missing. No-op in dev/test. Runs before *anything* else so the
-    # friendly error fires before we read appsettings, wire routes, etc.
+    # friendly error fires before we read config, wire routes, etc.
     from dora_api.infrastructure.profile import (
         validate_production_requirements,
         warn_if_insecure_cookies_in_production,

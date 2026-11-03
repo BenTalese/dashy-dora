@@ -16,8 +16,9 @@ import uuid
 
 import requests
 
+from tests.e2e.dora_api._onboarding_finish import finish_seed
+
 BASE = "http://localhost:5170/api"
-SEED = f"{BASE}/onboarding/seed"
 STOCK_LOCATIONS = f"{BASE}/stock-locations"
 
 
@@ -36,7 +37,7 @@ def test__seed_onboarding__groups_and_locations__commits_everything_together(api
     # with the ambient defaults + explicit filters that select nothing new,
     # and confirm the response shape is coherent (no exception, sensible
     # counts, no partial state).
-    resp = requests.post(SEED, json={
+    resp = finish_seed({
         "groups": True,
         "group_names": [group_pick],       # unknown name → nothing to create
         "locations": True,
@@ -55,7 +56,7 @@ def test__seed_onboarding__seed_default_groups__commits_them(api):
     # Broad happy path — seed default groups without a filter. Whether they
     # end up "created" or "skipped" depends on whether previous tests seeded
     # them, but the endpoint must return a coherent 200 with matching totals.
-    resp = requests.post(SEED, json={"groups": True})
+    resp = finish_seed({"groups": True})
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["groups_created"] + body["groups_skipped"] >= 1, body
@@ -72,12 +73,12 @@ def test__seed_onboarding__own_group_and_zone_names__created_once_in_the_same_ca
         "extra_location_names": [f"Own zone {unique}"],
     }
 
-    first = requests.post(SEED, json=body)
+    first = finish_seed(body)
     assert first.status_code == 200, first.text
     assert first.json()["groups_created"] == 1
     assert first.json()["locations_created"] == 1
 
-    second = requests.post(SEED, json=body)
+    second = finish_seed(body)
     assert second.status_code == 200, second.text
     assert second.json()["groups_created"] == 0
     assert second.json()["groups_skipped"] == 1
@@ -86,3 +87,36 @@ def test__seed_onboarding__own_group_and_zone_names__created_once_in_the_same_ca
 
     zones = requests.get(f"{BASE}/locations").json()
     assert f"Own zone {unique}" in {z["name"] for z in zones}
+
+
+def test__finish__a_rejected_part_saves_nothing(api):
+    """14-D2: the wizard's draft is all or nothing. A bad theme in the
+    preferences refuses the request and the own group seeded in the same
+    request is not left behind."""
+    unique = uuid.uuid4().hex[:6]
+    resp = requests.post(f"{BASE}/onboarding/finish", json={
+        "preferences": {"theme": "not-a-theme"},
+        "seed": {"groups": False, "locations": False, "extra_group_names": [f"Atomic {unique}"]},
+    })
+    assert resp.status_code == 422, resp.text
+    groups = requests.get(f"{BASE}/stock-groups").json()
+    names = {g["name"] for g in (groups["items"] if isinstance(groups, dict) else groups)}
+    assert f"Atomic {unique}" not in names
+    me = requests.get(f"{BASE}/auth/me").json()
+    assert me["theme"] != "not-a-theme"
+
+
+def test__finish__stamps_completion_and_applies_the_draft(api):
+    unique = uuid.uuid4().hex[:6]
+    requests.post(f"{BASE}/onboarding/restart")
+    resp = requests.post(f"{BASE}/onboarding/finish", json={
+        "preferences": {"theme": "blueberry"},
+        "seed": {"groups": False, "locations": False, "extra_group_names": [f"Done {unique}"]},
+        "items": {"items": [{"name": f"Finish item {unique}", "group_name": f"Done {unique}"}]},
+    })
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["seed"]["groups_created"] == 1
+    assert resp.json()["items"]["created"] == 1
+    me = requests.get(f"{BASE}/auth/me").json()
+    assert me["theme"] == "blueberry"
+    assert me["onboarding_completed_at"] is not None

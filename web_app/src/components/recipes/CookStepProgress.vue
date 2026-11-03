@@ -140,7 +140,7 @@
         font-size: var(--font-size-2xl);
         font-weight: 700;
         line-height: 1;
-        color: var(--brand-primary);
+        color: var(--primary-ink);
         font-variant-numeric: tabular-nums;
     }
     .cook-progress__total {

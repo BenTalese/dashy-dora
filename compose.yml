@@ -114,9 +114,10 @@ services:
       - DORA_DB_USER=${DORA_DB_USER:-}
       - DORA_DB_PASSWORD=${DORA_DB_PASSWORD:-}
 
-      # ── API tuning (optional; defaults baked into appsettings) ─────
+      # ── API tuning (optional) ──────────────────────────────────────
+      # Log level defaults to INFO in production; set DEBUG / WARNING / ERROR to change it.
       - DORA_API_PORT=${DORA_API_PORT:-5170}
-      - DORA_LOG_LEVEL=${DORA_LOG_LEVEL:-ERROR}
+      - DORA_LOG_LEVEL=${DORA_LOG_LEVEL:-}
       - DORA_DEBUG=${DORA_DEBUG:-}
 
       # ── API server (FU-397) ────────────────────────────────────────
@@ -191,11 +192,9 @@ services:
       - dora_data:/app/data       # sqlite + uploads
       - dora_cache:/app/cache     # image cache + scraped json
       - dora_logs:/app/logs       # application logs
-      # NOTE for existing deployments: the `dora_config:/app/config` volume is
-      # gone. `dapi.appsettings.json` lives at `<DORA_DATA_DIR>/config/` (inside
-      # `dora_data`) and has since 2026-05; `/app/config` was only the legacy
-      # source the boot-time migration moved it *out of*. A leftover named
-      # volume is harmless — `docker volume rm <project>_dora_config` to drop it.
+      # NOTE for existing deployments: configuration is env-only (1.0.0). A
+      # leftover `dapi.appsettings.json` under `<DORA_DATA_DIR>/config/` or an
+      # old `dora_config` volume is ignored and safe to delete.
 
     # Container-level healthcheck — hits nginx's lightweight /healthz
     # so a wedged Python API doesn't take down the whole container

@@ -204,7 +204,7 @@
     }
     .story-glyph--control .g--big {
         font-size: 84px;
-        color: var(--brand-primary);
+        color: var(--primary-ink);
     }
     .story-switches {
         display: flex;

@@ -41,7 +41,108 @@ next.
 
 ---
 
-## 2026-10-30 (latest): **Finish-off steps 1–2 done, step 4 mostly done, step 3 cut short (FU-971)**
+## 2026-11-03 (later): **Colour-board picks applied (uncommitted)**
+
+**Owner:** pasted picks from the board (FU-622).
+
+**Built:** `--primary-ink` (tokens default = --brand-primary; per-theme shades for pesto, pesto-dark, lemon-tart,
+blueberry, cherry-cola, sourdough) read by `.text-primary` (app.scss, !important over Quasar) and 25 `color:
+var(--brand-primary)` sites; `--brand-wordmark` (default = accent; pesto-dark override) read by ApplicationLogo.
+Primaries deepened: pesto 33%, blueberry 54%. Secondaries: pesto-dark, blueberry-dark, cherry-cola-dark (+ soft +
+strong). ExpiringChip neutral → `.dora-chip--tint-warning`; `.q-chip.dora-chip--tint-*` now set `--text-primary` ink
+and a solid 1px border (the bare tint class left Quasar's fixed chip ink).
+
+**Verified:** board maths re-run on the new themes.scss (every pick at its floor); rebuilt SPA, live probe in 7 themes:
+`.text-primary` on cards 4.88 to 10.73, wordmark on header 4.55 in pesto-dark, tint chip text 6.18 to 13.91, no page
+errors. vitest 865, vue-tsc + eslint clean. FU-622/674/801/621/777 → RESOLVED; FU-963 → RESOLVED (owner accepted as is: remaining wordmark ratios and the nested-interactive rows).
+
+**Next up:** refresh PROJECT_STATE; commit both repos when the owner says.
+
+---
+
+## 2026-11-03: **Preferred buys coexist with products; Product Search nav on the link alone (uncommitted)**
+
+**Owner:** "Update preferred products to show and be used as normal unless a product is linked (allowing the two
+systems to coexist)"; "Make product search nav menu item appear if link is filled out (no other criteria required)".
+
+**Built:** one per-item rule, `usesOffers(offerCount, productsEnabled)` in `models/shoppingList.ts`: linked products
+when products are on and the item has any, else preferred buys. Used by `hasLineChoices` / `pickedLineChoice` (list
+plan rows, templates), `LineChoicePicker`, `RecipeIngredientRowEditor`, and the stock-item page's Preferred buys card
+(was hidden install-wide with products on, feedback 2026-08-16, now superseded). The server already sent both lists,
+so no API change. Help copy for preferred buys + the list picker updated, corpus re-exported. MainLayout: Product
+Search entry drops the `features.products` gate. Test `lineChoiceSource.spec.ts`.
+
+**Gates:** vitest 865; vue-tsc + eslint clean.
+
+**QA (same day, owner ask "QA these recent changes"):** rebuilt the PWA SPA and drove it with scratch Playwright against
+a seeded backend (5186) and a fresh unseeded one (5187): preferred buys on list rows, item page and recipe editor
+per item; Product Search nav on the link alone; the welcome tour's single `/finish` (theme, en-US locale + New York
+timezone from the device, default groups/zones); the orphans button without the glow. 34 checks, all pass, no page
+errors. 5 DORA_VERIFY lines deleted (evidence in DORA_VERIFY_TRIAGE).
+
+**Next up:** owner's colour-board picks; refresh PROJECT_STATE; commit both repos when the owner says.
+
+---
+
+## 2026-11-02: **Owner calls 14-D2 / 14-D3 / 10-D3 (uncommitted)**
+
+**Owner:** 14-D2 yes, 14-D3 no, 10-D3 yes.
+
+**Built:** `POST /api/onboarding/finish` takes the whole wizard draft (preferences, app settings (admin only), seed,
+items, seed_demo) and applies it in one transaction via the existing handlers' new `commit=False` (UpdateMe,
+UpdateAppSettings, Seed, SeedItems, SeedDemo; the established `commit` kwarg pattern), then stamps completion; any
+error rolls back. `/seed`, `/seed-items`, `/seed-demo` routes retired (pre-release, no shim); their tests now post to
+`/finish` through `tests/e2e/dora_api/_onboarding_finish.py`; two new tests (a rejected part saves nothing; the draft
+applies + stamps). Admin-gate sweep pins `/finish` with an `app_settings` body. SPA: `WelcomeWizard` builds one
+`FinishOnboardingRequest`; `appSettingsStore.refreshAsync`. 10-D3: the orphans button lost `:attention`. 14-D3: no
+change (recorded in FINALISATION_REVIEW §0).
+
+**Gates:** pytest 2746 passed (after pinning the new admin gate); vitest 862; vue-tsc + eslint clean.
+
+**Next up:** owner's colour-board picks; rebuild the SPA and recheck the fixed lines; refresh PROJECT_STATE; commit
+both repos when the owner says.
+
+---
+
+## 2026-11-01: **Version 1.0.0, colour board, owner decisions built; FU-971 walks in flight (uncommitted)**
+
+**Status: builds and paperwork done; FU-971 walkers resumed after a rate-limit stop. Nothing committed.**
+
+**Done:** version 1.0.0 (version_info, package.json/lock, CHANGELOG example, DORA_VERIFY line); SPA rebuilt in PWA mode.
+Colour board artifact https://claude.ai/artifact/39cAkaYr2TXUpEgxeAum25 (FU-622; owner picks pending). FU-954 resolved
+(hide-only). Owner decisions built: pywebview pin removed (FU-949); 19-D2 appsettings.json retired, env-only config,
+compose log level now profile default (INFO in prod); 19-D4/FU-640 refused writes logged at WARNING
+(`middleware.log_rejected_mutation`); 19-D3 `/api/health.db`; 17-D2 no networkTimeoutSeconds; 10-R3 price watches 403
+with money off + SPA hides them; 10-D4 "Hide from deals" on custom products; 18-D5/FU-625 `user_llm_providers` backup
+section (no key, no verified flag, users remap on duplicate); 14-D4 demo user skips the wizard; 14-D6 wizard asks
+Language & format; 11-D4 slider glow; 20-D2 ordinary toasts off the top edge; 16-D2 `is_available` on the ingest
+wire (both repos) + "No price yet"; 11-D1 `app_help` tool over `help_corpus.json` (exported from helpContent.ts,
+drift spec `helpCorpusExport.spec.ts`), APP_OVERVIEW now a routing guide. Recorded owner calls: 13-D4 accept, 16-D1
+keep, 18-D2 won't-do, 09-D1 household-wide (no copy), 09-D2 as is, 12-D1 yes, 15-D3/15-D4 as is, 17-D1 unbuilt,
+18-D1 later, 20-D1 no.
+
+**Gates:** vitest 862/862, vue-tsc + eslint clean on touched files; full pytest **2743 passed**, 1 skipped, 1 xfailed. Companion `tests/test_dora_ingest_client.py` 13 passed.
+
+**Ledgers:** FU-625, FU-640, FU-949, FU-919 → RESOLVED; progress notes on FU-946 (1, 6), FU-947 (3), FU-632 (1),
+FU-622 (board); FU-972 opened (scheduled backups, 18-D1). FINALISATION_REVIEW §0 records every decision. CHANGELOG
+`### Changed` gained the batch. DORA_VERIFY "Owner decisions built (2026-11-01)". Close-gate: R-005 carve-out comment on
+the health `db` probe; no new ADR (the help export reuses the codegen + drift-test pattern).
+
+**FU-971 done (11-02):** walks B to E finished after two rate-limit resumes; ~160 DORA_VERIFY lines deleted on pass
+(evidence in DORA_VERIFY_TRIAGE), fixes the same day: delete-blocked dialog (axios kept problem extension keys),
+member Product Search buttons, Basic-mode empty stores (dispatch now `ensureRecipeData`), backup `created_at` UTC
+offset, Separate this cook (no key in separate mode), dark day chip hover/pips, dashboard cold-load boundary, meal-slot
+counts (planned meals only), Help deep-link scroll (router leaves `/help/*?e=` alone), What's new markdown, Small
+caption floor + `--font-size-3xl` unit, splash z-index under dialogs, import bad date → row error, alembic `fileConfig`
+no longer wipes app logging (prod boot verified to log router/job counts). Leftovers FU-973/974/976/977. Gates: pytest
+2744 passed; vitest 862; vue-tsc + eslint clean. Fixed lines stay in DORA_VERIFY for a recheck on a rebuilt SPA.
+
+**Next up:** owner to answer 14-D2, 14-D3, 10-D3 and paste colour-board picks; rebuild the SPA and recheck the fixed
+lines; refresh PROJECT_STATE; commit both repos when the owner says.
+
+---
+
+## 2026-10-30: **Finish-off steps 1–2 done, step 4 mostly done, step 3 cut short (FU-971)**
 
 **Status: paused by the owner ("wrap up, continue later"). Committed and pushed as `693af124`.**
 

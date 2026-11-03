@@ -228,7 +228,9 @@
     // they were always orthogonal to the palette.
 
     // Phase D / FU-186 — the "Product Search" entry:
-    //   - hidden when products is off (no product data ⇒ no search surface)
+    //   - shown whenever a `product_search_url` is set, nothing else
+    //     (owner 2026-11-03): it used to wait for product data too, but the
+    //     search is how a fresh install gets its first products.
     //   - hidden when no `product_search_url` is configured — the entry exists
     //     only to open that URL, and a nav item that dead-ends on an admin-only
     //     settings page is useless to a normal user (owner call: setting the
@@ -240,7 +242,6 @@
     const productSearch = useProductSearchUrl();
 
     const productSearchEntry = computed<MenuButtonProps | null>(() => {
-        if (!features.products.value) return null;
         const url = productSearch.url.value.trim();
         if (!url) return null;
         return {

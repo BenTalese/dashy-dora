@@ -1,24 +1,17 @@
-import json
 import logging
 import os
 from pathlib import Path
 
-from pydantic import BaseModel
-
 from dora_api.infrastructure.profile import (Profile, current_profile,
                                              env_flag, is_production)
 
-
-class Config(BaseModel):
-    API_HOST: str = "0.0.0.0"
-    API_PORT: int = 5170
-    LOG_LEVEL: str = "ERROR"
+DEFAULT_API_HOST = "0.0.0.0"
+DEFAULT_API_PORT = 5170
 
 
-# D3: per-profile defaults for things that meaningfully differ between
-# dev and prod. The JSON appsettings still wins when an operator pins
-# a value there, and env vars still win over JSON — these are just the
-# "what should it be when nothing's pinned" fallbacks.
+# Configuration is env-only (19-D2 retired `dapi.appsettings.json`). These
+# are the per-profile fallbacks for things that differ between dev and
+# prod when the matching env var is unset.
 _PROFILE_DEFAULTS = {
     Profile.DEVELOPMENT: {
         "log_level": "DEBUG",
@@ -98,59 +91,15 @@ def _sqlite_url_from_path(raw: str) -> str:
     return f"sqlite:///{Path(raw).expanduser().resolve().as_posix()}"
 
 
-def _resolve_config_path() -> Path:
-    """D3: appsettings.json lives under <DATA_DIR>/config/ so the
-    operator's persistent overrides ride the data volume. The legacy
-    `./config/dapi.appsettings.json` location is migrated by
-    path_migration.migrate_legacy_appsettings() on startup."""
-    data_dir = _env("DORA_DATA_DIR", "data")
-    return (Path(data_dir).expanduser().resolve()) / "config" / "dapi.appsettings.json"
-
-
 class DoraConfig:
-    _config: Config
-    _config_path: Path
-
-    def __init__(self):
-        self._config_path = _resolve_config_path()
-        # D3: relocated to <DATA_DIR>/config/. Attempt to move a
-        # legacy ./config/dapi.appsettings.json into the new home so
-        # operators that customised it don't silently lose their
-        # tweaks. Must happen before the file-exists check so the
-        # generated-defaults branch doesn't overwrite the moved file.
-        try:
-            from dora_api.infrastructure.path_migration import \
-                migrate_legacy_appsettings
-            migrate_legacy_appsettings(self._config_path)
-        except Exception:
-            # Migration is best-effort — never block startup over it.
-            pass
-
-        if not Path.exists(self._config_path):
-            # D3: generate sensible defaults on first boot. Operators
-            # can edit afterwards; env vars still win.
-            self._config_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(self._config_path, 'w') as _AppSettings:
-                _AppSettings.write(Config().model_dump_json(indent = 4))
-
-        with open(self._config_path, 'r') as _AppSettings:
-            self._config = Config(**json.load(_AppSettings))
-
     def get_profile(self) -> Profile:
         return current_profile()
 
-    # ── Env-var-first getters ─────────────────────────────────────────
-    # Every getter reads the relevant env var first and falls back to
-    # the JSON appsettings value. The JSON file is still the source of
-    # truth for un-overridden values + dev defaults, but containerised
-    # deployments can override any of these via .env without editing
-    # files in the image.
-
     def get_api_host(self) -> str:
-        return _env("DORA_API_HOST", self._config.API_HOST) or self._config.API_HOST
+        return _env("DORA_API_HOST", DEFAULT_API_HOST) or DEFAULT_API_HOST
 
     def get_api_port(self) -> int:
-        return _env_int("DORA_API_PORT", self._config.API_PORT)
+        return _env_int("DORA_API_PORT", DEFAULT_API_PORT)
 
     def get_db_connection_string(self) -> str:
         # Postgres is the standard datastore (Decision 5,
@@ -186,22 +135,14 @@ class DoraConfig:
         return _default_postgres_url()
 
     def get_log_level(self) -> int:
-        """Root log level: `DORA_LOG_LEVEL` > JSON `LOG_LEVEL` > the profile
-        default. The JSON default is "ERROR" (legacy); that value means "use
-        the profile default" so dev gets DEBUG without an explicit override.
-        An unknown name is warned about once and falls back to the profile
-        default rather than silently resolving to NOTSET. This is the one
-        resolver — `configure_logging` takes its result (finalisation 19-R5;
-        it used to re-read the env var itself and ignore the JSON layer)."""
+        """Root log level: `DORA_LOG_LEVEL`, else the profile default
+        (DEBUG in development, INFO in production). An unknown name is
+        warned about once and falls back to the profile default rather than
+        silently resolving to NOTSET. This is the one resolver;
+        `configure_logging` takes its result (finalisation 19-R5)."""
         env_value = _env("DORA_LOG_LEVEL")
-        json_value = self._config.LOG_LEVEL
         profile_default = _PROFILE_DEFAULTS[current_profile()]["log_level"]
-        if env_value:
-            name = env_value.strip().upper()
-        elif json_value and json_value.upper() != "ERROR":
-            name = json_value.strip().upper()
-        else:
-            name = profile_default
+        name = env_value.strip().upper() if env_value else profile_default
 
         level = logging.getLevelNamesMapping().get(name)
         if level is None:

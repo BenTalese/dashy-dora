@@ -418,7 +418,7 @@
     }
     .add-meal-button:hover,
     .add-meal-button:focus-visible {
-        color: var(--brand-primary);
+        color: var(--primary-ink);
         border-color: var(--brand-primary);
         background: var(--surface-sunken);
     }

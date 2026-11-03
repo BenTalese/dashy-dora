@@ -1297,7 +1297,7 @@
     .meal-plans-reconcile-nudge {
         display: inline-block;
         padding: 0.35rem 0.75rem;
-        color: var(--brand-primary);
+        color: var(--primary-ink);
         text-decoration: none;
         font-size: var(--font-size-sm);
         font-weight: 500;

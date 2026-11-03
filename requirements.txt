@@ -1,13 +1,10 @@
 apscheduler==3.10.4
 beautifulsoup4==4.12.3
-# Desktop A: pywebview hosts the SPA in a native window (GTK on
-# Linux, WebView2 on Windows, WKWebView on macOS). platformdirs
-# resolves the per-OS user data / cache / log directories so the
-# bundled app writes to the right place. Both pulled in only by the
-# desktop bootstrap (`desktop_app.py`); the Docker path doesn't
-# import either.
+# Desktop A: platformdirs resolves the per-OS user data / cache / log
+# directories so the bundled app writes to the right place. Pulled in
+# only by the desktop bootstrap (`desktop_app.py`), which opens the SPA
+# in the default browser; the Docker path doesn't import it.
 platformdirs==4.3.6
-pywebview==5.4
 # PyInstaller bundles the desktop app into `dist/Dora/`. Pulled into
 # the main requirements (vs a separate `requirements-dev.txt`) so
 # the GitHub Actions matrix doesn't have to install it separately.

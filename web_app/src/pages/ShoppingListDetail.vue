@@ -2310,7 +2310,6 @@
         if (!ok) return;
         $q.notify({
             type: 'positive',
-            position: 'bottom',
             timeout: 4000,
             message: `Picked ${line.stock_item_name}`,
             actions: [{

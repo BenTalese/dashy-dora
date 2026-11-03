@@ -1,10 +1,12 @@
 """End-to-end coverage for the N8 Price History Explorer endpoints."""
 import uuid
 
+import pytest
 import requests
 
 
 BASE = "http://localhost:5170/api/price-history"
+APP_SETTINGS = "http://localhost:5170/api/app-settings"
 
 
 def test__price_history__missing_product_ids__is_400(api):
@@ -66,7 +68,26 @@ def test__price_history__series_carries_your_prices_and_observations(api):
     assert all(p["unit_price"] > 0 for p in s["observation_points"])
 
 
-def test__price_alerts__crud_round_trip(api):
+@pytest.fixture
+def money_on(api):
+    requests.patch(APP_SETTINGS, json={"money_enabled": True})
+    yield
+    requests.patch(APP_SETTINGS, json={"money_enabled": False})
+
+
+def test__price_alerts__money_off__every_route_is_403(api):
+    # 10-R3: a watch is a dollar threshold, so it is a money surface.
+    requests.patch(APP_SETTINGS, json={"money_enabled": False})
+    products = requests.get("http://localhost:5170/api/products").json()["items"]
+    create = requests.post(f"{BASE}/alerts", json={
+        "product_id": products[0]["product_id"], "threshold_unit_price": 1.23,
+    })
+    assert create.status_code == 403, create.text
+    assert requests.get(f"{BASE}/alerts").status_code == 403
+    assert requests.delete(f"{BASE}/alerts/{uuid.uuid4()}").status_code == 403
+
+
+def test__price_alerts__crud_round_trip(api, money_on):
     products = requests.get("http://localhost:5170/api/products").json()["items"]
     assert products, "the seed ships products"
     product_id = products[0]["product_id"]
@@ -91,7 +112,7 @@ def test__price_alerts__crud_round_trip(api):
     assert redel.status_code == 404
 
 
-def test__price_alerts__create_for_unknown_product__is_404(api):
+def test__price_alerts__create_for_unknown_product__is_404(api, money_on):
     response = requests.post(f"{BASE}/alerts", json={
         "product_id": str(uuid.uuid4()), "threshold_unit_price": 5.0,
     })

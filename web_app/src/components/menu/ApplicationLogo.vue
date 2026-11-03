@@ -69,7 +69,7 @@
         white-space: nowrap;
         display: inline-block;
         transform-origin: center center;
-        color: var(--brand-accent);
+        color: var(--brand-wordmark);
         cursor: pointer;
     }
 

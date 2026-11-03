@@ -2480,7 +2480,7 @@
     }
     .rn__groupname {
         font-size: 0.8125rem; font-weight: 700; letter-spacing: 0.06em;
-        text-transform: uppercase; color: var(--brand-primary);
+        text-transform: uppercase; color: var(--primary-ink);
         min-width: 0;
         margin: 0;
     }

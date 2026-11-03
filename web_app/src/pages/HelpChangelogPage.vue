@@ -51,7 +51,7 @@
 
     /** Strip the markdown emphasis and code ticks the changelog uses. */
     function plain(line: string): string {
-        return line.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1').replace(/^\*([^*]+)\*/, '$1').trim();
+        return line.replace(/\*\*(.+?)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1').replace(/^\*([^*]+)\*/, '$1').trim();
     }
 
     function render(body: string): Block[] {
@@ -62,8 +62,10 @@
             if (para.length) blocks.push({ kind: 'para', text: plain(para.join(' ')) });
             para = [];
         };
+        // Strip after joining: bold or code that wraps onto a continuation
+        // line only matches once the bullet is whole (278 bullets leaked `**`).
         const flushList = () => {
-            if (list) blocks.push({ kind: 'list', items: list });
+            if (list) blocks.push({ kind: 'list', items: list.map(plain) });
             list = null;
         };
         for (const raw of body.split('\n')) {
@@ -75,12 +77,12 @@
             if (bullet) {
                 flushPara();
                 list ??= [];
-                list.push(plain(bullet[1] ?? ''));
+                list.push((bullet[1] ?? '').trim());
                 continue;
             }
             if (list && /^\s{2,}\S/.test(line)) {
                 // a wrapped continuation of the last bullet
-                list[list.length - 1] = `${list[list.length - 1]} ${plain(line)}`;
+                list[list.length - 1] = `${list[list.length - 1]} ${line.trim()}`;
                 continue;
             }
             flushList();

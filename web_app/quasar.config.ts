@@ -398,9 +398,11 @@ export default defineConfig((ctx): any => {
 
                 cfg.runtimeCaching = [
                     {
-                        // Dora API — NetworkFirst with a 5 s timeout so a
-                        // slow backend doesn't pin the UI; falls back to
-                        // the cached GET response when offline.
+                        // Dora API — NetworkFirst with no timeout: the
+                        // cached GET is served only when the network fails,
+                        // so stale data appears only while the offline
+                        // banner is up (17-D2). A slow answer is still a
+                        // live answer.
                         // Requests made with `cache: 'no-store'` (the
                         // `/api/health` reachability probe in
                         // `useNetworkStatus`) are left to the network: a
@@ -412,7 +414,6 @@ export default defineConfig((ctx): any => {
                         method: 'GET',
                         options: {
                             cacheName: 'dora-api',
-                            networkTimeoutSeconds: 5,
                             expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 },
                             cacheableResponse: { statuses: [0, 200] },
                         },

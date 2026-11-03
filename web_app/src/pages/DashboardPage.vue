@@ -1079,10 +1079,14 @@
             // shows you. `refreshDoraScore` bypasses it outright — a `loadAll`
             // is the user asking for current numbers.
             refreshDoraScore(),
-            shoppingListStore.ensureLoadedAsync(),
+            // These two stores feed a card and a deep-link, not the page: with
+            // the API down an uncaught rejection here took the whole dashboard
+            // to the error boundary (walk D, 2026-11-01). The cards that read
+            // them show their own empty or error state.
+            shoppingListStore.ensureLoadedAsync().catch(() => undefined),
             // the donut's low/out segments deep-link to
             // /stock?level_id=<id>; the store hydrates those ids.
-            stockLevelStore.ensureLoadedAsync(),
+            stockLevelStore.ensureLoadedAsync().catch(() => undefined),
         ]);
     }
 

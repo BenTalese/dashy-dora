@@ -69,7 +69,7 @@
            ink rather than a semantic colour: this is not a warning, and
            painting a 1.5-star recipe red would be the app editorialising
            about someone's dinner (D-013). */
-        color: var(--brand-primary);
+        color: var(--primary-ink);
         white-space: nowrap;
     }
     .rhs__star--empty { color: var(--border-strong); }

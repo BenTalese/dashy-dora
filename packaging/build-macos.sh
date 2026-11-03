@@ -2,9 +2,7 @@
 # Build the Dashy Dora desktop bundle for macOS.
 #
 # Produces `dist/Dora/Dora` plus a sibling tree of dylibs + bundled
-# data. macOS uses WKWebView via pywebview at runtime; the WKWebView
-# framework ships with macOS itself so there is no separate install
-# step.
+# data. The app opens the SPA in the default browser.
 #
 # Prerequisites:
 #   - Python 3.11 + a venv with `pip install -r requirements.txt`

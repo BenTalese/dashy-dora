@@ -401,7 +401,10 @@ export default class AxiosHttpClient implements HttpClient {
                 apiError.title ||
                 Object.values(apiError.errors ?? {}).join(', ') ||
                 message;
+            // Problem-detail extension members (e.g. a stock-item delete's
+            // `blocked_by_recipes`) ride along so callers can act on them.
             details = {
+                ...(apiError as unknown as Record<string, unknown>),
                 title: apiError.title,
                 errors: apiError.errors,
                 type: apiError.type,

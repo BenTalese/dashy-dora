@@ -39,7 +39,8 @@
 /* ─── Pesto (default light — fresh garden green + teal + golden) ──── */
 /* ═══════════════════════════════════════════════════════════════════ */
 [data-theme="pesto"] {
-    --brand-primary: hsl(150 60% 36%);
+    --brand-primary: hsl(150 60% 33%);
+    --primary-ink: hsl(150 60% 29%);
     --brand-primary-soft: hsl(150 60% 92%);
     --brand-secondary: hsl(189 100% 26%);
     --brand-secondary-soft: hsl(189 35% 88%);
@@ -91,10 +92,12 @@
 /* ─── Pesto Dark (Group 3: forest teal + bright lime) ─────────────── */
 [data-theme="pesto-dark"] {
     --brand-primary: hsl(150 48% 40%);            /* further toned for dark-mode contrast */
+    --brand-wordmark: hsl(150 48% 47.5%);
+    --primary-ink: hsl(150 48% 41.5%);
     --brand-primary-soft: hsla(150, 48%, 40%, 0.22);
-    --brand-secondary: hsl(170 28% 30%);          /* #35605A */
-    --brand-secondary-soft: hsla(170, 28%, 30%, 0.3);
-    --brand-secondary-strong: hsl(170 32% 58%);   /* indicator fill — see tokens.scss */
+    --brand-secondary: hsl(212 28% 30%);
+    --brand-secondary-soft: hsla(212, 28%, 30%, 0.3);
+    --brand-secondary-strong: hsl(212 28% 45%);
     --brand-accent: hsl(150 48% 40%);
     --brand-accent-soft: hsla(150, 48%, 40%, 0.22);
     --accent-ink: hsl(150 48% 45%);                  /* raw accent was 3.7:1 on elevated; lifted to 4.6:1 */
@@ -160,6 +163,7 @@
 /* ═══════════════════════════════════════════════════════════════════ */
 [data-theme="lemon-tart"] {
     --brand-primary: hsl(40 88% 67%);
+    --primary-ink: hsl(40 88% 29.5%);
     --brand-primary-soft: hsl(40 95% 92%);
     --brand-secondary: hsl(189 100% 26%);
     --brand-secondary-soft: hsl(189 35% 88%);
@@ -294,7 +298,8 @@
 /* ─── Blueberry (cool cobalt + navy + sky) ────────────────────────── */
 /* ═══════════════════════════════════════════════════════════════════ */
 [data-theme="blueberry"] {
-    --brand-primary: hsl(218 76% 56%);
+    --brand-primary: hsl(218 76% 54%);
+    --primary-ink: hsl(218 76% 46.5%);
     --brand-primary-soft: hsl(218 76% 92%);
     --brand-secondary: hsl(220 60% 22%);
     --brand-secondary-soft: hsl(220 30% 86%);
@@ -344,9 +349,9 @@
 [data-theme="blueberry-dark"] {
     --brand-primary: hsl(193 25% 66%);            /* #82AEB1 */
     --brand-primary-soft: hsla(193, 25%, 66%, 0.2);
-    --brand-secondary: hsl(184 14% 47%);          /* #668586 */
-    --brand-secondary-soft: hsla(184, 14%, 47%, 0.25);
-    --brand-secondary-strong: hsl(184 22% 64%);   /* indicator fill — see tokens.scss */
+    --brand-secondary: hsl(232 28% 47%);
+    --brand-secondary-soft: hsla(232, 28%, 47%, 0.25);
+    --brand-secondary-strong: hsl(232 28% 52%);
     --brand-accent: hsl(232 41% 75%);             /* #A7ACD9 */
     --brand-accent-soft: hsla(232, 41%, 75%, 0.18);
     --accent-ink: var(--brand-accent);               /* already 5.9:1 on elevated */
@@ -409,6 +414,7 @@
 /* ═══════════════════════════════════════════════════════════════════ */
 [data-theme="cherry-cola"] {
     --brand-primary: hsl(352 65% 50%);
+    --primary-ink: hsl(352 65% 46%);
     --brand-primary-soft: hsl(352 60% 92%);
     --brand-secondary: hsl(355 50% 18%);
     --brand-secondary-soft: hsl(355 25% 86%);
@@ -458,13 +464,13 @@
 [data-theme="cherry-cola-dark"] {
     --brand-primary: hsl(98 60% 70%);             /* lifted B0CA87 */
     --brand-primary-soft: hsla(98, 60%, 70%, 0.18);
-    --brand-secondary: hsl(2 16% 19%);            /* #442220 */
-    --brand-secondary-soft: hsla(2, 16%, 19%, 0.3);
+    --brand-secondary: hsl(98 28% 19%);
+    --brand-secondary-soft: hsla(98, 28%, 19%, 0.3);
     /* Lifted toward clay/tan rather than straight up the red ramp: this
        theme's --semantic-negative is hsl(7 78% 65%), and a lifted #442220
        lands close enough to it that an Essential stripe would read as an
        alert. Hue pushed to 20 to keep the two separable. */
-    --brand-secondary-strong: hsl(20 30% 62%);
+    --brand-secondary-strong: hsl(98 28% 37%);
     --brand-accent: hsl(74 36% 44%);              /* #809848 */
     --brand-accent-soft: hsla(74, 36%, 44%, 0.18);
     --accent-ink: hsl(74 36% 46%);                   /* raw accent was 4.2:1 on elevated; lifted to 4.6:1 */
@@ -527,6 +533,7 @@
 /* ═══════════════════════════════════════════════════════════════════ */
 [data-theme="sourdough"] {
     --brand-primary: hsl(33 72% 55%);
+    --primary-ink: hsl(33 72% 32%);
     --brand-primary-soft: hsl(33 65% 92%);
     --brand-secondary: hsl(28 36% 28%);
     --brand-secondary-soft: hsl(28 22% 86%);

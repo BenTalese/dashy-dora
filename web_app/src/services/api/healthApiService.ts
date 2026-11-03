@@ -7,6 +7,9 @@ import AxiosHttpClient from './axiosHttpClient';
  *  built against older shapes. */
 export interface HealthInfo {
     ok: boolean;
+    /** 19-D3 — whether the server can reach its database. Optional because
+     *  older backends won't emit it. */
+    db?: 'ok' | 'unreachable';
     version: string;
     /** FU-861 — git short sha of the server's build; null from a source
      *  checkout. Optional in the type because older backends won't emit it. */

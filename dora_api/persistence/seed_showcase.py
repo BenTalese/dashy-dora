@@ -162,6 +162,9 @@ def seed_showcase_data():
         send_deals_on_day=6,
         username="demo",
         is_admin=True,
+        # 14-D4 (owner 2026-11-01): a visitor lands on the populated
+        # dashboard, not the first-run wizard, after every reset.
+        onboarding_completed_at=now,
     )
     repo.add(demo_user)
 

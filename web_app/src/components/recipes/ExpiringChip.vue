@@ -14,7 +14,7 @@
         cookbook layouts back out of step. The breakdown that a panel would
         have shown lives in the tooltip.
     -->
-    <q-chip dense :color="tone.color" :text-color="tone.textColor" :icon="tone.icon">
+    <q-chip dense :color="tone.color" :text-color="tone.textColor" :class="tone.classes" :icon="tone.icon">
         {{ label }}
         <BaseTooltip max-width="260px">{{ tooltip }}</BaseTooltip>
     </q-chip>
@@ -57,15 +57,17 @@
     const tone = computed(() => {
         switch (expiryToneFor(props.soonestDate)) {
             case 'expired':
-                return { color: 'negative', textColor: 'dark', icon: ICONS.error };
+                return { color: 'negative', textColor: 'dark', icon: ICONS.error, classes: undefined };
             case 'soon':
-                return { color: 'warning', textColor: 'dark', icon: ICONS.wasteExpired };
+                return { color: 'warning', textColor: 'dark', icon: ICONS.wasteExpired, classes: undefined };
             // 'ok' = inside the filter's 14-day horizon but outside the 7-day
             // "soon" band; 'none' = at-risk for a reason other than a date.
-            // Both are real but not urgent, so they read as muted rather than
-            // borrowing a colour that means "act now".
+            // Both are real but not urgent, so they take the soft warm tint the
+            // recipe row's "Use soon" chip wears rather than the saturated
+            // fill that means "act now" (FU-777, owner pick 2026-11-03; was a
+            // fixed `grey-7` that ignored the theme, R-002).
             default:
-                return { color: 'grey-7', textColor: 'white', icon: ICONS.schedule };
+                return { color: undefined, textColor: undefined, icon: ICONS.schedule, classes: 'dora-chip--tint-warning' };
         }
     });
 

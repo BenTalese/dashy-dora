@@ -103,7 +103,7 @@
                 email: form.email.trim() || null,
             });
             $q.notify({
-                type: 'positive', position: 'top',
+                type: 'positive',
                 message: 'Admin account created. Welcome to Dashy Dora!',
                 timeout: 4000,
             });

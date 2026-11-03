@@ -126,7 +126,7 @@
        its text, not the glyph, so this doesn't grow the chip run's row. */
     .rating-chip__glyph {
         font-size: 18px;
-        color: var(--brand-primary);
+        color: var(--primary-ink);
     }
     .rating-chip__value {
         font-size: var(--font-size-sm);

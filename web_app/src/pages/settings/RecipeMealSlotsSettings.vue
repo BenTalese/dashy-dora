@@ -5,7 +5,7 @@
         :icon="ICONS.schedule"
         noun="meal slot"
         noun-plural="meal slots"
-        usage-label="entry"
+        usage-label="planned meal"
         empty-action="Create one to schedule meals against."
         :preserves-label="true"
         :reorderable="true"

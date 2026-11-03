@@ -56,7 +56,8 @@
                     <span v-if="product.size">{{ product.size }}</span>
                 </div>
                 <div class="row items-baseline q-gutter-xs q-mt-xs">
-                    <span class="text-h6">{{ formatMoney(product.price_now) }}</span>
+                    <span v-if="hasPrice(product)" class="text-h6">{{ formatMoney(product.price_now) }}</span>
+                    <span v-else class="dora-text-muted">{{ NO_PRICE_YET }}</span>
                     <span
                         v-if="hasDiscount"
                         class="text-caption dora-text-muted product-card__was"
@@ -64,7 +65,7 @@
                         {{ formatMoney(product.price_was) }}
                     </span>
                 </div>
-                <div v-if="watchThreshold != null" class="product-card__watch">
+                <div v-if="moneyEnabled && watchThreshold != null" class="product-card__watch">
                     <q-icon :name="ICONS.price_check" size="14px" />
                     Alert at {{ formatMoney(watchThreshold) }}
                 </div>
@@ -154,10 +155,10 @@
                                 <q-icon :name="ICONS.search" size="18px" />
                             </q-item-section>
                             <q-item-section>
-                                {{ product.is_active ? 'Stop tracking prices' : 'Track prices' }}
+                                {{ activeLabel }}
                             </q-item-section>
                         </q-item>
-                        <q-item clickable @click="emit('watch-price')">
+                        <q-item v-if="moneyEnabled" clickable @click="emit('watch-price')">
                             <q-item-section avatar>
                                 <q-icon :name="ICONS.price_check" size="18px" />
                             </q-item-section>
@@ -224,9 +225,10 @@
     import ProductThumb from 'src/components/products/ProductThumb.vue';
     import StoreLogo from 'src/components/StoreLogo.vue';
     import { formatMoney } from 'src/composables/useMoney';
+    import { useMoneyEnabled } from 'src/composables/useMoneyEnabled';
     import { ICONS } from 'src/style/icons';
     import type { Product } from 'src/models/product';
-    import { isOnSpecial } from 'src/helpers/offerLogic';
+    import { NO_PRICE_YET, hasPrice, isOnSpecial } from 'src/helpers/offerLogic';
     import { useProductStoreLink } from 'src/composables/useProductStoreLink';
 
     const props = defineProps<{
@@ -251,6 +253,14 @@
     }>();
 
     const hasDiscount = computed(() => isOnSpecial(props.product));
+    // Price watches are a money surface (10-R3).
+    const { moneyEnabled } = useMoneyEnabled();
+    // Nothing refreshes a custom product, so for one `is_active` only decides
+    // whether it shows in deals (10-D4).
+    const activeLabel = computed(() => {
+        if (props.product.is_custom) return props.product.is_active ? 'Hide from deals' : 'Show in deals';
+        return props.product.is_active ? 'Stop tracking prices' : 'Track prices';
+    });
 
     const {
         isLink: isTopHalfLink, tag: topHalfTag, attrs: topHalfAttrs,

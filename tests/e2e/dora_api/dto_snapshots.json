@@ -132,6 +132,7 @@
       "budget_policy",
       "build",
       "cooking_policy",
+      "db",
       "features",
       "image_policy",
       "locale_policy",

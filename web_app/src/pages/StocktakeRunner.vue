@@ -576,7 +576,6 @@
         } catch (err) {
             $q.notify({
                 type: 'negative',
-                position: 'top',
                 message: 'Could not confirm.',
                 caption: toastCaption(err),
             });
@@ -602,7 +601,6 @@
             } catch (err) {
                 $q.notify({
                     type: 'negative',
-                    position: 'top',
                     message: 'Could not update.',
                     caption: toastCaption(err),
                 });
@@ -638,7 +636,6 @@
         } catch (err) {
             $q.notify({
                 type: 'negative',
-                position: 'top',
                 message: 'Could not update.',
                 caption: toastCaption(err),
             });
@@ -667,7 +664,6 @@
         } catch (err) {
             $q.notify({
                 type: 'negative',
-                position: 'top',
                 message: 'Could not push.',
                 caption: toastCaption(err),
             });
@@ -702,7 +698,6 @@
         } catch (err) {
             $q.notify({
                 type: 'negative',
-                position: 'top',
                 message: 'Could not mute.',
                 caption: toastCaption(err),
             });
@@ -740,7 +735,6 @@
         } catch (err) {
             $q.notify({
                 type: 'negative',
-                position: 'top',
                 message: 'Could not save those checks.',
                 caption: toastCaption(err),
             });
@@ -788,7 +782,6 @@
         } catch (err) {
             $q.notify({
                 type: 'negative',
-                position: 'top',
                 message: 'Could not mute.',
                 caption: toastCaption(err),
             });
@@ -814,7 +807,6 @@
         } catch (err) {
             $q.notify({
                 type: 'negative',
-                position: 'top',
                 message: 'Could not delete.',
                 caption: toastCaption(err),
             });

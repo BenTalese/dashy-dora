@@ -29,8 +29,7 @@ infer them statically:
    explicitly.
 
 4. **Hidden imports** for runtime-discovered plugins/drivers:
-   sqlite dialect, alembic runtime, apscheduler trigger types, the
-   pywebview GTK backend on Linux.
+   sqlite dialect, alembic runtime, apscheduler trigger types.
 
 5. **Email + onboarding seed templates** + bundled JSON seed data
    are read from disk at runtime — ship as data.
@@ -88,6 +87,8 @@ datas = [
      "dora_api/features/onboarding"),
     # Email templates — Jinja templates rendered at send time.
     ("dora_api/email_templates", "dora_api/email_templates"),
+    # The Help guides, exported from the SPA for the assistant's app_help tool.
+    ("dora_api/features/help/help_corpus.json", "dora_api/features/help"),
 ]
 datas += collect_data_files("alembic", subdir="templates")
 

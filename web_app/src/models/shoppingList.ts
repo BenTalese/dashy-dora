@@ -59,9 +59,9 @@ export type LineProductOffer = {
 
 export type LinePreferredBuy = { preferred_buy_id: string; label: string };
 
-/** The "which one" choice a list row and a template line both carry. One
- *  source per install, never both: offers with `features.products`, preferred
- *  buys without. */
+/** The "which one" choice a list row and a template line both carry. Decided
+ *  per item (owner 2026-11-03): an item with linked products offers those,
+ *  every other item its preferred buys, so the two coexist on one install. */
 export type LineChoice = {
     itemName: string;
     offers: LineProductOffer[];
@@ -70,8 +70,14 @@ export type LineChoice = {
     preferredBuyId: string | null;
 };
 
+/** The one rule for which source an item's choice comes from: its linked
+ *  products when products are on and it has any, else its preferred buys. */
+export function usesOffers(offerCount: number, productsEnabled: boolean): boolean {
+    return productsEnabled && offerCount > 0;
+}
+
 export function hasLineChoices(choice: LineChoice, productsEnabled: boolean): boolean {
-    return productsEnabled ? choice.offers.length > 0 : choice.preferredBuys.length > 0;
+    return usesOffers(choice.offers.length, productsEnabled) || choice.preferredBuys.length > 0;
 }
 
 /** Only an offer the user picked, never the cheapest-offer fallback, which
@@ -80,7 +86,7 @@ export function pickedLineChoice(
     choice: LineChoice,
     productsEnabled: boolean,
 ): { id: string; label: string } | null {
-    if (productsEnabled) {
+    if (usesOffers(choice.offers.length, productsEnabled)) {
         const offer = choice.offers.find((o) => o.product_id === choice.selectedProductId);
         return offer ? { id: offer.product_id, label: offer.name } : null;
     }

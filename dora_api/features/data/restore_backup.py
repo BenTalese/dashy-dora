@@ -352,6 +352,13 @@ class RestoreBackupHandler:
                         # another item already.
                         skipped[backup_key] += 1
                         continue
+                    if backup_key == "user_llm_providers" and self._provider_already_configured(
+                        table, decoded
+                    ):
+                        # UNIQUE(user_id, provider): the account already has
+                        # its own settings for this provider; keep them.
+                        skipped[backup_key] += 1
+                        continue
 
                     db.session.execute(insert(table).values(**decoded))
                     present_pks[backup_key].add(decoded_pk)
@@ -410,6 +417,15 @@ class RestoreBackupHandler:
     def _product_already_linked(table, decoded: dict[str, Any], present: set) -> bool:
         product_id = str(decoded.get("product_id"))
         return any(pk[1] == product_id for pk in present if len(pk) == 2)
+
+    @staticmethod
+    def _provider_already_configured(table, decoded: dict[str, Any]) -> bool:
+        return db.session.execute(
+            select(table.c.id).where(
+                table.c.user_id == decoded.get("user_id"),
+                table.c.provider == decoded.get("provider"),
+            )
+        ).first() is not None
 
     def _decode_row(
         self,

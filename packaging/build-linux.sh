@@ -8,9 +8,6 @@
 # Prerequisites:
 #   - Python 3.11 + a venv with `pip install -r requirements.txt`
 #   - Node + npm
-#   - System libs for pywebview's GTK backend:
-#       sudo apt install python3-gi gir1.2-webkit2-4.1 \
-#                        libgirepository1.0-dev libcairo2-dev
 #
 # Flags:
 #   --skip-spa           reuse an existing `web_app/dist/spa/` build
@@ -47,8 +44,7 @@ done
 echo "[build] Dashy Dora — Linux desktop bundle"
 echo "[build] cwd=$(pwd)"
 
-# System deps (libpython*.so for PyInstaller, GTK + WebKit for
-# pywebview) are apt-installed, not pip — documented in README. We
+# System deps (libpython*.so for PyInstaller) are apt-installed, not pip — documented in README. We
 # don't preflight them: ldconfig-based detection is unreliable
 # across distros, and PyInstaller's own "PythonLibraryNotFoundError"
 # already points at the missing dev package clearly.

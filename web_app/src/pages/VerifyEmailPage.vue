@@ -112,7 +112,6 @@
             await api.resendVerificationAsync(resendEmail.value.trim());
             $q.notify({
                 type: 'positive',
-                position: 'top',
                 message: 'If that address is registered, a verification email is on its way.',
             });
             resendOpen.value = false;
@@ -120,7 +119,6 @@
         } catch (err) {
             $q.notify({
                 type: 'negative',
-                position: 'top',
                 message: err instanceof Error ? err.message : 'Could not send.',
             });
         } finally {

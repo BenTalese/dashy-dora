@@ -32,8 +32,13 @@ export default defineRouter(function (/* { store, ssrContext } */) {
         // savedPosition only for those navs), resets on fresh forward
         // nav and on full reload (the history stack is gone). Filters /
         // search / sort follow the same rule via useListState.
-        scrollBehavior: (_to, _from, savedPosition) =>
-            savedPosition ?? { left: 0, top: 0 },
+        // A Help deep link (`/help/<topic>?e=<guide>`) scrolls itself to the
+        // guide; resetting to the top here ran after it and undid it.
+        scrollBehavior: (to, _from, savedPosition) => {
+            if (savedPosition) return savedPosition;
+            if (to.path.startsWith('/help/') && typeof to.query.e === 'string') return false;
+            return { left: 0, top: 0 };
+        },
         routes,
 
         // Leave this as is and make changes in quasar.conf.js instead!

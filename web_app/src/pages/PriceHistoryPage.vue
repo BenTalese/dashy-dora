@@ -101,6 +101,7 @@
                         dense
                     />
                     <BaseButton
+                        v-if="moneyEnabled"
                         variant="ghost"
                         :icon="ICONS.notifications"
                         :label="compactToolbar ? undefined : 'Manage alerts'"
@@ -207,10 +208,11 @@
                         <q-card-section v-else class="text-caption dora-text-muted-5">
                             No data yet.
                         </q-card-section>
-                        <q-separator />
                         <!-- One watch editor for the whole app (10-R40): the
-                             card opens the same dialog My products uses. -->
-                        <q-card-section class="q-pt-sm">
+                             card opens the same dialog My products uses.
+                             Watches are a money surface (10-R3). -->
+                        <q-separator v-if="moneyEnabled" />
+                        <q-card-section v-if="moneyEnabled" class="q-pt-sm">
                             <BaseButton
                                 variant="primary"
                                 class="full-width"
@@ -297,12 +299,14 @@
         type PriceAlert, type PriceHistorySeries, type PriceRange,
     } from 'src/services/api/priceHistoryApiService';
     import { useProductStore } from 'src/stores/productStore';
+    import { useMoneyEnabled } from 'src/composables/useMoneyEnabled';
     import { storeToRefs } from 'pinia';
 
     const $q = useQuasar();
     const route = useRoute();
     const compactToolbar = computed(() => $q.screen.lt.sm);
     const historyApi = new PriceHistoryApiService();
+    const { moneyEnabled } = useMoneyEnabled();
     // One product store for the app (R-003): My products and this page read
     // the same list, hydrated lazily.
     const productStore = useProductStore();
@@ -416,6 +420,10 @@
     }
 
     async function refreshAlerts() {
+        if (!moneyEnabled.value) {
+            alerts.value = [];
+            return;
+        }
         try {
             const result = await historyApi.listAlertsAsync();
             alerts.value = result.items;

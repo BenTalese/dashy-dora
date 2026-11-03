@@ -4,6 +4,15 @@
  *  accepted Type-C carve-out), the one client copy every surface uses. */
 type OfferPrices = { price_now: number | null | undefined; price_was: number | null | undefined };
 
+/** Whether the offer carries a real price. A product the producer pushed
+ *  with no offer (out of stock, price unknown) holds a $0 placeholder, which
+ *  must read as "No price yet", never as free (16-D2). */
+export function hasPrice(offer: OfferPrices): boolean {
+    return offer.price_now != null && offer.price_now > 0;
+}
+
+export const NO_PRICE_YET = 'No price yet';
+
 export function isOnSpecial(offer: OfferPrices): boolean {
     return discountPercent(offer) !== null;
 }

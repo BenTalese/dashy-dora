@@ -590,7 +590,9 @@ export function useMealPlanner() {
         if (!plan) return;
         const selected = new Set(selectedDayIsos.filter((iso) => !isPastDay(iso)));
         const oldKey = entry.cook_batch_id ?? undefined;
-        const newKey = selected.size >= 2
+        // A separate keeps every day but links none of them: minting a key
+        // here re-linked the days under a new batch (walk D, 2026-11-01).
+        const newKey = mode === 'redefine' && selected.size >= 2
             ? (globalThis.crypto?.randomUUID?.() ?? `cook-${entry.meal_plan_entry_id}`)
             : undefined;
 

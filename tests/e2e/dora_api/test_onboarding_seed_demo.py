@@ -1,4 +1,4 @@
-"""FU — `POST /onboarding/seed-demo` on a genuinely fresh install.
+"""FU — `POST /onboarding/finish` with `seed_demo` on a genuinely fresh install.
 
 The demo seed has two paths and only one of them was ever exercised here: on a
 dev-seeded (or already-onboarded) DB the "Spaghetti Aglio e Olio" recipe
@@ -13,12 +13,13 @@ This test forces the fresh-install branch: drop the recipes, and rename the
 demo's ingredients out of the way so the handler has to create its own.
 """
 import requests
+
+from tests.e2e.dora_api._onboarding_finish import finish_demo
 from sqlalchemy import text
 
 from dora_api.app import app, db
 
 BASE = "http://localhost:5170/api"
-SEED_DEMO = f"{BASE}/onboarding/seed-demo"
 
 # Match the starter pack (finalisation 14-R2) — the demo reuses the wizard's items.
 _DEMO_INGREDIENT_NAMES = ("Pasta", "Garlic", "Olive oil")
@@ -48,7 +49,7 @@ def _force_fresh_install_state() -> None:
 def test__seed_demo__fresh_install__creates_items_recipe_and_plan(api):
     _force_fresh_install_state()
 
-    response = requests.post(SEED_DEMO)
+    response = finish_demo()
 
     assert response.status_code == 200, response.text
     body = response.json()
@@ -82,7 +83,7 @@ def test__seed_demo__joins_an_existing_plan_for_this_week__never_a_second_one(ap
         return int(plans), int(entries)
 
     plans_before, entries_before = _counts()
-    body = requests.post(SEED_DEMO).json()
+    body = finish_demo().json()
     assert body["seeded"] is True and body["meal_plan_created"] is True, body
     plans_after, entries_after = _counts()
 
@@ -92,9 +93,9 @@ def test__seed_demo__joins_an_existing_plan_for_this_week__never_a_second_one(ap
 
 def test__seed_demo__second_call__is_a_no_op(api):
     _force_fresh_install_state()
-    assert requests.post(SEED_DEMO).json()["seeded"] is True
+    assert finish_demo().json()["seeded"] is True
 
-    repeat = requests.post(SEED_DEMO)
+    repeat = finish_demo()
 
     assert repeat.status_code == 200, repeat.text
     assert repeat.json() == {

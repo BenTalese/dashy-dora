@@ -716,7 +716,7 @@
         width: 220px;
         max-width: 100%;
     }
-    .settings-page__link { color: var(--brand-primary); font-weight: 600; }
+    .settings-page__link { color: var(--primary-ink); font-weight: 600; }
     .provider-card {
         border: 1px solid color-mix(in srgb, var(--text-primary) 10%, transparent);
         border-radius: 12px;

@@ -377,7 +377,7 @@
     .pm-chart__link {
         display: inline-block;
         margin-top: var(--space-2);
-        color: var(--brand-primary);
+        color: var(--primary-ink);
         font-size: var(--font-size-sm);
     }
     /* A6 — the row buttons already carry a ring; this link did not. */

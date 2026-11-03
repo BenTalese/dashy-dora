@@ -496,11 +496,16 @@ class CommitSpreadsheetHandler:
                         existing_group_names, request.options.create_missing_groups,
                     )
                     expiry_idx = col_index.get("expiry")
-                    expiry = (
-                        _coerce_to_date(row[expiry_idx], day_first=day_first)
-                        if expiry_idx is not None and expiry_idx < len(row)
-                        else None
-                    )
+                    try:
+                        expiry = (
+                            _coerce_to_date(row[expiry_idx], day_first=day_first)
+                            if expiry_idx is not None and expiry_idx < len(row)
+                            else None
+                        )
+                    except ValueError as exc:
+                        # One bad date is that row's error, not a 500 for the
+                        # whole import (walk C, 2026-11-01).
+                        raise _RowError(str(exc)) from exc
                     essential_idx = col_index.get("is_essential")
                     is_essential = (
                         _is_truthy(row[essential_idx])

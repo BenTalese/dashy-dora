@@ -17,19 +17,17 @@
              bullet that does point here. -->
         <div class="row items-center q-gutter-sm products-toolbar">
             <div class="row items-center no-wrap products-toolbar__actions">
-                <!-- MP-18: "could be more obvious when there's more than zero.
-                     Should grab attention, not be obscured." `attention` (the
-                     glow BaseButton gained after this feedback) fires only
-                     when there IS something to fix, which is the condition
-                     that keeps a glow from becoming wallpaper (D-14 as amended
-                     2026-08-20). -->
+                <!-- MP-18 asked for this to grab attention, but the predicate
+                     counts every stock item without a tracked product, so on
+                     any install that uses products for a few items the glow
+                     never went out (10-D3). Owner 2026-11-02: drop the glow,
+                     keep the count. -->
                 <BaseButton
                     variant="secondary"
                     :icon="ICONS.link_off"
                     :label="compactToolbar ? undefined : orphansLabel"
                     :aria-label="orphansLabel"
                     :disable="stockItemsMissingProducts.length === 0"
-                    :attention="stockItemsMissingProducts.length > 0"
                     @click="orphansOpen = true"
                 >
                     <q-badge
@@ -526,6 +524,7 @@
 
 <script lang="ts" setup>
     import BaseTooltip from 'src/components/BaseTooltip.vue';
+    import { useMoneyEnabled } from 'src/composables/useMoneyEnabled';
     import AppSpinner from 'src/components/AppSpinner.vue';
     import BaseButton from 'src/components/BaseButton.vue';
     import BaseDialog from 'src/components/BaseDialog.vue';
@@ -627,8 +626,8 @@
 
     // ── Price watches (owner 2026-10-15) ────────────────────────────────
     // The user's own watches, keyed by product so each card can say whether
-    // it has one. The bell only fires a watch with money features on
-    // (`get_alerts._price_drop_alerts`); setting one is not gated.
+    // it has one. Watches are a money surface (10-R3): with money off the
+    // endpoints refuse and the cards hide the watch controls, so skip the call.
     const priceHistoryApi = new PriceHistoryApiService();
     const watches = ref<PriceAlert[]>([]);
     const watchByProduct = computed(
@@ -636,7 +635,12 @@
     );
     const watchOpen = ref(false);
     const watchTarget = ref<Product | null>(null);
+    const { moneyEnabled } = useMoneyEnabled();
     async function loadWatches(): Promise<void> {
+        if (!moneyEnabled.value) {
+            watches.value = [];
+            return;
+        }
         try {
             watches.value = (await priceHistoryApi.listAlertsAsync()).items;
         } catch {

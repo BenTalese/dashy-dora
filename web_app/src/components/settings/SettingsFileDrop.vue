@@ -206,7 +206,7 @@
         border: 0;
     }
     .file-drop__icon {
-        color: var(--brand-primary);
+        color: var(--primary-ink);
         flex: 0 0 auto;
     }
     .file-drop__label {

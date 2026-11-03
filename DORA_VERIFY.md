@@ -22,12 +22,20 @@ top-to-bottom.
 
 ---
 
+## Owner decisions built (2026-11-01)
+- [ ] Flip the Basic/AI switch in Dora chat: one glow round the pill per flip.
+- [ ] With money off: My Products and Price history show no price-alert controls.
+- [ ] A product the companion pushed out of stock reads "Out of stock" and "No price yet", not $0.00.
+- [ ] A failed save in stocktake shows its toast bottom-right; going offline still shows the notice at the top.
+- [ ] Ask Dora (AI mode) "how do I back up my install": she answers from the Back up guide.
+- [ ] Walk the app in Pesto Dark, Blueberry Dark and Cherry Cola Dark: the new secondary (secondary buttons, the essential stripe and count, soft chips) looks right to you.
+
 ## Security: sign-ups, sessions, reset links (2026-10-30) — origin FU-928
 - [ ] ⚠️ Operator: after the next deploy, confirm the production install's public URL is set (Settings → Email) if you use password-reset mail; without it reset mails are skipped and "Forgot password?" is hidden.
 
 ## Release prep: build id + PUID/PGID (2026-10-30) — origin FU-861, FU-964
 - [ ] ⚠️ Operator: `DORA_BUILD_ID=$(git rev-parse --short HEAD) docker compose up -d --build`, then confirm the boot log says "dora_api will run as uid=1000 gid=1000", `docker exec dashy_dora ps -o user,cmd` shows gunicorn not running as root, and the API can still write (upload a recipe photo, take a backup).
-- [ ] Open Settings → About → Technical details on that deploy: Build reads `v0.7.0 · <sha>` with "Quote this when reporting a problem.", and `/api/health` shows the same `build`.
+- [ ] Open Settings → About → Technical details on that deploy: Build reads `v1.0.0 · <sha>` with "Quote this when reporting a problem.", and `/api/health` shows the same `build`.
 - [ ] On an existing install whose volumes were written as root, confirm the first boot after this change chowns them and nothing reports a permission error.
 
 ## Autonomous QA round 3, browser-verify owed (2026-10-30)
@@ -37,226 +45,89 @@ Driven by the agent on the seeded backend: 35 journey assertions (cart button, l
 ## Autonomous QA round 2, browser-verify owed (2026-10-30)
 Driven by the agent: fresh install → /setup → wizard → empty-household crawl (clean), a second user's wizard, an authz matrix (anonymous + non-admin over 220 routes), fault injection (1-in-3 / abort / all-500 API reads: no blank pages or stuck spinners), axe-core at 1280/375, query budget on dense + 2000-item seeds, Postgres DDL offline. The items below were fixed from a code read and want one look.
 - [ ] Dora chat with a hosted provider (OpenAI / Anthropic / Gemini): ask "what's expiring?" — a real answer, and Settings → Assistant still reads available afterwards (tool results now carry `tool_call_id`).
-- [ ] Companion: ask link-status for a name Dora holds only at another store — "not in Dora" (it used to match the other store's product, and unsave could delete it).
-- [ ] Onboarding as a second member: Finish does not re-create default groups/locations the admin deleted; the recap shows no stock rows. Register, then open the verify-email link mid-wizard — the page verifies instead of bouncing to /welcome.
-- [ ] Native first run with no saved server: the address page shows (no endless splash); after Connect the app lands on /setup or /login.
-- [ ] Stock: filter to 250+ items → Export CSV, Print view and QR sheet all open (ids are POSTed now); on a phone the Settings/Admin toggle and the settings chips are 44px tall.
-- [ ] Login: six wrong passwords for one username inside a minute → 429 with Retry-After; a correct login afterwards resets it.
-- [ ] Stores: a logo that is a tiny PNG declaring 13000×13000 — the store saves with no brand colour and the server stays up.
-- [ ] Companion: push a backdated offer — the current price stays the newer one.
+- [ ] Android app, first run with no saved server: the address page shows; after Connect it lands on /login.
 - [ ] ⚠️ Operator (SQLite production DB, origin FU-965): against the live `dora.data.db` (or its newest backup) run `SELECT count(*) FROM "StockItemSubstitute"`, `"StockItemProduct"`, `"StockItemPriceObservation"`, `"ShoppingListLine"`, `"RecipeIngredient"`, `"RecipeStep"` and compare with what the app shows / an older backup — a count that is far below what you remember means an earlier upgrade cascade-deleted rows (restore them from the older backup's sections via Backup & restore).
 - [ ] Operator (Postgres): `upgrade head` on an EMPTY Postgres completes (eight revisions were Postgres-broken); `test__migrations__upgrade_head_runs_on_postgres` with `DORA_TEST_POSTGRES_URL` passes; `SHOW timezone` on the app's connection reads UTC.
 - [ ] Operator (compose): a plain-http install now gets Secure cookies by default — set `DORA_SECURE_COOKIES=false` in `.env` if logins fail after upgrading; nginx responses carry nosniff / X-Frame-Options / Referrer-Policy.
 
 ## Autonomous QA sweep, browser-verify owed (2026-10-29)
 Driven by the agent against the seeded backend: setup-admin success path (pytest), chunked upload for restore + import, step-image keep/reorder/foreign-id, null move, meal-plan sort, reconcile Skip advancing, route crawls at 1440/375, 522-request API sweep. The items below were fixed from a code read only and want one look each.
-- [ ] Cook mode, voice on (desktop Chrome): say "next" twice — the step advances exactly twice; "start timer" after a finished timer counts down rather than finishing at once.
-- [ ] Recipe page: edit ingredients without saving, click a version sibling — a prompt appears; Stay keeps the edits, Leave discards them.
-- [ ] Recipe page, photo method: reorder two saved photos and add a third, save — all three are there in the new order; delete one and save — the other two remain.
-- [ ] Stock item page (peek): click item A then B before A finishes loading — B's detail and B's QR label show (Scanning tab); "Add missing" on a recipe card with two draft lists — pick a list, every missing item lands on it.
-- [ ] Stock row: set a level while offline — the row reverts to the old level with a "Could not update" toast; set an expiry — the toast shows the locale date, not an ISO string.
-- [ ] Stocktake: a run with review items only — confirm them all; the summary card shows (not "You're all caught up"). Boot with the API down — an error card, not "all caught up".
-- [ ] Shopping lists: with two lists, open the overview while another tab is mid-refresh — it redirects to the next-up list, never "No shopping lists yet"; dismiss the budget banner on list A, open over-budget list B — B's banner shows.
-- [ ] Shopping list (done): Put away → assign a location to an unsorted item — the dialog stays, group ticks survive, no page flash. Receipt photos render on the strip and in zoom.
-- [ ] Templates page: double-tap Use on a card — one list; only that card's button spins.
-- [ ] Meal plans: tap + on an entry's servings three times fast — servings go up by three; arrow week twice fast — the shopping card, budget and "Dora suggests" show the week on screen; apply a swap that brings the week under budget — the Undo banner is still there.
-- [ ] Reconcile runner: with 31+ past meals, Skip through the first page — it keeps going past 30 and ends on "complete" with the right count; "Different portions" opens with the planned servings.
-- [ ] Reports: click All time then 30 days quickly — every card shows 30-day numbers and the window label matches. Price history: selected-product chips carry their series colour swatch.
-- [ ] Settings → Nutrition: with the API down, change the rating scheme — the control reverts and a toast shows. Region: pick USD with the API down — the picker reverts. Import: halt on error → fix mapping → Import runs again.
-- [ ] Scan overlay (scanning on): open it, close it while the camera permission prompt is still up, then allow — the camera light goes off.
+- [ ] Cook mode voice with a real mic: say "next" twice, the step advances exactly twice.
+- [ ] Meal plans: arrow two weeks fast with differing suggestions; "Dora suggests" shows the week on screen.
+- [ ] Scan overlay on a real phone: close it while the camera prompt is up, then allow; the camera light goes off.
 - [ ] Operator (Postgres): `GET /api/dashboard/restock-radar` with a Low item returns 200 (was a naive/aware TypeError). Audit retention set to 30 days — the nightly prune log line names 30.
 - [ ] Operator (gunicorn): filter stock to ~150 items and Export CSV / Print view — 200, not "Bad Request Line".
 
 ## Help area redesign, browser-verify owed (2026-10-29)
-- [ ] Help: the landing shows the mascot, the search box, 14 topic cards (each with a count), Common questions and the two doors; nothing overflows at 375px.
-- [ ] Help → Stock: guides open one at a time with a chevron; "Reading a stock row" shows the live legend and the stock-rows screenshot with rounded corners and a hairline.
-- [ ] From a stock item's Substitutes tab, the (?) lands on Help → Stock with the Substitutes guide open and scrolled into view; same for QR label, Barcodes, the stocktake runner's (?), the reconcile runner's (?) and Settings → Assistant's "Learn more".
-- [ ] Help search "budget" lists guides from several topics; clearing the box brings the topics back; the address carries `?q=`.
+- [ ] Help deep links ((?) on Substitutes, QR label, stocktake, reconcile; Assistant "Learn more") scroll the open guide into view.
 - [ ] Help → What's new renders the changelog as cards with bullet lists (no raw `**` or backticks); Help → About shows the version pill and, when configured, Report an issue.
-- [ ] Help → Dora → Her faces shows the eleven mascot tiles; `/help/dora` from the assistant settings page still resolves.
-- [ ] Dark theme: topic cards, guide cards and screenshots read correctly (hairline visible, no white flash); keyboard focus rings on cards and crumbs.
 
 ## Finalisation Stage 2 — unit 30 (cross-cutting sweeps), browser-verify owed (2026-10-27) — origin FU-929
-- [ ] Any delete (a recipe, a store, a shopping list, a template, a stock item from the stocktake sweep): the dialog shows a flat Cancel and a red filled OK; Escape and a backdrop tap cancel; the delete only happens on OK.
-- [ ] Settings → Kitchen setup → Stores / Locations / a vocabulary page: "New …" asks for a name in a text prompt; an empty answer does nothing; the rename prompt is pre-filled.
-- [ ] Add-to-list with two draft lists (cart shortcut, the Add-to-list button, stock overview bulk add): the "Which list?" radio dialog picks the first by default and cancelling adds nothing.
-- [ ] Meal plan → a cooked entry → "Cook once for more days": the checkbox dialog is pre-ticked with the days already covered.
-- [ ] Recipe page: edit, then Back — the "Unsaved changes" dialog's Stay keeps you on the page, Leave without saving leaves.
 - [ ] Settings → Appearance → text size *Small*: captions and chip labels are still 12px (not 10.5px); *Large* and *X-large* scale as before.
-- [ ] Price history (a product priced above baseline), Backup & restore (a duplicate row in the preview), API access (pending / unmapped badges), Audit log severity chips: dark ink on the amber chips.
-- [ ] Tab to Dora's launcher, a planner day's Add button, an onboarding loop node and the settings file-drop zone: a visible focus ring, distinct from hover.
 - [ ] Every settings page still lays out as a column with its actions right-aligned (the chrome moved from 29 scoped copies to one global stylesheet).
 
 ## Finalisation Stage 2 — unit 29 (ops / self-host), operator checks owed (2026-10-27) — origin FU-929
 - [ ] Boot the compose stack: `docker logs` shows one "Scheduled 5 job(s): audit_retention [cron…]; …" line and one "Registered N router(s), M route(s)" line (6 jobs with `DORA_DEMO_MODE=true`).
-- [ ] Boot with `DORA_LOG_LEVEL=LOUD`: one "Unknown log level 'LOUD'; using the production profile default INFO" warning and the app still boots at INFO.
-- [ ] Boot with `DORA_ENV=production` and a required var blank: the boxed "Refusing to start" banner on stderr, exit non-zero; with `DORA_SECURE_COOKIES=false`: the boxed WARNING banner, same frame.
 - [ ] `docker compose up` on an existing deployment after the `dora_config` volume removal: boots clean; `dapi.appsettings.json` is still at `<data>/config/`.
 - [ ] Rename `dora_api/features/alerts/__init__.py` aside and boot: the boot fails with "Feature package dora_api.features.alerts failed to import" + traceback (then put it back).
-- [ ] Fresh dev boot with no `DORA_SECRET_KEY`: `data/.secret_key` is created `-rw-------` (Linux/macOS; Windows ignores the mode).
-- [ ] Settings → Voice with Piper absent: the 503 hint names Settings → Admin → System → Voice.
 - [ ] Desktop bundle (`build-windows.ps1` / `build-linux.sh`) still builds without the `webview.platforms.gtk` hidden import and opens the browser.
 
 ## Finalisation Stage 2 — unit 28 (backup / import), browser-verify owed (2026-10-27) — origin FU-929
-- [ ] Settings → Admin → Data → Backup & restore: the library lists newest first; New backup (defaults) → Download → Restore this backup → Delete each work and each failure toast carries a reference id.
-- [ ] Backup & restore: drop a backup file → preview tree → Restore selection; drop the same file again after a restore and confirm the "upload is gone" case reads as a not-found caption, not "HTTP 404".
 - [ ] Backup & restore: edit a saved backup file on disk by hand, then Download it — a 409 toast, and the row shows a failed status after reload.
-- [ ] Import: download a template, upload a CSV with `03/04/2027` in a date column on an en-AU install → 3 April; switch locale to en-US → 4 March.
-- [ ] Import: the result dialog's "Download error rows" CSV opens with `row_number,name,reason` and quotes a reason containing a comma.
-- [ ] Import / Backup: kill the API mid-upload — "Upload failed." toast with a friendly caption; retrying the drop works.
 
 ## Finalisation Stage 2 — unit 27 (offline / PWA), browser-verify owed (2026-10-27) — origin FU-929
-- [ ] Built PWA: go offline (DevTools → Network → Offline): the red banner reads "You're offline. You can look around, but not make changes." with Retry; stop the API only: "Can't reach Dora…" with Retry; back online: a green "Back online." toast at the top.
-- [ ] Built PWA with a newer build cached: the accent "A new version of Dora is ready" strip shows Reload + dismiss, under the header, same shape as the offline strip.
-- [ ] Chrome → Application → Manifest: name "Dashy Dora", short name "Dora", theme colour #f5c462, two 192/512 icons + maskable; install prompt still offered over https.
-- [ ] Cook mode and a shopping list in shop mode still keep the screen awake on a phone (wake lock) and release it on leaving.
+- [ ] On a phone over https: the install prompt appears.
+- [ ] On a phone: cook mode and shop mode keep the screen awake.
 - [ ] Android shell: About shows the "Dora API endpoint" row and no install section; camera availability unchanged.
 
 ## Finalisation Stage 2 — unit 26 (ingestion seam), browser-verify owed (2026-10-27) — origin FU-929
 - [ ] Companion → push a product with an unknown field: the companion shows a per-field message naming the field, not "Extra inputs are not permitted" repeated.
-- [ ] Settings → API access: a key the companion has only used to list stores shows a "Last used" time, not "Never used".
-- [ ] Settings → API access → Store mappings: the store picker lists every Dora store (more than 50 if you have them); assigning and clearing a mapping still works.
-- [ ] Settings → API access: a disabled source's "Disabled" badge reads in dark themes (sunken tint, no white-on-grey).
 
 ## Finalisation Stage 2 — unit 25 (auth shell), browser-verify owed (2026-10-27) — origin FU-929
-- [ ] Register with an email address (SMTP configured): an info toast "Check your inbox for a verification link." shows; without an address, no toast.
-- [ ] Signed in on a page, expire the session (restart the API with a new secret, or delete the cookie) then click anything: you land on `/login?redirect=…` and, after signing in, back on that page.
-- [ ] Sign out: DevTools → Application → Cookies shows no `dora_csrf` cookie afterwards.
-- [ ] Visit a typo'd URL signed out and signed in: the 404 uses the login look (blobs, mascot, glass card) and "Take me home" works.
-- [ ] Login, Setup and Users → Add user / Change password: the eye toggle reveals the password; typing 7 characters on a *new* password shows "At least 8 characters"; sign-in's current-password field shows no length hint.
-- [ ] About → Change (native) and the cannot-connect splash → Change instance URL: same dialog, saving reloads against the new URL.
-- [ ] Setup pages: the "One-time setup" / "Choose your Dora" pill renders as before; primary/secondary button ink and the splash text are unchanged (tokens, not hex).
-
-## Finalisation Stage 2 — unit 24 (settings shell + onboarding), browser-verify owed (2026-10-27) — origin FU-929
-- [ ] Settings → Users: a user with a photo shows "Remove picture" in the ⋮ menu; using it clears the avatar; a user without one doesn't show the item.
-- [ ] Settings → Notifications with SMTP / VAPID unset: the "isn't set up on this install yet" card still renders as the warning banner with the admin's "Set up" button.
-- [ ] Settings → About → "Run the welcome tour again" lands on `/welcome`; finishing it returns to the dashboard with your data intact.
-- [ ] Welcome tour, stock step: add your own group and zone, finish — both exist once under Settings → Kitchen setup; run the tour again and add the same names — no duplicates.
-- [ ] Welcome tour, welcome step: pick Light, then open Settings → Preferences — the picker shows Pesto / Light (no legacy "system" key).
-- [ ] Welcome tour: typing a name in the stock step doesn't stutter (draft autosave is debounced).
-- [ ] Welcome layout in a dark theme and the confetti colours still read correctly (tokens, not hex).
+- [ ] Cannot-connect splash → Change instance URL: the dialog sits above the splash and Save is clickable. On the Android app, About → Change opens the same dialog.
+- [ ] Android app: the "Choose your Dora" pill renders.
 
 ## Finalisation Stage 2 — unit 23 (reports, budget, waste), browser-verify owed (2026-10-27) — origin FU-929
-- [ ] Reports (30 days): spend-by-store total, spend-by-category total and the budget card's spend agree for a week with one finished shop.
-- [ ] Reports: every card that names the window reads the same words ("in the last 90 days"); Price changes says "since you started logging prices" on All.
-- [ ] Spend by category bars keep their colours after a theme switch.
-- [ ] Mark as wasted: tabbing through the reason tiles shows a focus ring.
-- [ ] Reports and dashboard with the API stopped: each card shows "couldn't load", and Retry recovers it.
+- [ ] Dashboard cold load with the API stopped: the dashboard's own error panel shows, not "Something went wrong on this screen".
 
 ## Finalisation Stage 2 — unit 22 (assistant), browser-verify owed (2026-10-27) — origin FU-929
-- [ ] Chat header Basic/AI slider on a phone: easy to hit, flips, focus ring shows on keyboard focus.
 - [ ] AI mode: two questions in a row answer without a pause before each (no network probe per question).
 - [ ] AI mode, over budget: "trim my list to budget" proposes with the install's currency symbol, and confirming trims.
 - [ ] AI mode: "plan pasta for tomorrow" with no slot named lands in the household's first slot.
-- [ ] Basic mode: "what's expiring" uses the household's expiring-soon window; "substitute for buttermilk" answers.
-- [ ] Settings → Assistant: base URL and model placeholders show for each provider.
-
-## Finalisation Stage 2 — unit 21 (dashboard), browser-verify owed (2026-10-27) — origin FU-929
-- [ ] Dashboard Cards menu: hide / show, move up / down and drag reorder all stick after a reload.
-- [ ] "What's coming": today is the first cell and ringed; weekday names follow the household locale.
-- [ ] "Next to cook" shows ready / missing-N as before; Kitchen health's plan coverage looks right.
-- [ ] Price drops: the "% off" chip and the linked-item link are readable in light and dark.
-- [ ] Small chips: recipe "Use soon" / missing chips, the recipe cost dialog and nutrition card text sizes look right (they now actually apply the xs size).
-
-## Finalisation Stage 2 — unit 20 (zero-input pantry), browser-verify owed (2026-10-24) — origin FU-929
-- [ ] With inference on: "Dora thinks …" still shows on stock rows, the item page, recipe cards and planner chips, with the same wording as before.
-- [ ] The planner's Dora-hunch glyph is readable (amber / green) in a light and a dark theme.
-
-## Finalisation Stage 2 — unit 19 (stock overview + stocktake), browser-verify owed (2026-10-24) — origin FU-929
-- [ ] Stock overview: the group filter lists your groups; rename a group in Settings, come back: the new name shows.
-- [ ] Create item and item page: the location picker searches "Pantry › Middle shelf" paths; the group picker lists groups.
-- [ ] Stock overview: export CSV downloads (named file on a same-host install).
-- [ ] Stocktake walk: Mute asks first (walk and sweep); a Low/Out pick lands in the restock prompt at the end.
-- [ ] Stocktake runner and stock rows in a dark theme: "Change level" neutral button hover, row hover / selected / expired outlines.
-- [ ] Item page: change the level from the overview's peek, the item page shows the new level name.
+- [ ] Basic mode on a fresh login, from the dashboard: "what's expiring" and "what can I cook" answer from your data.
 
 ## Finalisation Stage 2 — unit 18 (cook mode), browser-verify owed (2026-10-24) — origin FU-929
-- [ ] Cook mode timer: start a 2-minute timer, switch apps for a minute, come back: it shows about a minute left; it chimes at zero.
-- [ ] Cook mode on a phone, step face and photo face: Previous / Repeat / Next fit one row; photo zoom pages with Previous / Next.
-- [ ] Cook mode "Sub-step" chip text is readable in a dark theme.
-- [ ] Finish cooking with 0 meals: no error.
-
-## Finalisation Stage 2 — unit 17 (shopping lists), browser-verify owed (2026-10-24) — origin FU-929
-- [ ] New list → start from a template, with a name and shop date typed: the list keeps both and has the template's items.
-- [ ] New list → merge a template into an existing list: items already on it are skipped, the rest added.
-- [ ] New list → start from a recipe or a meal plan: all the items land (one request in the Network tab).
-- [ ] Shop mode price sheet: save a price + store, store only, and clear; each sticks, and a failure puts the old values back.
-- [ ] Finish a list, put away: groups by location as before.
-- [ ] A finished list's receipt face still shows its lines, prices and photos; add and delete a receipt photo.
-- [ ] Stock overview: bulk add to list and bulk remove from list still work.
-- [ ] Trim to budget preview and apply on an over-budget list.
+- [ ] Cook mode timer on a real phone: switch apps for a minute, it shows about a minute less.
 
 ## Finalisation Stage 2 — unit 16 (meal plans), browser-verify owed (2026-10-24) — origin FU-929
-- [ ] Planner, phone and desktop: chip menu actions (view, cook, remove, servings ±, link, unlink, lighter, fresh) all work.
-- [ ] Planner chips and phone cards: price, Dora's hunch, chef hat and fridge glyphs show as before; cook-day chip reads "Cook day · N servings".
-- [ ] "This week's shopping" matches on phone and desktop.
-- [ ] Build my week: opens with every slot ticked; a picked recipe with no matching time-of-day lands in the first slot.
-- [ ] Build my week with a budget cap on, money on: stays under; money off: no figures anywhere.
+- [ ] Planner chip menu → Separate this cook: every day keeps its meal and none says Cook day / Leftovers.
 - [ ] Settings → Meal slots: usage counts match the planner.
-- [ ] Reconcile runner and Meal log: close X, progress, and (?) opens Help → "Reconcile past meals".
-- [ ] New shopping list → from a meal plan: plans read "Week of …", not "null".
-- [ ] Templates → Delete: the Cancel button isn't all-caps.
-- [ ] Meal plans, stock, settings, stocktake, reconcile and log pages still fill the screen below the header.
 - [ ] Planner in a dark theme: the focused day chip's text and pips are readable.
 
 ## Finalisation Stage 2 — units 11–14, browser-verify owed (2026-10-24) — origin FU-929
 - [ ] Dora (AI mode): "add milk to my list" returns the add card, no error.
 - [ ] Stock item still used by a recipe → Delete: the "Still used by recipes" dialog lists the recipe names as plain text.
-- [ ] Row menu, item page and bell "Push 7 days" on an expired item all land on today + N; each shows on the History tab.
-- [ ] My products with 51+ saved products shows them all; Price history finds product 51.
-- [ ] Price history card → "Watch this price" opens the same dialog My products uses; Manage alerts → Change opens it too.
-- [ ] As a member (not admin) with a Product Search URL set: the nav link shows; with none set: no Product Search buttons.
-- [ ] Store logos and profile pictures render (incl. the Capacitor shell / a split host).
-- [ ] Settings → Notifications with money off hides "price drops"; with auto-drain on hides "meals to reconcile".
-- [ ] Item page: History tab says "Restocked → …" / "Dropped to …" after renaming a level.
-- [ ] Item page: type in Notes (don't save), toggle Essential: the draft stays.
-- [ ] Item page signal cards (Dora thinks / planned meals / buy verdict) look alike in pesto and blueberry, light and dark.
-- [ ] Recipe page missing-ingredient substitutes and cook-mode "Swap" still list substitutes.
-- [ ] Network tab on a cold load: one `/health` request.
-- [ ] Cook mode → open a different recipe by URL / back-forward: the new recipe loads at step 1.
-- [ ] Run a stocktake, then open `/stock` without reloading: levels match what the stocktake set.
-- [ ] Cookbook: filter badge count and Clear filters still cover every filter (try a few, then Clear).
-- [ ] Recipe card and compact row: favourite (red when on), cook and add-to-list buttons behave as before.
-- [ ] Settings → Categories / Cuisines / Tools: add, rename (incl. a duplicate name → error), delete shows the recipe count.
-- [ ] Recipe images, step images, store logos and list attachments still load.
+- [ ] Member with no Product Search URL: the stock item Products tab shows no "Find & link" or "Link another".
+- [ ] Store logos and profile pictures render in the Android app.
 
 ## Finalisation Stage 2 — units 1–10, browser-verify owed (2026-10-23) — origin FU-929
 Backup & restore
-- [ ] Settings → Data → Backup: *New backup* with the default sections is accepted; the section list (labels, "sensitive" badges) comes from the server.
-- [ ] Restore selection: pick one stock item from a backup, restore, the item reappears; no error toast.
 Offline / PWA (built SPA)
-- [ ] DevTools → Application → Service Workers shows **one** registration (`sw.js`); opening Settings → Notifications does not add a second one, evict the cache, or show the "new version" banner.
 - [ ] Docker image: `dist/spa/sw.js` + `manifest.json` present in the built container; install prompt appears over https.
 Dashboard
-- [ ] With a saved layout that pre-dates Kitchen health, the card appears at its registry position (second), not last.
-- [ ] Delete a stock level that items still used (or null one by hand) → the restock radar card still renders.
 Dora assistant
 - [ ] "Tick off milk", "add <recipe> to my list", "trim my list to budget" return a confirm card (no "something went wrong").
 - [ ] Every "See it" / "Open …" button under an answer lands on a live page (Cookbook, My products, Settings → Budget).
-- [ ] Basic mode: "where is the rice" names the zone (Pantry / Fridge), not "(no location)".
-- [ ] Settings → Dora assistant with the API down: a "Couldn't load your provider settings." toast shows.
+- [ ] Basic mode on a fresh login, from the dashboard: "where is the rice" names the zone.
 Reports / budget
-- [ ] Set the household timezone to Pacific/Kiritimati, finish a shop: the budget card counts it in the current period.
-- [ ] Reports window label reads install-locale dates ("3 Aug 2026 – 2 Sep 2026"), no US ordering.
-- [ ] Waste card reason tiles read "Bought too much", matching the Mark-as-wasted dialog.
 Shopping lists
-- [ ] Save as template on a list carrying a product-only line: succeeds; the template has the item lines only.
-- [ ] Finish → "move unticked to a new list" with product-only lines: they move.
-- [ ] Quick-add sheet shows the search icon in the field.
 Meal plans
-- [ ] Duplicate to next week on a week with a cook batch: next week keeps the batch (one cook, N meals) and the fresh marks.
-- [ ] Meal plan print view and shopping list print view open from the Capacitor shell / a cross-site deploy (no 401 tab).
+- [ ] Meal plan and shopping list print views open from the Android app.
 Cook mode / recipes
-- [ ] Cook-mode guard dialog names a labelled ingredient ("tasty cheddar") the same as the recipe page.
 - [ ] iOS Safari / WKWebView: no CSP violation logged on load; speech output works after the first tap.
-- [ ] Finish a cook with the API down for one level write: a "Couldn't update 1 stock level." toast precedes the celebration.
 Stock
-- [ ] Stock overview peek opens at 50 %.
-- [ ] Stock-item page: expiry, "Opened", and timeline dates are formatted (no raw `2026-10-23`).
 Cross-cutting
 - [ ] Toasts all sit bottom-right; offline/online and PWA update toasts still arrive at the top.
-- [ ] Focus ring halo follows the theme (Tab through buttons in blueberry and sourdough-dark — no Pesto green).
-- [ ] Cook-mode scaling: "2 rashers" at 1.5× → 3 (whole), "1 handful" stays continuous.
 
 ## Follow-up batch 2026-10-22
 - [ ] My products ⋮ → Set items in pack: save 12, the menu then reads "Items in pack: 12"; Clear removes it.

@@ -1,0 +1,1760 @@
+[
+  {
+    "slug": "dashboard",
+    "title": "Dashboard",
+    "blurb": "Your home page and the cards on it.",
+    "entries": [
+      {
+        "slug": "your-dashboard",
+        "title": "Your dashboard",
+        "summary": "A set of cards you own. Cards (top right) shows, hides and reorders them, and the layout is saved to your account.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "A card whose feature is off for the install is hidden, not shown empty.",
+        "path": "/"
+      },
+      {
+        "slug": "kitchen-health",
+        "title": "Kitchen health",
+        "summary": "One score from four signals over the last 30 days: waste, budget, freshness and plan coverage.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "A signal with nothing to score is left out, never scored zero. The arrow compares with a week ago.",
+        "path": null
+      },
+      {
+        "slug": "next-to-cook",
+        "title": "Next to cook",
+        "summary": "The next meals someone actually has to cook, in day and slot order.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "With batch cooking on, meals the pool already covers are left out. Cook opens cook mode at the batch’s yield.",
+        "path": null
+      },
+      {
+        "slug": "use-it-up",
+        "title": "Use it up",
+        "summary": "What is about to go off, expired first, and the recipes that would use the most of it.",
+        "how": null,
+        "setting": "Admin → Expiring-soon window",
+        "setting_path": "/settings/admin/system/alerts",
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "whats-coming",
+        "title": "What's coming",
+        "summary": "A fortnight at a glance: green dots for meals, red for expiries, blue for a shopping day. Tap a day for the list.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "restock-radar",
+        "title": "Restock radar",
+        "summary": "Items that went low or out in the last 30 days, newest first, with a cart button.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Planned means a meal in the next fortnight still needs it.",
+        "path": null
+      },
+      {
+        "slug": "my-budget",
+        "title": "My budget",
+        "summary": "Spend this period against the household budget, plus what is still to buy on open lists.",
+        "how": null,
+        "setting": "Settings → Budget",
+        "setting_path": "/settings/budget",
+        "note": "Spend counts ticked lines on finished lists with a price.",
+        "path": null
+      },
+      {
+        "slug": "price-drops",
+        "title": "Price drops",
+        "summary": "Tracked products at a genuine new low against their own history, never a retailer’s ticket price.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "An opt-in card. Needs products on.",
+        "path": null
+      },
+      {
+        "slug": "message-of-the-day",
+        "title": "The message of the day",
+        "summary": "A greeting that stays all day, and under it a tip about something easy to miss.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": null
+      }
+    ]
+  },
+  {
+    "slug": "stock",
+    "title": "Stock",
+    "blurb": "Your pantry: items, levels, expiry and Dora’s hunches.",
+    "entries": [
+      {
+        "slug": "add-item",
+        "title": "Add a stock item",
+        "summary": "Stock → New item. A name and a level are enough; location, group, essential and expiry can come later.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": "/stock"
+      },
+      {
+        "slug": "reading-a-row",
+        "title": "Reading a stock row",
+        "summary": "The square is the level: green stocked, amber low, red out. A dashed ring means the number might be wrong. A row outline means something needs you. A dimmed row is out but not essential.",
+        "how": null,
+        "setting": "Settings → Notifications",
+        "setting_path": "/settings/notifications",
+        "note": "The outline follows the alert kinds you keep on.",
+        "path": null
+      },
+      {
+        "slug": "finding-things",
+        "title": "Finding things",
+        "summary": "Search by name, quick chips (Needs attention, Expiring soon, Essential, Open), filters for level, location and group, and a sort.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Filters survive leaving and returning, not a reload.",
+        "path": null
+      },
+      {
+        "slug": "quick-actions",
+        "title": "Quick actions on a row",
+        "summary": "Tap the square to set a level. The expiry button offers +1, +7 and +14 days, Clear and Log waste. Seal or open an item, or add it to your list.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "bulk-select",
+        "title": "Doing several at once",
+        "summary": "Bulk select, or hold a row on a phone: add to a list, move, restock, log waste for one reason, or print QR labels.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "essentials-auto-add",
+        "title": "Essentials and auto-add",
+        "summary": "An essential is chased as soon as it runs low. With auto-add on, a low or out item lands on your draft list by itself.",
+        "how": null,
+        "setting": "Admin → Stock",
+        "setting_path": "/settings/admin/system/stock",
+        "note": "Nothing is auto-added when you have no draft list, or more than one.",
+        "path": null
+      },
+      {
+        "slug": "expiry-opened",
+        "title": "Expiry and opened",
+        "summary": "Set a date from the calendar, push it with +1d, +7d or +14d, or clear it. Marking an item opened asks whether to shorten its expiry.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Every change is kept on the History tab.",
+        "path": null
+      },
+      {
+        "slug": "dora-thinks",
+        "title": "The \"Dora thinks…\" hint",
+        "summary": "Dora infers a rough Out, Low or Stocked from your purchases, your buying rhythm and your cooking. She only speaks when she disagrees with what you recorded.",
+        "how": null,
+        "setting": "Settings → Assistant",
+        "setting_path": "/settings/assistant",
+        "note": "Her guess never changes your level. A level you set in the last three days wins outright.",
+        "path": null
+      },
+      {
+        "slug": "hints-elsewhere",
+        "title": "Hints on other pages",
+        "summary": "Three switches put the same opinion on the cookbook (May be short, May be cookable), shopping lists (you may be out of…) and the planner.",
+        "how": null,
+        "setting": "Settings → Assistant",
+        "setting_path": "/settings/assistant",
+        "note": "Off by default. They only ever add a remark.",
+        "path": null
+      },
+      {
+        "slug": "quick-checks",
+        "title": "Quick checks",
+        "summary": "When a list or a planned meal depends on an item Dora is unsure of, she asks one question: Still have rice? Set the level and it goes away.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "buy-verdict",
+        "title": "The Buy / Wait / Skip ring",
+        "summary": "A ring on the cart button: green worth buying now, amber maybe wait, red probably skip. Built from your own prices, pace and waste only.",
+        "how": null,
+        "setting": "Admin → Money",
+        "setting_path": "/settings/admin/system/money",
+        "note": "When Dora is not confident she says nothing.",
+        "path": null
+      },
+      {
+        "slug": "stock-item-page",
+        "title": "The stock item page",
+        "summary": "Every row is its own editor and saves as you change it. Tabs for Products, Recipes, Substitutes, Scanning, Lists and History.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "A tab is hidden when the feature behind it is off for the install.",
+        "path": null
+      },
+      {
+        "slug": "three-cards",
+        "title": "Dora’s three cards on an item",
+        "summary": "Dora thinks (her inferred level), planned meals that need it, and Should I buy it? Each opens to its reasoning.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "None of them is an alert.",
+        "path": null
+      },
+      {
+        "slug": "your-prices",
+        "title": "Your prices",
+        "summary": "Your own price record: prices you log plus prices from finished shops. Usually is the median of the last year, shown once there are three.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Paying more than usual means 15% over that median. Shelf prices of linked products never count.",
+        "path": null
+      },
+      {
+        "slug": "price-chart",
+        "title": "The price history chart",
+        "summary": "Your logged prices as a solid line, store offers dashed, your usual price dotted. One unit, one axis.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "preferred-buys",
+        "title": "Preferred buys",
+        "summary": "A note of what you actually buy, with no price or store.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "An item with a linked product uses that product instead, since it answers the same question with real prices.",
+        "path": null
+      },
+      {
+        "slug": "nutrition-item",
+        "title": "Nutrition on an item",
+        "summary": "In complex mode, link the item to a food so recipes using it can total their energy. Suggestions are never saved until you tap Use this.",
+        "how": null,
+        "setting": "Admin → Nutrition",
+        "setting_path": "/settings/admin/system/nutrition",
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "item-history",
+        "title": "An item’s history",
+        "summary": "One timeline, newest first: level changes, waste, lists, purchases, cooks and the expiry trail.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Each kind keeps its latest 50 and says how many were cut.",
+        "path": null
+      },
+      {
+        "slug": "substitutes",
+        "title": "Substitutes",
+        "summary": "Items that can stand in for one another, with a note and a ratio. Cook mode offers them when something is low.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "A swap made in cook mode is temporary. The recipe is untouched.",
+        "path": null
+      },
+      {
+        "slug": "barcodes",
+        "title": "Barcodes",
+        "summary": "A product’s real EAN or UPC, typed or scanned. One code belongs to one item.",
+        "how": null,
+        "setting": "Admin → Stock",
+        "setting_path": "/settings/admin/system/stock",
+        "note": "Dora never looks the number up online.",
+        "path": null
+      },
+      {
+        "slug": "qr-label",
+        "title": "QR label",
+        "summary": "Dora’s own printable label for an item. Scanning it opens the item’s page.",
+        "how": "Print one from the Scanning tab, or a batch under Kitchen setup → QR labels.",
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "scanning",
+        "title": "Scanning with an action",
+        "summary": "Scan opens the camera on Open item. Switch to Set to a level and walk the pantry marking things.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "A barcode Dora does not know opens New item prefilled.",
+        "path": null
+      },
+      {
+        "slug": "export",
+        "title": "Exporting your stock",
+        "summary": "Export → CSV or Print / Save as PDF of exactly the rows shown.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "delete-item",
+        "title": "Deleting a stock item",
+        "summary": "Removes the item with its history, prices, substitutes and barcodes.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Dora refuses while the item is in a recipe, and names them.",
+        "path": null
+      },
+      {
+        "slug": "how-stocktake-works",
+        "title": "How stocktake works",
+        "summary": "Dora walks you through the items due a check, least certain first. Three parts: agree with what she is sure about, the walk, then items that left the rotation.",
+        "how": "Still correct · Change level · Skip · Push 3 days · Mute.",
+        "setting": "Admin → Stocktake",
+        "setting_path": "/settings/admin/system/stocktake",
+        "note": "At the end anything you marked low or out can go on a list in one go.",
+        "path": "/stocktake"
+      },
+      {
+        "slug": "starter-packs",
+        "title": "Starter packs",
+        "summary": "At setup, five packs you tick item by item, plus your own items.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Items you already have are skipped, not duplicated.",
+        "path": null
+      }
+    ]
+  },
+  {
+    "slug": "cookbook",
+    "title": "Cookbook",
+    "blurb": "Recipes: writing them, importing them, cost and nutrition.",
+    "entries": [
+      {
+        "slug": "add-edit-recipe",
+        "title": "Add and edit a recipe",
+        "summary": "Cookbook → New recipe makes a stub. Each block has its own pencil; Save commits them together.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": "/cookbook"
+      },
+      {
+        "slug": "ingredients-pantry",
+        "title": "Ingredients and the pantry",
+        "summary": "An ingredient points at a pantry item so Dora knows whether you have it, or stays as plain text.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Typing a name the pantry does not have offers to add it.",
+        "path": null
+      },
+      {
+        "slug": "can-i-cook",
+        "title": "Can I cook this?",
+        "summary": "Yes, no (with what is missing) or unknown (some rows are not linked to the pantry).",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Missing means out of stock. A low item still counts as cookable.",
+        "path": null
+      },
+      {
+        "slug": "method-modes",
+        "title": "Three ways to write a method",
+        "summary": "Free text (each line a step), Structured (steps, sub-steps, links to ingredients and tools, timers) or Photos.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Switching never deletes the other modes’ content.",
+        "path": null
+      },
+      {
+        "slug": "sections",
+        "title": "Sections",
+        "summary": "Named groups inside a recipe, like For the sauce, holding ingredients and steps.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "import-paste",
+        "title": "Import a recipe by pasting",
+        "summary": "Cookbook → Import. Paste a page’s text and Dora picks out the name, times, servings, ingredients and steps.",
+        "how": "On Android, share the page to Dora instead.",
+        "setting": null,
+        "setting_path": null,
+        "note": "Matching to your pantry is fuzzy. Check the rows.",
+        "path": null
+      },
+      {
+        "slug": "unlinked-bulk",
+        "title": "Fix unlinked ingredients in bulk",
+        "summary": "Every unlinked ingredient grouped by its text, so \"1 onion\" in nine recipes is linked once.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": "/settings/kitchen-setup/unlinked-ingredients"
+      },
+      {
+        "slug": "versions",
+        "title": "Versions of a recipe",
+        "summary": "New version copies everything into a sibling named (vN). Versions are equal peers, each with its own pool and favourite.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "meals-prepared",
+        "title": "Meals prepared",
+        "summary": "Cooked portions waiting in the fridge or freezer. Cook mode adds them; past planned days use them.",
+        "how": null,
+        "setting": "Admin → Cooking",
+        "setting_path": "/settings/admin/system/cooking",
+        "note": "Shown in Batch style, hidden in Fresh.",
+        "path": null
+      },
+      {
+        "slug": "recipe-cost",
+        "title": "What a recipe costs",
+        "summary": "An estimate from your own prices, ingredient by ingredient. Rows that cannot be priced are reported, not guessed.",
+        "how": null,
+        "setting": "Admin → Money",
+        "setting_path": "/settings/admin/system/money",
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "nutrition-modes",
+        "title": "Nutrition: off, simple, complex",
+        "summary": "Simple: type kcal per serving. Complex: link items to foods and Dora totals energy per serving, with coverage and a Health Star Rating or Nutri-Score.",
+        "how": null,
+        "setting": "Admin → Nutrition",
+        "setting_path": "/settings/admin/system/nutrition",
+        "note": "Ratings are estimates. A missing figure flatters them, and the panel says which.",
+        "path": null
+      },
+      {
+        "slug": "dietary-tags",
+        "title": "Dietary tags",
+        "summary": "A planning aid for the include and exclude filter. Check the ingredient list when food safety matters.",
+        "how": null,
+        "setting": "Kitchen setup → Dietary tags",
+        "setting_path": "/settings/kitchen-setup/recipe-dietary-tags",
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "mark-cooked",
+        "title": "Marking a recipe cooked",
+        "summary": "Cooking stamps Last cooked today, adds to the pool in batch style, and writes a Used in event on each ingredient’s history.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": null
+      }
+    ]
+  },
+  {
+    "slug": "cooking",
+    "title": "Cook mode",
+    "blurb": "One step at a time, with a voice if you want one.",
+    "entries": [
+      {
+        "slug": "cook-mode",
+        "title": "Cook mode",
+        "summary": "One step at a time, large enough to read from across the kitchen. The step’s ingredients and tools light up; tap the progress bar to jump.",
+        "how": "Cook on a recipe. Keys: → or space next, ← back, R repeat, Esc exit.",
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": "/cookbook"
+      },
+      {
+        "slug": "cooking-for",
+        "title": "Cooking for a different number",
+        "summary": "The Cooking for pill rescales every quantity for this cook only: whole numbers for things you count, kitchen fractions for the rest.",
+        "how": null,
+        "setting": "Admin → Cooking",
+        "setting_path": "/settings/admin/system/cooking",
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "sous-chef",
+        "title": "Sous Chef",
+        "summary": "Dora reads each step as you reach it; Repeat reads it again. Her own voice when it is installed on the server, your device’s otherwise.",
+        "how": null,
+        "setting": "Settings → Voice",
+        "setting_path": "/settings/voice",
+        "note": "On a phone, a step read after a long silence may be muted by the browser.",
+        "path": null
+      },
+      {
+        "slug": "hands-free",
+        "title": "Hands-free commands",
+        "summary": "Mic on, then say next, back, repeat, ingredients, tools, start, pause or reset timer, stop, or exit.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Chrome, Edge and Safari. Firefox has no speech recognition.",
+        "path": null
+      },
+      {
+        "slug": "timers",
+        "title": "Step timers",
+        "summary": "A step’s own timer, or one Dora reads out of its wording. At zero: a toast, a chime and, with Sous Chef on, a spoken Timer finished.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "One timer at a time. Moving to another step resets it.",
+        "path": null
+      },
+      {
+        "slug": "swap",
+        "title": "Swapping an ingredient",
+        "summary": "When something is low or out, pick a recorded substitute with its ratio and note.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Temporary. The recipe is untouched.",
+        "path": null
+      },
+      {
+        "slug": "finishing",
+        "title": "Finishing a cook",
+        "summary": "Each ingredient with its level preselected; change the ones you used up. Last cooked moves to today.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Batch households also say how many spare servings went in the pool.",
+        "path": null
+      },
+      {
+        "slug": "screen-on",
+        "title": "The screen stays on",
+        "summary": "In Cook mode and in a shop the phone does not lock.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Needs a browser with wake lock and HTTPS. Elsewhere it locks as usual.",
+        "path": null
+      }
+    ]
+  },
+  {
+    "slug": "meal-plans",
+    "title": "Meal plans",
+    "blurb": "A week at a time, with Dora’s help if you want it.",
+    "entries": [
+      {
+        "slug": "plan-a-week",
+        "title": "Plan a week",
+        "summary": "Monday to Sunday with your meal slots on each day. Tap a slot, then a recipe in the rail. Tap the same recipe again to add a serving.",
+        "how": null,
+        "setting": "Kitchen setup → Meal slots",
+        "setting_path": "/settings/kitchen-setup/recipe-meal-slots",
+        "note": "Past days are read-only.",
+        "path": "/meal-plans"
+      },
+      {
+        "slug": "build-my-week",
+        "title": "Build my week",
+        "summary": "Dora proposes a week from light guidance: days, meals, an emphasis, servings and optionally a budget cap. Edit it before saving.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Each meal uses a distinct recipe, so a small cookbook leaves gaps.",
+        "path": null
+      },
+      {
+        "slug": "dora-suggests",
+        "title": "Dora suggests",
+        "summary": "The rail’s first chip ranks your cookbook for the week: expiring stock, cookable now, not had lately, favourites, with the reason beside each row.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "cook-batches",
+        "title": "Cook once for several days",
+        "summary": "Link one recipe across days. The earliest day is the cook day and carries the whole yield; later days are leftovers.",
+        "how": null,
+        "setting": "Admin → Cooking",
+        "setting_path": "/settings/admin/system/cooking",
+        "note": "Batch style only. Cost is counted once, on the cook day.",
+        "path": null
+      },
+      {
+        "slug": "cook-fresh",
+        "title": "Cooked fresh on the day",
+        "summary": "Marks a meal as cooked on its day, outside the pool. It shows a Fresh chip and never takes a ready serving.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "meal-glyphs",
+        "title": "What the meal glyphs mean",
+        "summary": "Chef hat: can you make it (green yes, amber missing ingredients). Fridge: is a serving ready (batch only). The card’s edge rolls them up.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "templates-sets",
+        "title": "Templates and rotating sets",
+        "summary": "Save a week as a template and apply it to one week or a run of weeks. A set rotates templates week by week.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Applying replaces the week’s future meals and asks first.",
+        "path": "/meal-plans/templates"
+      },
+      {
+        "slug": "reconcile",
+        "title": "Reconcile past meals",
+        "summary": "As days pass Dora records what happened to each meal. Auto assumes you cooked it and logs it; manual asks you: Cooked, Different portions, Cooked later, Didn’t cook, Skip.",
+        "how": null,
+        "setting": "Admin → Meal reconciliation",
+        "setting_path": "/settings/admin/system/meal-reconcile",
+        "note": "Every decision is a new receipt. Nothing is overwritten.",
+        "path": "/meal-plans/reconcile"
+      },
+      {
+        "slug": "missing-this-week",
+        "title": "Missing this week",
+        "summary": "The rail totals the week’s ingredients, splits them into out, low and stocked, and hands the missing ones to a shopping list.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "cost-this-week",
+        "title": "Cost this week and the budget",
+        "summary": "Each meal’s price is its recipe estimate times servings. The week’s total sits under the rail against the budget, with cheaper swaps when it is over.",
+        "how": null,
+        "setting": "Admin → Money",
+        "setting_path": "/settings/admin/system/money",
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "lighter",
+        "title": "Find a lighter option",
+        "summary": "From a meal’s menu: recipes with fewer kcal per serving and the saving. Never volunteered.",
+        "how": null,
+        "setting": "Admin → Nutrition",
+        "setting_path": "/settings/admin/system/nutrition",
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "daily-brief",
+        "title": "Tomorrow at a glance",
+        "summary": "One evening notification naming tomorrow’s meals and any shopping day. Silent when there is nothing to say.",
+        "how": null,
+        "setting": "Settings → Notifications",
+        "setting_path": "/settings/notifications",
+        "note": null,
+        "path": null
+      }
+    ]
+  },
+  {
+    "slug": "shopping",
+    "title": "Shopping lists",
+    "blurb": "From a draft to the shop to the receipt.",
+    "entries": [
+      {
+        "slug": "three-faces",
+        "title": "One list, three faces",
+        "summary": "A draft while you build it, a shop while you are in the store, a receipt once you finish. Shop starts the trip; Finish ends it.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Finishing is final. Ticked items restock when you finish, never before.",
+        "path": "/shopping-lists"
+      },
+      {
+        "slug": "which-list",
+        "title": "Which list does the cart button use?",
+        "summary": "Your only draft. With two or more drafts it asks once and remembers for the tab; with none it asks you to create one.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "There is no primary list. Shop day is what orders the rail.",
+        "path": null
+      },
+      {
+        "slug": "adding-items",
+        "title": "Adding items",
+        "summary": "Add item searches every stock item, frequent ones first. The cart button on stock rows, ingredients and products adds with one tap. Add to a list pre-ticks what is missing.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "A new line remembers your last choice for that item.",
+        "path": null
+      },
+      {
+        "slug": "start-a-list",
+        "title": "Start a list from stock, a recipe or a plan",
+        "summary": "New list fills from low or out items, essentials, frequent buys, a recipe, a plan week or a template.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Nothing is added twice.",
+        "path": null
+      },
+      {
+        "slug": "offers-preferred",
+        "title": "Picking which one",
+        "summary": "The item’s name on a row is a menu of its linked products’ offers, or its preferred buys when it has no linked product. Picking an offer moves the line to that store.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "line-cost-store",
+        "title": "What a line is expected to cost",
+        "summary": "Estimate: your entered price, else the picked offer, else what you last paid. Store: where you bought it, else the list’s store, else the item’s usual store.",
+        "how": null,
+        "setting": "Admin → Money",
+        "setting_path": "/settings/admin/system/money",
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "prices-while-shopping",
+        "title": "Entering prices as you shop",
+        "summary": "Tap a row’s price to record what you paid, how many and where. Log price records a shelf price for something not on the list.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Only entered prices become spend and history.",
+        "path": null
+      },
+      {
+        "slug": "finish-restock",
+        "title": "Finish and restock",
+        "summary": "Ticked items go to Stocked, priced lines become purchase history, names are frozen. Unticked items go to another list or the bin.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "amend",
+        "title": "Amend a receipt",
+        "summary": "On a finished list, correct price, store and quantity per line. The purchase record is rewritten, so a typo stops feeding estimates.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "trim",
+        "title": "Keep a shop under budget",
+        "summary": "Over budget, Dora offers to set lines aside, each with its reason. Keep protects a line; Add back restores it.",
+        "how": null,
+        "setting": "Settings → Budget",
+        "setting_path": "/settings/budget",
+        "note": "Essentials and meals in the next two days are never cut.",
+        "path": null
+      },
+      {
+        "slug": "shopping-templates",
+        "title": "Templates",
+        "summary": "Save a list as a template and start new lists from it in one tap.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": "/shopping-lists/templates"
+      },
+      {
+        "slug": "receipt-photos",
+        "title": "Receipt photos",
+        "summary": "Attach up to 20 photos to a shop or a receipt.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Record-keeping only. Nothing is read from the image.",
+        "path": null
+      },
+      {
+        "slug": "may-be-out",
+        "title": "You may be out of…",
+        "summary": "On a draft, a strip of items Dora thinks you have run out of that are not on the list yet. Tap to add.",
+        "how": null,
+        "setting": "Settings → Assistant",
+        "setting_path": "/settings/assistant",
+        "note": "Nothing is added for you.",
+        "path": null
+      }
+    ]
+  },
+  {
+    "slug": "products",
+    "title": "Products and prices",
+    "blurb": "Saved products, price history and deals.",
+    "entries": [
+      {
+        "slug": "what-is-product",
+        "title": "What a product is",
+        "summary": "One thing at one shop with a price. A stock item is the thing in your kitchen. Link them and the price rides with your pantry record.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": "/my-products"
+      },
+      {
+        "slug": "finding-products",
+        "title": "Finding products",
+        "summary": "Product Search opens the page your admin set up. What you save there lands in My products.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "No Product Search in the menu? Your admin sets it up under Admin → Product data.",
+        "path": null
+      },
+      {
+        "slug": "link-unlink",
+        "title": "Link or unlink a product",
+        "summary": "Grey broken link means not linked: tap to pick a stock item. Green means linked: tap to unlink.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "custom-products",
+        "title": "Custom products",
+        "summary": "For a shop Dora cannot check. You type the price, size and store; Dora never refreshes it and marks it Custom.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "pack-count",
+        "title": "Items in the pack",
+        "summary": "Set how many are in a pack so a recipe’s 3 eggs can be priced.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "tracking",
+        "title": "Tracking prices",
+        "summary": "Stop tracking hides a product from deals and the weekly email without deleting it.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "On a product you added yourself the menu says Hide from deals, since nothing refreshes its price.",
+        "path": null
+      },
+      {
+        "slug": "bulk-products",
+        "title": "Bulk select",
+        "summary": "All visible, On deal, Low stock on deal and more. Then add to a list, unlink, stop tracking or delete in one go.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "watch-price",
+        "title": "Watch a price",
+        "summary": "From a product’s menu, Alert me on a price drop. A new offer at or below your figure raises a bell alert, once per offer.",
+        "how": null,
+        "setting": "Admin → Money",
+        "setting_path": "/settings/admin/system/money",
+        "note": "Price alerts need money features on.",
+        "path": null
+      },
+      {
+        "slug": "price-history",
+        "title": "Price history",
+        "summary": "Compare up to five products over 30 days, 90 days, a year or all time, with your usual price where you have logged one.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": "/price-history"
+      },
+      {
+        "slug": "deals-email",
+        "title": "Weekly deals email",
+        "summary": "Pick a day under Notifications; the mail arrives at 7 am with the best specials across your tracked products.",
+        "how": null,
+        "setting": "Settings → Notifications",
+        "setting_path": "/settings/notifications",
+        "note": "A quiet week sends nothing. Needs a verified email address.",
+        "path": null
+      },
+      {
+        "slug": "real-deal",
+        "title": "Is it really a deal?",
+        "summary": "Dora checks a special against the product’s own 90-day history and what you have paid. A special dearer than your usual price is called out.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "delete-product",
+        "title": "Deleting a product",
+        "summary": "Gone for good, with its price history and any watch on it.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Finished lists keep their record of it.",
+        "path": null
+      }
+    ]
+  },
+  {
+    "slug": "alerts",
+    "title": "Alerts and notifications",
+    "blurb": "The bell, push, and Dora’s suggestions.",
+    "entries": [
+      {
+        "slug": "the-bell",
+        "title": "The bell",
+        "summary": "Counts the actionable things: expired food, an essential low or out, expiring soon, a missed shop, a price hit. Lower-key nudges are listed, not counted.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "alert-kinds",
+        "title": "What each alert means",
+        "summary": "Expired · Expiring soon · Essential low or out · Did you forget your shopping? · Shopping day · No meals planned · Past meals need confirming · Hit your price.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "A non-essential running low is not an alert. The stock row already says it.",
+        "path": null
+      },
+      {
+        "slug": "snooze-dismiss",
+        "title": "Snooze, dismiss, and why alerts come back",
+        "summary": "Each alert is one episode. Dismiss hides it until that episode ends; Snooze hides it for seven days. The next pack of apples is a new alert.",
+        "how": null,
+        "setting": "Settings → Notifications",
+        "setting_path": "/settings/notifications",
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "choose-alerts",
+        "title": "Choosing which alerts you get",
+        "summary": "A switch per kind, for you only. Off removes it from the bell, the stock rows and push.",
+        "how": null,
+        "setting": "Settings → Notifications",
+        "setting_path": "/settings/notifications",
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "push",
+        "title": "Push notifications",
+        "summary": "Needs push keys from an admin, a browser that supports push, and the switch on for this device. Dora pushes new actionable alerts hourly, once each.",
+        "how": null,
+        "setting": "Settings → Notifications",
+        "setting_path": "/settings/notifications",
+        "note": "On an iPhone, add Dora to the home screen first.",
+        "path": null
+      },
+      {
+        "slug": "evening-brief",
+        "title": "The evening brief",
+        "summary": "7 pm in your household’s timezone: tomorrow’s meals and any shopping day due. Rides push and sends nothing on an empty evening.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "suggestions",
+        "title": "Dora’s suggestions",
+        "summary": "Ideas, not alerts: use something soon, over budget, probably due, buy less, still have it?, meals to confirm. Cards at the top of her chat with Why?, Snooze and Dismiss.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Dismissing hides a suggestion for the whole household.",
+        "path": null
+      }
+    ]
+  },
+  {
+    "slug": "reports",
+    "title": "Reports, budget and waste",
+    "blurb": "What your own records say.",
+    "entries": [
+      {
+        "slug": "built-from",
+        "title": "What Reports is built from",
+        "summary": "Your own records: finished lists with prices, cooks logged in cook mode, logged prices and marked waste. Nothing is looked up.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": "/reports"
+      },
+      {
+        "slug": "range",
+        "title": "The range and All time",
+        "summary": "Every card answers for the range you pick. All time starts at your first record; waste looks back at most a year.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "money-went",
+        "title": "Where the money went",
+        "summary": "By store, by stock group, or against the same-length period before.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Items with no price are counted and named, never silently dropped.",
+        "path": null
+      },
+      {
+        "slug": "kitchen-memory",
+        "title": "Kitchen memory",
+        "summary": "Cooks finished in cook mode, the portions you made, and how many different recipes that was.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "price-changes",
+        "title": "Price changes",
+        "summary": "First and last price in the range for items with two or more logged prices, per shelf unit. Tap an item for its chart.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "logging-waste",
+        "title": "Logging waste",
+        "summary": "On a stock row, open the expiry menu, Mark as wasted, then a reason. Undo within five seconds puts it back.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": "/stock"
+      },
+      {
+        "slug": "budget",
+        "title": "The household budget",
+        "summary": "One amount, weekly from Monday or monthly. Spent is ticked lines on finished lists; projected is what is on open lists dated in the period.",
+        "how": null,
+        "setting": "Settings → Budget",
+        "setting_path": "/settings/budget",
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "money-off",
+        "title": "Reports with money off",
+        "summary": "Waste and Kitchen memory stay. Summary, Spend and Price changes go.",
+        "how": null,
+        "setting": "Admin → Money",
+        "setting_path": "/settings/admin/system/money",
+        "note": null,
+        "path": null
+      }
+    ]
+  },
+  {
+    "slug": "dora",
+    "title": "Dora",
+    "blurb": "The assistant in the corner, and what she can do.",
+    "entries": [
+      {
+        "slug": "two-modes",
+        "title": "Basic or AI",
+        "summary": "Basic is always on and works offline: lookups, conversions, substitutes, adding to your list, page help. AI understands looser phrasing and needs a provider you connect.",
+        "how": null,
+        "setting": "Settings → Assistant",
+        "setting_path": "/settings/assistant",
+        "note": "If AI drops out mid-chat, Dora answers in Basic for that message.",
+        "path": null
+      },
+      {
+        "slug": "what-to-ask",
+        "title": "What you can ask",
+        "summary": "How’s my pantry · what’s low · what’s expiring · where’s the milk · what’s for dinner · recipe for carbonara · what’s on my list · 1 cup to ml · substitute for butter · what can I do here.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "add-to-list-basic",
+        "title": "Adding to your list by chat",
+        "summary": "Type add milk and eggs. Dora matches the names against your pantry and adds the clear ones to your draft list.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Anything ambiguous she asks about, never guesses.",
+        "path": null
+      },
+      {
+        "slug": "never-on-her-own",
+        "title": "Dora never changes anything on her own",
+        "summary": "In AI mode every change arrives as a card you Confirm or Cancel. Until you tap Confirm, nothing has happened.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "what-she-sees",
+        "title": "What Dora can see",
+        "summary": "Your household’s data in this install. Never another household, never the web.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "With OpenAI, Anthropic or Gemini your messages go to that provider. Ollama keeps everything on your own machine.",
+        "path": null
+      },
+      {
+        "slug": "set-up-ai",
+        "title": "Set up AI mode",
+        "summary": "Ollama (a local model, no key) or OpenAI, Anthropic or Gemini (your own key). Test connection before turning it on. Per account.",
+        "how": null,
+        "setting": "Settings → Assistant",
+        "setting_path": "/settings/assistant",
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "ai-unavailable",
+        "title": "Why does AI mode say unavailable?",
+        "summary": "The provider did not answer: Ollama is not running, the key is wrong, the model is mistyped, or the server cannot reach the URL.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "The URL is from the server’s point of view, not your browser’s. Retry on the banner after fixing it.",
+        "path": null
+      },
+      {
+        "slug": "encryption-key",
+        "title": "Paid providers need an encryption key",
+        "summary": "The install needs DORA_SECRET_ENCRYPTION_KEY set so your API key is stored encrypted. The Assistant page says so and can generate one.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Rotating the key invalidates every saved key.",
+        "path": null
+      },
+      {
+        "slug": "talking",
+        "title": "Talking to Dora",
+        "summary": "Tap the mic, speak, tap again. Your words land in the box so you can read them before sending.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Chrome and Edge. Firefox has no speech recognition.",
+        "path": null
+      },
+      {
+        "slug": "hearing",
+        "title": "Hearing Dora",
+        "summary": "The speaker button has Dora read her replies aloud, with her own voice when it is installed on the server.",
+        "how": null,
+        "setting": "Settings → Voice",
+        "setting_path": "/settings/voice",
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "which-browsers",
+        "title": "Which browsers can Dora speak in?",
+        "summary": "All of them, with her own voice installed on the server. The browser’s voice is the part that varies, and Firefox often has none.",
+        "how": null,
+        "setting": "Settings → Voice",
+        "setting_path": "/settings/voice",
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "page-aware",
+        "title": "How does Dora know what page I’m on?",
+        "summary": "She reads the route. Ask what can I do here on any page.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "suggestions-in-chat",
+        "title": "Suggestions in the chat",
+        "summary": "The number on the launcher is how many suggestions Dora has. Open the chat to Accept, Snooze a day, Dismiss, or ask Why.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "slow-down",
+        "title": "Why does Dora say slow down?",
+        "summary": "Twenty questions a minute per person is the ceiling, so a stuck script cannot run up your provider bill. She answers in Basic until the minute is up.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "turn-off",
+        "title": "Turning Dora off",
+        "summary": "Show digital assistant chat bubble, off. Hides the launcher everywhere for your account only.",
+        "how": null,
+        "setting": "Settings → Assistant",
+        "setting_path": "/settings/assistant",
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "faces",
+        "title": "Her faces",
+        "summary": "The burger in the corner reacts to the conversation.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": null
+      }
+    ]
+  },
+  {
+    "slug": "getting-started",
+    "title": "Getting started",
+    "blurb": "First run, signing in and your account.",
+    "entries": [
+      {
+        "slug": "first-run",
+        "title": "Your first run",
+        "summary": "A short story, then a one-minute setup. Nothing is saved until Finish.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Skip keeps the defaults, and the dashboard offers to continue for a day.",
+        "path": null
+      },
+      {
+        "slug": "what-finish-sets",
+        "title": "What Finish sets up",
+        "summary": "Your look; for the first user also the household, the feature switches, starter items and optionally one demo recipe.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Everything is editable afterwards in Stock and Settings.",
+        "path": null
+      },
+      {
+        "slug": "run-setup-again",
+        "title": "Running setup again",
+        "summary": "Settings → About → Welcome tour starts it over.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": "/settings/about"
+      },
+      {
+        "slug": "sign-in-register",
+        "title": "Signing in and creating an account",
+        "summary": "A username and password. An admin adds new people on Settings → Users. If the admin has switched on sign-ups there, the sign-in page also offers \"Need an account?\". Passwords are 8 or more characters, and new accounts are never admins.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "A failed sign-in never says which half was wrong.",
+        "path": null
+      },
+      {
+        "slug": "first-admin",
+        "title": "The first admin",
+        "summary": "A brand-new install opens on a one-time page that creates the first admin and signs them in. Then the page is gone for good.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "forgot-password",
+        "title": "Forgot your password",
+        "summary": "Enter your email; if it is on an account a one-hour reset link arrives.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "The button appears only when the install can send email. Otherwise an admin sets a new password for you.",
+        "path": null
+      },
+      {
+        "slug": "verify-email",
+        "title": "Verifying your email",
+        "summary": "Accounts with an address get a 24-hour link. Scheduled emails only go to verified addresses.",
+        "how": null,
+        "setting": "Settings → Notifications",
+        "setting_path": "/settings/notifications",
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "signed-out",
+        "title": "Why was I signed out?",
+        "summary": "A password change or reset signs out your other devices. An admin deactivating an account signs it out. Cleared cookies end a session.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "phone-app",
+        "title": "The phone app and your Dora address",
+        "summary": "The app asks for your server’s address once and adds /api for you.",
+        "how": "Change it later under Settings → About.",
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": "/settings/about"
+      },
+      {
+        "slug": "username-email-password",
+        "title": "Username, email and password",
+        "summary": "Edit them inline under Account and Save.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Changing your password signs out your other devices.",
+        "path": "/settings/account"
+      },
+      {
+        "slug": "profile-picture",
+        "title": "Profile picture",
+        "summary": "Upload a photo or pick a preset. It saves the moment you choose.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": "/settings/account"
+      }
+    ]
+  },
+  {
+    "slug": "settings",
+    "title": "Settings and admin",
+    "blurb": "Your preferences, the kitchen setup, and the install.",
+    "entries": [
+      {
+        "slug": "two-modes-settings",
+        "title": "Settings and Admin",
+        "summary": "Personal settings and install-wide Admin settings are two modes. Admins switch with the pill at the top.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Kitchen setup is shared by the household even though it sits on the personal side.",
+        "path": null
+      },
+      {
+        "slug": "who-can-change",
+        "title": "Who can change what",
+        "summary": "Anyone edits their own account, appearance, notifications, voice and the shared kitchen setup. Only admins change install-wide behaviour.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "appearance",
+        "title": "Appearance",
+        "summary": "Mode (System, Light, Dark), a theme family, a font and one of four text sizes. Per account, and it follows you across devices.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "The sign-in page is always the light brand look.",
+        "path": "/settings/preferences"
+      },
+      {
+        "slug": "notifications-page",
+        "title": "Notifications",
+        "summary": "Which alert kinds reach your bell, how long alerts live, push for this device, the evening brief and the weekly deals email.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": "/settings/notifications"
+      },
+      {
+        "slug": "voice-settings",
+        "title": "Voice",
+        "summary": "Speak to Dora, and let her speak back with her own voice or your device’s.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Her voices are 60 to 110 MB downloads on the server.",
+        "path": "/settings/voice"
+      },
+      {
+        "slug": "locations",
+        "title": "Stock locations",
+        "summary": "A three-level map of where things live: zones, areas, sections. Items can sit at any level.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Deleting a zone leaves its items unassigned, not deleted.",
+        "path": "/settings/kitchen-setup/stock-locations"
+      },
+      {
+        "slug": "vocab",
+        "title": "Stock groups and recipe vocabulary",
+        "summary": "Name-only lists used as filters and pickers, each showing how many things use it.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Meal slots are the one reorderable list, and their order drives the planner.",
+        "path": "/settings/kitchen-setup/stock-groups"
+      },
+      {
+        "slug": "stores",
+        "title": "Stores",
+        "summary": "The shops Dora knows about. Add one, give it a logo, remove the ones you do not use.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": "/settings/kitchen-setup/stores"
+      },
+      {
+        "slug": "formatting",
+        "title": "How Dora shows dates, money and units",
+        "summary": "Every date, price and unit follows the household’s region, not your browser.",
+        "how": null,
+        "setting": "Admin → Region & locale",
+        "setting_path": "/settings/admin/system/region",
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "shortcuts",
+        "title": "Keyboard shortcuts",
+        "summary": "Press ? anywhere for the list. / focuses search; g then s, l, r, d or h jumps to Stock, Lists, Cookbook, Dashboard or Help.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Shortcuts never use Ctrl or Cmd, so they cannot collide with the browser’s.",
+        "path": null
+      },
+      {
+        "slug": "region",
+        "title": "Region and locale (admin)",
+        "summary": "Currency, language, units and the household timezone. Match this device fills zone, locale and units.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "The timezone decides which day is today everywhere.",
+        "path": "/settings/admin/system/region"
+      },
+      {
+        "slug": "kitchen-features",
+        "title": "Kitchen features (admin)",
+        "summary": "One page per switch: stock auto-add and scanning, stocktake, cooking style, meal reconciliation, money, nutrition, alert thresholds, image quality.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Each flip is install-wide and applies to everyone on their next page load.",
+        "path": "/settings/admin/system"
+      },
+      {
+        "slug": "email-push-admin",
+        "title": "Email and push setup (admin)",
+        "summary": "SMTP details, the email switch, the public URL used in links, and the keys for web push.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Secrets are stored encrypted and need DORA_SECRET_ENCRYPTION_KEY on the server.",
+        "path": "/settings/admin/system/email"
+      },
+      {
+        "slug": "users-admin",
+        "title": "Manage users (admin)",
+        "summary": "Add, rename, reset passwords, promote, deactivate (locks them out, keeps everything) or delete.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "You cannot demote or remove yourself, or the last admin who can still sign in.",
+        "path": "/settings/admin/users"
+      },
+      {
+        "slug": "audit-log",
+        "title": "Audit log (admin)",
+        "summary": "Every change, sign-in attempt and client crash, filterable, with CSV export.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Retention is 1 to 3650 days, pruned nightly.",
+        "path": "/settings/admin/audit-log"
+      }
+    ]
+  },
+  {
+    "slug": "data",
+    "title": "Data and access",
+    "blurb": "Backups, imports and API keys. Admins only.",
+    "entries": [
+      {
+        "slug": "backup",
+        "title": "Back up your install",
+        "summary": "Everything Dora knows, saved to one file in the Backup library on the server. Download any of them to keep a copy elsewhere.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Passwords and secrets are never included. Backups are manual.",
+        "path": "/settings/admin/data/backup"
+      },
+      {
+        "slug": "restore",
+        "title": "Restore a backup",
+        "summary": "Brings rows in. Rows that already exist are skipped, never overwritten. From a file you first see a preview and pick exactly what to bring.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Restore adds, it does not delete. Reload afterwards.",
+        "path": null
+      },
+      {
+        "slug": "import-spreadsheet",
+        "title": "Import stock items from a spreadsheet",
+        "summary": "An .xlsx or .csv with at least a name column. Download the template, fill it, check the column mapping, import.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Levels must already exist. Locations and groups can be created on the fly.",
+        "path": "/settings/admin/data/import"
+      },
+      {
+        "slug": "api-key",
+        "title": "Create an API key",
+        "summary": "Lets a program you run push products and prices into Dora. The key is shown once, right after you create it.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Anyone holding the key can change products in this install. Lose it, revoke it and make a new one.",
+        "path": "/settings/admin/api-access"
+      },
+      {
+        "slug": "store-mappings",
+        "title": "Map the store names a source uses",
+        "summary": "An unknown store name holds the record as pending under that key until you say which of your stores it means.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Records pushed before you map are not queued. The source pushes them again.",
+        "path": null
+      },
+      {
+        "slug": "source-working",
+        "title": "See whether a source is working",
+        "summary": "Each key shows when it was last used and running totals of records accepted, skipped and failed.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "disable-revoke",
+        "title": "Disable or revoke a key",
+        "summary": "Disable pauses a source and keeps its mappings. Revoke deletes the key for good.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Neither removes the products already pushed.",
+        "path": null
+      }
+    ]
+  },
+  {
+    "slug": "app",
+    "title": "Offline, install and updates",
+    "blurb": "Dora on your devices, and where your data lives.",
+    "entries": [
+      {
+        "slug": "offline",
+        "title": "Use Dora when the connection drops",
+        "summary": "A red strip appears and you can keep looking at anything you have opened before. Changes wait until you are back.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Dora never saves a change for later, so what you see is always what the server has.",
+        "path": null
+      },
+      {
+        "slug": "install",
+        "title": "Install Dora on your phone or computer",
+        "summary": "Settings → About → Install as an app. On an iPhone, Share → Add to Home Screen.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Needs HTTPS. Installing does not change your data or sign you in anywhere new.",
+        "path": "/settings/about"
+      },
+      {
+        "slug": "new-version",
+        "title": "A new version is ready",
+        "summary": "After the server is updated a blue strip appears. Reload when convenient.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "The yellow notice on About is about the server itself, for whoever runs it.",
+        "path": null
+      },
+      {
+        "slug": "android-app",
+        "title": "The Android app",
+        "summary": "The same Dora in a native wrapper. It asks for your server’s address on first launch.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Push is not available inside the Android app. Use the installed web app for that.",
+        "path": null
+      },
+      {
+        "slug": "where-data",
+        "title": "Where Dora keeps your data",
+        "summary": "On the server: the dora_data volume on Docker, or your app-data folder with the desktop app. Never in the browser.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Deleting that folder deletes the install. Take a backup first.",
+        "path": null
+      },
+      {
+        "slug": "newer-dora",
+        "title": "Is there a newer Dora?",
+        "summary": "Help → About shows the version you run and whether a newer release exists. Updating is the operator’s job.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": "/help/about"
+      },
+      {
+        "slug": "demo-mode",
+        "title": "Why does a banner say Demo mode?",
+        "summary": "The install was started as a public demo. Sample data, and everything resets on a timer.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": "Nothing you change is kept.",
+        "path": null
+      },
+      {
+        "slug": "something-wrong",
+        "title": "Something went wrong, and the ref code",
+        "summary": "A short code like ref: 3f9a2c1b on an error is the id of that request in the server log. Quote it when you report a problem.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": null
+      },
+      {
+        "slug": "report-problem",
+        "title": "Reporting a problem",
+        "summary": "Help → About → Report an issue, when the operator has set one up. Otherwise note the steps and pass them on.",
+        "how": null,
+        "setting": null,
+        "setting_path": null,
+        "note": null,
+        "path": "/help/about"
+      }
+    ]
+  }
+]

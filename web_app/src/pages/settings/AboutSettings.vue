@@ -466,7 +466,7 @@
     .about-does__icon {
         flex: 0 0 auto;
         margin-top: 1px;
-        color: var(--brand-primary);
+        color: var(--primary-ink);
     }
 
     /* auto-fit rather than a fixed column count: four tiles on a wide pane,

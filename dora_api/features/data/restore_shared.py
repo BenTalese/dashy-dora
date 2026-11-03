@@ -141,14 +141,23 @@ SECTIONS: tuple[Section, ...] = (
         # Never ship credentials. Restoring users without hashes means they
         # can't log in until an admin resets them — that's the explicit
         # trade-off for being able to back up account preferences.
-        # The per-user LLM API key moved to the `UserLlmProvider` table
-        # (2026-08-12), which is not a backup section at all — so the key
-        # (and the rest of the provider config) never leaves the install
-        # via a backup; there's nothing to exclude on User any more.
         excluded_columns=frozenset({
             "password_hash",
         }),
         sensitive=True,
+    ),
+    # FU-625 / 18-D5 — each user's assistant provider settings (base URL,
+    # model) ride along with their account. The API key never does (FU-387
+    # defence-in-depth), and `verified` resets to its default so the Mode
+    # picker offers a provider only after it answers a probe on this install.
+    Section(
+        "user_llm_providers", "UserLlmProvider", "Assistant providers (no API keys)",
+        "Optional", False,
+        excluded_columns=frozenset({
+            "api_key_encrypted",
+            "verified",
+            "verified_at",
+        }),
     ),
     Section(
         "product_historic_offers", "ProductHistoricOffer", "Historic product offers", "Optional", False,
@@ -175,6 +184,8 @@ REMAP_ON_DUPLICATE: frozenset[str] = frozenset({
     "stock_groups", "stock_levels", "stock_locations", "saved_products",
     "stock_items", "recipe_collections", "cuisines", "categories",
     "dietary_tags", "tools",
+    # A same-username account keeps its id; its provider rows follow it.
+    "users",
 })
 
 TABLE_NAME_BY_BACKUP_KEY: dict[str, str] = {s.backup_key: s.table_name for s in SECTIONS}
@@ -256,6 +267,7 @@ REQUIRED_FKS: set[tuple[str, str]] = {
     ("product_historic_offers", "product_id"),
     ("barcodes", "product_id"),
     ("barcodes", "stock_item_id"),
+    ("user_llm_providers", "user_id"),
 }
 
 # Children that ride along when their parent is selected (partial mode UX).
@@ -267,6 +279,7 @@ CHILD_AUTO_INCLUDE: tuple[tuple[str, str, str], ...] = (
     ("meal_plans", "meal_plan_entries", "meal_plan_id"),
     ("saved_products", "product_historic_offers", "product_id"),
     ("saved_products", "barcodes", "product_id"),
+    ("users", "user_llm_providers", "user_id"),
 )
 
 
