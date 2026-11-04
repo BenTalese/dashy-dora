@@ -17,7 +17,8 @@ from dora_api.features.assistant.ask_assistant import _tool_result_message
 from dora_api.features.assistant.tools import _bounded_days
 from dora_api.infrastructure.llm import llm_client
 from dora_api.infrastructure.llm.anthropic_client import (
-    AnthropicClient, _split_system_and_convert as anthropic_convert)
+    AnthropicClient, _split_system_and_convert as anthropic_convert,
+    _to_openai_shape)
 from dora_api.infrastructure.llm.gemini_client import \
     _split_system_and_convert as gemini_convert
 from dora_api.infrastructure.llm.llm_client import LlmUnavailable, is_provider_down
@@ -50,6 +51,22 @@ def test__anthropic__tool_result_block_references_the_tool_use_id():
     assert tool_use["type"] == "tool_use" and tool_use["id"] == "call_abc"
     assert tool_result == {"type": "tool_result", "tool_use_id": "call_abc",
                            "content": '[{"name": "Milk"}]'}
+
+
+def test__anthropic__a_tool_turn_replays_its_thinking_blocks_first():
+    # FU-946: current Claude models think by default and expect a tool turn's
+    # thinking back unchanged, ahead of its tool_use blocks.
+    thinking = {"type": "thinking", "thinking": "", "signature": "sig"}
+    reply = _to_openai_shape({"content": [
+        thinking,
+        {"type": "tool_use", "id": "toolu_1", "name": "list_low_stock", "input": {}},
+    ]})
+    _system, out = anthropic_convert([
+        {"role": "user", "content": "what's low?"},
+        reply,
+    ])
+    assert out[-1]["content"][0] == thinking
+    assert out[-1]["content"][1]["type"] == "tool_use"
 
 
 def test__openai__tool_message_has_tool_call_id_and_no_name():

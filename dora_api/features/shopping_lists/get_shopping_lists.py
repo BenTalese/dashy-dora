@@ -21,6 +21,7 @@ from dora_api.features.routers import SHOPPING_LIST_ROUTER
 from dora_api.infrastructure.api_response import ok
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
+from dora_api.features.shopping_lists._list_label import list_labeller
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -56,6 +57,7 @@ class GetShoppingListsHandler:
         # Python after a single grouped query.
         session = self.repository.session
         lists: List[ShoppingList] = self.repository.get(ShoppingList).all()
+        label = list_labeller(self.repository)
 
         counts: dict[UUID, tuple[int, int]] = {}
         # `(shopping_list_id, ticked) -> count` rolled up in one query.
@@ -85,7 +87,7 @@ class GetShoppingListsHandler:
             out.append(ShoppingListSummaryDto(
                 shopping_list_id = lst.id,
                 name = lst.name,
-                display_name = lst.display_name,
+                display_name = label(lst),
                 status = lst.status,
                 created_at = lst.created_at,
                 completed_at = lst.completed_at,

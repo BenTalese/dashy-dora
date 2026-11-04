@@ -9,7 +9,7 @@ from uuid import uuid4
 
 from dora_api.domain.entities.shopping_list import ShoppingListLine
 from dora_api.features.shopping_lists._line_price import (
-    harvest_observation_fields, line_paid_unit_price)
+    harvest_observation_fields, is_bought_line, line_paid_unit_price)
 
 
 def _line(*, actual=None, picked=None, quantity=1) -> ShoppingListLine:
@@ -33,6 +33,22 @@ def test__ladder__falls_back_to_picked():
 
 def test__ladder__none_when_neither_set():
     assert line_paid_unit_price(_line(actual=None, picked=None)) is None
+
+
+# ── is_bought_line — R-061 ───────────────────────────────────────────────
+
+def test__is_bought_line__the_tick_decides_not_the_price():
+    # FU-768: a priced unticked line was read as a purchase.
+    priced_unticked = _line(picked=2.0)
+    priced_unticked.is_ticked = False
+    unpriced_ticked = _line()
+    unpriced_ticked.is_ticked = True
+    deferred = _line(actual=3.0)
+    deferred.is_ticked = True
+    deferred.deferred_by_budget = True
+    assert not is_bought_line(priced_unticked)
+    assert is_bought_line(unpriced_ticked)
+    assert not is_bought_line(deferred)
 
 
 # ── harvest_observation_fields — E4 measure vs count ──────────────────────

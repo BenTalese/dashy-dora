@@ -528,7 +528,13 @@ def configure_mappings(db: SQLAlchemy):
         "ShoppingListTemplateLine", metadata,
         Column("id", UUIDType, primary_key=True),
         Column("template_id", UUIDType, ForeignKey("ShoppingListTemplate.id", ondelete="CASCADE"), nullable=False),
-        Column("stock_item_id", UUIDType, ForeignKey("StockItem.id", ondelete="CASCADE"), nullable=False),
+        # Anchored by a stock item or a product, like a list line (FU-940 D1).
+        Column("stock_item_id", UUIDType, ForeignKey("StockItem.id", ondelete="CASCADE"), nullable=True),
+        Column("product_id", UUIDType, ForeignKey("Product.id", ondelete="CASCADE"), nullable=True),
+        CheckConstraint(
+            "stock_item_id IS NOT NULL OR product_id IS NOT NULL",
+            name="template_line_anchor",
+        ),
         Column("quantity", Integer, nullable=True),
         Column("sequence", Integer, nullable=False, server_default="0"),
         Column("selected_product_id", UUIDType, ForeignKey("Product.id", ondelete="SET NULL"), nullable=True),
@@ -1088,6 +1094,10 @@ def configure_mappings(db: SQLAlchemy):
         Column("offset_from_monday", Integer, nullable=False),
         Column("slot", String(50), nullable=False),
         Column("servings", Integer, nullable=False, server_default="1"),
+        # FU-939: entries sharing a key were one batch cook; applying the
+        # template mints a batch per key.
+        Column("cook_key", String(64), nullable=True),
+        Column("cook_fresh", Boolean, nullable=False, server_default=false()),
     )
 
     meal_plan_template_set_table = Table(
@@ -1353,6 +1363,7 @@ def configure_mappings(db: SQLAlchemy):
     Index("ix_ShoppingListLine_selected_product_id", _t["ShoppingListLine"].c.selected_product_id)
     Index("ix_ShoppingListLine_shopping_list_id", _t["ShoppingListLine"].c.shopping_list_id)
     Index("ix_ShoppingListLine_stock_item_id", _t["ShoppingListLine"].c.stock_item_id)
+    Index("ix_ShoppingListTemplateLine_product_id", _t["ShoppingListTemplateLine"].c.product_id)
     Index("ix_ShoppingListTemplateLine_selected_product_id", _t["ShoppingListTemplateLine"].c.selected_product_id)
     Index("ix_ShoppingListTemplateLine_stock_item_id", _t["ShoppingListTemplateLine"].c.stock_item_id)
     Index("ix_ShoppingListTemplateLine_template_id", _t["ShoppingListTemplateLine"].c.template_id)

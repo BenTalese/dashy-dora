@@ -254,7 +254,6 @@ _SIMPLE_CREATE_PROBES: list[Probe] = [
     _p_create("POST /tools", "/tools", {"name": _u("tool")}),
     _p_create("POST /stock-groups", "/stock-groups", {"name": _u("grp")}),
     _p_create("POST /stores", "/stores", {"name": _u("store")}),
-    _p_create("POST /stock-locations", "/stock-locations", {"name": _u("loc")}),
     _p_create("POST /locations", "/locations",
               {"name": _u("zone"), "kind": "zone", "sequence": 0}),
     _p_create("POST /recipe-collections", "/recipe-collections", {"name": _u("coll")}),

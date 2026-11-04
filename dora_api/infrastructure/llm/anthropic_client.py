@@ -34,13 +34,16 @@ from dora_api.infrastructure.llm.llm_client import (LlmClient, LlmUnavailable,
 _LOGGER = logging.getLogger(__name__)
 DEFAULT_BASE_URL = "https://api.anthropic.com"
 _API_VERSION = "2023-06-01"
+# Carries a tool turn's raw thinking blocks through the provider-neutral
+# message history (current Claude models think by default).
+_THINKING_KEY = "_anthropic_thinking"
 # Curated tool-capable models. Update on a new Claude release; the
 # user can also type a model id manually in Settings.
 _DEFAULT_MODELS = [
-    "claude-opus-4-20250514",
-    "claude-sonnet-4-20250514",
-    "claude-3-5-haiku-20241022",
-    "claude-3-5-sonnet-20241022",
+    "claude-opus-5",
+    "claude-sonnet-5",
+    "claude-haiku-4-5",
+    "claude-fable-5-1",
 ]
 
 
@@ -103,10 +106,12 @@ class AnthropicClient(LlmClient):
         system_prompt, anthropic_messages = _split_system_and_convert(messages)
         anthropic_tools = _convert_tools(tools) if tools else None
 
+        # No `temperature`: current Claude models reject sampling parameters
+        # with a 400. They also think by default, which spends output tokens
+        # before the answer, so the cap leaves room for both (FU-946).
         payload: dict = {
             "model": self._model,
-            "max_tokens": 1024,
-            "temperature": 0.2,
+            "max_tokens": 16000,
             "messages": anthropic_messages,
         }
         if system_prompt:
@@ -170,7 +175,7 @@ def _split_system_and_convert(messages: list[dict]) -> tuple[str, list[dict]]:
             # Reconstruct the assistant turn that proposed the tools so
             # Anthropic can match `tool_use_id`s. Text content + each
             # tool_call as a `tool_use` block.
-            content_blocks: list[dict] = []
+            content_blocks: list[dict] = list(m.get(_THINKING_KEY) or [])
             if isinstance(m.get("content"), str) and m["content"]:
                 content_blocks.append({"type": "text", "text": m["content"]})
             for call in m["tool_calls"]:
@@ -217,11 +222,14 @@ def _to_openai_shape(response: dict) -> dict:
     blocks = response.get("content") or []
     text_parts: list[str] = []
     tool_calls: list[dict] = []
+    thinking: list[dict] = []
     for block in blocks:
         if not isinstance(block, dict):
             continue
         btype = block.get("type")
-        if btype == "text":
+        if btype in ("thinking", "redacted_thinking"):
+            thinking.append(block)
+        elif btype == "text":
             t = block.get("text")
             if isinstance(t, str):
                 text_parts.append(t)
@@ -242,4 +250,8 @@ def _to_openai_shape(response: dict) -> dict:
     }
     if tool_calls:
         message["tool_calls"] = tool_calls
+        # A tool turn is replayed to the same model, which expects its own
+        # thinking blocks back unchanged; the converter below re-emits them.
+        if thinking:
+            message[_THINKING_KEY] = thinking
     return message

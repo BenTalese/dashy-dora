@@ -144,6 +144,20 @@ def test__library_backup__tampered_file__download_and_restore_refuse_and_mark_fa
     assert next(r for r in listed if r["backup_id"] == backup_id)["status"] == "failed"
 
 
+def test__backup__stores_and_parent_first_locations(api):
+    """FU-955: stores ride in the backup (a saved product needs its store),
+    and a location moved under a newer one is dumped after its parent."""
+    first_zone = requests.post(f"{API}/locations", json={"name": f"First {uuid.uuid4().hex[:6]}", "kind": "zone"}).json()["location_id"]
+    area = requests.post(f"{API}/locations", json={"name": f"Area {uuid.uuid4().hex[:6]}", "kind": "area", "parent_id": first_zone}).json()["location_id"]
+    later_zone = requests.post(f"{API}/locations", json={"name": f"Later {uuid.uuid4().hex[:6]}", "kind": "zone"}).json()["location_id"]
+    assert requests.patch(f"{API}/locations/{area}", json={"parent_id": later_zone}).status_code == 204
+
+    _, payload = _create_backup(["stock_locations", "stores"])
+    assert payload["stores"], "the seed has stores"
+    ids = [row["id"] for row in payload["stock_locations"]]
+    assert ids.index(later_zone) < ids.index(area)
+
+
 def test__get_backup__without_auth__is_unauthorized(api):
     # Bare requests.Session (no login) — we hit the URL directly without
     # going through the shared authenticated session that conftest set up.
@@ -905,16 +919,13 @@ def test__shopping_list_print_view__returns_html_with_list_name(api):
     assert "@media print" in response.text
 
 
-def test__recipe_export_csv__returns_csv_when_recipes_exist(api):
-    recipe_id = _first_seeded_recipe_id()
+def test__recipe_export_csv__endpoint_removed(api):
+    # FU-933: the recipe CSV export went with its button; print is the only
+    # recipe export.
     response = requests.get(
-        f"http://localhost:5170/api/recipes/{recipe_id}/export?format=csv",
+        f"http://localhost:5170/api/recipes/{_first_seeded_recipe_id()}/export?format=csv",
     )
-    assert response.status_code == 200, response.text
-    assert response.headers["Content-Type"].startswith("text/csv")
-    header_line = response.text.splitlines()[0]
-    for col in ("ingredient", "quantity", "unit", "notes", "location"):
-        assert col in header_line
+    assert response.status_code == 404
 
 
 def test__recipe_print_view__returns_html_with_recipe_name(api):
@@ -1424,7 +1435,6 @@ def test__print_and_csv__content_type__names_the_charset_once(api):
     for url in (
         f"{API}/shopping-lists/{list_id}/print-view",
         f"{API}/recipes/{recipe_id}/print-view",
-        f"{API}/recipes/{recipe_id}/export?format=csv",
         f"{API}/meal-plans/{plan_id}/print-view",
         f"{STOCK_ITEMS_URL}/print-view",
         f"{STOCK_ITEMS_URL}/export?format=csv",
@@ -1437,28 +1447,9 @@ def test__print_and_csv__content_type__names_the_charset_once(api):
 
 def test__csv_exports__start_with_a_utf8_bom(api):
     # Excel on Windows read the BOM-less CSV as ANSI: "Crème" became "CrÃ¨me".
-    recipe_id = _create_structured_recipe()
-    for url, first_column in (
-        (f"{API}/recipes/{recipe_id}/export?format=csv", "ingredient"),
-        (f"{STOCK_ITEMS_URL}/export?format=csv", "location"),
-    ):
-        raw = requests.get(url).content
-        assert raw.startswith(b"\xef\xbb\xbf"), raw[:10]
-        assert raw.decode("utf-8-sig").splitlines()[0].split(",")[0] == first_column
-
-
-def test__recipe_csv__unlinked_name_and_trimmed_quantities(api):
-    import csv
-    import io
-    recipe_id = _create_structured_recipe()
-    raw = requests.get(f"{API}/recipes/{recipe_id}/export?format=csv").content
-    rows = list(csv.DictReader(io.StringIO(raw.decode("utf-8-sig"))))
-    by_unit = {row["unit"]: row for row in rows}
-    # An unlinked row exported a blank name; quantities exported as "100.0".
-    assert by_unit["g"]["ingredient"] == "Crème fraîche"
-    assert by_unit["g"]["quantity"] == "100"
-    assert by_unit["tbsp"]["quantity"] == "2"
-    assert all(row["ingredient"] for row in rows), rows
+    raw = requests.get(f"{STOCK_ITEMS_URL}/export?format=csv").content
+    assert raw.startswith(b"\xef\xbb\xbf"), raw[:10]
+    assert raw.decode("utf-8-sig").splitlines()[0].split(",")[0] == "location"
 
 
 def test__recipe_print_view__structured_recipe_prints_sections_steps_and_tags(api):

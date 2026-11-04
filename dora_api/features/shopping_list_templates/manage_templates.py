@@ -26,13 +26,12 @@ from sqlalchemy import func, select
 from dora_api.app import db
 from dora_api.domain.entities.preferred_buy import PreferredBuy
 from dora_api.domain.entities.product import Product
-from dora_api.domain.entities.shopping_list import (ShoppingList, format_list_date,
-                                                    ShoppingListLine)
+from dora_api.domain.entities.shopping_list import ShoppingList, ShoppingListLine
 from dora_api.domain.entities.shopping_list_template import (
     ShoppingListTemplate, ShoppingListTemplateLine,
 )
 from dora_api.domain.entities.stock_item import StockItem
-from dora_api.features.app_settings.clock import household_today
+from dora_api.features.products.product_links import linked_stock_items
 from dora_api.features.routers import SHOPPING_LIST_TEMPLATE_ROUTER
 from dora_api.features.shopping_lists._line_defaults import apply_line_defaults
 from dora_api.features.shopping_lists.get_shopping_list_detail import (
@@ -48,6 +47,7 @@ from dora_api.persistence.field import EntityField
 from dora_api.persistence.uuid_key import uuid_key
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
+from dora_api.features.shopping_lists._list_label import list_labeller
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -63,7 +63,10 @@ def _line_quantity(template_quantity: int | None) -> int:
 @dataclass(frozen=True, slots=True)
 class TemplateLineDto:
     line_id: UUID
-    stock_item_id: UUID
+    stock_item_id: UUID | None
+    # Set on a product-only line (FU-940 D1); `stock_item_name` then carries
+    # the product's name.
+    product_id: UUID | None
     stock_item_name: str
     quantity: int | None
     sequence: int
@@ -150,7 +153,15 @@ class GetTemplateDetailHandler:
 
         # Resolve stock items, their offers and preferred buys in one batch
         # each so we don't N+1.
-        stock_item_ids = list({l.stock_item_id for l in lines})
+        stock_item_ids = list({l.stock_item_id for l in lines if l.stock_item_id})
+        product_ids = list({l.product_id for l in lines if l.stock_item_id is None and l.product_id})
+        product_names: dict[UUID, str] = {}
+        if product_ids:
+            product_names = {
+                p.id: p.name for p in self.repository.get(Product).all(
+                    EntityField(Product, "id").in_(product_ids)
+                )
+            }
         items: dict[UUID, StockItem] = {}
         preferred_buys: dict[UUID, List[PreferredBuy]] = {}
         if stock_item_ids:
@@ -171,8 +182,12 @@ class GetTemplateDetailHandler:
             TemplateLineDto(
                 line_id = l.id,
                 stock_item_id = l.stock_item_id,
-                stock_item_name = items[l.stock_item_id].name
-                    if l.stock_item_id in items else "(missing item)",
+                product_id = l.product_id,
+                stock_item_name = (
+                    items[l.stock_item_id].name if l.stock_item_id in items
+                    else product_names.get(l.product_id) if l.product_id
+                    else None
+                ) or "(missing item)",
                 quantity = l.quantity,
                 sequence = l.sequence,
                 selected_product_id = l.selected_product_id,
@@ -576,6 +591,7 @@ class InstantiateTemplateHandler:
 
         now = datetime.now(timezone.utc)
         on_list: set[UUID] = set()
+        products_on_list: set[UUID] = set()
         next_sequence = 0
         if request.merge_into_list_id is not None:
             target = self.repository.get(ShoppingList).by_id(request.merge_into_list_id)
@@ -589,14 +605,11 @@ class InstantiateTemplateHandler:
             # The same "already on the list" rule as `AddLineHandler`: a
             # plain stock-item line, not a product nested under one.
             on_list = {l.stock_item_id for l in existing if l.stock_item_id and l.product_id is None}
+            products_on_list = {l.product_id for l in existing if l.product_id and l.stock_item_id is None}
             next_sequence = max((l.sequence for l in existing), default=-1) + 1
         else:
-            # Household date through `format_list_date` (R-021 / R-056) — this
-            # was a server-local `strftime`, a second copy of that format
-            # (finalisation 03-R8).
-            today = household_today(self.repository)
-            name = (request.name or "").strip() or f"{template.name} · {format_list_date(today, today)}"
-            target = ShoppingList(name=name, created_at=now)
+            # No name means the list labels itself (FU-940 D4).
+            target = ShoppingList(name=(request.name or "").strip() or None, created_at=now)
             self.repository.add(target)
 
         template_lines: List[ShoppingListTemplateLine] = self.repository.get(ShoppingListTemplateLine).all(
@@ -609,8 +622,16 @@ class InstantiateTemplateHandler:
         # checked without a query per line.
         items: dict[UUID, StockItem] = {}
         live_preferred_buys: set[UUID] = set()
+        live_products: set[UUID] = set()
         if template_lines:
-            item_ids = [l.stock_item_id for l in template_lines]
+            item_ids = [l.stock_item_id for l in template_lines if l.stock_item_id]
+            product_ids = [l.product_id for l in template_lines if l.stock_item_id is None and l.product_id]
+            if product_ids:
+                live_products = {
+                    p.id for p in self.repository.get(Product).all(
+                        EntityField(Product, "id").in_(product_ids)
+                    )
+                }
             items = {
                 i.id: i for i in self.repository.get(StockItem)
                 .include("products")
@@ -625,6 +646,23 @@ class InstantiateTemplateHandler:
         new_lines: List[ShoppingListLine] = []
         skipped = 0
         for tl in template_lines:
+            if tl.stock_item_id is None:
+                # A product-only line (FU-940 D1), "already on the list" when
+                # the list has the same product-only line.
+                if tl.product_id not in live_products:
+                    continue
+                if tl.product_id in products_on_list:
+                    skipped += 1
+                    continue
+                new_lines.append(ShoppingListLine(
+                    shopping_list_id = target.id,
+                    product_id = tl.product_id,
+                    quantity = _line_quantity(tl.quantity),
+                    sequence = next_sequence + len(new_lines),
+                    added_at = now,
+                ))
+                products_on_list.add(tl.product_id)
+                continue
             item = items.get(tl.stock_item_id)
             if item is None:
                 continue
@@ -700,10 +738,6 @@ class SnapshotResponse:
     template_id: UUID | None = None
     source_not_found: bool = False
     line_count: int = 0
-    # Product-only source lines have no stock item and a template line is
-    # item-anchored (NOT NULL), so they are skipped rather than 500-ing the
-    # snapshot (finalisation 03-R2). Reported so the SPA can say so.
-    skipped_product_lines: int = 0
 
 
 class SnapshotFromListHandler:
@@ -719,7 +753,7 @@ class SnapshotFromListHandler:
         # `display_name`, not `name`: a self-labelled list has `name=None` and
         # the fallback read "Template from None" (finalisation 03-R2).
         template = ShoppingListTemplate(
-            name = (request.name or "").strip() or f"Template from {source.display_name}",
+            name = (request.name or "").strip() or f"Template from {list_labeller(self.repository)(source)}",
             created_at = now,
             updated_at = now,
         )
@@ -733,11 +767,32 @@ class SnapshotFromListHandler:
         source_lines.sort(key=lambda l: l.sequence)
 
         added = 0
-        skipped_product_lines = 0
         templated_items: set[UUID] = set()
+        templated_products: set[UUID] = set()
+        # A product linked to an item on the list is that item's line already.
+        linked_item_by_product = {
+            pid: link.stock_item_id for pid, link in linked_stock_items(
+                self.repository,
+                [l.product_id for l in source_lines if l.stock_item_id is None and l.product_id],
+            ).items()
+        }
+        listed_items = {l.stock_item_id for l in source_lines if l.stock_item_id}
         for sl in source_lines:
             if sl.stock_item_id is None:
-                skipped_product_lines += 1
+                # Product-only lines keep their product (FU-940 D1); a line
+                # with neither anchor (a frozen name only) has nothing to copy.
+                if sl.product_id is None or sl.product_id in templated_products:
+                    continue
+                if linked_item_by_product.get(sl.product_id) in listed_items:
+                    continue
+                templated_products.add(sl.product_id)
+                self.repository.add(ShoppingListTemplateLine(
+                    template_id = template.id,
+                    product_id = sl.product_id,
+                    quantity = sl.quantity if sl.quantity is not None else 1,
+                    sequence = added,
+                ))
+                added += 1
                 continue
             # An item can sit on a list as both a plain line and a nested
             # product line; a template holds one line per item.
@@ -755,10 +810,7 @@ class SnapshotFromListHandler:
             added += 1
         # FU-512 unit-of-work: single commit.
         self.repository.save_changes()
-        return SnapshotResponse(
-            template_id=template.id, line_count=added,
-            skipped_product_lines=skipped_product_lines,
-        )
+        return SnapshotResponse(template_id=template.id, line_count=added)
 
 
 @SHOPPING_LIST_TEMPLATE_ROUTER.route("/from-list/<uuid:source_list_id>", methods=["POST"])
@@ -775,5 +827,4 @@ def snapshot_from_list(source_list_id: UUID):
     return ok({
         "template_id": _Response.template_id,
         "line_count": _Response.line_count,
-        "skipped_product_lines": _Response.skipped_product_lines,
     })

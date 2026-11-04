@@ -8,6 +8,7 @@ every household-date window (R-021).
 from datetime import date, datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from dora_api.domain.locale_format import DEFAULT_LOCALE
 from dora_api.features.app_settings.access import get_or_create_app_setting
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 
@@ -35,6 +36,12 @@ def today_in_timezone(tz_name: str | None) -> date:
 
 def household_today(repository: SqlAlchemyRepository) -> date:
     return today_in_timezone(get_or_create_app_setting(repository).timezone)
+
+
+def household_locale(repository: SqlAlchemyRepository) -> str:
+    """The install's region locale for text the server writes (FU-969); the
+    SPA formats the same values through `Intl` with the same tag."""
+    return (get_or_create_app_setting(repository).locale or "").strip() or DEFAULT_LOCALE
 
 
 def household_timezone(repository: SqlAlchemyRepository) -> ZoneInfo:

@@ -96,6 +96,17 @@ def format_day(value: date, locale: str | None) -> str:
     return spec.day.format(**_date_values(spec, value, spec.day_months or spec.months))
 
 
+def format_weekday(value: date, locale: str | None) -> str:
+    """The locale's short weekday: "Fri", "Fr."."""
+    return _spec(locale).weekdays[value.weekday()]
+
+
+def format_list_label(value: date, today: date, locale: str | None) -> str:
+    """A self-labelled shopping list's name: the weekday heading this year
+    ("Sat, 14 Jun"), the medium date with its year otherwise (FU-969)."""
+    return format_day(value, locale) if value.year == today.year else format_date(value, locale)
+
+
 def format_time(value: time | datetime, locale: str | None) -> str:
     """The locale's short time: "4:50 pm", "4:50 PM", "16:50"."""
     spec = _spec(locale)

@@ -31,14 +31,11 @@ _BASE = "http://localhost:5170/api"
 # ── Stock locations ────────────────────────────────────────────────────
 
 def make_stock_location(name: str = "Cellar", **overrides: Any) -> dict:
-    """Create a StockLocation via `POST /api/stock-locations`. Returns
-    the created DTO (`{name, stock_location_id}`). Idempotent-ish: a
-    duplicate name returns a 422; callers who want that behaviour should
-    use the direct call, not the factory."""
-    body = {"name": name, **overrides}
-    resp = requests.post(f"{_BASE}/stock-locations", json=body)
+    """Create a zone via `POST /api/locations`. Returns `{name, location_id}`."""
+    body = {"name": name, "kind": "zone", **overrides}
+    resp = requests.post(f"{_BASE}/locations", json=body)
     assert resp.status_code == 201, resp.text
-    return resp.json()
+    return {"name": name, "location_id": resp.json()["location_id"]}
 
 
 # ── Products ───────────────────────────────────────────────────────────

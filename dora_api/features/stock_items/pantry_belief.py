@@ -32,7 +32,7 @@ point is a robust band, not false precision.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 from uuid import UUID
@@ -48,7 +48,7 @@ from dora_api.domain.stock_status import (LOW_STOCK_SEQUENCE,
                                           OUT_OF_STOCK_SEQUENCE,
                                           STOCKED_SEQUENCE)
 from dora_api.features.app_settings.clock import household_timezone, household_today
-from dora_api.features.shopping_lists._line_price import line_paid_unit_price
+from dora_api.features.shopping_lists._line_price import is_bought_line
 from dora_api.features.stock_items._level_access import resolve_levels_by_item
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
@@ -73,6 +73,9 @@ _PROGRESS_OUT = 1.15      # comfortably past a full cycle → ~Out
 # by this fraction of a cycle — so cooking with an item empties it sooner
 # than the calendar cadence alone implies (this is the P6-07 signal).
 _CONSUMPTION_WEIGHT = 0.34
+# A drop recorded as ending at Out says more than a nudge down a band: it
+# counts twice (FU-945, the reason `ConsumptionEvent` keeps from/to sequence).
+_OUT_DROP_WEIGHT = 2 * _CONSUMPTION_WEIGHT
 
 # Confidence band cut-points (0..1).
 _CONF_HIGH = 0.66
@@ -93,6 +96,8 @@ class BeliefInputs:
     purchase_dates: list[date]      # unique, ascending
     consumption_dates: list[date]   # ascending
     today: date
+    # The consumption dates whose drop ended at Out (a subset of the above).
+    out_drop_dates: list[date] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -186,8 +191,10 @@ def compute_belief(inputs: BeliefInputs) -> PantryBelief:
         cooks_since_purchase = sum(
             1 for d in inputs.consumption_dates if d >= last_purchase
         )
+        outs_since_purchase = sum(1 for d in inputs.out_drop_dates if d >= last_purchase)
         progress = days_since_purchase / cadence_days
-        progress += _CONSUMPTION_WEIGHT * cooks_since_purchase
+        progress += _CONSUMPTION_WEIGHT * (cooks_since_purchase - outs_since_purchase)
+        progress += _OUT_DROP_WEIGHT * outs_since_purchase
 
         if progress >= _PROGRESS_OUT:
             believed = OUT_OF_STOCK_SEQUENCE
@@ -345,14 +352,11 @@ def gather_belief_inputs_for_items(
                 completed_at_by_list[l.id] = l.completed_at
     purchase_dates_by_item: dict[UUID, set[date]] = {i.id: set() for i in items}
     for line in lines:
-        # R-061 — only a bought line is a purchase: ticked, and not deferred
-        # by trim-to-budget (same rule as `spend_lines`).
-        if not line.is_ticked or line.deferred_by_budget:
+        # R-061 — only a bought line is a purchase, priced or not (FU-768).
+        if not is_bought_line(line):
             continue
         completed_at = completed_at_by_list.get(line.shopping_list_id)
         if completed_at is None:
-            continue
-        if line_paid_unit_price(line) is None:
             continue
         d = _household_date(completed_at, tz)
         if d is not None:
@@ -363,10 +367,13 @@ def gather_belief_inputs_for_items(
         EntityField(ConsumptionEvent, ConsumptionEvent.Fields.STOCK_ITEM_ID).in_(item_ids)
     )
     consumption_dates_by_item: dict[UUID, list[date]] = {}
+    out_drop_dates_by_item: dict[UUID, list[date]] = {}
     for e in events:
         d = _household_date(e.occurred_at, tz)
         if d is not None:
             consumption_dates_by_item.setdefault(e.stock_item_id, []).append(d)
+            if e.to_sequence is not None and e.to_sequence >= OUT_OF_STOCK_SEQUENCE:
+                out_drop_dates_by_item.setdefault(e.stock_item_id, []).append(d)
 
     out: dict[UUID, BeliefInputs] = {}
     for item in items:
@@ -380,5 +387,6 @@ def gather_belief_inputs_for_items(
             purchase_dates=sorted(purchase_dates_by_item.get(item.id, set())),
             consumption_dates=sorted(consumption_dates_by_item.get(item.id, [])),
             today=today,
+            out_drop_dates=sorted(out_drop_dates_by_item.get(item.id, [])),
         )
     return out

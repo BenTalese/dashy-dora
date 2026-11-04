@@ -1,6 +1,6 @@
 ﻿# Dashy Dora — Project State
 
-**Last reviewed: 2026-11-03 (evening): version 1.0.0 is code-complete and QA'd; the pre-ship fixes are in. Left: the owner's production steps (FU-965 check, then deploy).**
+**Last reviewed: 2026-11-04: version 1.0.0 is code-complete and QA'd; pre-ship fixes and the owner's 19 decision answers are built. Left: the owner's production steps (FU-965 check, then deploy).**
 
 This is the single front door: where every phase and workstream is up
 to, and what needs your attention. For *where things stand* this doc
@@ -26,7 +26,9 @@ Status key: ✅ done-clean · ➗ done-with-carve-outs · 🟡 active/in-progres
 
 **11-03 evening: pre-ship fixes.** Restore now refuses a backup changed on disk (and the library marks it Damaged); with the API down, an unvisited page keeps the shell and the offline banner instead of the error screen; the budget projection and trim price lines the same way the list total does (last price paid included, set-aside lines excluded); Build my week says when its week is over budget. A truth sweep closed FU-928 (most QA run 2 items were already fixed) and moved what's still live to FU-978.
 
-**Tests:** pytest 2749 passed, vitest 867, vue-tsc and eslint clean. The 11-03 evening work is not committed yet.
+**11-04: owner answers built.** Persistent cook timers, templates that keep batches and product lines, self-named lists, region-formatted server dates, one "bought" rule app-wide, stores in backups, Android cleartext, cooking-word units, current Claude models, and the old flat locations API, recipe CSV and copy routes removed.
+
+**Tests:** pytest 2728 passed, vitest 872, vue-tsc and eslint clean. The 11-04 work is committed locally.
 
 ---
 
@@ -78,7 +80,7 @@ Status key: ✅ done-clean · ➗ done-with-carve-outs · 🟡 active/in-progres
 
 **⚠️ FU-965 first: check the production DB for cascade-deleted rows** before deploying 1.0.0. Run the row counts in `DORA_VERIFY.md` ("Autonomous QA round 2", the ⚠️ Operator line) against the live DB or its newest backup; restore an older backup if counts are short.
 
-**Total open backlog: 215 items in `DORA_FOLLOWUPS.md`.** None blocks the release. The list below is what needs you or a running install.
+**Total open backlog: 197 items in `DORA_FOLLOWUPS.md`.** None blocks the release. The list below is what needs you or a running install.
 
 1. 🟢 **Ship 1.0.0:** build the Docker image (`DORA_BUILD_ID=$(git rev-parse --short HEAD) docker compose build`), run the "Release prep" checks in `DORA_VERIFY.md`, tag `v1.0.0`, deploy to Altair, run onboarding. Compose defaults to Secure cookies: set `DORA_SECURE_COOKIES=false` only if prod is plain http. Configuration is env-only now; an old `appsettings.json` is ignored.
 2. 🟢 **FU-918:** confirm a companion push lands on production (the companion now sends `is_available` too, so deploy both).

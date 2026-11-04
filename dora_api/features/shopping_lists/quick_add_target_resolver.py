@@ -15,7 +15,7 @@ The resolver is a pure function over a list of ShoppingList rows so callers can
 reuse the same draft set they already loaded.
 """
 from dataclasses import dataclass, field
-from typing import Iterable, List, Literal
+from typing import Callable, Iterable, List, Literal
 from uuid import UUID
 
 from dora_api.domain.entities.shopping_list import (SHOPPING_LIST_STATUS_DRAFT,
@@ -37,7 +37,9 @@ class QuickAddTargetOutcome:
     candidates: List[QuickAddTargetCandidate] = field(default_factory=list)
 
 
-def resolve_quick_add_target(lists: Iterable[ShoppingList]) -> QuickAddTargetOutcome:
+def resolve_quick_add_target(
+    lists: Iterable[ShoppingList], label: Callable[[ShoppingList], str],
+) -> QuickAddTargetOutcome:
     drafts = [l for l in lists if l.status == SHOPPING_LIST_STATUS_DRAFT]
     if not drafts:
         return QuickAddTargetOutcome(kind="none")
@@ -47,9 +49,9 @@ def resolve_quick_add_target(lists: Iterable[ShoppingList]) -> QuickAddTargetOut
     return QuickAddTargetOutcome(
         kind="ambiguous",
         candidates=[
-            # display_name: candidates are shown in a "which list?" picker,
-            # so a self-labelled list must read as its date, not None.
-            QuickAddTargetCandidate(shopping_list_id=l.id, name=l.display_name)
+            # The label, not `name`: candidates are shown in a "which list?"
+            # picker, so a self-labelled list must read as its date, not None.
+            QuickAddTargetCandidate(shopping_list_id=l.id, name=label(l))
             for l in drafts
         ],
     )

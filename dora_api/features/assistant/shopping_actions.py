@@ -26,6 +26,7 @@ from dora_api.features.shopping_lists.manage_shopping_list_lines import (
 from dora_api.features.shopping_lists.quick_add_target_resolver import \
     resolve_quick_add_target
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
+from dora_api.features.shopping_lists._list_label import list_labeller
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -79,7 +80,7 @@ def _primary_list(repo: SqlAlchemyRepository) -> ShoppingList | None:
     # assistant asks instead of guessing. (This previously queried the
     # dropped `is_primary` column and would AttributeError at runtime.)
     lists = repo.get(ShoppingList).all()
-    outcome = resolve_quick_add_target(lists)
+    outcome = resolve_quick_add_target(lists, list_labeller(repo))
     if outcome.kind != "single":
         return None
     return next((l for l in lists if l.id == outcome.target_list_id), None)
@@ -113,7 +114,7 @@ def resolve_add_plan(raw_items: Any) -> dict[str, Any]:
         "type": "add_to_shopping_list",
         "no_primary": primary is None,
         "shopping_list": (
-            {"id": str(primary.id), "name": primary.display_name} if primary else None
+            {"id": str(primary.id), "name": list_labeller(repo)(primary)} if primary else None
         ),
         "items": resolved,
     }

@@ -203,6 +203,37 @@
                 @select="goToStep"
             />
 
+            <!-- FU-943: a timer keeps running when you move on (a 40-minute
+                 braise outlives the steps after it). Off its own step it
+                 shows here, with a way back to the step that set it. -->
+            <div v-if="timerElsewhere" class="cook-timer-band row items-center q-gutter-sm q-mb-md">
+                <q-icon :name="ICONS.timer" size="22px" color="primary" />
+                <span class="text-body1">
+                    Step {{ (timerStepIndex ?? 0) + 1 }} timer
+                    <strong class="timer-text">{{ formatTimer(timerRemaining ?? 0) }}</strong>
+                </span>
+                <q-space />
+                <BaseButton
+                    v-if="timerRunning"
+                    variant="ghost"
+                    :icon="ICONS.pause"
+                    label="Pause"
+                    @click="pauseTimer"
+                />
+                <BaseButton
+                    v-else-if="(timerRemaining ?? 0) > 0"
+                    variant="ghost"
+                    :icon="ICONS.play_arrow"
+                    label="Resume"
+                    @click="resumeTimer"
+                />
+                <BaseButton
+                    variant="ghost"
+                    label="Go to step"
+                    @click="goToStep(timerStepIndex ?? 0)"
+                />
+            </div>
+
             <q-card v-if="!isImageMode" flat bordered class="step-card q-mb-md">
                 <q-card-section>
                     <div class="row items-center q-gutter-xs q-mb-xs">
@@ -240,7 +271,7 @@
                     <div class="row items-center q-gutter-sm">
                         <q-icon :name="ICONS.timer" size="32px" color="primary" />
                         <div class="text-h6 timer-text">
-                            {{ formatTimer(timerRemaining ?? stepTimerMinutes * 60) }}
+                            {{ formatTimer(timerOnThisStep ? (timerRemaining ?? stepTimerMinutes * 60) : stepTimerMinutes * 60) }}
                         </div>
                         <!-- Owner feedback 2026-09-01: *"How does the timer
                              function get added? Is it guessing?"* It was, for
@@ -253,7 +284,7 @@
                         </span>
                         <q-space />
                         <BaseButton
-                            v-if="!timerRunning"
+                            v-if="!timerRunning || !timerOnThisStep"
                             variant="primary"
                             :icon="ICONS.play_arrow"
                             label="Start"
@@ -271,7 +302,7 @@
                             @click="pauseTimer"
                         />
                         <BaseButton
-                            v-if="timerRemaining !== null"
+                            v-if="timerOnThisStep && timerRemaining !== null"
                             variant="ghost"
                             :icon="ICONS.restart_alt"
                             label="Reset"
@@ -282,7 +313,7 @@
                          Tone shifts to negative when finished so the bar
                          itself confirms the toast/audio. -->
                     <q-linear-progress
-                        v-if="timerTotal !== null && timerTotal > 0"
+                        v-if="timerOnThisStep && timerTotal !== null && timerTotal > 0"
                         :value="timerProgress"
                         :color="timerRemaining === 0 ? 'negative' : 'primary'"
                         rounded
@@ -958,9 +989,9 @@
         running: timerRunning,
         total: timerTotal,
         progress: timerProgress,
-        start: startTimer,
+        start: startCookTimer,
         pause: pauseTimer,
-        reset: resetTimer,
+        reset: resetCookTimer,
     } = useCookTimer({
         // On iOS / macOS WKWebView a timer callback is not a user activation,
         // so `speak()` and `playTimerFinishTone()` are subject to the autoplay
@@ -1376,8 +1407,30 @@
         }
     }
 
+    // FU-943: the one timer belongs to the step that started it and keeps
+    // running across step changes. Starting another step's timer replaces it.
+    const timerStepIndex = ref<number | null>(null);
+    const timerOnThisStep = computed(() => timerStepIndex.value === currentStepIndex.value);
+    const timerElsewhere = computed(() =>
+        timerStepIndex.value !== null && !timerOnThisStep.value && timerRemaining.value !== null,
+    );
+
+    function startTimer(seconds: number) {
+        if (!timerOnThisStep.value) resetCookTimer();
+        timerStepIndex.value = currentStepIndex.value;
+        startCookTimer(seconds);
+    }
+
+    function resumeTimer() {
+        startCookTimer(timerRemaining.value ?? 0);
+    }
+
+    function resetTimer() {
+        resetCookTimer();
+        timerStepIndex.value = null;
+    }
+
     function nextStep() {
-        resetTimer();
         // no more per-step tick state; advancing just navigates
         // (or opens the finish flow when we've run out of steps).
         if (currentStepIndex.value < steps.value.length - 1) {
@@ -1389,13 +1442,11 @@
 
     function prevStep() {
         if (currentStepIndex.value > 0) {
-            resetTimer();
             currentStepIndex.value -= 1;
         }
     }
 
     function goToStep(idx: number) {
-        resetTimer();
         currentStepIndex.value = idx;
     }
 
@@ -1795,6 +1846,13 @@
         max-width: 900px;
         margin: 0 auto;
     }
+    .cook-timer-band {
+        padding: 0.5rem 0.75rem;
+        background: var(--surface-sunken);
+        border: 1px solid var(--border-default);
+        border-radius: 8px;
+    }
+
     .step-card {
         min-height: 200px;
     }

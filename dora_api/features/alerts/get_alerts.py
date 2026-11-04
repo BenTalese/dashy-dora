@@ -56,7 +56,7 @@ from dora_api.features.alerts.alert_kinds import (SEVERITY_HIGH, SEVERITY_LOW,
                                                   SEVERITY_ORDER,
                                                   TIER_ACTIONABLE, TIER_FYI,
                                                   is_actionable)
-from dora_api.features.app_settings.clock import household_today
+from dora_api.features.app_settings.clock import household_locale, household_today
 from dora_api.features.products.product_links import linked_stock_items
 from dora_api.features.stock_items.stock_attention import (is_essential_low,
                                                            is_expired,
@@ -68,6 +68,8 @@ from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 from dora_api.infrastructure.session_user import current_user_id
+from dora_api.features.shopping_lists._list_label import list_labeller
+from dora_api.domain.locale_format import format_day
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -377,6 +379,7 @@ class GetAlertsHandler:
         # Mon=0 … Sun=6, so days to next Monday is 7 - weekday().
         next_monday = today + timedelta(days=7 - today.weekday())
         next_sunday = next_monday + timedelta(days=6)
+        locale = household_locale(self.repository)
         entries: List[MealPlanEntry] = self.repository.get(MealPlanEntry).all(
             EntityField(MealPlanEntry, MealPlanEntry.Fields.SCHEDULED_FOR)
             .between(next_monday, next_sunday)
@@ -389,8 +392,8 @@ class GetAlertsHandler:
             severity = SEVERITY_LOW,
             message = "No meals planned for next week",
             detail = (
-                f"Next week ({next_monday.strftime('%a %d %b')} – "
-                f"{next_sunday.strftime('%a %d %b')}) has nothing on the plan yet."
+                f"Next week ({format_day(next_monday, locale)} to "
+                f"{format_day(next_sunday, locale)}) has nothing on the plan yet."
             ),
             related_date = next_monday.isoformat(),
             # Raised for the coming week during this one.
@@ -437,6 +440,7 @@ class GetAlertsHandler:
         is a new episode, and the two kinds never share a dismissal (they used
         to be one kind on one key, so dismissing the reminder also silenced the
         missed-shop nudge). Clears when the list is finished."""
+        label = list_labeller(self.repository)
         horizon = today + timedelta(days=SHOPPING_DAY_WINDOW_DAYS)
         lists: List[ShoppingList] = self.repository.get(ShoppingList).all(
             EntityField(ShoppingList, ShoppingList.Fields.PLANNED_SHOP_DATE)
@@ -457,7 +461,7 @@ class GetAlertsHandler:
                     kind = "shopping_overdue",
                     severity = SEVERITY_MEDIUM,
                     message = "Did you forget your shopping?",
-                    detail = f"{lst.display_name} was planned for {when}.",
+                    detail = f"{label(lst)} was planned for {when}.",
                     target_id = str(lst.id),
                     related_date = planned_iso,
                     started_on = (planned + timedelta(days=1)).isoformat(),
@@ -472,7 +476,7 @@ class GetAlertsHandler:
                 alert_id = list_alert_key(lst.id, f"shopping_day:{planned_iso}"),
                 kind = "shopping_day",
                 severity = SEVERITY_LOW,
-                message = f"Shopping day {when}: {lst.display_name}",
+                message = f"Shopping day {when}: {label(lst)}",
                 detail = "Open the list to get ready.",
                 target_id = str(lst.id),
                 related_date = planned_iso,

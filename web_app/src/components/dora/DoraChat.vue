@@ -372,11 +372,11 @@
     import { ICONS } from 'src/style/icons';
     import { storeToRefs } from 'pinia';
     import type { DoraMood } from 'src/components/dora/doraTypes';
+    import { useDoraContext } from 'src/composables/useDoraContext';
     import { useQuickAdd } from 'src/composables/useQuickAdd';
     import { useShoppingListActions } from 'src/composables/useShoppingListActions';
     import { useStockItemActions } from 'src/composables/useStockItemActions';
     import type { AuthenticatedUser } from 'src/models/auth';
-    import AlertApiService from 'src/services/api/alertApiService';
     import AssistantApiService, {
         type AddToShoppingListAction,
         type CommitAddItem,
@@ -385,8 +385,7 @@
         type PendingAction,
     } from 'src/services/api/assistantApiService';
     import { clearBuyVerdictCache, invalidateBuyVerdict } from 'src/composables/useBuyVerdict';
-    import HealthApiService from 'src/services/api/healthApiService';
-    import HelpApiService from 'src/services/api/helpApiService';
+    import { buildChips, chipPoolSize, CHIP_LIMIT, type Chip } from 'src/services/doraChips';
     import {
         contextualActionsFor,
         type ContextualAction,
@@ -396,10 +395,8 @@
         extractAddToListItems,
         labelFor,
         runIntent,
-        type DoraContext,
         type DoraIntentId
     } from 'src/services/doraIntents';
-    import { useMealPlanStore } from 'src/stores/mealPlanStore';
     import { useRecipeStore } from 'src/stores/recipeStore';
     import { useRecipeVocabStore } from 'src/stores/recipeVocabStore';
     import { useShoppingListStore } from 'src/stores/shoppingListStore';
@@ -408,11 +405,10 @@
     import { useLocationStore } from 'src/stores/locationStore';
     import { invalidateReconcileQueue } from 'src/composables/useReconcileQueue';
     import { usePlannedDemand } from 'src/composables/usePlannedDemand';
-    import type { LocationNode } from 'src/models/location';
-    import { localTodayIso } from 'src/helpers/weekDates';
     import { useSuggestionStore } from 'src/stores/suggestionStore';
     import type { DoraSuggestion } from 'src/services/api/suggestionsApiService';
     import { useAuthStore } from 'src/stores/authStore';
+    import { useTypewriter } from 'src/composables/useTypewriter';
     import { useVoiceInput } from 'src/composables/useVoiceInput';
     import { useSpeechOutput } from 'src/composables/useSpeechOutput';
     import type { QScrollArea } from 'quasar';
@@ -469,14 +465,7 @@
 
     const route = useRoute();
     const router = useRouter();
-    const helpApi = new HelpApiService();
-    // The household's expiring-soon window for Basic mode (11-R34); `/health`
-    // is probed once per session and shared.
-    const expiringSoonWindowDays = ref<number | undefined>(undefined);
-    void new HealthApiService().getInfoAsync()
-        .then((info) => { expiringSoonWindowDays.value = info.alerts_policy?.expiring_soon_window_days; })
-        .catch(() => undefined);
-    const alertApi = new AlertApiService();
+    const { context } = useDoraContext(() => props.currentUser);
     const assistantApi = new AssistantApiService();
     // suggestion panel reads from the same store as the
     // launcher badge, so dismissing here updates the badge instantly.
@@ -524,18 +513,14 @@
     const { openQuickAdd } = useQuickAdd();
 
     const recipeStore = useRecipeStore();
-    // chat handlers need the dietary-tag vocab to convert
-    // ids on recipes into names ("vegetarian", "gluten free") for
-    // substring matching.
+    // Warmed with the rest so the chat context can name dietary tags.
     const recipeVocabStore = useRecipeVocabStore();
     const stockItemStore = useStockItemStore();
-    const mealStore = useMealPlanStore();
     const stockLevelStore = useStockLevelStore();
     const locationStore = useLocationStore();
     const shoppingListStore = useShoppingListStore();
     const { recipes } = storeToRefs(recipeStore);
     const { stockItems } = storeToRefs(stockItemStore);
-    const { stockLevels } = storeToRefs(stockLevelStore);
 
     const messages = ref<Message[]>([]);
     const draft = ref('');
@@ -622,107 +607,6 @@
     // from what Dora just said sits first, then the row is filled from the
     // mode's pool (basic = intent shortcuts; AI = natural-language prompts).
     // Capped so the row stays breathable.
-    type ChipDispatch =
-        | { kind: 'intent'; id: DoraIntentId }
-        | { kind: 'prompt'; text: string };
-    type Chip = { key: string; label: string; dispatch: ChipDispatch };
-
-    const CHIP_LIMIT = 4;
-
-    // Basic-mode pool: intent shortcuts the rule engine handles directly.
-    // Ordered by everyday usefulness — practical pantry asks first, then
-    // app-help, then personality/fun. Refresh button cycles through these.
-    const BASIC_CHIP_POOL: DoraIntentId[] = [
-        'whats_for_dinner',
-        'attention',
-        'pantry_summary',
-        'low_stock',
-        'expiring',
-        'shopping_list_status',
-        'weeks_meals',
-        'find_recipe',
-        'convert',
-        'substitute',
-        'page_help',
-        'how_do_i',
-        'show_around',
-        'guides',
-        'whats_new',
-        'food_fact',
-        'tell_me_something',
-        'joke',
-        'report_issue',
-    ];
-
-    // AI-mode pool: full-sentence prompts that play to the model's strengths.
-    // Each is what would be sent to /ask if clicked — the chip label is the
-    // short version shown on the button. Wider pool than basic since AI can
-    // handle the open-ended natural-language ones too.
-    const AI_CHIP_POOL: { label: string; prompt: string }[] = [
-        // Pantry data
-        { label: "What's for dinner?", prompt: "what's for dinner tonight" },
-        { label: 'What needs attention?', prompt: 'what needs my attention right now' },
-        { label: "What's expiring?", prompt: "what's about to go off this week" },
-        { label: "What's low?", prompt: "what's running low in my pantry" },
-        { label: 'Pantry health', prompt: "how's my pantry looking" },
-        { label: "What's on my list?", prompt: "what's on my shopping list" },
-        { label: "What's in the fridge?", prompt: "what's in the fridge" },
-        // Recipe ideas
-        { label: 'What can I cook now?', prompt: 'what can I make with what I have' },
-        { label: 'Kid-friendly tonight', prompt: 'something kid-friendly tonight' },
-        { label: 'Comfort food', prompt: 'comfort food ideas' },
-        { label: 'Quick weeknight', prompt: 'something quick for a weeknight' },
-        { label: 'Date night', prompt: 'date night recipe ideas' },
-        { label: 'Fancy dessert', prompt: 'fancy dessert ideas' },
-        // Shopping + deals
-        { label: "What's in season?", prompt: "what's in season right now" },
-        { label: 'Any deals?', prompt: "what's on special right now" },
-        { label: 'Compare prices', prompt: "where's milk cheapest right now" },
-        // Kitchen helpers
-        { label: 'Substitute for…', prompt: 'what can I use instead of buttermilk' },
-        { label: 'Convert units', prompt: 'how many ml in a cup of flour' },
-        // Planning
-        { label: "What's the plan?", prompt: "what's on the meal plan this week" },
-        // App help
-        { label: "What's new?", prompt: "what's new in the app" },
-        { label: 'How do I…?', prompt: 'how do I add a stock item' },
-        { label: 'What can I do here?', prompt: 'what can I do on this page' },
-        { label: 'Show me around', prompt: 'give me a tour of the app' },
-        // Personality
-        { label: 'Tell me a joke', prompt: 'tell me a joke' },
-        { label: 'Random food fact', prompt: 'tell me a random food fact' },
-        { label: 'Tell me something', prompt: 'tell me something silly' },
-        { label: 'Thanks D.O.R.A.', prompt: 'thanks dora' },
-        { label: 'I found an issue', prompt: 'i found an issue' },
-    ];
-
-    // Map intent IDs → AI-mode chip (label + prompt). Used to translate a
-    // reply's `suggestions: DoraIntentId[]` into AI chips when the bias
-    // runs in AI mode. If an intent has no entry it just doesn't bias the
-    // AI row — basic mode still uses it directly via labelFor().
-    const INTENT_TO_AI_CHIP: Partial<Record<DoraIntentId, { label: string; prompt: string }>> = {
-        attention: { label: 'What needs attention?', prompt: 'what needs my attention right now' },
-        pantry_summary: { label: 'Pantry health', prompt: "how's my pantry looking" },
-        low_stock: { label: "What's low?", prompt: "what's running low in my pantry" },
-        expiring: { label: "What's expiring?", prompt: "what's about to go off this week" },
-        shopping_list_status: { label: "What's on my list?", prompt: "what's on my shopping list" },
-        whats_for_dinner: { label: "What's for dinner?", prompt: "what's for dinner tonight" },
-        weeks_meals: { label: "What's the plan?", prompt: "what's on the meal plan this week" },
-        joke: { label: 'Tell me a joke', prompt: 'tell me a joke' },
-        food_fact: { label: 'Food fact', prompt: 'tell me a food fact' },
-        tell_me_something: { label: 'Tell me something', prompt: 'tell me something silly' },
-        guides: { label: 'Open the guides', prompt: 'show me the guides' },
-        compliment: { label: 'Thanks Dora', prompt: 'thanks dora' },
-        substitute: { label: 'Substitute for…', prompt: 'what can I use instead of buttermilk' },
-        convert: { label: 'Convert units', prompt: 'how many ml in a cup of flour' },
-        find_recipe: { label: 'Find a recipe', prompt: 'find me a recipe for pasta' },
-        show_around: { label: 'Show me around', prompt: 'give me a tour of the app' },
-        page_help: { label: 'What can I do here?', prompt: 'what can I do on this page' },
-        how_do_i: { label: 'How do I…?', prompt: 'how do I add a stock item' },
-        whats_new: { label: "What's new?", prompt: "what's new in the app" },
-        report_issue: { label: 'I found an issue', prompt: 'i found an issue' },
-    };
-
     // Latest reply's suggestion list, in order. Drives the front-of-row bias.
     const latestSuggestions = computed<DoraIntentId[]>(() => {
         for (let i = messages.value.length - 1; i >= 0; i--) {
@@ -742,51 +626,15 @@
     const chipCursor = ref(0);
     const suppressReplyBias = ref(false);
 
-    function rotate<T>(arr: readonly T[], offset: number): T[] {
-        if (arr.length === 0) return [];
-        const n = ((offset % arr.length) + arr.length) % arr.length;
-        return [...arr.slice(n), ...arr.slice(0, n)];
-    }
-
-    const visibleChips = computed<Chip[]>(() => {
-        const seen = new Set<string>();
-        const out: Chip[] = [];
-        const push = (chip: Chip) => {
-            if (seen.has(chip.key) || out.length >= CHIP_LIMIT) return;
-            seen.add(chip.key);
-            out.push(chip);
-        };
-        const useReplyBias = !suppressReplyBias.value;
-
-        if (aiActive.value) {
-            if (useReplyBias) {
-                for (const id of latestSuggestions.value) {
-                    const ai = INTENT_TO_AI_CHIP[id];
-                    if (ai) push({ key: `prompt:${ai.prompt}`, label: ai.label, dispatch: { kind: 'prompt', text: ai.prompt } });
-                }
-            }
-            for (const entry of rotate(AI_CHIP_POOL, chipCursor.value)) {
-                push({ key: `prompt:${entry.prompt}`, label: entry.label, dispatch: { kind: 'prompt', text: entry.prompt } });
-            }
-        } else {
-            if (useReplyBias) {
-                for (const id of latestSuggestions.value) {
-                    push({ key: `intent:${id}`, label: labelFor(id), dispatch: { kind: 'intent', id } });
-                }
-            }
-            for (const id of rotate(BASIC_CHIP_POOL, chipCursor.value)) {
-                push({ key: `intent:${id}`, label: labelFor(id), dispatch: { kind: 'intent', id } });
-            }
-        }
-        return out;
-    });
+    const visibleChips = computed<Chip[]>(() => buildChips({
+        aiActive: !!aiActive.value,
+        suggestions: suppressReplyBias.value ? [] : latestSuggestions.value,
+        cursor: chipCursor.value,
+    }));
 
     // Only worth showing the refresh button when the active pool actually
     // has more entries than fit on the row (after the reply-bias chips).
-    const canRotateChips = computed(() => {
-        const poolSize = aiActive.value ? AI_CHIP_POOL.length : BASIC_CHIP_POOL.length;
-        return poolSize > CHIP_LIMIT;
-    });
+    const canRotateChips = computed(() => chipPoolSize(!!aiActive.value) > CHIP_LIMIT);
 
     function rotateChips() {
         // First press just suspends the reply-bias (so the row immediately
@@ -941,120 +789,6 @@
     // in the app (Dashboard, Stock, etc.); if they haven't been loaded in
     // this session yet we return empty arrays and the intent handlers
     // degrade with friendly "nothing tracked yet" messaging.
-    function context(): DoraContext {
-        return {
-            currentPath: route.path,
-            username: props.currentUser?.username,
-            expiringSoonWindowDays: expiringSoonWindowDays.value,
-            fetchFoodFact: async () => (await helpApi.getFoodFactAsync()).fact,
-            fetchVersion: async () => {
-                const v = await helpApi.getVersionAsync();
-                return {
-                    current: v.current_version,
-                    latest: v.latest_version,
-                    updateAvailable: v.update_available,
-                    releaseUrl: v.release_url,
-                };
-            },
-            fetchAttention: async () => {
-                const a = await alertApi.getAlertsAsync();
-                return {
-                    high: a.high_count,
-                    medium: a.medium_count,
-                    low: a.low_count,
-                    topMessages: a.items.slice(0, 3).map((alert) => alert.message),
-                };
-            },
-            getStock: () => {
-                const levels = stockLevels.value;
-                const levelById = new Map(levels.map((l) => [l.stock_level_id, l]));
-                // Zone name per item from the location tree (the display
-                // policy every chip uses — `formatLocation(…, 'zone')`), so
-                // Basic-mode "where is X" answers; it used to stamp null for
-                // every item (finalisation 11-R4).
-                const zoneByItem = new Map<string, string>();
-                const walk = (nodes: LocationNode[], zone: string) => {
-                    for (const node of nodes) {
-                        const zoneName = zone || node.name;
-                        for (const item of node.items) zoneByItem.set(item.stock_item_id, zoneName);
-                        walk(node.children, zoneName);
-                    }
-                };
-                walk(locationStore.tree, '');
-                return stockItems.value.map((s) => {
-                    const lvl = levelById.get(s.stock_level_id);
-                    return {
-                        id: s.stock_item_id,
-                        name: s.name,
-                        levelName: lvl?.name ?? null,
-                        levelSequence: lvl?.sequence ?? null,
-                        locationName: zoneByItem.get(s.stock_item_id) ?? null,
-                        expiryDate: s.expiry_date ?? null,
-                        isEssential: Boolean(s.is_essential),
-                        isOpen: Boolean(s.is_open),
-                    };
-                });
-            },
-            getRecipes: () => {
-                // resolve dietary tag ids → names once per call
-                // so the chat handler can substring-match "vegetarian"
-                // / "gluten free" against recipes without an N×M scan
-                // of the vocab.
-                const tagNameById = new Map(
-                    (recipeVocabStore.dietaryTags ?? []).map(
-                        (t) => [t.dietary_tag_id, t.name],
-                    ),
-                );
-                return recipes.value.map((r) => ({
-                    id: r.recipe_id,
-                    name: r.name,
-                    cuisine: r.cuisine_name,
-                    category: r.category_name,
-                    cookTimeMinutes: r.cook_time_minutes,
-                    isFavourite: Boolean(r.is_favourite),
-                    ingredientStockItemIds: r.ingredients
-                        .map((i) => i.stock_item_id)
-                        .filter((id): id is string => !!id),
-                    dietaryTagNames: (r.dietary_tag_ids ?? [])
-                        .map((id) => tagNameById.get(id))
-                        .filter((n): n is string => !!n),
-                    timeOfDay: r.time_of_day ?? null,
-                }));
-            },
-            getShoppingLists: () => shoppingListStore.summaries.map((l) => ({
-                id: l.shopping_list_id,
-                name: l.display_name,
-                itemCount: l.line_count,
-                isQuickAddTarget: l.shopping_list_id === shoppingListStore.quickAddTargetListId,
-            })),
-            getMealPlan: () => {
-                const plans = mealStore.mealPlans;
-                if (!plans || plans.length === 0) return null;
-                // Plans sorted ascending by start_date — pick the soonest one
-                // that hasn't fully passed. Surface up to 5 next meal names.
-                // Household today from the server (R-021), local date before
-                // it loads — never the UTC date (finalisation 11-R33).
-                const today = mealStore.today ?? localTodayIso();
-                const live = plans.find((p) =>
-                    p.entries.some((e) => e.scheduled_for >= today),
-                ) ?? plans[plans.length - 1]!;
-                const upcoming = [...live.entries]
-                    .filter((e) => e.scheduled_for >= today)
-                    .sort((a, b) => a.scheduled_for.localeCompare(b.scheduled_for))
-                    .slice(0, 5)
-                    .map((e) => `${e.scheduled_for}: ${e.recipe_name} (×${e.servings})`);
-                const lastDate = live.entries.length
-                    ? live.entries.map((e) => e.scheduled_for).sort().at(-1)!
-                    : live.start_date;
-                return {
-                    startDate: live.start_date,
-                    endDate: lastDate,
-                    upcomingMealNames: upcoming,
-                };
-            },
-        };
-    }
-
     async function scrollToBottom() {
         await nextTick();
         // One extra frame so any DOM that was just appended (typing dots,
@@ -1072,56 +806,10 @@
     }
 
     // Per-character reveal so the talking face has something to sync against.
-    // 22ms/char feels fluid; for very long replies we accelerate slightly so
-    // we don't keep the user waiting more than ~3s for the full text. The
-    // talking event stays on for an extra TALK_TAIL_MS after the last char
-    // so the lip-flap is visible even on short replies.
-    const TYPE_CHAR_MS = 22;
-    const TYPE_MAX_TOTAL_MS = 3000;
-    const TALK_TAIL_MS = 600;
-    let activeTypewriter: { cancel: () => void } | null = null;
-
-    function startTypewriter(message: Message) {
-        if (activeTypewriter) activeTypewriter.cancel();
-        const full = message.text;
-        message.displayText = '';
-        if (!full) {
-            emit('talking', false);
-            return;
-        }
-        const charMs = Math.max(8, Math.min(TYPE_CHAR_MS, Math.floor(TYPE_MAX_TOTAL_MS / full.length)));
-        let i = 0;
-        let cancelled = false;
-        emit('talking', true);
-        const tick = () => {
-            if (cancelled) return;
-            i += 1;
-            message.displayText = full.slice(0, i);
-            // Throttled scroll-follow so the new lines don't disappear below
-            // the fold while typing.
-            if (i % 6 === 0) void scrollToBottom();
-            if (i >= full.length) {
-                message.displayText = full;
-                void scrollToBottom();
-                setTimeout(() => {
-                    if (!cancelled) emit('talking', false);
-                }, TALK_TAIL_MS);
-                activeTypewriter = null;
-                return;
-            }
-            timer = setTimeout(tick, charMs);
-        };
-        let timer = setTimeout(tick, charMs);
-        activeTypewriter = {
-            cancel: () => {
-                cancelled = true;
-                clearTimeout(timer);
-                message.displayText = full;
-                emit('talking', false);
-                activeTypewriter = null;
-            },
-        };
-    }
+    const typewriter = useTypewriter({
+        onTalking: (talking) => emit('talking', talking),
+        onProgress: () => { void scrollToBottom(); },
+    });
 
     function pushDoraMessage(reply: Awaited<ReturnType<typeof runIntent>>) {
         const message: Message = {
@@ -1139,7 +827,7 @@
         // one we just built — otherwise per-char displayText writes don't
         // trigger re-renders and the bubble stays empty until something
         // else nudges reactivity.
-        startTypewriter(messages.value[messages.value.length - 1]!);
+        typewriter.start(messages.value[messages.value.length - 1]!);
         // speak the reply when the user has opted in. Runs in
         // parallel with the typewriter so the audio and on-screen text
         // start at roughly the same moment.
@@ -1667,7 +1355,7 @@
                 };
                 messages.value.push(message);
                 emit('mood', mood);
-                startTypewriter(messages.value[messages.value.length - 1]!);
+                typewriter.start(messages.value[messages.value.length - 1]!);
                 await scrollToBottom();
                 return;
             }
@@ -1696,7 +1384,7 @@
     onBeforeUnmount(() => {
         // Make sure the talking-state event doesn't get stranded if the
         // chat is closed while a reveal is in flight.
-        if (activeTypewriter) activeTypewriter.cancel();
+        typewriter.cancel();
     });
 
     // Re-summarise the page when the user navigates while the chat is open

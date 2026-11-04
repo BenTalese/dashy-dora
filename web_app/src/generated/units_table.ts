@@ -343,3 +343,6 @@ export const NO_SPACE_UNITS: ReadonlySet<string> = new Set(["floz", "g", "kg", "
 /** Units a quantity is counted in — scaling rounds these to whole numbers.
  *  Singular forms; `isCountableUnit` also accepts the plural. */
 export const COUNTABLE_UNITS: ReadonlySet<string> = new Set(["bunch", "can", "clove", "egg", "floret", "head", "knob", "leaf", "piece", "pinch", "rasher", "scoop", "slice", "sprig", "stalk", "stick", "wedge"]);
+
+/** Cooking words the ingredient picker offers beside the table units. */
+export const COOKING_WORD_UNITS: ReadonlyArray<string> = ["bunch", "can", "clove", "drizzle", "egg", "floret", "handful", "head", "knob", "leaf", "piece", "rasher", "scoop", "slice", "splash", "sprig", "stalk", "wedge"];

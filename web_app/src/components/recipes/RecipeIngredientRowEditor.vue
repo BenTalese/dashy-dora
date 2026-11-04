@@ -316,6 +316,7 @@
     const { unitOptions, onUnitFilter } = useUnitOptions(
         ['volume', 'mass', 'count'],
         () => draft.value?.unit,
+        { cookingWords: true },
     );
 
     // Re-seed the draft whenever the dialog opens on a row, so a second visit

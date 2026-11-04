@@ -35,21 +35,29 @@ def _make_product() -> str:
     return resp.headers["location"].rsplit(":", 1)[-1]
 
 
-def test__snapshot_shopping_list__product_only_line__is_skipped_and_reported_not_500(api):
-    """Finalisation 03-R2: a template line is item-anchored (NOT NULL), so a
-    product-only source line can't be copied — it used to raise IntegrityError
-    (500) for any list carrying one. It is skipped and counted instead."""
-    src_id = requests.post(LISTS, json={"name": f"03-R2 src {uuid4()}"}).json()["shopping_list_id"]
+def test__snapshot_shopping_list__product_only_line__round_trips_through_the_template(api):
+    """FU-940 D1: a product-only line used to be skipped by "Save as template".
+    It is kept, named by its product, and comes back on a list from the
+    template."""
+    src_id = requests.post(LISTS, json={"name": f"D1 src {uuid4()}"}).json()["shopping_list_id"]
+    product_id = _make_product()
     assert requests.post(f"{LISTS}/{src_id}/lines", json={"stock_item_id": _a_stock_item_id()}).status_code in (200, 201)
-    assert requests.post(f"{LISTS}/{src_id}/lines", json={"product_id": _make_product()}).status_code in (200, 201)
+    assert requests.post(f"{LISTS}/{src_id}/lines", json={"product_id": product_id}).status_code in (200, 201)
 
     resp = requests.post(f"{SL_TEMPLATES}/from-list/{src_id}", json={"include_ticked": True})
-
     assert resp.status_code in (200, 201), resp.text
-    body = resp.json()
-    assert body["line_count"] == 1
-    assert body["skipped_product_lines"] == 1
-    requests.delete(f"{SL_TEMPLATES}/{body['template_id']}")
+    template_id = resp.json()["template_id"]
+    assert resp.json()["line_count"] == 2
+
+    lines = requests.get(f"{SL_TEMPLATES}/{template_id}").json()["lines"]
+    product_line = next(l for l in lines if l["stock_item_id"] is None)
+    assert product_line["product_id"] == product_id
+    assert product_line["stock_item_name"].startswith("SnapProduct-")
+
+    made = requests.post(f"{SL_TEMPLATES}/{template_id}/instantiate", json={}).json()
+    new_lines = requests.get(f"{LISTS}/{made['shopping_list_id']}").json()["lines"]
+    assert any(l["product_id"] == product_id and l["stock_item_id"] is None for l in new_lines)
+    requests.delete(f"{SL_TEMPLATES}/{template_id}")
 
 
 def test__snapshot_shopping_list__ItemWithPlainAndProductLine__OneTemplateLine(api):

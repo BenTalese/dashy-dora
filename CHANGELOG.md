@@ -109,6 +109,24 @@ semver — major bumps signal schema or breaking-config changes.
   guide they name directly.
 
 ### Fixed
+- **Owner decisions, 2026-11-04.** A cook-mode timer keeps running when you
+  move to another step, with a small band to pause it or jump back. Meal-plan
+  templates remember batch cooks and fresh meals. "Save as template" keeps
+  product-only lines. New lists made by Build my shop or from a template name
+  themselves by date. Dates Dora writes (list names, buy hints, alerts) follow
+  your region. The ingredient unit picker offers clove, sprig, rasher, slice
+  and friends, and keeps an old unit like "loaf" on its row. Backups include
+  stores, so they restore onto another install. The Android app can reach a
+  plain http:// server.
+- **"Bought" means ticked on a finished list everywhere.** Suggestions, Dora's
+  pantry guesses, buy verdicts, waste value and the assistant's price answers
+  no longer count an unticked line that happened to carry a price; a ticked
+  line with no price now counts. Running out counts more in Dora's guesses,
+  and an item's usual price comes from the unit most of its prices use.
+- **AI chat on current Claude models.** The example and suggested models are
+  current ones, and requests no longer send a setting those models reject.
+- Removed: the recipe CSV export route, the unused list-copy and
+  template-clone routes, and the old flat stock-locations API.
 - **A saved backup that was changed on disk can't be restored (2026-11-03).**
   Only Download checked the file against the checksum taken when it was saved;
   Restore went ahead. Both refuse now, and the library marks the backup Damaged.

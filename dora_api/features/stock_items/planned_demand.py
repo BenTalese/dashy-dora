@@ -50,6 +50,8 @@ from dora_api.domain.stock_status import (LOW_STOCK_SEQUENCE,
 from dora_api.features.meal_plans.planned_meals import upcoming_planned_meals
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
+from dora_api.domain.locale_format import DEFAULT_LOCALE, format_day
+from dora_api.features.app_settings.clock import household_locale
 
 
 # How far ahead "coming week(s)" reaches. Two weeks rather than one: the
@@ -101,6 +103,7 @@ def build_reason(
     covered_meals: int,
     recipe_names: list[str],
     earliest_needed: date | None,
+    locale: str = DEFAULT_LOCALE,
 ) -> str:
     """The one-line "why" the UI surfaces. Same shape as the belief's `reason`.
 
@@ -124,13 +127,8 @@ def build_reason(
     if covered_meals > 0:
         head += f"; {covered_meals} already covered by a cooked batch"
     if earliest_needed is not None:
-        # Built by hand rather than with `%-d`, which is glibc-only and raises
-        # on Windows — the app runs in a container on one machine and a venv
-        # on another, so a platform-specific format string is a latent 500.
-        head += (
-            f". First needed {earliest_needed.strftime('%a')} "
-            f"{earliest_needed.day} {earliest_needed.strftime('%b')}"
-        )
+        # In the household's region format (FU-969).
+        head += f". First needed {format_day(earliest_needed, locale)}"
     return head + "."
 
 
@@ -148,6 +146,7 @@ def gather_planned_demand(
     and every entry comes back at `URGENCY_NONE`, which is the honest answer
     when nobody said what the level is.
     """
+    locale = household_locale(repository)
     snapshot = upcoming_planned_meals(repository, horizon_days=horizon_days)
     if not snapshot.meals:
         return {}
@@ -209,6 +208,7 @@ def gather_planned_demand(
                 covered_meals=covered_count,
                 recipe_names=ordered,
                 earliest_needed=earliest.get(item_id),
+                locale=locale,
             ),
         )
     return out

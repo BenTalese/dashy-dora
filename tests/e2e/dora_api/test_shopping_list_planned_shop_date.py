@@ -8,7 +8,7 @@ from datetime import date
 
 import requests
 
-from dora_api.domain.entities.shopping_list import format_list_date
+from dora_api.domain.locale_format import format_list_label
 
 SHOPPING_LISTS = "http://localhost:5170/api/shopping-lists"
 
@@ -87,8 +87,8 @@ def test_display_name_follows_the_name_then_date_ladder():
     """FU-165 L509 — server-owned `display_name` (R-003): a custom name wins;
     clearing it self-labels from the planned shop date; changing the shop day
     re-labels; clearing the date too falls back to a non-empty creation-date
-    label. Dates are in a far year so `format_list_date` yields a stable
-    absolute string regardless of the run day."""
+    label. Dates are in a far year so the label carries the year and reads
+    the same whatever the run day (en-AU, the seeded household locale)."""
     d1 = date(2030, 3, 15)
     list_id = _create({"name": "Weekly big shop", "planned_shop_date": d1.isoformat()})
     try:
@@ -97,12 +97,12 @@ def test_display_name_follows_the_name_then_date_ladder():
 
         # Clear the name → self-labels from the planned shop date.
         _patch(list_id, {"name": None})
-        assert _detail(list_id)["display_name"] == format_list_date(d1)
+        assert _detail(list_id)["display_name"] == format_list_label(d1, date.today(), "en-AU")
 
         # Change the shop day → re-labels.
         d2 = date(2030, 12, 24)
         _patch(list_id, {"planned_shop_date": d2.isoformat()})
-        assert _detail(list_id)["display_name"] == format_list_date(d2)
+        assert _detail(list_id)["display_name"] == format_list_label(d2, date.today(), "en-AU")
 
         # Clear the date too (name still cleared) → non-empty creation-date
         # fallback (exact value is a UTC/local edge — assert it's present).

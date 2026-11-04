@@ -1,7 +1,6 @@
 /**
- * Recipe export: the print view (recipe card). The CSV download went with
- * the owner's "export to csv feels weird, remove feature here" (RECIPE
- * DETAIL feedback); its server route is an owner call (FU-933).
+ * Recipe export: the print view (recipe card). The CSV download and its
+ * server route were removed (owner, FU-933).
  */
 import { Notify } from 'quasar';
 import { openHtmlDocumentAsync, PopupBlockedError } from 'src/services/files/printView';

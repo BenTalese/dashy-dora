@@ -129,7 +129,11 @@ def test__money_ladder__budget_projection_and_trim_use_the_historic_rung(api):
     assert trim.json()["projected_total"] == 4.0
 
     # QA2-14: a line the trim deferred is off the shop, so it leaves the
-    # projection the way it leaves the list's own total.
+    # projection the way it leaves the list's own total. An item only a
+    # far-off meal needs is a cut the trim always makes (habit ranking
+    # depends on the rest of the data).
+    from tests.e2e.dora_api.test_trim_to_budget import FAR_OUT_MIN_DAYS, _plan_meal_needing
+    _plan_meal_needing(item, days_out=FAR_OUT_MIN_DAYS)
     applied = requests.post(
         f"{LISTS}/{list_id}/trim-to-budget", json={"budget_target": 0, "mode": "apply"},
     ).json()

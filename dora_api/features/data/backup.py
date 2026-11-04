@@ -63,9 +63,39 @@ def _encode_value(value: Any) -> Any:
     return value
 
 
+def _parent_first(table, rows: list) -> list:
+    """Rows of a self-referencing table (a location under a location, a
+    sub-step under a step) ordered so every parent precedes its children.
+    Restore resolves a self-FK against the rows already inserted, so a child
+    dumped first lost its parent (FU-955). Rows in a cycle, which the app
+    never writes, keep their original order at the end."""
+    self_fks = [
+        c.name for c in table.columns
+        if any(fk.column.table is table for fk in c.foreign_keys)
+    ]
+    if not self_fks:
+        return rows
+    ordered: list = []
+    placed: set = set()
+    pending = list(rows)
+    while pending:
+        ready = [
+            r for r in pending
+            if all(r._mapping[col] is None or r._mapping[col] in placed for col in self_fks)
+        ]
+        if not ready:
+            ordered.extend(pending)
+            break
+        for r in ready:
+            ordered.append(r)
+            placed.add(r._mapping["id"])
+        pending = [r for r in pending if r._mapping["id"] not in placed]
+    return ordered
+
+
 def _dump_table(table_name: str, excluded_columns: frozenset[str]) -> list[dict[str, Any]]:
     table = db.metadata.tables[table_name]
-    rows = db.session.execute(select(table)).all()
+    rows = _parent_first(table, db.session.execute(select(table)).all())
     column_names = [c.name for c in table.columns if c.name not in excluded_columns]
     indices = [i for i, c in enumerate(table.columns) if c.name not in excluded_columns]
     return [

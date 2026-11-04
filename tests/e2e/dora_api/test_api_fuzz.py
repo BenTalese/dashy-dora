@@ -30,8 +30,8 @@ D. **Wrong-type field fuzz on core creates** — for the core create
    endpoints, each field is sent with a deliberately wrong JSON type and the
    response must be the middleware's 400 problem-details envelope.
    ("Stock level" from the original brief has no create endpoint — stock
-   levels are a fixed seeded vocabulary, GET-only — so stock-locations
-   stands in as the eighth surface.)
+   levels are a fixed seeded vocabulary, GET-only — so locations stands in
+   as the eighth surface.)
 
 Structure notes (mirrors test_route_auth_enforcement.py): routes register
 inside `startup()` (run by the session-scoped `api` fixture), so
@@ -187,7 +187,6 @@ KNOWN_FU528_UUID_500_RULES: frozenset[tuple[str, str]] = frozenset({
     ("DELETE", "/api/meal-plan-templates/<template_id>"),
     ("GET", "/api/meal-plan-templates/<template_id>"),
     ("PATCH", "/api/meal-plan-templates/<template_id>"),
-    ("POST", "/api/meal-plan-templates/<template_id>/clone"),
     ("DELETE", "/api/meal-plans/<meal_plan_id>"),
     ("PATCH", "/api/meal-plans/<meal_plan_id>"),
     ("GET", "/api/meal-plans/<meal_plan_id>/ingredients"),
@@ -200,7 +199,6 @@ KNOWN_FU528_UUID_500_RULES: frozenset[tuple[str, str]] = frozenset({
     ("DELETE", "/api/recipes/<recipe_id>"),
     ("GET", "/api/recipes/<recipe_id>"),
     ("PATCH", "/api/recipes/<recipe_id>"),
-    ("GET", "/api/recipes/<recipe_id>/export"),
     ("GET", "/api/recipes/<recipe_id>/image"),
     ("POST", "/api/recipes/<recipe_id>/new-version"),
     ("GET", "/api/recipes/<recipe_id>/print-view"),
@@ -218,7 +216,6 @@ KNOWN_FU528_UUID_500_RULES: frozenset[tuple[str, str]] = frozenset({
     ("DELETE", "/api/shopping-lists/<shopping_list_id>/attachments/<attachment_id>"),
     ("GET", "/api/shopping-lists/<shopping_list_id>/attachments/<attachment_id>"),
     ("POST", "/api/shopping-lists/<shopping_list_id>/clear"),
-    ("POST", "/api/shopping-lists/<shopping_list_id>/copy"),
     ("POST", "/api/shopping-lists/<shopping_list_id>/finish"),
     ("DELETE", "/api/shopping-lists/<shopping_list_id>/lines/<line_id>"),
     ("PATCH", "/api/shopping-lists/<shopping_list_id>/lines/<line_id>"),
@@ -239,8 +236,6 @@ KNOWN_FU528_UUID_500_RULES: frozenset[tuple[str, str]] = frozenset({
     ("GET", "/api/stock-items/<stock_item_id>/qr"),
     ("POST", "/api/stock-items/<stock_item_id>/snooze"),
     ("DELETE", "/api/stock-items/<stock_item_id>/substitutes/<substitute_id>"),
-    ("DELETE", "/api/stock-locations/<stock_location_id>"),
-    ("PATCH", "/api/stock-locations/<stock_location_id>"),
     ("DELETE", "/api/stores/<store_id>"),
     ("PATCH", "/api/stores/<store_id>"),
     ("GET", "/api/stores/<store_id>/image"),
@@ -474,11 +469,11 @@ _CORE_CREATE_FUZZ: list[tuple[str, dict, dict]] = [
         },
     ),
     # "stock level" has no create endpoint (fixed seeded vocabulary,
-    # GET-only) — stock-locations is the eighth core create surface.
+    # GET-only) — locations is the eighth core create surface.
     (
-        "/api/stock-locations",
-        {"name": "fuzz shelf"},
-        {"name": 7},
+        "/api/locations",
+        {"name": "fuzz shelf", "kind": "zone"},
+        {"name": 7, "kind": ["zone"]},
     ),
 ]
 

@@ -81,15 +81,6 @@ export interface ItemPriceMoversResponse {
     items_unchanged: number;
 }
 
-export interface SavingsListBreakdown {
-    shopping_list_id: string;
-    name: string;
-    completed_at: string | null;
-    picked_total: number;
-    list_total: number;
-    savings: number;
-}
-
 export interface PriceDropRow {
     product_id: string;
     name: string;
@@ -112,7 +103,6 @@ export interface SavingsCapturedResponse {
     range: ReportRange;
     total_savings: number;
     total_spent: number;
-    lists: SavingsListBreakdown[];
 }
 
 // culinary memory. Three new report shapes that back the new

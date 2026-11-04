@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FU-962: a self-hosted Dora is usually reached at a plain http:// LAN
+     address the user types in, which Android blocks by default and no
+     static domain list can name. Cleartext is allowed; HTTPS servers are
+     still reached over HTTPS. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

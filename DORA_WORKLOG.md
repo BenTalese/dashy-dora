@@ -41,6 +41,27 @@ next.
 
 ---
 
+## 2026-11-04: **Owner answers to 19 decision FUs, built (uncommitted)**
+
+**Owner:** 943 yes, 939 yes, 940 D1 yes / D2 skip / D4 no, 978 QA2-44 as is, 685 no, 969 yes, 938 keep both, 768 yes,
+933 drop, 936 drop, 944 yes, 945 weight more, 955 yes, 962 Android first, 639 (camera worked before), 876 majority,
+786/902 yes, 946 all four, 947 yes unless improvements. 20 (support channel) and 21 (CI) unanswered.
+
+**Built:** see CHANGELOG 2026-11-04 and the State lines in DORA_FOLLOWUPS_RESOLVED. Migrations `b6e1d9c4a2f7`
+(template line product anchor) and `c8f3a6e2d9b4` (meal template cook_key/cook_fresh). New: `_list_label.list_labeller`,
+`household_locale`, `locale_format.format_weekday/format_list_label`, `_line_price.is_bought_line/bought_lines`,
+`your_prices.active_price_dimension`, `units.COOKING_WORD_UNITS`, `services/doraChips.ts`, `useTypewriter`,
+`useDoraContext`. Removed `ShoppingList.display_name` (now `display_label(locale, today)`), `format_list_date`,
+`features/stock_locations`, recipe CSV export, list copy, template clone, `skipped_product_lines`, savings `lists[]`.
+946 (2) skipped as moot (no reader). Anthropic client: no `temperature`, `max_tokens` 16000, thinking blocks replayed
+on tool turns. The ladder trim test was flaky on habit ranking; now uses the far-off-meal rule.
+
+**Gates:** pytest 2728 passed; vitest 872; vue-tsc + eslint clean. Not driven live: 4 lines in DORA_VERIFY.
+
+**Next up:** owner: FU-965, build/tag/deploy (migrations run on boot). Open calls: support channel (FU-557), CI (FU-721).
+
+---
+
 ## 2026-11-03 (evening): **Pre-ship fixes, budget fixes, backlog truth sweep (uncommitted)**
 
 **Owner:** "whats left to do? lets finalise the app"; picked pre-deploy fixes + budget fixes + backlog truth sweep.

@@ -19,7 +19,6 @@ import requests
 from tests.e2e.dora_api._onboarding_finish import finish_seed
 
 BASE = "http://localhost:5170/api"
-STOCK_LOCATIONS = f"{BASE}/stock-locations"
 
 
 def test__seed_onboarding__groups_and_locations__commits_everything_together(api):

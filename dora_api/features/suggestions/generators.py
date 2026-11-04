@@ -33,7 +33,7 @@ from dora_api.domain.entities.stock_item import StockItem
 from dora_api.domain.entities.stock_item_waste_event import StockItemWasteEvent
 from dora_api.domain.entities.user import User
 from dora_api.features.app_settings.clock import household_today
-from dora_api.features.shopping_lists._line_price import line_paid_unit_price
+from dora_api.features.shopping_lists._line_price import is_bought_line
 from dora_api.features.stock_items.pantry_belief import gather_beliefs_for_items
 from dora_api.infrastructure.utils import pluralize
 from dora_api.persistence.field import EntityField
@@ -190,11 +190,9 @@ def generate_likely_due(repository: SqlAlchemyRepository) -> list[Suggestion]:
     # Bucket completion dates per stock item.
     by_item: dict[UUID, list[date]] = {}
     for line in lines:
-        if line_paid_unit_price(line) is None:
-            # Without a price the line might not represent a real
-            # purchase (e.g. never-ticked). Use price-presence as the
-            # "this was actually bought" signal — matches the
-            # purchase_price_stats heuristic (same actual→picked ladder).
+        # R-061 / FU-768: a purchase is a ticked line on a finished list,
+        # priced or not; a price alone was read as a purchase.
+        if not is_bought_line(line):
             continue
         lst = archived_lookup.get(line.shopping_list_id)
         if lst is None or lst.completed_at is None:

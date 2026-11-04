@@ -21,7 +21,6 @@ from dora_api.domain.entities.stock_item import StockItem
 from dora_api.domain.entities.stock_level import StockLevel
 from dora_api.domain.stock_status import StockStatus, level_for_status
 from dora_api.features.routers import SHOPPING_LIST_ROUTER
-from dora_api.features.shopping_lists._line_defaults import apply_line_defaults
 from dora_api.features.shopping_lists._line_retention import \
     snapshot_line_display_names
 from dora_api.features.shopping_lists.get_shopping_lists import get_shopping_lists
@@ -320,88 +319,6 @@ def finish_shopping_list(shopping_list_id: UUID):
         f"{_Response.ticked_lines} items restocked"
     )
     return ok({"items_restocked": _Response.ticked_lines})
-
-
-# ───── Copy ────────────────────────────────────────────────────────────────
-
-class CopyShoppingListRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    # If "all", copy every line. If "unticked", only the lines that weren't
-    # ticked off (useful for "move unchecked to new list" flow).
-    include: str = "all"
-    name: str | None = Field(default=None, max_length=255)
-
-
-@dataclass(slots=True)
-class CopyShoppingListResponse:
-    not_found: bool = False
-    new_shopping_list_id: UUID | None = None
-
-
-class CopyShoppingListHandler:
-    def __init__(self, repository: Repository) -> None:
-        self.repository = repository
-
-    def handle(self, request: CopyShoppingListRequest, shopping_list_id: UUID) -> CopyShoppingListResponse:
-        source: ShoppingList | None = self.repository.get(ShoppingList).by_id(shopping_list_id)
-        if source is None:
-            return CopyShoppingListResponse(not_found=True)
-
-        source_lines = self.repository.get(ShoppingListLine).all(
-            EntityField(ShoppingListLine, "shopping_list_id").eq(shopping_list_id)
-        )
-        if request.include == "unticked":
-            source_lines = [l for l in source_lines if not l.is_ticked]
-
-        now = datetime.now(timezone.utc)
-        target = ShoppingList(
-            # display_name, not raw name — the source may be self-labelled
-            # (name NULL), and "Copy of Sat 14 Jun" beats "Copy of None".
-            name = (request.name or "").strip() or f"Copy of {source.display_name}",
-            created_at = now,
-        )
-        self.repository.add(target)
-
-        # Both anchors and every "which one" / store choice travel, so a
-        # product-only line copies (it used to lose both anchors and 500 on the
-        # line-anchor check, finalisation 03-R1).
-        copies = [
-            ShoppingListLine(
-                shopping_list_id = target.id,
-                stock_item_id = sl.stock_item_id,
-                product_id = sl.product_id,
-                display_name_snapshot = sl.display_name_snapshot,
-                quantity = sl.quantity,
-                is_ticked = False,  # fresh list starts unticked
-                selected_product_id = sl.selected_product_id,
-                preferred_buy_id = sl.preferred_buy_id,
-                planned_store_id = sl.planned_store_id,
-                sequence = sl.sequence,
-                added_at = now,
-            )
-            for sl in source_lines
-        ]
-        apply_line_defaults(self.repository, copies)
-        for line in copies:
-            self.repository.add(line)
-        # FU-512 unit-of-work: one commit at the end.
-        self.repository.save_changes()
-        return CopyShoppingListResponse(new_shopping_list_id=target.id)
-
-
-@SHOPPING_LIST_ROUTER.route("/<uuid:shopping_list_id>/copy", methods=["POST"])
-@has_request_body(CopyShoppingListRequest)
-def copy_shopping_list(shopping_list_id: UUID):
-    _Request: CopyShoppingListRequest = get_request_body()
-    if _Request.include not in ("all", "unticked"):
-        return business_rule_violation("`include` must be 'all' or 'unticked'.")
-    _Response = CopyShoppingListHandler(SqlAlchemyRepository()).handle(_Request, shopping_list_id)
-    if _Response.not_found:
-        return not_found("ShoppingList", shopping_list_id)
-    _LOGGER.info(
-        f"Copied shopping list {shopping_list_id} -> {_Response.new_shopping_list_id}"
-    )
-    return ok({"shopping_list_id": _Response.new_shopping_list_id})
 
 
 # ───── Start shopping ─────────────────────────────────────────────────────

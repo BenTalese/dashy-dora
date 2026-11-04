@@ -682,6 +682,15 @@ COUNTABLE_UNITS: frozenset[str] = (SUB_ITEM_UNITS - _VAGUE_AMOUNTS) | frozenset(
 })
 
 
+# The ingredient picker's "cooking words" (FU-786 / FU-902): the parts and
+# counted things a recipe is written in that the conversion table has no entry
+# for. Offered in the ingredient row editor only, so pricing and nutrition keep
+# reading them exactly as before (the portion-row lookup weighs "3 cloves").
+COOKING_WORD_UNITS: frozenset[str] = frozenset(
+    word for word in SUB_ITEM_UNITS | COUNTABLE_UNITS if word not in UNIT_TABLE
+)
+
+
 def is_sub_item_unit(unit: str | None) -> bool:
     """Whether *unit* names a part of a shelf item rather than the item.
     Accepts plurals, which is how recipes are actually written ("3 cloves")."""

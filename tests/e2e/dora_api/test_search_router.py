@@ -44,9 +44,8 @@ def _make_recipe(name: str) -> dict:
 
 
 def _make_tree_location(name: str, kind: str, parent_id: str | None = None) -> str:
-    """Create a location through the tree API (`POST /api/locations`) —
-    the only surface that accepts `parent_id` (the flat
-    `/api/stock-locations` create is name-only). Returns the new id."""
+    """Create a location through the tree API (`POST /api/locations`).
+    Returns the new id."""
     body: dict = {"name": name, "kind": kind}
     if parent_id is not None:
         body["parent_id"] = parent_id

@@ -49,7 +49,7 @@ from dora_api.domain.stock_status import (LOW_STOCK_SEQUENCE,
                                           is_missing, is_out_of_stock,
                                           needs_restock)
 from dora_api.features.alerts.get_alerts import GetAlertsHandler
-from dora_api.features.shopping_lists._line_price import line_paid_unit_price
+from dora_api.features.shopping_lists._line_price import bought_lines, line_paid_unit_price
 from dora_api.persistence.bool_operation import BoolOperation
 from dora_api.persistence.field import EntityField
 from dora_api.features.app_settings.access import get_or_create_app_setting
@@ -1312,6 +1312,7 @@ def suggest_recipes(args: dict) -> list[dict]:
 # is the assistant tool-call adapter: same return shape the LLM expects.
 from dora_api.domain import units as _units
 from dora_api.infrastructure.session_user import current_user_id
+from dora_api.features.shopping_lists._list_label import list_labeller
 
 
 def app_help(args: dict) -> list[dict]:
@@ -1827,7 +1828,7 @@ def shopping_list_contents(args: dict) -> list[dict]:
         active_lists = repo.get(ShoppingList).all(
             EntityField(ShoppingList, ShoppingList.Fields.STATUS).ne(SHOPPING_LIST_STATUS_DONE)
         )
-        outcome = resolve_quick_add_target(active_lists)
+        outcome = resolve_quick_add_target(active_lists, list_labeller(repo))
         if outcome.kind != "single":
             return [{"status": "no_primary" if outcome.kind == "none" else "ambiguous"}]
         target = next(
@@ -2186,38 +2187,18 @@ def purchase_price_stats(args: dict) -> list[dict]:
         }]
     item = matches[0]
 
-    # Walk ticked lines on archived lists for this item. We deliberately
-    # include unticked lines on archived lists too — the user may have
-    # entered a price without ticking — by gating on "has a usable price"
-    # instead of is_ticked.
-    lines: list[ShoppingListLine] = repo.get(ShoppingListLine).all(
-        EntityField(ShoppingListLine, ShoppingListLine.Fields.STOCK_ITEM_ID).eq(item.id)
-    )
-    if not lines:
+    # R-061 / FU-946: only bought lines on finished lists. This used to keep
+    # unticked lines with a price too, and walk the lists itself.
+    purchases = bought_lines(repo, item.id)
+    if not purchases:
         return [{
             "item_name": item.name,
             "status": "no_purchases",
-            "note": "No finished shopping lists reference this item yet.",
+            "note": "No finished shopping lists record buying this item yet.",
         }]
-
-    # Restrict to lines whose parent list is archived (= a completed shop).
-    list_ids = list({l.shopping_list_id for l in lines})
-    archived_ids: set[UUID] = set()
-    if list_ids:
-        lists = repo.get(ShoppingList).all(
-            EntityField(ShoppingList, "id").in_(list_ids)
-            & EntityField(ShoppingList, ShoppingList.Fields.STATUS).eq(SHOPPING_LIST_STATUS_DONE)
-        )
-        archived_ids = {l.id for l in lists}
-
-    # Collect (unit_price, merchant_id_or_None, completed_at) per usable line.
-    # Pre-load completed_at + linked merchants in bulk to avoid N+1.
-    completed_lookup: dict[UUID, datetime | None] = {}
-    if archived_ids:
-        for l in repo.get(ShoppingList).all(
-            EntityField(ShoppingList, "id").in_(list(archived_ids))
-        ):
-            completed_lookup[l.id] = l.completed_at
+    lines = [line for line, _ in purchases]
+    archived_ids = {line.shopping_list_id for line in lines}
+    completed_lookup = {line.shopping_list_id: done_at for line, done_at in purchases}
 
     # Selected-product → merchant lookup, for lines that didn't override
     # `purchased_store_id` but did pick an offer.

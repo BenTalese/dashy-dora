@@ -89,6 +89,10 @@ SECTIONS: tuple[Section, ...] = (
     Section("stock_groups", "StockGroup", "Stock groups", "Core data", True, _name_key),
     Section("stock_levels", "StockLevel", "Stock levels", "Core data", True, _name_key),
     Section("stock_locations", "StockLocation", "Stock locations", "Core data", True, _location_key),
+    # FU-955: a saved product needs its store, and stores were not backed up,
+    # so a restore onto another install dropped every product. Matched by
+    # name, so an install's own "Coles" is reused rather than duplicated.
+    Section("stores", "Store", "Stores", "Core data", True, _name_key),
     Section("saved_products", "Product", "Saved products", "Core data", True, _product_key),
     Section("stock_items", "StockItem", "Stock items", "Core data", True, _name_key),
     Section("product_stock_item_links", "StockItemProduct", "Product ↔ stock-item links", "Core data", True),
@@ -110,9 +114,8 @@ SECTIONS: tuple[Section, ...] = (
     Section("recipe_tools", "RecipeTool", "Recipe ↔ tool links", "Core data", True),
     # structured steps + their two link tables. Steps must be
     # inserted before their link rows; sub-steps reference parent_step_id on
-    # the same table, but rows insert in any order on restore (the FK is
-    # deferred by SQLite when reset+restored in one txn, and Postgres tolerates
-    # the same-table reference once all rows are present).
+    # the same table, so the dump writes parents before children
+    # (`backup._parent_first`, FU-955).
     Section("recipe_steps", "RecipeStep", "Recipe steps", "Core data", True),
     Section("recipe_step_ingredients", "RecipeStepIngredient", "Recipe step ↔ ingredient links", "Core data", True),
     Section("recipe_step_tools", "RecipeStepTool", "Recipe step ↔ tool links", "Core data", True),
@@ -181,7 +184,7 @@ SECTIONS: tuple[Section, ...] = (
 # here — remapping those would pour the backup's ingredients / lines / entries
 # into the existing document, duplicating its contents.
 REMAP_ON_DUPLICATE: frozenset[str] = frozenset({
-    "stock_groups", "stock_levels", "stock_locations", "saved_products",
+    "stock_groups", "stock_levels", "stock_locations", "stores", "saved_products",
     "stock_items", "recipe_collections", "cuisines", "categories",
     "dietary_tags", "tools",
     # A same-username account keeps its id; its provider rows follow it.
@@ -216,6 +219,8 @@ HARD_FK_PULL_IN: dict[tuple[str, str], str] = {
     # Pull the referenced Product into the selection so the line survives
     # a "shopping list only" partial restore.
     ("shopping_list_items", "product_id"): "saved_products",
+    ("shopping_list_template_lines", "product_id"): "saved_products",
+    ("saved_products", "store_id"): "stores",
 }
 
 # Soft FKs (nullable in schema): if the target is missing at insert time and
@@ -244,6 +249,9 @@ REQUIRED_FKS: set[tuple[str, str]] = {
     ("shopping_list_items", "product_id"),
     ("shopping_list_template_lines", "template_id"),
     ("shopping_list_template_lines", "stock_item_id"),
+    # Product-only template lines (FU-940 D1); "if set, must resolve" like the
+    # list line's anchors.
+    ("shopping_list_template_lines", "product_id"),
     ("recipe_ingredients", "recipe_id"),
     ("recipe_ingredients", "stock_item_id"),
     ("recipe_dietary_tags", "recipe_id"),

@@ -62,7 +62,7 @@ def stock_level_id():
 
 @pytest.fixture
 def stock_location_id():
-    return requests.get('http://localhost:5170/api/stock-locations').json()['items'][0]['stock_location_id']
+    return requests.get('http://localhost:5170/api/locations').json()[0]['location_id']
 
 #endregion setup
 

@@ -29,6 +29,7 @@ from dora_api.infrastructure.api_response import ok
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
+from dora_api.features.shopping_lists._list_label import list_labeller
 from flask import request
 
 _LOGGER = logging.getLogger(__name__)
@@ -102,6 +103,7 @@ class GetUpcomingHandler:
             )
 
         # ── Planned shopping days (not yet done) ──────────────────────
+        label = list_labeller(self.repository)
         lists: List[ShoppingList] = self.repository.get(ShoppingList).all(
             EntityField(ShoppingList, ShoppingList.Fields.PLANNED_SHOP_DATE)
             .between(today, end)
@@ -110,7 +112,7 @@ class GetUpcomingHandler:
         )
         for lst in lists:
             _day(lst.planned_shop_date).shopping.append(
-                UpcomingShopping(list_id=str(lst.id), name=lst.display_name)
+                UpcomingShopping(list_id=str(lst.id), name=label(lst))
             )
 
         # ── Meal-plan days ────────────────────────────────────────────

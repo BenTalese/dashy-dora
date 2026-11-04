@@ -29,12 +29,10 @@ from pydantic import BaseModel, ConfigDict
 
 from dora_api.domain.entities.meal_plan_entry import MealPlanEntry
 from dora_api.domain.entities.recipe import Recipe
-from dora_api.domain.entities.shopping_list import (ShoppingList, ShoppingListLine,
-                                                    format_list_date)
+from dora_api.domain.entities.shopping_list import ShoppingList, ShoppingListLine
 from dora_api.domain.entities.stock_item import StockItem
 from dora_api.domain.stock_status import (is_low_stock, is_out_of_stock,
                                           needs_restock)
-from dora_api.features.app_settings.clock import household_today
 from dora_api.features.routers import SHOPPING_LIST_ROUTER
 from dora_api.features.shopping_lists._frequently_added import (
     DEFAULT_FREQUENTLY_ADDED_LIMIT, rank_frequently_added_ids)
@@ -79,8 +77,7 @@ class AutoGenerateRequest(BaseModel):
     name: Optional[str] = None
     sources: AutoGenerateSources = AutoGenerateSources()
     # When set, append (deduplicated) to this existing list. When None, a
-    # new list is created — auto-named "Auto N · <date>" if `name` is
-    # blank, where N is the count of existing auto-generated lists + 1.
+    # new list is created, self-labelled when `name` is blank.
     merge_into_list_id: Optional[UUID] = None
 
 
@@ -226,16 +223,9 @@ class AutoGenerateHandler:
 
     def _create_list(self, name: Optional[str]) -> ShoppingList:
         now = datetime.now(timezone.utc)
-        if name and name.strip():
-            list_name = name.strip()
-        else:
-            # "Auto 3 · Sun 31 May" — N counts non-archived auto-named lists
-            # to keep the sequence stable as old runs get archived.
-            n = self._next_auto_index()
-            # Household date through `format_list_date` (R-021 / R-056;
-            # finalisation 03-R8) — was a server-local `strftime` copy.
-            today = household_today(self.repository)
-            list_name = f"Auto {n} · {format_list_date(today, today)}"
+        # No name means the list labels itself, like every other list
+        # (owner, FU-940 D4: the server never invents a list name).
+        list_name = name.strip() if name and name.strip() else None
 
         target = ShoppingList(name=list_name, created_at=now)
         self.repository.add(target)
@@ -249,11 +239,6 @@ class AutoGenerateHandler:
         # unit; FU-351's empty-list guard (see L210-220) already prevents
         # a phantom-empty-list.
         return target
-
-    def _next_auto_index(self) -> int:
-        all_lists = self.repository.get(ShoppingList).all()
-        # name is nullable now (UX-v2 self-labelled lists) — guard the scan.
-        return sum(1 for l in all_lists if (l.name or "").startswith("Auto ")) + 1
 
     # ── Sources ─────────────────────────────────────────────────────────
 

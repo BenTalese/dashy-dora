@@ -18,7 +18,6 @@ MEAL_SLOT_ROUTER = Blueprint("MEAL_SLOT_ROUTER", __name__, url_prefix="/api/meal
 STOCK_ITEM_ROUTER = Blueprint("STOCK_ITEM_ROUTER", __name__, url_prefix="/api/stock-items")
 STOCK_LEVEL_ROUTER = Blueprint("STOCK_LEVEL_ROUTER", __name__, url_prefix="/api/stock-levels")
 STOCK_GROUP_ROUTER = Blueprint("STOCK_GROUP_ROUTER", __name__, url_prefix="/api/stock-groups")
-STOCK_LOCATION_ROUTER = Blueprint("STOCK_LOCATION_ROUTER", __name__, url_prefix="/api/stock-locations")
 LOCATION_ROUTER = Blueprint("LOCATION_ROUTER", __name__, url_prefix="/api/locations")
 SHOPPING_LIST_ROUTER = Blueprint("SHOPPING_LIST_ROUTER", __name__, url_prefix="/api/shopping-lists")
 SHOPPING_LIST_TEMPLATE_ROUTER = Blueprint("SHOPPING_LIST_TEMPLATE_ROUTER", __name__, url_prefix="/api/shopping-list-templates")

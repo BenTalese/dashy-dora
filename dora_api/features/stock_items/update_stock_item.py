@@ -415,7 +415,8 @@ class UpdateStockItemHandler:
         # next manual click; we don't silently pick one.
         from dora_api.features.shopping_lists.quick_add_target_resolver import \
             resolve_quick_add_target
-        outcome = resolve_quick_add_target(active_lists)
+        from dora_api.features.shopping_lists._list_label import list_labeller
+        outcome = resolve_quick_add_target(active_lists, list_labeller(self.repository))
         if outcome.kind != "single":
             return None
         target = next(

@@ -145,6 +145,13 @@ def spend_lines(
     return out
 
 
+def is_bought_line(line: ShoppingListLine) -> bool:
+    """Whether a line records a purchase (R-061): ticked, and not set aside by
+    trim-to-budget. A price on the line is not evidence (FU-768). Callers also
+    require the list to be finished."""
+    return bool(line.is_ticked) and not line.deferred_by_budget
+
+
 def line_paid_unit_price(line: ShoppingListLine) -> float | None:
     """The per-unit price actually paid for a shopping line, via the standard
     ladder: the user-entered ``actual_unit_price`` wins, else the
@@ -159,6 +166,28 @@ def line_paid_unit_price(line: ShoppingListLine) -> float | None:
     if line.picked_offer_price is not None:
         return float(line.picked_offer_price)
     return None
+
+
+def bought_lines(
+    repository, stock_item_id: UUID,
+) -> list[tuple[ShoppingListLine, datetime | None]]:
+    """Every purchase of one item: its bought lines (`is_bought_line`) on
+    finished lists, each with the list's completion time. The paid-price
+    history the assistant's price stats read (FU-946, 11-R42)."""
+    lines = [
+        l for l in repository.get(ShoppingListLine).all(
+            EntityField(ShoppingListLine, ShoppingListLine.Fields.STOCK_ITEM_ID).eq(stock_item_id)
+        )
+        if is_bought_line(l)
+    ]
+    if not lines:
+        return []
+    completed: dict[UUID, datetime | None] = {
+        sl.id: sl.completed_at for sl in repository.get(ShoppingList).all(
+            EntityField(ShoppingList, "id").in_(list({l.shopping_list_id for l in lines}))
+        ) if sl.is_done
+    }
+    return [(l, completed[l.shopping_list_id]) for l in lines if l.shopping_list_id in completed]
 
 
 LastPurchase = tuple[datetime, float, "UUID | None"]

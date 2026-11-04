@@ -565,7 +565,7 @@
     import { useAuthStore } from 'src/stores/authStore';
     import { clearOnboardingSkipped, markOnboardingSkipped } from 'src/helpers/onboardingSkip';
     import { useScanningEnabled } from 'src/composables/useScanningEnabled';
-    import { useStockLocationStore } from 'src/stores/stockLocationStore';
+    import { useLocationStore } from 'src/stores/locationStore';
     import { computed, onMounted, reactive, ref, watch } from 'vue';
     import { useRouter } from 'vue-router';
 
@@ -578,7 +578,7 @@
     const { refreshScanning } = useScanningEnabled();
     const { reload: reloadMeasurementSystem } = useMeasurementSystem();
     const authStore = useAuthStore();
-    const stockLocationStore = useStockLocationStore();
+    const locationStore = useLocationStore();
 
     const { currentUser } = storeToRefs(authStore);
 
@@ -1224,7 +1224,7 @@
         uniqueSorted([
             ...pickedLocationNames.value,
             ...customLocations.value,
-            ...stockLocationStore.stockLocations.map((l) => l.name),
+            ...locationStore.tree.map((zone) => zone.name),
         ]),
     );
 
@@ -1552,9 +1552,7 @@
         // every-default-ticked picks) is first-user only — see buildFinishRequest.
         await Promise.all([
             loadStockGroups(),
-            stockLocationStore.stockLocations.length === 0
-                ? stockLocationStore.getStockLocationsAsync()
-                : Promise.resolve(),
+            locationStore.ensureLoadedAsync(),
             state.value?.first_user ? loadCatalog() : Promise.resolve(),
         ]);
     });

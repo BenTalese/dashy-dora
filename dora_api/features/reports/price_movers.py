@@ -15,7 +15,7 @@ from dora_api.domain.entities.stock_item_price_observation import (
     StockItemPriceObservation)
 from dora_api.domain import units
 from dora_api.features.stock_items.your_prices import (
-    active_dim_from_latest, display_denominator_for_series,
+    active_price_dimension, display_denominator_for_series,
     measurement_system_from_repo, per_unit_in_canonical)
 from dora_api.features.routers import REPORTS_ROUTER
 from dora_api.infrastructure.api_response import forbidden, ok
@@ -132,7 +132,7 @@ class ItemPriceMoversHandler:
             # same chokepoint rule `build_your_prices_for_item` applies, so an
             # item's "usual" and its movement never disagree about which unit
             # they are talking about.
-            active_dim = active_dim_from_latest(observations)
+            active_dim = active_price_dimension(observations)
             if active_dim is None:
                 continue
 

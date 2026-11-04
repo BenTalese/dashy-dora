@@ -88,6 +88,7 @@ def _verdict(v="unsure", confidence="medium"):
 def _ctx(items, *, demand=None, verdicts=None, cover=None, habits=None):
     ctx = _Ctx(
         today=TODAY,
+        locale="en-AU",
         stock_items_by_id={it.id: it for it in items},
         offer_by_product_id={},
         last_paid_by_item={},

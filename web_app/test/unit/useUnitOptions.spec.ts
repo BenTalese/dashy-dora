@@ -126,6 +126,22 @@ describe('useUnitOptions', () => {
         // The exception is exactly one unit wide, not a hole in the filter.
         expect(values).not.toContain('oz');
     });
+
+    it('keeps a saved word the table has never heard of (FU-786: loaf)', () => {
+        setSystem('metric');
+        const values = useUnitOptions(INGREDIENT_DIMENSIONS, () => 'loaf')
+            .allUnitOptions.value.map((o) => o.value);
+        expect(values).toContain('loaf');
+    });
+
+    it('offers cooking words only when asked (FU-902)', () => {
+        setSystem('metric');
+        const plain = useUnitOptions(INGREDIENT_DIMENSIONS).allUnitOptions.value.map((o) => o.value);
+        const cooking = useUnitOptions(INGREDIENT_DIMENSIONS, undefined, { cookingWords: true })
+            .allUnitOptions.value.map((o) => o.value);
+        expect(plain).not.toContain('clove');
+        expect(cooking).toEqual(expect.arrayContaining(['clove', 'sprig', 'rasher', 'stalk', 'head', 'slice']));
+    });
 });
 
 describe('unitsForSystem', () => {

@@ -33,6 +33,7 @@ from dora_api.infrastructure.session_user import current_user
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
+from dora_api.features.shopping_lists._list_label import list_labeller
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -439,7 +440,7 @@ class GetShoppingListDetailHandler:
             inferred_suggestions = self._inferred_suggestions(_List, _Lines),
             shopping_list_id = _List.id,
             name = _List.name,
-            display_name = _List.display_name,
+            display_name = list_labeller(self.repository)(_List),
             status = _List.status,
             created_at = _List.created_at,
             completed_at = _List.completed_at,

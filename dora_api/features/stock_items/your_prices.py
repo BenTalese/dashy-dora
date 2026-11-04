@@ -16,6 +16,7 @@ the DTO straight to the screen.
 from __future__ import annotations
 
 import statistics
+from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Iterable
@@ -141,7 +142,7 @@ def _baseline_from_observations(
 
     Algorithm (B4 / C1-C5 / LC-2):
       1. No observations → empty state.
-      2. Active dimension = dimension of the most-recent observation.
+      2. Active dimension = the dimension most observations are in.
       3. Filter to observations in that dimension within ``BASELINE_WINDOW``.
       4. Normalise each to a per-canonical-unit price.
       5. ``current`` = the most-recent observation's per-unit price (set
@@ -156,13 +157,17 @@ def _baseline_from_observations(
         return _empty_your_prices()
 
     observations = sorted(observations, key=lambda o: o.observed_at, reverse=True)
-    latest = observations[0]
-    latest_def = units.find_unit(latest.unit)
-    if latest_def is None or latest_def.dimension not in units.PRICE_DIMENSIONS:
+    active_dim = active_price_dimension(observations)
+    if active_dim is None:
         # Defensive — the write path validates this so it's a "should never"
         # case; degrade to empty state rather than 500.
-        return _empty_your_prices(latest.observed_at)
-    active_dim = latest_def.dimension
+        return _empty_your_prices(observations[0].observed_at)
+    # "Current" and the display denominator read the newest price in the
+    # dimension the baseline is in, not a stray in another one.
+    latest = next(
+        o for o in observations
+        if (d := units.find_unit(o.unit)) is not None and d.dimension == active_dim
+    )
     canonical_unit = units.CANONICAL_PRICE_UNIT[active_dim]
 
     latest_per_unit = per_unit_in_canonical(
@@ -346,13 +351,15 @@ def display_denominator_for_series(
     still picks an appropriate denominator.
     """
     measure_in_canonical = 0.0
-    if observations:
-        latest = max(observations, key=lambda o: o.observed_at)
-        latest_def = units.find_unit(latest.unit)
-        if latest_def is not None and latest_def.dimension == active_dim:
-            measure_in_canonical = units.convert(
-                latest.total_measure, latest.unit, canonical_unit,
-            ) or 0.0
+    in_dim = [
+        o for o in observations
+        if (d := units.find_unit(o.unit)) is not None and d.dimension == active_dim
+    ]
+    if in_dim:
+        latest = max(in_dim, key=lambda o: o.observed_at)
+        measure_in_canonical = units.convert(
+            latest.total_measure, latest.unit, canonical_unit,
+        ) or 0.0
     if measure_in_canonical == 0.0:
         for prod in products:
             if not prod.size_unit or not prod.size_value:
@@ -368,22 +375,34 @@ def display_denominator_for_series(
     return units.display_denominator_for(active_dim, measure_in_canonical, system=system)
 
 
-def active_dim_from_latest(
+def active_price_dimension(
     observations: list[StockItemPriceObservation],
 ) -> str | None:
-    """Active price dimension = dimension of the most-recent observation (B4).
-    None when there are no observations or the latest unit is non-price.
+    """The dimension most of an item's price observations are in (FU-876),
+    the most recent of the tied ones on a tie. None when no observation is in
+    a price dimension.
 
-    Public (was `_active_dim_from_latest`) for the same reason as
-    `per_unit_in_canonical`: an item's "usual" and its reported movement must
-    not disagree about which unit they are talking about."""
-    if not observations:
+    It used to be the latest observation's dimension, so nine prices in `kg`
+    and one stray `ea` logged last gave a baseline from the one. Public for
+    the same reason as `per_unit_in_canonical`: an item's "usual" and its
+    reported movement must not disagree about which unit they are about."""
+    counts: Counter[str] = Counter()
+    latest_by_dim: dict[str, datetime] = {}
+    for obs in observations:
+        obs_def = units.find_unit(obs.unit)
+        if obs_def is None or obs_def.dimension not in units.PRICE_DIMENSIONS:
+            continue
+        counts[obs_def.dimension] += 1
+        seen = latest_by_dim.get(obs_def.dimension)
+        if seen is None or obs.observed_at > seen:
+            latest_by_dim[obs_def.dimension] = obs.observed_at
+    if not counts:
         return None
-    latest = max(observations, key=lambda o: o.observed_at)
-    latest_def = units.find_unit(latest.unit)
-    if latest_def is None or latest_def.dimension not in units.PRICE_DIMENSIONS:
-        return None
-    return latest_def.dimension
+    top = max(counts.values())
+    return max(
+        (dim for dim, count in counts.items() if count == top),
+        key=lambda dim: latest_by_dim[dim],
+    )
 
 
 def _observation_points(
@@ -524,7 +543,7 @@ def build_stock_item_price_series(
     )
     products = _linked_products(repo, stock_item_id)
 
-    active_dim = active_dim_from_latest(observations) or _first_product_price_dim(products)
+    active_dim = active_price_dimension(observations) or _first_product_price_dim(products)
     if active_dim is None:
         return None, []
     canonical_unit = units.CANONICAL_PRICE_UNIT[active_dim]
@@ -589,7 +608,7 @@ def build_product_observation_series(
             StockItemPriceObservation.Fields.STOCK_ITEM_ID,
         ).in_(stock_item_ids)
     )
-    active_dim = active_dim_from_latest(observations)
+    active_dim = active_price_dimension(observations)
     if active_dim is None:
         return None, []
     canonical_unit = units.CANONICAL_PRICE_UNIT[active_dim]

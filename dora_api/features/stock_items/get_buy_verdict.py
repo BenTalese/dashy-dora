@@ -58,10 +58,11 @@ from dora_api.domain.stock_status import (
 )
 from dora_api.features.app_settings.access import money_features_enabled
 from dora_api.features.app_settings.clock import (
-    household_timezone, household_today,
+    household_locale, household_timezone, household_today,
 )
 from dora_api.features.routers import STOCK_ITEM_ROUTER
-from dora_api.features.shopping_lists._line_price import line_paid_unit_price
+from dora_api.features.shopping_lists._line_price import (is_bought_line,
+                                                        line_paid_unit_price)
 from dora_api.features.stock_items._level_access import resolve_levels_by_item
 from dora_api.features.stock_items.pantry_belief import (
     PantryBelief, gather_beliefs_for_items,
@@ -72,6 +73,7 @@ from dora_api.features.stock_items.planned_demand import (
 from dora_api.infrastructure.api_response import forbidden, not_found, ok
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
+from dora_api.domain.locale_format import DEFAULT_LOCALE, format_day
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -251,6 +253,8 @@ class VerdictInputs:
     # zone UTC observation timestamps are bucketed into via `_local_date` so the
     # two clocks agree. Defaults to UTC (tests build samples at UTC-noon).
     tz: tzinfo = timezone.utc
+    # The household's region locale for the dates in the copy (FU-969).
+    locale: str = DEFAULT_LOCALE
     # D-11 — Dora's inferred level for this item, or None when belief
     # wasn't gathered (older call sites / composer unit tests). When belief
     # has something to say the `need` axis prefers it over the recorded
@@ -515,7 +519,7 @@ def _wait_hint(inputs: VerdictInputs) -> Optional[WaitHintDto]:
         days_until=(next_low - inputs.today).days,
         reason=(
             f"Your usual low lands ~every {int(round(median_gap))} days. "
-            f"Expect the next around {next_low.strftime('%b %d')}."
+            f"Expect the next around {format_day(next_low, inputs.locale)}."
         ),
     )
 
@@ -769,6 +773,7 @@ def gather_verdict_inputs_for_items(
 
     today = household_today(repository)
     tz = household_timezone(repository)
+    locale = household_locale(repository)
     horizon_start = datetime.combine(
         today - timedelta(days=_HISTORY_WINDOW_DAYS),
         datetime.min.time(), tzinfo=tz,
@@ -827,7 +832,7 @@ def gather_verdict_inputs_for_items(
         for line in item_lines:
             # R-061 — only a bought line is a purchase: ticked, and not
             # deferred by trim-to-budget (same rule as `spend_lines`).
-            if not line.is_ticked or line.deferred_by_budget:
+            if not is_bought_line(line):
                 continue
             completed_at = completed_lookup.get(line.shopping_list_id)
             if completed_at is None:
@@ -853,6 +858,7 @@ def gather_verdict_inputs_for_items(
             ),
             today=today,
             tz=tz,
+            locale=locale,
             belief=beliefs.get(item.id),
             fake_markdown=item.id in fake_markdown_items,
             planned_demand=demand_by_item.get(item.id),

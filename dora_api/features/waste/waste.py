@@ -23,7 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from dora_api.domain.entities.recipe import Recipe
 from dora_api.domain.entities.recipe_ingredient import RecipeIngredient
-from dora_api.domain.entities.shopping_list import ShoppingListLine
+from dora_api.domain.entities.shopping_list import ShoppingList, ShoppingListLine
 from dora_api.domain.entities.stock_item import StockItem
 from dora_api.domain.entities.stock_item_waste_event import (
     StockItemWasteEvent, WASTE_REASON_VALUES,
@@ -32,7 +32,8 @@ from dora_api.domain.stock_status import effective_expiring_soon_window, is_miss
 from dora_api.features.app_settings.access import get_or_create_app_setting
 from dora_api.features.app_settings.clock import household_today
 from dora_api.features.routers import WASTE_ROUTER
-from dora_api.features.shopping_lists._line_price import line_paid_unit_price
+from dora_api.features.shopping_lists._line_price import (is_bought_line,
+                                                        line_paid_unit_price)
 from dora_api.infrastructure.api_response import (bad_request, no_content,
                                                   not_found, ok)
 from dora_api.infrastructure.decorators import has_request_body
@@ -116,10 +117,21 @@ class GetWasteRescueHandler:
         value_lookup: dict[UUID, float] = {}
         if items:
             item_ids = [i.id for i in items]
-            lines = self.repository.get(ShoppingListLine).all(
-                EntityField(ShoppingListLine, ShoppingListLine.Fields.STOCK_ITEM_ID)
-                .in_(item_ids)
-            )
+            lines = [
+                l for l in self.repository.get(ShoppingListLine).all(
+                    EntityField(ShoppingListLine, ShoppingListLine.Fields.STOCK_ITEM_ID)
+                    .in_(item_ids)
+                )
+                if is_bought_line(l)
+            ]
+            # R-061 / FU-768: only what was bought on a finished list prices
+            # the risk; an unticked line's price was never paid.
+            done_ids = {
+                sl.id for sl in self.repository.get(ShoppingList).all(
+                    EntityField(ShoppingList, "id").in_(list({l.shopping_list_id for l in lines}))
+                ) if sl.is_done
+            } if lines else set()
+            lines = [l for l in lines if l.shopping_list_id in done_ids]
             for line in sorted(lines, key=lambda l: (l.added_at is None, l.added_at)):
                 price = line_paid_unit_price(line)
                 if price is not None:

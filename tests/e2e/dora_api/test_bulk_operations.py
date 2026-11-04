@@ -56,10 +56,10 @@ def _get_item(stock_item_id: str) -> dict:
 
 def test__bulk_move__moves_every_item_and_reports_missing_ids(api):
     location = requests.post(
-        f"{BASE}/stock-locations", json={"name": f"Shelf-{uuid4().hex[:8]}"},
+        f"{BASE}/locations", json={"name": f"Shelf-{uuid4().hex[:8]}", "kind": "zone"},
     )
     assert location.status_code == 201, location.text
-    location_id = location.json()["stock_location_id"]
+    location_id = location.json()["location_id"]
 
     ids = [_make_item()["stock_item_id"] for _ in range(3)]
     ghost = str(uuid4())
@@ -79,9 +79,9 @@ def test__bulk_move__moves_every_item_and_reports_missing_ids(api):
 
 def test__bulk_move__null_destination_unassigns(api):
     location = requests.post(
-        f"{BASE}/stock-locations", json={"name": f"Shelf-{uuid4().hex[:8]}"},
+        f"{BASE}/locations", json={"name": f"Shelf-{uuid4().hex[:8]}", "kind": "zone"},
     )
-    location_id = location.json()["stock_location_id"]
+    location_id = location.json()["location_id"]
     sid = _make_item(stock_location_id=location_id)["stock_item_id"]
 
     resp = requests.post(f"{STOCK_ITEMS}/bulk-move", json={

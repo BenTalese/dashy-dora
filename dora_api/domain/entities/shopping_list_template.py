@@ -21,7 +21,9 @@ from dora_api.domain.entities.base_entity import BaseEntity
 @dataclass
 class ShoppingListTemplateLine(BaseEntity):
     template_id: UUID
-    stock_item_id: UUID
+    # Anchored by a stock item or, for a product-only line, a product.
+    stock_item_id: UUID | None = None
+    product_id: UUID | None = None
     quantity: int | None = 1
     sequence: int = 0
     selected_product_id: UUID | None = None
@@ -30,6 +32,7 @@ class ShoppingListTemplateLine(BaseEntity):
     class Fields(BaseEntity.Fields):
         TEMPLATE_ID = "template_id"
         STOCK_ITEM_ID = "stock_item_id"
+        PRODUCT_ID = "product_id"
         QUANTITY = "quantity"
         SEQUENCE = "sequence"
         SELECTED_PRODUCT_ID = "selected_product_id"

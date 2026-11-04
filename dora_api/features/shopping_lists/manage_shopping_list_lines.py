@@ -40,6 +40,7 @@ from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
+from dora_api.features.shopping_lists._list_label import list_labeller
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -583,7 +584,7 @@ class QuickAddToDraftHandler:
             active_lists = self.repository.get(ShoppingList).all(
                 EntityField(ShoppingList, ShoppingList.Fields.STATUS).ne(SHOPPING_LIST_STATUS_DONE)
             )
-            outcome = resolve_quick_add_target(active_lists)
+            outcome = resolve_quick_add_target(active_lists, list_labeller(self.repository))
             if outcome.kind == "none":
                 return QuickAddResponse(result="no_draft")
             if outcome.kind == "ambiguous":

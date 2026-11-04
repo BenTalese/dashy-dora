@@ -48,7 +48,6 @@ PRODUCTS = f"{BASE}/products"
 SHOPPING_LISTS = f"{BASE}/shopping-lists"
 MEAL_PLANS = f"{BASE}/meal-plans"
 LOCATIONS = f"{BASE}/locations"
-STOCK_LOCATIONS = f"{BASE}/stock-locations"
 COLLECTIONS = f"{BASE}/recipe-collections"
 TEMPLATES = f"{BASE}/meal-plan-templates"
 
@@ -467,23 +466,6 @@ def test__delete_location_subtree__items_in_descendants_unassigned_and_tree_read
         ))[0]
         assert _Row["stock_location_id"] is None
 
-
-def test__delete_stock_location__legacy_router__items_unassigned_via_fk(api):
-    _Loc = requests.post(STOCK_LOCATIONS, json={"name": f"DelInt Legacy {uuid4().hex[:8]}"})
-    assert _Loc.status_code == 201, _Loc.text
-    _LocId = _Loc.json()["stock_location_id"]
-    _Item = _make_item("DelInt LegacyLoc", stock_location_id=_LocId)
-
-    assert requests.delete(f"{STOCK_LOCATIONS}/{_LocId}").status_code == 204
-
-    # This router does a bare remove — the item's FK degrade is pure
-    # DB-level ON DELETE SET NULL. Pinned: both delete routers converge on
-    # the same end state (item survives, unassigned).
-    _Row = assert_envelope(requests.get(
-        f"{STOCK_ITEMS}?filter=stock_item_id:eq:{_Item['stock_item_id']}"
-    ))[0]
-    assert _Row["stock_location_id"] is None
-
 #endregion
 
 #region ---------------- 5. product ----------------
@@ -700,14 +682,12 @@ def test__delete_store__twice__second_is_404(api):
     assert_problem(requests.delete(f"{STORES}/{_StoreId}"), 404)
 
 
-def test__delete_location__twice__second_is_404_on_both_routers(api):
+def test__delete_location__twice__second_is_404(api):
     _Zone = requests.post(LOCATIONS, json={"name": f"DelInt Twice {uuid4().hex[:8]}", "kind": "zone"})
     assert _Zone.status_code == 201, _Zone.text
-    _ZoneId = _Zone.json()["location_id"] if "location_id" in _Zone.json() else _Zone.json().get("stock_location_id")
+    _ZoneId = _Zone.json()["location_id"]
     assert requests.delete(f"{LOCATIONS}/{_ZoneId}").status_code == 204
     assert_problem(requests.delete(f"{LOCATIONS}/{_ZoneId}"), 404)
-    # The legacy router agrees the row is gone (no 500 on the miss).
-    assert_problem(requests.delete(f"{STOCK_LOCATIONS}/{_ZoneId}"), 404)
 
 #endregion
 

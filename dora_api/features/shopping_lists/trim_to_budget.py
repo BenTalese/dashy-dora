@@ -29,7 +29,7 @@ from dora_api.domain.entities.recipe_ingredient import RecipeIngredient
 from dora_api.domain.entities.shopping_list import (ShoppingList,
                                                     ShoppingListLine)
 from dora_api.domain.entities.stock_item import StockItem
-from dora_api.features.app_settings.clock import household_today
+from dora_api.features.app_settings.clock import household_locale, household_today
 from dora_api.features.budget.budget import (projected_unit_price,
                                              period_headroom)
 from dora_api.features.routers import SHOPPING_LIST_ROUTER
@@ -47,6 +47,7 @@ from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 from dora_api.infrastructure.session_user import current_user_id
+from dora_api.domain.locale_format import format_weekday
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -125,6 +126,8 @@ class _MealDemand:
 @dataclass(slots=True)
 class _Ctx:
     today: date
+    # Region locale for the weekday in a reason chip (FU-969).
+    locale: str
     stock_items_by_id: Dict[UUID, StockItem]
     offer_by_product_id: Dict[UUID, ProductOffer]
     last_paid_by_item: Dict[UUID, LastPurchase]
@@ -207,6 +210,7 @@ class TrimToBudgetHandler:
 
         ctx = _Ctx(
             today=today,
+            locale=household_locale(self.repository),
             stock_items_by_id=stock_items_by_id,
             offer_by_product_id=offer_by_product_id,
             last_paid_by_item=last_paid_by_item,
@@ -525,7 +529,7 @@ def _classify_lines(
         ):
             if demand.entry_count <= 1 and demand.recipe_names:
                 recipe = demand.recipe_names[0]
-                day = demand.earliest.strftime("%a")
+                day = format_weekday(demand.earliest, ctx.locale)
                 out.append((
                     5, line,
                     REASON_FOR_RECIPE_ON_DAY.format(recipe=recipe, day=day),

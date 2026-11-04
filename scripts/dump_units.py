@@ -245,6 +245,11 @@ def _emit_unit_word_lists() -> str:
         + ", ".join(_ts_string(u) for u in sorted(units.COUNTABLE_UNITS))
         + "]);",
         "",
+        "/** Cooking words the ingredient picker offers beside the table units. */",
+        "export const COOKING_WORD_UNITS: ReadonlyArray<string> = ["
+        + ", ".join(_ts_string(u) for u in sorted(units.COOKING_WORD_UNITS))
+        + "];",
+        "",
     ])
 
 

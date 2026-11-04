@@ -1,28 +1,19 @@
-"""Export endpoints for recipes — CSV (ingredients) + print-view (recipe card).
+"""Recipe print view (recipe card): a server-rendered HTML page the user
+prints via the browser. PDF is "Save as PDF" from the print dialog. The CSV
+export went with the owner's removal of the button (FU-933).
 
-Mirrors the shopping-list export pattern: CSV downloads + a server-rendered
-HTML page the user prints via the browser. PDF is "Save as PDF" from the
-print dialog.
-
-  GET /api/recipes/<id>/export?format=csv
   GET /api/recipes/<id>/print-view
 """
 import base64
-import csv
-import io
-import logging
 from dataclasses import dataclass, field
 from uuid import UUID
 
-from flask import Response, render_template_string, request
+from flask import Response, render_template_string
 
 from dora_api.domain.units import format_quantity
 from dora_api.features.data.export_shared import (
-    CSV_BOM,
     PRINT_CSS,
     PRINT_TOOLBAR,
-    csv_safe_row,
-    export_filename,
     print_format,
 )
 from dora_api.features.recipes.get_recipes import (
@@ -33,35 +24,16 @@ from dora_api.features.recipes.get_recipes import (
 )
 from dora_api.features.recipes.recipe_step_image_access import get_step_image_bytes
 from dora_api.features.routers import RECIPE_ROUTER
-from dora_api.infrastructure.api_response import bad_request, not_found
+from dora_api.infrastructure.api_response import not_found
 from dora_api.infrastructure.data_url import decode_data_url
 from dora_api.infrastructure.utils import pluralize
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 
-_LOGGER = logging.getLogger(__name__)
-
-
 def _ingredient_name(ingredient: RecipeIngredientDto) -> str:
     """The recipe's own label, else the linked stock item, else the pasted
     text. An unlinked (imported, never matched) row has no stock item, so the
-    sheet used to print "None" and the CSV a blank name."""
+    sheet used to print "None"."""
     return ingredient.label or ingredient.stock_item_name or ingredient.raw_text or ""
-
-
-def _build_csv(recipe: RecipeDto) -> str:
-    buffer = io.StringIO()
-    writer = csv.writer(buffer)
-    writer.writerow(["ingredient", "quantity", "unit", "notes", "location"])
-    for ingredient in recipe.ingredients:
-        writer.writerow(csv_safe_row([
-            _ingredient_name(ingredient),
-            # R-079: the formatter owns precision ("2", not "2.0").
-            format_quantity(ingredient.quantity, None),
-            ingredient.unit or "",
-            ingredient.notes or "",
-            ingredient.stock_location_name or "",
-        ]))
-    return CSV_BOM + buffer.getvalue()
 
 
 # ── Print-view shaping ─────────────────────────────────────────────────
@@ -250,30 +222,6 @@ def _render_print_view(recipe: RecipeDto, generated_at: str) -> str:
         format_quantity=format_quantity,
         ingredient_name=_ingredient_name,
     )
-
-
-@RECIPE_ROUTER.route("/<uuid:recipe_id>/export", methods=["GET"])
-def export_recipe(recipe_id: UUID):
-    fmt = (request.args.get("format") or "csv").lower()
-    if fmt not in ("csv",):
-        return bad_request(
-            f"Unsupported export format '{fmt}'. Supported: csv. "
-            "For PDF, open the print-view and 'Save as PDF' from your browser."
-        )
-    recipe = GetRecipesHandler(SqlAlchemyRepository()).handle_by_id(recipe_id)
-    if recipe is None:
-        return not_found("Recipe", recipe_id)
-    body = _build_csv(recipe)
-    filename = export_filename("recipe", recipe.name, "csv")
-    _LOGGER.info(
-        "Exported recipe %s as %s (%d ingredients)",
-        recipe_id, fmt, len(recipe.ingredients),
-    )
-    # `mimetype`, not a hand-written charset: Flask appends `; charset=utf-8`
-    # itself, and spelling it out doubled it (same fix as barcodes.py).
-    response = Response(body, mimetype="text/csv")
-    response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
-    return response
 
 
 @RECIPE_ROUTER.route("/<uuid:recipe_id>/print-view", methods=["GET"])

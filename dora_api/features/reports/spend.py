@@ -22,7 +22,6 @@ from sqlalchemy import select
 
 from dora_api.domain.entities.store import Store
 from dora_api.domain.entities.product import Product
-from dora_api.domain.entities.shopping_list import ShoppingList
 from dora_api.domain.entities.stock_item import StockItem
 from dora_api.features.shopping_lists._line_price import resolve_store_id, spend_lines
 from dora_api.features.routers import REPORTS_ROUTER
@@ -191,16 +190,6 @@ def spend_by_store():
 
 # ───── 6. Savings captured ────────────────────────────────────────────────
 
-@dataclass(slots=True)
-class SavingsListBreakdown:
-    shopping_list_id: UUID
-    name: str
-    completed_at: datetime | None
-    picked_total: float
-    list_total: float
-    savings: float
-
-
 class SavingsCapturedHandler:
     """Aggregate savings = list_price_at_pick − what the user actually paid,
     per archived list with snapshot data.
@@ -230,47 +219,17 @@ class SavingsCapturedHandler:
             # not negative).
             rrp = line.list_price_at_pick if line.list_price_at_pick is not None else line.unit_price
             list_total_by_list[lst_id] = list_total_by_list.get(lst_id, 0.0) + rrp * line.quantity
-        if not picked_by_list:
-            return {"total_savings": 0.0, "total_spent": 0.0, "lists": []}
-        list_rows = self.repository.session.execute(
-            select(ShoppingList.id, ShoppingList.name, ShoppingList.completed_at)
-            .where(ShoppingList.id.in_(list(picked_by_list)))
-        ).all()
-
-        breakdowns: List[SavingsListBreakdown] = []
-        for list_id, name, completed_at in list_rows:
-            picked_total = round(picked_by_list.get(list_id, 0.0), 2)
-            list_total = round(list_total_by_list.get(list_id, 0.0), 2)
+        # Per list, then summed: a list whose paid total rounds to nothing
+        # adds no savings. The per-list breakdown had no reader (FU-947).
+        total_savings = 0.0
+        total_spent = 0.0
+        for list_id, picked in picked_by_list.items():
+            picked_total = round(picked, 2)
             if picked_total == 0.0:
                 continue
-            breakdowns.append(SavingsListBreakdown(
-                shopping_list_id=list_id,
-                name=name,
-                completed_at=completed_at,
-                picked_total=picked_total,
-                list_total=list_total,
-                savings=round(list_total - picked_total, 2),
-            ))
-        breakdowns.sort(
-            key=lambda b: (b.completed_at or datetime.min.replace(tzinfo=timezone.utc)),
-        )
-        total_savings = round(sum(b.savings for b in breakdowns), 2)
-        total_spent = round(sum(b.picked_total for b in breakdowns), 2)
-        return {
-            "total_savings": total_savings,
-            "total_spent": total_spent,
-            "lists": [
-                {
-                    "shopping_list_id": b.shopping_list_id,
-                    "name": b.name,
-                    "completed_at": b.completed_at,
-                    "picked_total": b.picked_total,
-                    "list_total": b.list_total,
-                    "savings": b.savings,
-                }
-                for b in breakdowns
-            ],
-        }
+            total_savings += round(list_total_by_list.get(list_id, 0.0), 2) - picked_total
+            total_spent += picked_total
+        return {"total_savings": round(total_savings, 2), "total_spent": round(total_spent, 2)}
 
 
 @REPORTS_ROUTER.route("/savings-captured", methods=["GET"])

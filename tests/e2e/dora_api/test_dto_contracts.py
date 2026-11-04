@@ -113,7 +113,6 @@ def _seed_meal_plan_template() -> None:
 CASES = [
     ("stock_items",        "/stock-items",        {},            _seed_stock_item),
     ("stock_levels",       "/stock-levels",       {},            None),
-    ("stock_locations",    "/stock-locations",    {},            None),
     ("stock_groups",       "/stock-groups",       {},            None),
     ("stores",             "/stores",             {},            None),
     ("products",           "/products",           {},            _seed_product),

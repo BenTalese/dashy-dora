@@ -10,6 +10,284 @@ resolutions go at the **top**.
 
 ---
 
+## [RESOLVED] FU-943 — Cook-mode timers reset when you move to another step
+- **Raised:** 2026-10-24 (finalisation 04-D2)
+- **Type:** decision
+- **What:** timers are per-step: `nextStep` / `prevStep` / `goToStep` all `resetTimer()`, so a 40-minute braise timer
+  dies the moment the cook reads ahead. (04-R8 made a running timer keep true time in a background tab; this is the
+  separate question of what happens on navigation.)
+- **Why deferred:** a product call: timers that persist across steps (a small "running timers" strip) vs the current
+  single-step model.
+- **Recommended resolution:** owner call; if yes, it lands inside `useCookTimer` (the 04-R8 seam).
+- **State:** 2026-11-04, owner: yes. The timer belongs to the step that started it and keeps running across steps; off its step a band shows "Step N timer" with pause/resume and Go to step. Starting another step's timer replaces it (`RecipeCookMode.vue`).
+
+## [RESOLVED] FU-939 — Meal-plan templates don't remember cook batches or fresh marks
+- **Raised:** 2026-10-24 (finalisation 02-D1)
+- **Type:** decision
+- **What:** `MealPlanTemplateEntry` holds day offset, slot and servings only, so applying a template to a Batch-cooking
+  household yields standalone meals: a "cook Sunday, eat Mon-Tue" week saved as a template comes back as three cooks.
+  (Duplicate-to-next-week keeps them since 02-R2; templates are the remaining path that drops them.)
+- **Why deferred:** a model change (template entries gain a cook-group token and `cook_fresh`) and a product call.
+- **Recommended resolution:** owner call; if yes, a small migration + `apply_template` minting batches through
+  `meal_plans/_entry_writes.mint_batches`.
+- **State:** 2026-11-04, owner: yes. `MealPlanTemplateEntry.cook_key` + `cook_fresh` (migration `c8f3a6e2d9b4`); saving a week stores the batch id as the key, applying mints a CookBatch per key still spanning 2+ days (`_mint_template_batches`). Test in `test_cook_batches.py`.
+
+## [RESOLVED] FU-940 — Shopping-list design calls from the finalisation review (templates, duplicates, list names)
+- **Raised:** 2026-10-24 (finalisation 03-D1, 03-D2, 03-D4)
+- **Type:** decision
+- **What:** three owner calls the review recorded rather than fixed. **D1:** templates are stock-item-anchored only, so
+  "Save as template" skips product-only lines (reported as `skipped_product_lines` since 03-R2); should
+  `ShoppingListTemplateLine` gain a nullable `product_id`? **D2:** moving leftovers to an existing list skips anything
+  already there rather than adding the quantities (the finish dialog says so); keep, or merge quantities? **D4:** the
+  server still invents names on two paths (auto-generate "Auto N · date"; instantiate "Template · date" when no name and
+  no merge target) while lists otherwise self-label; should any server path name a list? (The New list dialog no longer
+  hits the instantiate default: it merges into the list it creates, 03-R33.)
+- **Why deferred:** product decisions, not code drift.
+- **Recommended resolution:** owner call; each is small once decided.
+- **State:** 2026-11-04, owner: D1 yes, D2 keep skipping, D4 no. D1: template lines may be product-anchored (migration `b6e1d9c4a2f7`, CHECK one anchor), snapshot keeps product-only lines (skipping ones linked to an item already on the template), instantiate restores them; `skipped_product_lines` removed. D4: auto-generate and instantiate leave `name` null so the list labels itself.
+
+## [RESOLVED] FU-685 — the row's expiry "soon" band is still a client-side 7 days while the outline reads the server's window
+- **Raised:** 2026-08-20 (stock-signal consolidation, Chunk 4).
+- **Type:** finding.
+- **What:** `helpers/expiryIndicator.ts` keeps its own `SOON_WINDOW_DAYS = 7` and
+  colours the row's expiry button amber off it. Chunk 3 killed the *other* copy of
+  that 7 (B1) by having the outline read the server's configurable window — so an
+  install that sets the expiring-soon window to, say, 14 days now gets a row that is
+  **outlined** for an item whose expiry button is still **green**. The file documents
+  the literal as display-only and that reading is defensible, but the two are visibly
+  on one row and B1 was exactly this shape.
+- **Why deferred:** it needs a call, not a fix: either the window rides the DTO to
+  the client (the honest one-rule answer, and `attention_kinds` already carries
+  `expiring_soon`, so the button could just read that) or the button's colour is
+  deliberately a fixed-scale "how close is the date" and the mismatch is intended.
+- **Recommended resolution:** **now-ish** — one decision, and if the answer is
+  "read `attention_kinds`" the fix is ~5 lines in `StockItemRow.vue`.
+- **State:** 2026-11-04, owner: no. The row's expiry button keeps its display-only 7-day band.
+
+## [RESOLVED] FU-938 — Stocktake and meal reconcile runners draw two different shells
+- **Raised:** 2026-10-24 (finalisation 02-R28)
+- **Type:** decision
+- **What:** `RunnerShell.vue` now hosts the meal reconcile runner and the meal log (brand-primary strip, white icons, (?)
+  to the Help guide). `StocktakeRunner.vue` keeps its own shell because it deliberately follows the theme (owner
+  2026-09-01: the strip is `--surface-page`, cards centred, 24px padding). Folding it in means picking one look for both.
+- **Why deferred:** a visual call, not a refactor: either the stocktake strip goes brand-primary or the reconcile strip goes
+  theme-toned.
+- **Recommended resolution:** owner call; then add a `tone` prop or move StocktakeRunner onto `RunnerShell` as is.
+- **State:** 2026-11-04, owner: keep both shells.
+
+## [RESOLVED] FU-768 — Four surfaces still treat "line has a price" as "line was bought"
+- **Raised:** 2026-08-28 (shopping-list feedback batch 1)
+- **Type:** finding
+- **What:** the sibling of the budget bug fixed this session. `picked_offer_price`
+  is snapshotted at **add** time, so an unticked line carries a price it never cost.
+  These four read that price with no `is_ticked` filter:
+  `suggestions/generators.py:186` (whose comment asserts the opposite is true),
+  `stock_items/pantry_belief.py:329` (invents purchase dates for items never
+  bought), `stock_items/get_buy_verdict.py:762` (pollutes `price_samples` /
+  `purchases_12mo`), and `waste/waste.py:113` (value-at-risk — and it doesn't even
+  filter to done lists).
+- **Why deferred:** unlike the budget, this isn't one filter — it's a question about
+  what counts as proof of purchase across four features with different tolerances
+  for a false positive. `_line_price.py` is the natural chokepoint for a
+  `line_purchased_unit_price()` that answers it once (R-003), but that's a design
+  call, not a reflex.
+- **Recommended resolution:** now-ish — these feed belief, verdicts and waste, all
+  of which the owner reads as signal. One decision, then mechanical.
+- **State:** 2026-11-04, owner: yes. One `is_bought_line` (ticked, not deferred; `_line_price.py`) used by likely-due suggestions, pantry belief, buy verdicts and waste value-at-risk (waste also requires a finished list); a ticked line without a price now counts as a purchase.
+
+## [RESOLVED] FU-933 — Drop or keep the recipe CSV export endpoint?
+- **Raised:** 2026-10-24 (finalisation 01-R27)
+- **Type:** decision
+- **What:** the owner asked to remove "Export to csv" from the recipe page; the client half is gone (`useRecipeExport`
+  only opens the print view now). The server route `GET /recipes/<id>/export` (`features/data/export_recipe.py`) has no
+  SPA caller but is pinned by `test_api_fuzz.py` and `test_data_router.py`.
+- **Why deferred:** deleting a live API route is an owner call (an API-only export may be wanted).
+- **Recommended resolution:** owner call — drop the route + its two test references, or keep it documented as API-only.
+- **State:** 2026-11-04, owner: drop. `GET /recipes/<id>/export` and `_build_csv` removed; test pins the 404.
+
+## [RESOLVED] FU-936 — Drop or keep the SPA-less copy routes (`/meal-plan-templates/<id>/clone`, `/shopping-lists/<id>/copy`)?
+- **Raised:** 2026-10-24 (finalisation 02-R26, 03-R1)
+- **Type:** decision
+- **What:** the templates page lost its Clone action in the 2026-09-13 redesign; the client store + API method are now
+  deleted. The server route and `test_clone_meal_plan_template_unit_of_work.py` remain with no SPA caller. Same for
+  `POST /shopping-lists/<id>/copy` ("Save as template" replaced it; pinned by `test_copy_shopping_list_unit_of_work.py`
+  and `test_api_fuzz.py`): 03-R1 recommended deleting it; it was fixed instead (it 500'd on a product-only line and
+  dropped every store / "which one" choice) so it is correct while the call is open.
+- **Also (12-R17, 2026-10-27):** `GET /waste/rescue` and `GET /waste/events` have no HTTP consumer (the assistant calls
+  `GetWasteRescueHandler` directly); the SPA's `getRescueAsync` / `listEventsAsync` are deleted, the routes and their
+  tests stay for the same call.
+- **Also (13-R19, 2026-10-27):** `POST /app-settings/probe` (`app_settings/probe_llm.py`) has no SPA caller since the
+  Assistant page probes per-user providers (`/assistant/probe`); `appSettingsApiService.probeAsync` + `ProbeResult` are
+  deleted, the route and its two tests stay for the same call.
+- **Why deferred:** deleting a live API route is an owner call (same shape as FU-933).
+- **Recommended resolution:** owner call: drop the route and its test, or keep it as API-only.
+- **State:** 2026-11-04, owner: drop. `/meal-plan-templates/<id>/clone` and `/shopping-lists/<id>/copy` and their handlers and tests removed.
+
+## [RESOLVED] FU-944 — Retire the flat `/stock-locations` API (onboarding still creates zones through it)
+- **Raised:** 2026-10-24 (finalisation 05-R11, 05-D2)
+- **Type:** decision + follow-up
+- **What:** the flat name-only `/api/stock-locations` CRUD (`features/stock_locations/*`, can't set `kind` or `parent_id`)
+  coexists with the tree `/api/locations` CRUD. Its only SPA caller is now `stockLocationStore` ← `WelcomeWizard`
+  (onboarding creates zones by name; Settings → Stock locations already uses the tree); the stock row's flat-name
+  fallback was dead and is gone (05-R12). Nine e2e files exercise the flat routes.
+- **Why deferred:** 05-D2 asks the owner to confirm onboarding zones via the tree API (`locationStore.createAsync({ name,
+  kind: 'zone' })`); the delete then spans the store, the API service, the routes and their tests.
+- **Recommended resolution:** owner confirm, then one sitting: onboarding → tree API, delete the flat routes, store, service
+  and tests.
+- **State:** 2026-11-04, owner: yes. Onboarding reads zones from `locationStore`; `features/stock_locations`, `STOCK_LOCATION_ROUTER`, `stockLocationApiService`, `stockLocationStore` and the flat-route tests removed; tests moved to `/api/locations`.
+
+## [RESOLVED] FU-945 — `ConsumptionEvent.from_sequence` / `to_sequence` are written but never read
+- **Raised:** 2026-10-24 (finalisation 07-R10, 07-D2)
+- **Type:** decision
+- **What:** the level write path (`update_stock_item.py`) and the seeds record the from / to sequence on every
+  consumption event, and the entity docstring promises the belief "can weight a drop-to-out more heavily", but
+  `compute_belief` never reads them.
+- **Why deferred:** either use them (a weight by `to_sequence` in the consumption weighting: a model change) or drop the
+  columns (a migration). Both are owner calls about the belief model.
+- **Recommended resolution:** owner call; if dropped, one migration plus the writer and seed lines.
+- **State:** 2026-11-04, owner: use them. Belief counts a drop ending at Out twice (`_OUT_DROP_WEIGHT`, `BeliefInputs.out_drop_dates`).
+
+## [RESOLVED] FU-955 — Backup restore: stores are not a section but `saved_products.store_id` is a required FK; self-referencing rows depend on dump order
+- **Raised:** 2026-10-29 (autonomous QA sweep)
+- **Type:** finding
+- **What:** (1) `restore_shared.REQUIRED_FKS` lists `("saved_products", "store_id")` but there is no `stores` section,
+  so a cross-install restore where store ids differ drops every saved product and, through `product_id`, its offers,
+  barcodes, product links and product-only lines; `StockItem.usual_store_id` is nulled. (2) `_dump_table` has no ORDER BY,
+  so a location moved under a newer parent (or a sub-step under a later step) can have its self-FK nulled as "target not
+  present" if the child precedes the parent in the dump — the comment at `restore_shared.py` says rows may insert in any
+  order, which is not true for self-FKs. Same-install restores (the common case) are unaffected by (1).
+- **Why deferred:** (1) is a scope decision (add a `stores` section keyed by name, placed before saved products, remapped
+  through the 2026-10-29 dup-key map); (2) needs a topological sort or a second pass for self-FKs.
+- **Recommended resolution:** with the next backup/restore unit; before any cross-install restore is advertised.
+- **State:** 2026-11-04, owner: yes. (1) `stores` section (name-keyed, remapped on duplicate) before saved products; `saved_products.store_id` pulls it in. (2) `backup._parent_first` dumps self-referencing tables parent-first.
+
+## [RESOLVED] FU-639 — Camera scanning needs HTTPS on the **web** build; pick the self-host TLS story
+- **Raised:** 2026-08-15 (stock-overview feedback round)
+- **Type:** deferred job
+- **What:** `navigator.mediaDevices` only exists in a **secure context**, so on a
+  self-hosted install reached at `http://192.168.x.x:PORT` in a *browser* the
+  scan overlay can never open the camera. **Scope confirmed 2026-08-15 — this is
+  web-only:** Capacitor sets `androidScheme: "https"`
+  (`src-capacitor/capacitor.config.json`), so the Android app's WebView origin is
+  `https://localhost` — a secure context — and `allowMixedContent: true` lets it
+  keep talking to a plain-http backend. `android.permission.CAMERA` is already in
+  the manifest. **So the Android app can scan against any instance**, and there is
+  no desktop build to consider (`quasar.config.ts` carries an Electron block but
+  there is no `src-electron/`, so it has never been built).
+  Communication is done (2026-08-15): shared `helpers/cameraAvailability.ts`
+  drives an explainer panel in the scan overlay, a live warning under the admin
+  Scanning toggle, and a Help guide entry. **What's left is the capability
+  itself** — options, none yet chosen: optional self-signed TLS in the container,
+  a documented reverse proxy (Caddy gets a cert in one line), or leaning on
+  Tailscale/`*.ts.net` which serves HTTPS for free. Same constraint gates push
+  notifications and PWA install, so one decision covers all three.
+- **Why deferred:** it's a deployment/distribution decision, not a code fix, and
+  it wants the same answer as the Phase-4 self-host release story rather than a
+  one-off patch. Out of scope for a UI feedback round.
+- **Recommended resolution:** later during Phase 4 (open-source release
+  readiness — bundle with FU-406's README/release work). Not urgent for the owner
+  personally: the Android app already covers his phone-scanning case.
+- **State:** 2026-11-04, owner noted the camera worked over http. Confirmed: since 2026-09-27 Dora never blocks on the origin; it warns, tries, and explains only after a real failure (`cameraAvailability.ts`). No TLS story needed.
+
+## [RESOLVED] FU-876 — an item's price baseline is decided by its *most recent* observation's dimension, not its majority
+- **Raised:** 2026-09-05 (recipe price-unit investigation, §5)
+- **Type:** finding
+- **What:** `your_prices.py` sets `active_dim = latest_def.dimension` and then
+  skips every observation outside it. So an item with nine observations in `kg`
+  and one stray in `ea` computes its baseline from the **one**, if the stray
+  happened to be logged last — the other nine are silently discarded, and the
+  median that drives "above usual" comes off a single row.
+- **Why it matters:** recency is a defensible tiebreak (it tracks how you buy
+  the thing *now*, e.g. switching from loose to packs), so this is not
+  self-evidently wrong. But it is not what the owner assumed was happening when
+  he asked about odd-unit observations, and one mis-keyed entry can reset an
+  item's whole price history with no warning. Majority-with-recency-tiebreak
+  would be the safer rule.
+- **Recommended resolution:** opportunistic — next time the pricing substrate is
+  open. Not urgent; needs a decision on the rule before any code.
+  Cross-ref: `docs/05_investigations/RECIPE_PRICE_UNIT_MISMATCH.md` §5.
+- **State:** 2026-11-04, owner: majority. `active_price_dimension` picks the dimension most observations are in (tie: newest); current value and denominator read the newest observation in it. Tests `test_active_price_dimension.py`.
+
+## [RESOLVED] FU-786 — A legacy free-text ingredient unit can never be re-selected once changed away
+- **Raised:** 2026-08-29 (recipe-view feedback batch)
+- **Type:** finding
+- **What:** the owner's reproduction case was an ingredient measured in
+  **`loaf`** — a word that predates the closed unit vocabulary and is not in
+  `UNIT_TABLE` at all. `useUnitOptions`' `includeValue` escape hatch exists so a
+  row keeps its own unit offered, but it only works for canonical units the
+  *measurement system* excludes (a `lb` on a metric install); a unit with no
+  table entry has no dimension, so `isOffered` can never return true for it.
+  Confirmed live: the dropdown on that row offered 14 units and `loaf` was not
+  among them. The field still *displays* `loaf` and saving without touching it
+  preserves it, so nothing is silently lost — but change it once and it is
+  unrecoverable from the UI.
+- **Why deferred:** the fix is a vocabulary decision, not a code one. Either
+  (a) add the genuinely-common count words (`loaf`, `slice`, `clove`, `sprig`,
+  `head`, `bunch`, `can`, `tin`, `jar`, `bottle`) to `dora_api/domain/units.py`
+  as universal count units — which is the pantry-shaped answer and also fixes
+  every recipe importer that parses them — or (b) widen `includeValue` to pass
+  an unknown unit straight through as a synthetic option, which keeps one row
+  working and leaves the importer producing units nothing can offer. (a) is
+  clearly better and clearly out of a feedback batch's scope.
+- **Recommended resolution:** **opportunistic** — next time the unit table or the
+  recipe importer is open. Worth a count of what's actually in the wild first:
+  `SELECT unit, COUNT(*) FROM RecipeIngredient WHERE unit IS NOT NULL GROUP BY 1`
+  names the words users have really typed.
+- **State:** 2026-11-04, owner: yes. `useUnitOptions` keeps a saved unit the table doesn't know (`loaf`) on its own row.
+
+## [RESOLVED] FU-902 — the units the nutrition rollup can weigh and the units the picker offers are different sets
+- **Raised:** 2026-09-09 (cookbook + recipe-view feedback batch)
+- **Type:** finding
+- **What:** the ingredient row editor's unit dropdown is a **closed list** built
+  from `UNIT_TABLE` (`useUnitOptions`), but the nutrition rollup's most
+  productive path is its *unknown unit word* branch — it takes whatever string
+  is on the row and looks for a USDA portion row mentioning it, which is how
+  "3 cloves garlic" gets weighed at all. `clove`, `stalk`, `sprig`, `head`,
+  `slice` and `rasher` are **not in `UNIT_TABLE`**, so they can't be picked —
+  yet the seed's own Sunday Ragu uses `cloves`, and the rollup weighs it. The
+  two vocabularies were built for different jobs and nobody reconciled them: a
+  user cannot enter the unit that gives them nutrition coverage, and the ones
+  they *can* enter are the ones USDA portion rows are least likely to name.
+- **Why deferred:** it is a vocabulary decision, not a bug fix — either those
+  words join `UNIT_TABLE` as count units (which puts them in every unit
+  dropdown in the app, `SubstituteMetadataDialog` included, and gives them a
+  measurement-system tag they don't want), or the ingredient picker alone gains
+  a "cooking words" tier. `whole` was added on 2026-09-09 because it was
+  already a *count* in every sense and its absence was a live defect; the rest
+  is a design call.
+- **Half of the vocabulary now exists, 2026-09-09:** resolving [[FU-904]] added
+  `units.SUB_ITEM_UNITS` — `clove`, `sprig`, `rasher`, `slice`, `stalk`,
+  `floret`, `leaf`, `wedge`, plus four vague amounts. It is a *pricing* rule,
+  not a picker vocabulary, so the dropdown still can't offer any of them; but
+  the list of words worth offering is now written down in the domain layer,
+  which is most of what made this a design call. The remaining question is
+  narrow: should `useUnitOptions` offer `SUB_ITEM_UNITS` as its own group in
+  the ingredient picker only?
+- **Recommended resolution:** opportunistic — next time the ingredient row
+  editor or `useUnitOptions` is open. Pairs with [[FU-895]].
+- **State:** 2026-11-04, owner: yes. `units.COOKING_WORD_UNITS` (emitted to `units_table.ts`) offered by the ingredient editor only (`cookingWords: true`).
+
+## [RESOLVED] FU-946 — Assistant leftovers from the finalisation review: help corpus, capabilities, page split, example ids
+- **Raised:** 2026-10-27 (finalisation 11-R25, 11-R26, 11-R30, 11-R42, 11-R16, 11-D1, 11-D4)
+- **Type:** follow-up + decisions
+- **What:** (1) **11-D1 / 11-R25:** `app_knowledge.APP_OVERVIEW` rides in every AI prompt and still describes the old
+  shell (Recipes, a Locations page, Settings → System); the review recommends a ~40-line routing guide plus an
+  `app_help(topic)` data tool over the same corpus `HelpPage.vue` renders — gated on the **20-D4** Help IA decision.
+  (2) **11-R26:** `DoraHelpPage.vue`'s capability lists drifted (13 of 40 tools missing); the fix is a
+  `GET /assistant/capabilities` (tool name, user-facing description, examples) the page renders. (3) **11-R30:**
+  `DoraChat.vue` (~1,650 lines): `services/doraChips.ts`, `composables/useTypewriter.ts`, `services/doraContext.ts`. (4)
+  **11-R42:** `purchase_price_stats` keeps its own paid-price sample collection beside `your_prices`. (5) **11-R16:** the
+  example model ids on the settings page (now served by `factory.PROVIDER_DEFAULTS`) are dated
+  (`claude-3-5-sonnet-20241022`, `gpt-4o-mini`); owner picks current ones. (6) **11-D4:** a one-shot glow when the Basic/AI
+  slider flips (owner may decline).
+- **Why deferred:** (1) waits on 20-D4; (2)–(4) are M-sized with no automated guard beyond the existing registry tests;
+  (5)/(6) are owner calls.
+- **Recommended resolution:** (1)+(2) together after 20-D4; (3) with FU-934's page splits; (4) opportunistic; (5)/(6)
+  owner.
+- **2026-10-29:** **20-D4 is decided and built** (one page per topic + Common questions + screenshot slot; see the worklog). The help corpus is now data in `web_app/src/help/helpContent.ts` (`HELP_TOPICS`), so item (1)'s `app_help(topic)` tool has a source to read; item (2) is moot — `DoraHelpPage.vue` is deleted and the Dora topic holds the user-facing copy without a tool list.
+- **Progress (2026-11-01):** (1) built on owner 11-D1: `app_help(topic)` data tool over `dora_api/features/help/help_corpus.json`, exported from `helpContent.ts` with the drift spec `helpCorpusExport.spec.ts`; APP_OVERVIEW cut to a routing guide. (6) built: one-shot glow on the slider flip. (2)-(5) remain.
+- **State:** 2026-11-04, owner: do all four. (2) moot, `DoraHelpPage.vue` is gone and nothing would read the endpoint. (3) `services/doraChips.ts`, `composables/useTypewriter.ts`, `composables/useDoraContext.ts` (DoraChat 1847 to 1535 lines). (4) `bought_lines` in `_line_price.py`; price stats no longer count unticked lines. (5) Claude ids now `claude-opus-5` (example) and opus-5/sonnet-5/haiku-4-5/fable-5-1 (list); dropped `temperature` (400 on current models), `max_tokens` 16000, tool-turn thinking blocks replayed. OpenAI and Gemini examples unchanged (not verified here).
+
 ## [RESOLVED] FU-644 — Preferred buys are hidden when Products is on, with no migration path for existing rows
 - **Raised:** 2026-08-16 (stock-item detail feedback batch — owner decision).
 - **Type:** finding.

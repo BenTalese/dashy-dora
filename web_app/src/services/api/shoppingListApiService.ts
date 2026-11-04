@@ -210,11 +210,6 @@ export default class ShoppingListApiService {
             {},
         );
 
-    // `copyAsync` went with copy-to-new-list: the picker's kebab and the Export
-    // menu were its only callers, and **Save as template** is the same idea
-    // under a name that says what it's for. Server endpoint still exists —
-    // FU-766.
-
     addLineAsync = async (listId: string, command: AddLineCommand): Promise<{ line_id: string; already_on_list: boolean }> =>
         await this.httpClient.post<{ line_id: string; already_on_list: boolean }, AddLineCommand>(
             `/shopping-lists/${listId}/lines`,

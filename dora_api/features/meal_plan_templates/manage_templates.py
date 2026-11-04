@@ -20,6 +20,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from dora_api.domain.entities.cook_batch import CookBatch
 from dora_api.domain.entities.meal_plan import MealPlan
 from dora_api.domain.entities.meal_plan_entry import MealPlanEntry
 from dora_api.domain.entities.meal_plan_template import (MealPlanTemplate,
@@ -218,6 +219,10 @@ class CreateMealPlanTemplateHandler:
                 offset_from_monday = offset,
                 slot = entry.slot,
                 servings = entry.servings,
+                # FU-939: the batch id is the group token; applying mints a
+                # fresh batch per token in the target week.
+                cook_key = str(entry.cook_batch_id) if entry.cook_batch_id else None,
+                cook_fresh = entry.cook_fresh,
             ))
         # FU-512 unit-of-work: one commit at the end. `add()` assigns
         # `template.id` client-side so the child FKs above don't need a
@@ -316,59 +321,6 @@ def delete_meal_plan_template(template_id: UUID):
     return no_content()
 
 
-# ───── Clone ────────────────────────────────────────────────────────────────
-
-@dataclass(slots=True)
-class CloneMealPlanTemplateResponse:
-    template_id: UUID | None = None
-    not_found: bool = False
-
-
-class CloneMealPlanTemplateHandler:
-    def __init__(self, repository: Repository) -> None:
-        self.repository = repository
-
-    def handle(self, template_id: UUID) -> CloneMealPlanTemplateResponse:
-        source: MealPlanTemplate | None = self.repository.get(MealPlanTemplate).by_id(template_id)
-        if source is None:
-            return CloneMealPlanTemplateResponse(not_found=True)
-        entries = _entries_for(self.repository, template_id)
-        now = datetime.now(timezone.utc)
-        clone = MealPlanTemplate(
-            name = f"{source.name} (copy)",
-            description = source.description,
-            created_at = now,
-            updated_at = now,
-        )
-        self.repository.add(clone)
-        for e in entries:
-            self.repository.add(MealPlanTemplateEntry(
-                template_id = clone.id,
-                recipe_id = e.recipe_id,
-                offset_from_monday = e.offset_from_monday,
-                slot = e.slot,
-                servings = e.servings,
-            ))
-        # FU-512 unit-of-work: single commit. Empty-entries case still
-        # commits (a no-op save on just the template row).
-        self.repository.save_changes()
-        return CloneMealPlanTemplateResponse(template_id=clone.id)
-
-
-@MEAL_PLAN_TEMPLATE_ROUTER.route("/<uuid:template_id>/clone", methods=["POST"])
-def clone_meal_plan_template(template_id: UUID):
-    _Response = CloneMealPlanTemplateHandler(SqlAlchemyRepository()).handle(template_id)
-    if _Response.not_found:
-        return not_found("MealPlanTemplate", template_id)
-    _LOGGER.info(f"Cloned meal-plan template {template_id} -> {_Response.template_id}")
-    return created(
-        _Response.template_id,
-        f"{MEAL_PLAN_TEMPLATE_ROUTER.name}.{get_meal_plan_templates.__name__}",
-        "meal_plan_template_id",
-        body={"meal_plan_template_id": _Response.template_id},
-    )
-
-
 # ───── Apply (fork weeks from a template / set) ─────────────────────────────
 
 RECURRING_WEEK_CAP = 26
@@ -390,6 +342,8 @@ def _fork_template_onto_week(
     an existing week, preserves consumed entries and replaces the future
     portion. Returns (meal_plan_id | None, added, skipped_past, replaced)."""
     new_entries: List[MealPlanEntry] = []
+    # cook_key -> the forked entries that were one batch in the template.
+    batch_groups: dict[str, List[MealPlanEntry]] = {}
     skipped = 0
     for te in template_entries:
         scheduled = monday + timedelta(days=te.offset_from_monday)
@@ -399,9 +353,13 @@ def _fork_template_onto_week(
         recipe = repository.get(Recipe).by_id(te.recipe_id)
         if recipe is None:
             continue
-        new_entries.append(MealPlanEntry(
+        entry = MealPlanEntry(
             recipe=recipe, scheduled_for=scheduled, servings=te.servings, slot=te.slot,
-        ))
+            cook_fresh=te.cook_fresh and not te.cook_key,
+        )
+        new_entries.append(entry)
+        if te.cook_key:
+            batch_groups.setdefault(te.cook_key, []).append(entry)
 
     existing: MealPlan | None = (
         repository.get(MealPlan)
@@ -433,6 +391,7 @@ def _fork_template_onto_week(
         existing.source_template_id = template_id
         existing.source_template_set_id = set_id
         existing.rotation_index = rotation_index
+        _mint_template_batches(repository, existing.id, batch_groups)
         return existing.id, len(new_entries), skipped, replaced
 
     if not new_entries:
@@ -444,7 +403,26 @@ def _fork_template_onto_week(
         rotation_index=rotation_index,
     )
     repository.add(plan)
+    _mint_template_batches(repository, plan.id, batch_groups)
     return plan.id, len(new_entries), skipped, 0
+
+
+def _mint_template_batches(
+    repository, meal_plan_id, batch_groups: dict[str, List[MealPlanEntry]],
+) -> None:
+    """One CookBatch per template batch that still spans two or more days in
+    the forked week (a past cut-off can leave one day, which is a normal meal).
+    The plan row is flushed first: a batch's FK names it."""
+    groups = [members for members in batch_groups.values() if len(members) >= 2]
+    if not groups:
+        return
+    repository.flush()
+    for members in groups:
+        batch = CookBatch(meal_plan_id=meal_plan_id, recipe_id=members[0].recipe.id)
+        repository.add(batch)
+        for entry in members:
+            entry.cook_batch_id = batch.id
+    repository.flush()
 
 
 class ApplyTemplateRequest(BaseModel):

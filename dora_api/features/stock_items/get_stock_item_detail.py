@@ -41,6 +41,7 @@ from dora_api.infrastructure.api_response import not_found, ok
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
+from dora_api.features.shopping_lists._list_label import list_labeller
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -601,7 +602,8 @@ def _list_adds(
     lists = list(repository.session.execute(
         select(ShoppingList).where(ShoppingList.id.in_({l.shopping_list_id for l in lines}))
     ).scalars())
-    name_by_id = {lst.id: lst.display_name for lst in lists}
+    label = list_labeller(repository)
+    name_by_id = {lst.id: label(lst) for lst in lists}
     return [
         ListAddEventDto(
             added_at = l.added_at,
@@ -641,6 +643,7 @@ def _purchase_events(
             continue
         purchases.append((lst, line))
     purchases.sort(key=lambda pair: pair[0].completed_at, reverse=True)
+    label = list_labeller(repository)
     return [
         PurchaseEventDto(
             occurred_at = lst.completed_at,
@@ -651,7 +654,7 @@ def _purchase_events(
                 if line.purchased_store_id is not None else None
             ),
             shopping_list_id = lst.id,
-            shopping_list_name = lst.display_name,
+            shopping_list_name = label(lst),
         )
         for lst, line in tally.capped(purchases)
     ]

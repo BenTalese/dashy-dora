@@ -313,7 +313,7 @@ def test__patch_stock_item__null_stock_location_id__clears_location(api):
     loc = make_stock_location(name=_uniq("null-loc"))
     item = make_stock_item(
         stock_level_id=level_id,
-        stock_location_id=loc["stock_location_id"],
+        stock_location_id=loc["location_id"],
         name=_uniq("null-loc-item"),
     )
     assert _item_detail(item["stock_item_id"])["stock_location_id"] is not None
@@ -365,36 +365,27 @@ def test__patch_stock_item__nonexistent_stock_group__is_clean_422_not_500(api):
     assert "stock_group_id" in resp.json()["errors"]
 
 
-# ═══ Stock locations ══════════════════════════════════════════════════════
+# ═══ Locations ═══════════════════════════════════════════════════════════
 
-def test__patch_stock_location__null_name__is_ignored(api):
-    # Pinned: name is the only PATCHable field and it's non-nullable —
-    # explicit null is a silent no-op.
+def test__patch_location__null_name__is_ignored(api):
+    # Pinned: name is non-nullable, so an explicit null is a silent no-op.
     loc = make_stock_location(name=_uniq("null-name-loc"))
-    resp = requests.patch(
-        f"{BASE}/stock-locations/{loc['stock_location_id']}", json={"name": None}
-    )
+    resp = requests.patch(f"{BASE}/locations/{loc['location_id']}", json={"name": None})
     assert resp.status_code == 204, resp.text
-    body = requests.get(
-        f"{BASE}/stock-locations",
-        params={"filter": f"stock_location_id:eq:{loc['stock_location_id']}"},
-    ).json()
-    assert body["items"][0]["name"] == loc["name"]
+    tree = requests.get(f"{BASE}/locations").json()
+    assert next(n for n in tree if n["location_id"] == loc["location_id"])["name"] == loc["name"]
 
 
-def test__patch_stock_location__rename_to_own_name__is_accepted(api):
+def test__patch_location__rename_to_own_name__is_accepted(api):
     loc = make_stock_location(name=_uniq("self-rename-loc"))
-    resp = requests.patch(
-        f"{BASE}/stock-locations/{loc['stock_location_id']}",
-        json={"name": loc["name"]},
-    )
+    resp = requests.patch(f"{BASE}/locations/{loc['location_id']}", json={"name": loc["name"]})
     assert resp.status_code == 204, resp.text
 
 
-def test__patch_stock_location__unknown_field__rejected_400(api):
+def test__patch_location__unknown_field__rejected_400(api):
     loc = make_stock_location(name=_uniq("extra-loc"))
     resp = requests.patch(
-        f"{BASE}/stock-locations/{loc['stock_location_id']}",
+        f"{BASE}/locations/{loc['location_id']}",
         json={"definitely_not_a_field": 1},
     )
     # extra="forbid" on every request model → unknown keys are hard 400s.

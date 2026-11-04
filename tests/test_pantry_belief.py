@@ -102,6 +102,23 @@ def test__cooking_shifts_prediction_earlier():
     assert "cooked with" in also_cooked.reason
 
 
+def test__a_drop_to_out_counts_more_than_a_nudge():
+    # FU-945: one drop recorded as ending at Out moves the belief further
+    # than one drop that didn't.
+    nudge = compute_belief(_inputs(
+        purchase_dates=_fortnightly_purchases(8),
+        consumption_dates=[_d(2)],
+        stock_level_last_updated=_d(60),
+    ))
+    to_out = compute_belief(_inputs(
+        purchase_dates=_fortnightly_purchases(8),
+        consumption_dates=[_d(2)],
+        out_drop_dates=[_d(2)],
+        stock_level_last_updated=_d(60),
+    ))
+    assert to_out.believed_sequence > nudge.believed_sequence
+
+
 # ── Override precedence: a fresh check wins ─────────────────────────────
 
 def test__recent_check_pins_to_recorded_high_confidence():

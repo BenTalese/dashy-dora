@@ -61,7 +61,7 @@ _REQUEST_TIMEOUT_SECONDS = 60
 PROVIDER_DEFAULTS: dict[str, tuple[str, str]] = {
     LLM_PROVIDER_OLLAMA: ("", "qwen2.5:7b"),
     LLM_PROVIDER_OPENAI: (openai_client.DEFAULT_BASE_URL, "gpt-4o-mini"),
-    LLM_PROVIDER_ANTHROPIC: (anthropic_client.DEFAULT_BASE_URL, "claude-3-5-sonnet-20241022"),
+    LLM_PROVIDER_ANTHROPIC: (anthropic_client.DEFAULT_BASE_URL, "claude-opus-5"),
     LLM_PROVIDER_GEMINI: (gemini_client.DEFAULT_BASE_URL, "gemini-2.0-flash"),
 }
 

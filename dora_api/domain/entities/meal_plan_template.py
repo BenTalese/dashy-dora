@@ -20,12 +20,18 @@ class MealPlanTemplateEntry(BaseEntity):
     offset_from_monday: int
     slot: str
     servings: int = 1
+    # FU-939: entries sharing a `cook_key` were one batch cook in the week the
+    # template came from; `cook_fresh` marks a meal cooked on the day.
+    cook_key: str | None = None
+    cook_fresh: bool = False
 
     class Fields(BaseEntity.Fields):
         TEMPLATE_ID = "template_id"
         RECIPE_ID = "recipe_id"
         OFFSET_FROM_MONDAY = "offset_from_monday"
         SLOT = "slot"
+        COOK_KEY = "cook_key"
+        COOK_FRESH = "cook_fresh"
         SERVINGS = "servings"
 
 

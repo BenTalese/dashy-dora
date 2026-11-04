@@ -4,6 +4,7 @@ from typing import List
 from uuid import UUID
 
 from dora_api.domain.entities.base_entity import BaseEntity
+from dora_api.domain.locale_format import format_list_label
 
 
 # the single source of truth for where a list is
@@ -136,24 +137,6 @@ class ShoppingListLine(BaseEntity):
         DISPLAY_NAME_SNAPSHOT = "display_name_snapshot"
 
 
-def format_list_date(value: date, today: date | None = None) -> str:
-    """Human label for a list's date-derived display name ("Sat 14 Jun");
-    the year is appended only when it isn't the current one.
-
-    R-021 carve-out: this is a pure display formatter, called from
-    `ShoppingList.display_name` (a @property with no repository access).
-    The `today` fallback is server-local — at worst, this can drop or
-    keep "current year" mistakenly for a handful of hours around 31 Dec
-    in households whose offset crosses the year line vs. the server's.
-    The fallback is documented; callers with a repository handy SHOULD
-    pass `household_today(repository)`. Display-only — never used for
-    date-boundary logic.
-    """
-    today = today or date.today()
-    fmt = "%a %d %b" if value.year == today.year else "%a %d %b %Y"
-    return value.strftime(fmt)
-
-
 @dataclass
 class ShoppingList(BaseEntity):
     # The user's custom name. None = no custom name — the list labels itself
@@ -181,20 +164,21 @@ class ShoppingList(BaseEntity):
     # lazy="noload"). Default empty so seed/in-memory construction works.
     lines: List[ShoppingListLine] = field(default_factory=list)
 
-    @property
-    def display_name(self) -> str:
+    def display_label(self, locale: str, today: date) -> str:
         """Server-owned display name (R-003): the custom name when set, else
-        the planned shop date, else the creation date. Clearing the custom
-        name makes the list re-label itself from its dates."""
+        the planned shop date, else the creation date, in the household's
+        region format (FU-969; callers pass `household_locale` and
+        `household_today`). Clearing the custom name makes the list re-label
+        itself from its dates."""
         if self.name:
             return self.name
         if self.planned_shop_date:
-            return format_list_date(self.planned_shop_date)
+            return format_list_label(self.planned_shop_date, today, locale)
         created = (
             self.created_at.date()
             if isinstance(self.created_at, datetime) else self.created_at
         )
-        return format_list_date(created)
+        return format_list_label(created, today, locale)
 
     @property
     def effective_date(self) -> date:

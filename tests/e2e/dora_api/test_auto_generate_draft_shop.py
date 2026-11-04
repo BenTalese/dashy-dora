@@ -78,6 +78,28 @@ def test__auto_generate__create_new_honours_the_explicit_name(api):
         requests.delete(f"{BASE}/stock-items/{stock_item_id}")
 
 
+def test__auto_generate__no_name__list_labels_itself(api):
+    # FU-940 D4: the server used to call it "Auto N · <date>".
+    stock_level_id = requests.get(f"{BASE}/stock-levels").json()["items"][0]["stock_level_id"]
+    stock_item_id = requests.post(f"{BASE}/stock-items", json={
+        "name": f"FU-940 unnamed {uuid4().hex[:8]}",
+        "stock_level_id": stock_level_id,
+        "is_essential": True,
+    }).json()["stock_item_id"]
+    generated_list_id = None
+    try:
+        body = requests.post(AUTO, json={"sources": {"essentials": True}}).json()
+        generated_list_id = body["shopping_list_id"]
+        detail = requests.get(f"{LISTS}/{generated_list_id}").json()
+        assert detail["name"] is None
+        assert not detail["display_name"].startswith("Auto ")
+    finally:
+        if generated_list_id:
+            requests.delete(f"{LISTS}/{generated_list_id}")
+        requests.patch(f"{BASE}/stock-items/{stock_item_id}", json={"is_essential": False})
+        requests.delete(f"{BASE}/stock-items/{stock_item_id}")
+
+
 def test__auto_generate__recipe_source__lists_unstocked_and_reports_unlinked(api):
     """03-R12 — the recipe source loads every recipe at once: an unstocked
     ingredient becomes a line, a stocked one doesn't, an unlinked one is

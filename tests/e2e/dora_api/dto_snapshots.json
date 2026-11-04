@@ -365,18 +365,6 @@
       "stock_level_id"
     ]
   },
-  "stock_locations": {
-    "envelope": [
-      "items",
-      "limit",
-      "page",
-      "total"
-    ],
-    "item_keys": [
-      "name",
-      "stock_location_id"
-    ]
-  },
   "stores": {
     "envelope": [
       "items",

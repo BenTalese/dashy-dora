@@ -22,6 +22,12 @@ top-to-bottom.
 
 ---
 
+## Owner decisions built (2026-11-04)
+- [ ] Cook mode: start a step timer, move two steps on: the timer band keeps counting; Go to step returns.
+- [ ] Apply a meal-plan template saved from a week with a batch cook: the new week shows the batch linked.
+- [ ] Ingredient editor: the unit list offers clove and sprig; a row saved as "loaf" still shows it.
+- [ ] Android app over http://<lan-ip>:5170 connects (FU-962).
+
 ## Pre-ship fixes (2026-11-03) — origin FU-976, FU-977
 - [ ] Edit a saved backup file on disk, then press Restore on it: refused, and the row shows Damaged.
 - [ ] Stop the API with the app open and go to a page not visited yet (Cookbook): the shell and "Can't reach Dora" banner stay, no error screen.

@@ -12,7 +12,10 @@ export type TemplateSummary = {
 
 export type TemplateLine = {
     line_id: string;
-    stock_item_id: string;
+    /** Null on a product-only line, which `product_id` anchors instead. */
+    stock_item_id: string | null;
+    product_id: string | null;
+    /** The stock item's name, or the product's on a product-only line. */
     stock_item_name: string;
     quantity: number | null;
     sequence: number;

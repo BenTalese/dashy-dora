@@ -1,7 +1,7 @@
 import { computed, ref, watch } from 'vue';
 
 import { useMeasurementSystem } from 'src/composables/useMeasurementSystem';
-import { UNIT_TABLE, type Dimension } from 'src/generated/units_table';
+import { COOKING_WORD_UNITS, UNIT_TABLE, type Dimension } from 'src/generated/units_table';
 
 /**
  * The app's unit picker vocabulary.
@@ -36,7 +36,13 @@ import { UNIT_TABLE, type Dimension } from 'src/generated/units_table';
  * One deliberate exception, `includeValue`: a row that already holds an
  * off-system unit keeps it in its own dropdown. Recipes predate the setting
  * and an install can change its mind; silently blanking a saved `lb` because
- * the household went metric would be data loss dressed as a filter.
+ * the household went metric would be data loss dressed as a filter. The same
+ * goes for a saved word the table has no entry for (`loaf`, FU-786): it stays
+ * offered on its own row.
+ *
+ * `cookingWords` adds the parts and counted things recipes are written in
+ * (`clove`, `sprig`, `rasher`, from `units.py` `COOKING_WORD_UNITS`). Only the
+ * ingredient editor asks for them (FU-902).
  */
 export interface UnitOption {
     label: string;
@@ -49,6 +55,7 @@ export function useUnitOptions(
      *  pass the row's current value so an existing entry is never dropped out
      *  from under the user. Reactive: pass a getter, not a snapshot. */
     includeValue?: () => string | null | undefined,
+    options: { cookingWords?: boolean } = {},
 ) {
     const allowed = dimensions ? new Set<Dimension>(dimensions) : null;
     const { offeredUnits } = useMeasurementSystem();
@@ -70,6 +77,17 @@ export function useUnitOptions(
             if (!isOffered(def.canonical, def.dimension)) continue;
             seen.add(def.canonical);
             out.push({ label: def.canonical, value: def.canonical });
+        }
+        if (options.cookingWords && (!allowed || allowed.has('count'))) {
+            for (const word of COOKING_WORD_UNITS) {
+                if (seen.has(word)) continue;
+                seen.add(word);
+                out.push({ label: word, value: word });
+            }
+        }
+        const kept = includeValue?.()?.trim();
+        if (kept && !seen.has(kept) && !(kept.toLowerCase() in UNIT_TABLE)) {
+            out.push({ label: kept, value: kept });
         }
         out.sort((a, b) => a.label.localeCompare(b.label));
         return out;
@@ -101,7 +119,9 @@ export function useUnitOptions(
                     matches.add(def.canonical);
                 }
             }
-            unitOptions.value = allUnitOptions.value.filter((o) => matches.has(o.value));
+            unitOptions.value = allUnitOptions.value.filter(
+                (o) => matches.has(o.value) || o.value.toLowerCase().includes(q),
+            );
         });
     }
 

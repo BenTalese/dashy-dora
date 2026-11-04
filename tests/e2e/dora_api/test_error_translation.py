@@ -43,8 +43,8 @@ def test__validation_error__missing_required_field__uses_missing_code(api):
 
 def test__validation_error__extra_field__uses_extra_forbidden_code(api):
     response = requests.post(
-        "http://localhost:5170/api/stock-locations",
-        json={"name": "Cellar 99", "bogus": "junk"},
+        "http://localhost:5170/api/locations",
+        json={"name": "Cellar 99", "kind": "zone", "bogus": "junk"},
     )
 
     assert response.status_code == 400
@@ -67,17 +67,15 @@ def test__domain_error__business_rule_violation__shape_lifts_string_into_entry(a
     """``business_rule_violation`` takes a plain string; the helper lifts
     it into ``ErrorEntry(code="domain", raw=None)`` so the wire shape is
     uniform whether the error came from Pydantic or from us."""
-    # Trigger a duplicate-name BRV (the stock-location seed has "fridge").
+    # An area with no parent zone is a business-rule violation.
     response = requests.post(
-        "http://localhost:5170/api/stock-locations",
-        json={"name": "FRIDGE"},
+        "http://localhost:5170/api/locations",
+        json={"name": "Top shelf", "kind": "area"},
     )
 
     assert response.status_code == 422
     body = response.json()
-    assert body["errors"][""] == [
-        domain_err("A stock location with the name 'FRIDGE' already exists."),
-    ]
+    assert body["errors"][""] == [domain_err("An area needs a parent zone.")]
 
 
 def test__domain_error__entity_existence_failure__shape_lifts_string_into_entry(api):

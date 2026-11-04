@@ -24,6 +24,7 @@ from dora_api.infrastructure.api_response import ok
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
+from dora_api.features.shopping_lists._list_label import list_labeller
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -65,7 +66,8 @@ class GetMembershipHandler:
         active_lists: List[ShoppingList] = self.repository.get(ShoppingList).all(
             EntityField(ShoppingList, ShoppingList.Fields.STATUS).ne(SHOPPING_LIST_STATUS_DONE)
         )
-        outcome = resolve_quick_add_target(active_lists)
+        label = list_labeller(self.repository)
+        outcome = resolve_quick_add_target(active_lists, label)
         quick_add_target_id = outcome.target_list_id if outcome.kind == "single" else None
         active_ids = {l.id for l in active_lists}
 
@@ -103,7 +105,7 @@ class GetMembershipHandler:
                 shopping_list_id = l.id,
                 # The resolved label (custom name or date fallback) — this
                 # DTO exists to render pickers/toasts, never to edit names.
-                name = l.display_name,
+                name = label(l),
                 status = l.status,
             )
             for l in active_lists

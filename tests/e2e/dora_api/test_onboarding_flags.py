@@ -107,7 +107,7 @@ def test__onboarding_catalog__serialises_groups_locations_packs(api):
 
 def test__onboarding_seed_items__creates_prelocated_and_dedupes(api):
     groups = requests.get(f"{BASE}/stock-groups").json()
-    locations = requests.get(f"{BASE}/stock-locations").json()["items"]
+    locations = requests.get(f"{BASE}/locations").json()
     assert groups and locations, "seed DB has groups + locations to resolve against"
     group_name = groups[0]["name"]
     location_name = locations[0]["name"]
@@ -132,7 +132,7 @@ def test__onboarding_seed_items__creates_prelocated_and_dedupes(api):
     assert len(created) == 1
     item = created[0]
     assert item["stock_group_id"] == groups[0]["stock_group_id"]
-    assert item["stock_location_id"] == locations[0]["stock_location_id"]
+    assert item["stock_location_id"] == locations[0]["location_id"]
 
     # Re-running Finish must not duplicate: same name is skipped.
     second = finish_items(payload)

@@ -238,7 +238,7 @@ def test__build_reason__names_the_meals_and_the_first_date():
         recipe_names=["Fried Rice"], earliest_needed=date(2026, 9, 5),
     )
     assert reason.startswith("3 planned meals coming up need this: Fried Rice")
-    assert "First needed Sat 5 Sep" in reason
+    assert "First needed Sat, 5 Sept" in reason  # en-AU, as Intl prints it (FU-969)
 
 
 def test__build_reason__mentions_the_batch_allocation_when_there_is_one():
@@ -272,3 +272,12 @@ def test__build_reason__no_planned_meals__says_nothing():
     assert build_reason(
         planned_meals=0, covered_meals=0, recipe_names=[], earliest_needed=None,
     ) == ""
+
+
+def test__build_reason__dates_follow_the_household_locale():
+    # FU-969: the date was always English, day first.
+    reason = build_reason(
+        planned_meals=1, covered_meals=0, recipe_names=["Soup"],
+        earliest_needed=date(2026, 9, 5), locale="en-US",
+    )
+    assert "First needed Sat, Sep 5" in reason

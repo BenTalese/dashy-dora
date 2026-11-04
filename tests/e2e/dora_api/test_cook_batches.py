@@ -360,3 +360,35 @@ def test__batch_covered_by_the_pool__leftovers_are_not_waiting(api):
             assert e["cook_batch_pending"] is False
     finally:
         requests.patch(APP_SETTINGS, json={"batch_features_enabled": False})
+
+
+def test__meal_plan_template__keeps_batches_and_fresh_marks(api):
+    # FU-939: a template forgot which meals were one batch cook and which
+    # were cooked fresh.
+    today = _household_today()
+    monday = today + timedelta(days=14 - today.weekday())
+    slot = _slot_names()[0]
+    batched, fresh = _make_recipe("Template batch"), _make_recipe("Template fresh")
+    day = lambda offset, week=0: (monday + timedelta(days=offset + 7 * week)).isoformat()
+    source = requests.post(MEAL_PLANS, json={"start_date": monday.isoformat(), "entries": [
+        {"recipe_id": batched, "scheduled_for": day(0), "servings": 2, "slot": slot, "cook_key": "b"},
+        {"recipe_id": batched, "scheduled_for": day(1), "servings": 2, "slot": slot, "cook_key": "b"},
+        {"recipe_id": fresh, "scheduled_for": day(2), "servings": 2, "slot": slot, "cook_fresh": True},
+    ]})
+    assert source.status_code == 201, source.text
+
+    template = requests.post(f"{BASE}/meal-plan-templates", json={
+        "name": f"Batch template {uuid4().hex[:8]}",
+        "source_meal_plan_id": source.json()["meal_plan_id"],
+    })
+    assert template.status_code == 201, template.text
+    applied = requests.post(f"{MEAL_PLANS}/from-template", json={
+        "template_id": template.json()["meal_plan_template_id"],
+        "monday_of_week": day(0, week=1),
+    })
+    assert applied.status_code == 200, applied.text
+
+    entries = _by_id(applied.json()["meal_plan_id"])["entries"]
+    batch_ids = {e["cook_batch_id"] for e in entries if e["recipe_id"] == batched}
+    assert len(batch_ids) == 1 and None not in batch_ids
+    assert [e["cook_fresh"] for e in entries if e["recipe_id"] == fresh] == [True]
