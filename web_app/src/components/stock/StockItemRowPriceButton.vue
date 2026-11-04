@@ -41,6 +41,8 @@
 <script setup lang="ts">
     import BaseTooltip from 'src/components/BaseTooltip.vue';
     import { computed, ref } from 'vue';
+    import { useQuasar } from 'quasar';
+    import { isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import BaseDialog from 'src/components/BaseDialog.vue';
     import PriceEntry from 'src/components/dora/PriceEntry.vue';
     import RowActionButton from 'src/components/RowActionButton.vue';
@@ -59,6 +61,7 @@
         (e: 'logged'): void;
     }>();
 
+    const $q = useQuasar();
     const stockItemApi = new StockItemApiService();
     const storesStore = useStoresStore();
     const stockItemStore = useStockItemStore();
@@ -99,6 +102,17 @@
             stockItemStore.invalidatePriceFacts(props.stockItemId);
             emit('logged');
             dialogOpen.value = false;
+        } catch (err) {
+            // FU-976 — this used to let the rejection escape, so a 5xx showed
+            // the http client's toast *and* the global "oopsie". Caught now:
+            // one toast, and the dialog stays open with the typed values.
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: "Couldn't log the price.",
+                    caption: toastCaption(err),
+                });
+            }
         } finally {
             submitting.value = false;
         }

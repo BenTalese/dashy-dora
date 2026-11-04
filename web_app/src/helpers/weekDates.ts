@@ -4,6 +4,8 @@
 // `toISOString()` on a *local* Date, which is UTC-shifted and drifts a day in
 // positive-offset zones near midnight (the C-2.K bug class).
 
+import { shallowRef } from 'vue';
+
 /** Normalise any date/datetime string to a YYYY-MM-DD date string. */
 export function isoDate(value: string): string {
     return new Date(value).toISOString().slice(0, 10);
@@ -12,12 +14,15 @@ export function isoDate(value: string): string {
 // ── Household timezone (R-021) ────────────────────────────────────────────
 // The household's IANA zone, from `/api/health` `locale_policy.timezone`.
 // `useMoney` (the locale authority, which already reads `locale_policy`) pushes
-// it in here once the probe lands; this module stays Vue-free so the pure date
-// helpers keep running in a node test environment (`useDateFormat` subscribes
-// via `onHouseholdTimezoneChange` to make templates re-render). `null` = not
-// known (or an older backend, or not configured) ⇒ fall back to the device
-// clock, exactly as before.
-let householdTz: string | null = null;
+// it in here once the probe lands. `null` = not known (or an older backend, or
+// not configured) ⇒ fall back to the device clock, exactly as before.
+//
+// A `shallowRef` (FU-969 (7)): every helper below that reads it (`localTodayIso`,
+// `daysFromToday`, ...) becomes a reactive dependency of whatever computed or
+// render called it, so a "Today" painted before `/health` landed re-renders when
+// the zone arrives, without each component subscribing. Vue's reactivity core
+// is plain JS, so the helpers still run in a node test environment.
+const householdTz = shallowRef<string | null>(null);
 const tzListeners = new Set<() => void>();
 
 // `AppSetting.timezone` is NOT NULL with a server default of 'UTC', and
@@ -43,8 +48,8 @@ export function setHouseholdTimezone(tz: string | null | undefined): void {
             next = null;
         }
     }
-    if (next === householdTz) return;
-    householdTz = next;
+    if (next === householdTz.value) return;
+    householdTz.value = next;
     tzListeners.forEach((fn) => fn());
 }
 
@@ -57,7 +62,7 @@ export function onHouseholdTimezoneChange(fn: () => void): () => void {
 
 /** The household IANA timezone, or `null` when it isn't known. */
 export function householdTimezone(): string | null {
-    return householdTz;
+    return householdTz.value;
 }
 
 const zoneDayFormatters = new Map<string, Intl.DateTimeFormat>();
@@ -66,7 +71,7 @@ const zoneDayFormatters = new Map<string, Intl.DateTimeFormat>();
  *  household zone is unknown). 'en-CA' is used purely because its short date IS
  *  YYYY-MM-DD; it is a data shape here, never a display locale. */
 function calendarDayIso(instant: Date): string {
-    const tz = householdTz;
+    const tz = householdTz.value;
     if (tz) {
         let fmt = zoneDayFormatters.get(tz);
         if (!fmt) {

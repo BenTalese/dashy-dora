@@ -1,7 +1,7 @@
 <template>
     <!-- Help landing (2026-10-29 redesign, 20-D4): a search over every guide,
          one card per topic, the question-shaped guides as Common questions,
-         and two quiet doors to What's new and About. `/help?q=<title>` from
+         and a quiet door to About (What's new was removed 2026-11-04). `/help?q=<title>` from
          a (?) chip resolves straight to its guide. -->
     <HelpShell>
         <header class="help-hero">
@@ -67,14 +67,6 @@
             </section>
 
             <section class="help-doors">
-                <router-link to="/help/whats-new" class="help-door">
-                    <q-icon :name="ICONS.new_releases" size="22px" class="help-door__icon" />
-                    <span class="help-door__text">
-                        <span class="help-door__title">What's new</span>
-                        <span class="help-door__sub">Recent changes, newest first.</span>
-                    </span>
-                    <q-icon :name="ICONS.chevron_right" size="18px" class="help-door__chevron" />
-                </router-link>
                 <router-link to="/help/about" class="help-door">
                     <q-icon :name="ICONS.info" size="22px" class="help-door__icon" />
                     <span class="help-door__text">

@@ -46,6 +46,8 @@ import {
     onHouseholdTimezoneChange,
     setHouseholdTimezone,
 } from 'src/helpers/weekDates';
+import { formatQuantity } from 'src/helpers/formatQuantity';
+import { scaleQuantity } from 'src/helpers/scaleQuantity';
 
 const NBSP = ' ';
 
@@ -137,6 +139,22 @@ describe('formatNumber / formatFileSize / formatUnitPrice', () => {
 
     it('spaces a per-unit price the one way', () => {
         expect(formatUnitPrice(1.89, 'qt')).toBe('$1.89 / qt');
+    });
+});
+
+describe('quantities use the household decimal mark (FU-969 (2))', () => {
+    it('writes "1,5kg" under de-DE and "1.5kg" under en-AU, never grouped', () => {
+        withLocale('de-DE', () => {
+            expect(formatQuantity(1.5, 'kg')).toBe('1,5kg');
+            expect(formatQuantity(31.333333333333332, 'tbsp')).toBe('31,33 tbsp');
+            expect(formatQuantity(1500, 'g')).toBe('1500g');
+            expect(scaleQuantity(1, 2, 15.2, 'kg')).toBe('7,6');
+        });
+        withLocale('en-AU', () => {
+            expect(formatQuantity(1.5, 'kg')).toBe('1.5kg');
+            expect(formatQuantity(1500, 'g')).toBe('1500g');
+            expect(scaleQuantity(1, 2, 15.2, 'kg')).toBe('7.6');
+        });
     });
 });
 

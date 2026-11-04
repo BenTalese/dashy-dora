@@ -23,6 +23,8 @@ from flask import session
 from pydantic import BaseModel, ConfigDict, Field
 from dora_api.domain.entities.audit_event import SEVERITY_AUDIT, SEVERITY_WARN
 from dora_api.domain.entities.user import User
+from dora_api.features.app_settings.access import get_or_create_app_setting
+from dora_api.features.app_settings.clock import is_valid_timezone
 from dora_api.features.auth.register_user import AuthenticatedUserDto
 from dora_api.features.routers import AUTH_ROUTER
 from dora_api.infrastructure.api_response import gone, ok, too_many_requests, validation_failed
@@ -52,6 +54,23 @@ class BootstrapAdminRequest(BaseModel):
     # set, because there it is the credential the operator locked the
     # endpoint to (see below).
     email: str | None = Field(default=None, max_length=255)
+    # QA2-12 — the setup device's IANA zone. A fresh install's household
+    # timezone is UTC, and onboarding (which offers the device zone) can be
+    # skipped, leaving "today" a day out for most households. Setup is the one
+    # step every install passes through, so the zone is taken here. Optional:
+    # an older client or a script just leaves the install on UTC as before.
+    timezone: str | None = Field(default=None, max_length=64)
+
+
+def _apply_setup_timezone(repo: SqlAlchemyRepository, tz_name: str | None) -> None:
+    """Start the household on the setup device's timezone, unless someone has
+    already set one (anything but the UTC default) or it isn't a real zone."""
+    tz_name = (tz_name or "").strip()
+    if not tz_name or not is_valid_timezone(tz_name):
+        return
+    setting = get_or_create_app_setting(repo)
+    if setting.timezone == "UTC":
+        setting.timezone = tz_name
 
 
 def _gone(detail: str):
@@ -150,6 +169,7 @@ def bootstrap_admin():
         password_changed_at=now,
     )
     repo.add(new_user)
+    _apply_setup_timezone(repo, request_body.timezone)
     repo.save_changes()
 
     # Auto-login the new admin so they don't have to bounce through /login

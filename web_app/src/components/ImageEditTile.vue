@@ -171,7 +171,7 @@
         opacity: 1;
     }
     .image-edit-tile:focus-visible {
-        box-shadow: 0 0 0 3px var(--focus-ring, var(--brand-primary));
+        box-shadow: 0 0 0 3px var(--focus-ring);
     }
     .image-edit-tile__input { display: none; }
 </style>

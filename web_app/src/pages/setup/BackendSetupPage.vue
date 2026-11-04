@@ -136,6 +136,6 @@
         background: var(--surface-sunken);
         padding: 1px 4px;
         border-radius: 3px;
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-family: var(--font-mono);
     }
 </style>

@@ -723,13 +723,17 @@ class ImportTemplate:
 # a user opening the CSV in Excel/Numbers can read *why* the example row's
 # level/location/group names may not match their install (the seeded
 # StockLevel / StockLocation / StockGroup rows are user-editable, so the
-# defaults "In stock" / "Pantry" / "Grains" are illustrative, not truth).
+# defaults "Stocked" / "Pantry" / "Pantry" are illustrative, not truth;
+# FU-977 (4): they are the names a fresh install starts with (the level from
+# the migrations, the location and group from onboarding's
+# `default_locations.json` / `default_stock_groups.json`), so a re-upload of
+# the untouched template matches).
 # The parser (`_read_sheets` → `_strip_comment_rows`) skips any row whose
 # first cell begins with `#`, so this row round-trips harmlessly if the
 # user re-uploads the same file without deleting it.
 _COMMENT_ROW_STOCK_ITEMS: tuple[str, ...] = (
-    "# example values are illustrative — replace them, "
-    "and use your own level/location/group names (see Settings → Kitchen setup).",
+    "# Example values are placeholders. Replace them, and use your own level, "
+    "location and group names (see Settings > Kitchen setup).",
 )
 
 
@@ -751,9 +755,9 @@ IMPORT_TEMPLATES: tuple[ImportTemplate, ...] = (
         # misalign the example row.
         example={
             "name": "Rice",
-            "level": "In stock",
+            "level": "Stocked",
             "location": "Pantry",
-            "group": "Grains",
+            "group": "Pantry",
             "expiry": "2027-01-01",
             "is_essential": "no",
         },

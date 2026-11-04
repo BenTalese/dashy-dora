@@ -60,7 +60,6 @@ describe('detectIntent — intent routing corpus', () => {
 
         // navigation / meta
         ['what can i do on this page', 'page_help'],
-        ["what's new", 'whats_new'],
         ['what version are you', 'version'],
         ['where is my flour', 'where_is'],
 

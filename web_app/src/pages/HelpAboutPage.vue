@@ -54,7 +54,6 @@
                     target="_blank"
                 />
                 <BaseButton variant="subtle" :icon="ICONS.smart_toy" label="Meet Dora" to="/help/dora" />
-                <BaseButton variant="subtle" :icon="ICONS.new_releases" label="What's new" to="/help/whats-new" />
             </div>
         </section>
     </HelpShell>

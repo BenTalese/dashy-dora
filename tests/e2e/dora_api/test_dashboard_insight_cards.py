@@ -330,4 +330,26 @@ def test__restock_radar__ItemWithoutLevel__IsSkippedNot500(api):
     assert orphan["stock_item_id"] not in {r["stock_item_id"] for r in resp.json()["rows"]}
 
 
+def test__restock_radar__ItemAlreadyOnAnActiveList__DropsOut(api):
+    """FU-897 (owner: hide them) — the rule the retired *Before you shop* card
+    was built on, carried across. The bell and the stock page keep saying
+    "you're out of flour" after it is on Saturday's list; this card is the
+    surface that knows the difference. A freshly levelled item is the most
+    recent band change, so it is in the top-6 slice before the add."""
+    item = _make_item(stock_level_id=_stock_level_id(2))
+    before = requests.get(RESTOCK_RADAR).json()["rows"]
+    assert item["stock_item_id"] in {r["stock_item_id"] for r in before}
+
+    lst = requests.post(SHOPPING_LISTS, json={"name": f"Radar List {uuid4().hex[:8]}"})
+    assert lst.status_code == 201, lst.text
+    line = requests.post(
+        f"{SHOPPING_LISTS}/{lst.json()['shopping_list_id']}/lines",
+        json={"stock_item_id": item["stock_item_id"]},
+    )
+    assert line.status_code in (200, 201), line.text
+
+    after = requests.get(RESTOCK_RADAR).json()["rows"]
+    assert item["stock_item_id"] not in {r["stock_item_id"] for r in after}
+
+
 #endregion restock radar

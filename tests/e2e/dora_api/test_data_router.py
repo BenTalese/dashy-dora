@@ -508,6 +508,44 @@ def test__restore_backup__upload_id_consumed_on_use(api):
     assert second.status_code == 404
 
 
+def test__restore_backup__staged_file_removed_after_inspect_then_restore(api):
+    # FU-977 (2): the SPA always inspects before restoring; the .bin must not
+    # outlive the successful restore.
+    from dora_api.features.data.uploads import staged_path
+
+    _, backup = _create_backup()
+    upload_id = _upload_via_chunks(backup)
+    inspect = requests.post(
+        "http://localhost:5170/api/data/backup/inspect", json={"upload_id": upload_id},
+    )
+    assert inspect.status_code == 200, inspect.text
+    restore = requests.post(
+        RESTORE_URL,
+        json={"upload_id": upload_id, "selection": {}, "mode": "all_skip_duplicates"},
+    )
+    assert restore.status_code == 200, restore.text
+    assert not staged_path(upload_id).exists()
+
+
+def test__restore_backup__refused_restore_keeps_staged_file_for_retry(api):
+    from dora_api.features.data.uploads import staged_path
+
+    _, backup = _create_backup()
+    upload_id = _upload_via_chunks(backup)
+    refused = requests.post(
+        RESTORE_URL,
+        json={"upload_id": upload_id, "selection": {}, "mode": "no_such_mode"},
+    )
+    assert refused.status_code == 400, refused.text
+    assert staged_path(upload_id).exists()
+    retry = requests.post(
+        RESTORE_URL,
+        json={"upload_id": upload_id, "selection": {}, "mode": "all_skip_duplicates"},
+    )
+    assert retry.status_code == 200, retry.text
+    assert not staged_path(upload_id).exists()
+
+
 def test__restore_backup__rejects_both_inputs(api):
     response = requests.post(
         RESTORE_URL,
@@ -727,7 +765,7 @@ def test__import_template__example_cells_line_up_with_headers(api):
     target field can no longer silently misalign example cells under the
     wrong headers. Contract: for the shipping stock_items template each
     non-empty example cell reads sensibly for its column (Rice under
-    `name`, `In stock` under `level`, etc.)."""
+    `name`, `Stocked` under `level`, etc.)."""
     import csv as _csv
     response = requests.get(
         "http://localhost:5170/api/data/import/templates/stock_items.csv"
@@ -751,9 +789,30 @@ def test__import_template__example_cells_line_up_with_headers(api):
     # surface here (e.g. `expiry`'s example date landing under
     # `is_essential`) instead of shipping to users.
     assert zipped.get("name") == "Rice", f"name column got {zipped!r}"
-    assert zipped.get("level") == "In stock", f"level column got {zipped!r}"
+    assert zipped.get("level") == "Stocked", f"level column got {zipped!r}"
     assert zipped.get("location") == "Pantry", f"location column got {zipped!r}"
-    assert zipped.get("group") == "Grains", f"group column got {zipped!r}"
+    assert zipped.get("group") == "Pantry", f"group column got {zipped!r}"
+    # FU-977 (4): the example names are the ones a real fresh install starts
+    # with: the level from the migrations (seeded here too), the location and
+    # group from onboarding's defaults. Not the dev seed's, which a production
+    # install never has.
+    import json as _json
+    from pathlib import Path as _Path
+    from dora_api.app import app as _app, db as _db
+    from sqlalchemy import text as _text
+    with _app.app_context():
+        levels = {r[0] for r in _db.session.execute(_text('SELECT name FROM "StockLevel"'))}
+    onboarding = _Path(__file__).resolve().parents[3] / "dora_api" / "features" / "onboarding"
+    groups = {g["name"] for g in _json.loads((onboarding / "default_stock_groups.json").read_text(encoding="utf-8"))}
+
+    def _names(nodes):
+        for n in nodes:
+            yield n["name"]
+            yield from _names(n.get("children", []))
+    locations = set(_names(_json.loads((onboarding / "default_locations.json").read_text(encoding="utf-8"))))
+    assert zipped["level"] in levels, levels
+    assert zipped["group"] in groups, groups
+    assert zipped["location"] in locations, locations
     assert zipped.get("expiry") == "2027-01-01", f"expiry column got {zipped!r}"
     assert zipped.get("is_essential") == "no", f"is_essential column got {zipped!r}"
 

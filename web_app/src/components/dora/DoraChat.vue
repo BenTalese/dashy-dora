@@ -1481,8 +1481,9 @@
         font-weight: 700;
         color: var(--accent-ink);
     }
+    /* Icon-only buttons: a graphic, so the 3:1 mark tier (FU-850). */
     .dora-accent-btn {
-        color: var(--accent-ink);
+        color: var(--accent-mark);
     }
     /* Inline blinking caret shown only while a dora message is mid-reveal.
        Visual hint that more text is coming, paired with the talking face. */

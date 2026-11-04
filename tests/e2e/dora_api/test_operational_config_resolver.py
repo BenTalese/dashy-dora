@@ -45,7 +45,6 @@ _INT_RESETS = {
 }
 _BOOL_RESETS = {
     "smtp_use_tls": True,
-    "email_enabled": False,
 }
 
 
@@ -128,14 +127,13 @@ def test__resolver__audit_retention_days__projects_row():
 
 # ── Bool fields: row is authoritative (NOT NULL column) ─────────────────
 
-def test__resolver__email_enabled__projects_row():
+def test__app_settings__email_enabled_is_gone():
+    # FU-906: the install-wide "email enabled" switch gated nothing (mail
+    # sends whenever an SMTP username is set), so it was deleted. A PATCH that
+    # still names it is refused rather than silently accepted.
+    assert "email_enabled" not in requests.get(APP_SETTINGS).json()
     resp = requests.patch(APP_SETTINGS, json={"email_enabled": True})
-    assert resp.status_code == 200, resp.text
-    assert _resolved().email_enabled is True
-
-    resp = requests.patch(APP_SETTINGS, json={"email_enabled": False})
-    assert resp.status_code == 200, resp.text
-    assert _resolved().email_enabled is False
+    assert 400 <= resp.status_code < 500, resp.text
 
 
 def test__resolver__smtp_use_tls__projects_row():

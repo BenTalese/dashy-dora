@@ -116,7 +116,7 @@
     import { useStockLevelStore } from 'src/stores/stockLevelStore';
     import { useStoresStore } from 'src/stores/storesStore';
     import { useQuasar } from 'quasar';
-    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+    import { isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { computed, ref, watch } from 'vue';
 
     const stockItemApi = new StockItemApiService();
@@ -227,11 +227,15 @@
             });
             closeLogPrice();
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: "Couldn't log the price.",
-                caption: toastCaption(err),
-            });
+            // FU-976 — a 5xx already got the http client's toast; a second one
+            // here was the "two toasts for one failure" from walk D.
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: "Couldn't log the price.",
+                    caption: toastCaption(err),
+                });
+            }
         } finally {
             submitting.value = false;
         }

@@ -7,7 +7,7 @@
             <template #title>Theme mode</template>
 
             <div class="appearance-choice">
-                <DoraSegmented
+                <BaseSegmented
                     :model-value="modeDraft"
                     :options="modeOptions"
                     @update:model-value="onModeChange"
@@ -57,7 +57,7 @@
             <template #title>Font family</template>
 
             <div class="appearance-choice">
-                <DoraSegmented
+                <BaseSegmented
                     :model-value="fontFamilyDraft"
                     :options="fontFamilyOptions"
                     @update:model-value="onFontFamilyChange"
@@ -71,7 +71,7 @@
             <template #title>Text size</template>
 
             <div class="appearance-choice">
-                <DoraSegmented
+                <BaseSegmented
                     :model-value="fontSizeDraft"
                     :options="fontSizeOptions"
                     @update:model-value="onFontSizeChange"
@@ -115,7 +115,7 @@
     import { useSettingsSave } from 'src/composables/useSettingsSave';
     import SettingsSection from 'src/components/settings/SettingsSection.vue';
     import SettingsPageHeader from 'src/components/settings/SettingsPageHeader.vue';
-    import DoraSegmented, { type DoraSegmentedOption } from 'src/components/settings/DoraSegmented.vue';
+    import BaseSegmented, { type BaseSegmentedOption } from 'src/components/BaseSegmented.vue';
 
     const authStore = useAuthStore();
     const { currentUser } = storeToRefs(authStore);
@@ -123,7 +123,7 @@
     const themeFamilies = THEME_FAMILIES;
     type ThemeMode = 'system' | 'light' | 'dark';
 
-    const modeOptions: DoraSegmentedOption<ThemeMode>[] = [
+    const modeOptions: BaseSegmentedOption<ThemeMode>[] = [
         { label: 'System', value: 'system', icon: ICONS.brightness_auto },
         { label: 'Light', value: 'light', icon: ICONS.light_mode },
         { label: 'Dark', value: 'dark', icon: ICONS.dark_mode },
@@ -135,9 +135,9 @@
     // default. Options + the `coalesceFontFamily` fold are the shared
     // FU-614 source in themeService (R-003). The compact segmented control
     // shortens "Plus Jakarta Sans" to "Plus Jakarta" via the label override.
-    const fontFamilyOptions: DoraSegmentedOption<FontFamilyPreference>[] =
+    const fontFamilyOptions: BaseSegmentedOption<FontFamilyPreference>[] =
         buildFontFamilyOptions({ plus_jakarta_sans: 'Plus Jakarta' });
-    const fontSizeOptions: DoraSegmentedOption<FontSizePreference>[] = [
+    const fontSizeOptions: BaseSegmentedOption<FontSizePreference>[] = [
         { label: 'Small', value: 'sm' },
         { label: 'Medium', value: 'md' },
         { label: 'Large', value: 'lg' },

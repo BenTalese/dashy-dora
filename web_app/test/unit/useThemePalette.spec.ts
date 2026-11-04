@@ -17,6 +17,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { computed } from 'vue';
 import {
+    categoricalColour,
+    categoricalColours,
     notifyThemeChanged,
     paletteToken,
     paletteTokens,
@@ -105,5 +107,33 @@ describe('reactivity — the whole point of the composable', () => {
         setToken('--chart-1', 'c');
         notifyThemeChanged();
         expect(series.value).toEqual(['c', 'b']);
+    });
+});
+
+describe('categoricalColours — one chart, no shared hues (FU-976)', () => {
+    beforeEach(() => {
+        document.documentElement.style.cssText = '';
+    });
+
+    it('gives "Pantry staples" and "Fruit & Veg" different colours', () => {
+        // They collide under the bare per-key hash; that is the walk-D bug.
+        const colours = categoricalColours(['Pantry staples', 'Fruit & Veg']);
+        expect(colours.get('Pantry staples')).not.toBe(colours.get('Fruit & Veg'));
+    });
+
+    it('never repeats a colour while the ramp has room', () => {
+        const keys = ['Dairy', 'Meat', 'Pantry staples', 'Fruit & Veg', 'Frozen', 'Bakery'];
+        const colours = categoricalColours(keys);
+        expect(new Set(colours.values()).size).toBe(keys.length);
+    });
+
+    it('depends on the set, not the order the rows arrive in', () => {
+        const a = categoricalColours(['Dairy', 'Pantry staples', 'Fruit & Veg']);
+        const b = categoricalColours(['Fruit & Veg', 'Dairy', 'Pantry staples']);
+        expect([...b.entries()].sort()).toEqual([...a.entries()].sort());
+    });
+
+    it('keeps a lone key on its own hashed hue', () => {
+        expect(categoricalColours(['Dairy']).get('Dairy')).toBe(categoricalColour('Dairy'));
     });
 });

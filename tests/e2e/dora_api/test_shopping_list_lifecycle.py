@@ -118,6 +118,32 @@ def test__bulk_add__OnDoneList__IsRefusedForTheWholeList(api):
     assert _detail(list_id)["lines"] == []
 
 
+def test__assistant_add__OnDoneList__IsTheListLevelRefusal(api):
+    # FU-969 (4): the assistant's add paths give the same list-level answer
+    # as bulk-add instead of counting every item as "couldn't be added".
+    from dora_api.features.shopping_lists.manage_shopping_list_lines import LIST_DONE_REFUSAL
+
+    list_id = _finished_list()
+    item_id = _new_stock_item()
+
+    act = requests.post(f"{BASE}/assistant/act", json={
+        "shopping_list_id": list_id, "items": [{"stock_item_id": item_id, "quantity": 1}],
+    })
+    assert_problem(act, 422, title="Business rule violation.")
+    assert LIST_DONE_REFUSAL in act.text
+
+    confirm = requests.post(f"{BASE}/assistant/confirm", json={
+        "type": "add_recipe_to_list",
+        "payload": {
+            "shopping_list_id": list_id, "list_name": "Done list", "recipe_name": "Toast",
+            "stock_item_ids": [item_id], "ingredient_names": ["Bread"],
+        },
+    })
+    assert confirm.status_code == 200, confirm.text
+    assert confirm.json() == {"ok": False, "answer": LIST_DONE_REFUSAL}
+    assert _detail(list_id)["lines"] == []
+
+
 def test__quick_add__HintAtDoneList__Returns422(api):
     list_id = _finished_list()
 

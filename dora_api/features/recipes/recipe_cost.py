@@ -41,6 +41,7 @@ from dataclasses import dataclass
 from typing import Iterable
 
 from dora_api.domain import units
+from dora_api.domain.entities.shopping_list import ShoppingListLine
 from dora_api.domain.entities.stock_item_price_observation import \
     StockItemPriceObservation
 from dora_api.domain.stock_status import \
@@ -85,10 +86,17 @@ class UnitPrice:
     can answer each. It is `None` when the pack is measured rather than
     counted, because then nothing in the data says how many items are in it —
     that is a gap we report, not one we fill in.
+
+    `whole_pack_amount` is the shelf price of the **whole pack** — what a
+    recipe line of "1 pack" means. It is not `pack_amount`: "1 pack" of a
+    12-egg carton at $6.00 is $6.00, and pricing it from the per-item half
+    billed $0.50 (QA2-18). `None` when the price source can't say what one
+    pack cost (a measured observation, which may span several packs).
     """
     amount: float
     unit: str
     pack_amount: float | None = None
+    whole_pack_amount: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -202,6 +210,7 @@ def _unit_price_map(repository, stock_item_ids: list) -> tuple[dict, dict]:
             amount, unit = float(price), "ea"
         unit_price = UnitPrice(
             amount, unit, _item_price(float(price), size_value, size_unit, pack_count),
+            whole_pack_amount=float(price),     # an offer is always per pack
         )
         prev = offer_by_item.get(uuid_key(sid))
         if prev is None or _cheaper(unit_price, prev):
@@ -214,6 +223,23 @@ def _unit_price_map(repository, stock_item_ids: list) -> tuple[dict, dict]:
         EntityField(StockItemPriceObservation, "stock_item_id").in_(stock_item_ids)
     ):
         obs_by_item.setdefault(uuid_key(obs.stock_item_id), []).append(obs)
+    # QA2-18: a counted purchase made on a shopping list knows how many packs
+    # it was ("1 carton of 12 eggs, $6"), so its whole-pack price is the line
+    # total over the line's quantity. One query for every item's latest line.
+    latest_obs = [
+        max((o for o in obs_list if o.total_measure), key=lambda o: o.observed_at,
+            default=None)
+        for obs_list in obs_by_item.values()
+    ]
+    line_ids = [o.shopping_list_line_id for o in latest_obs
+                if o is not None and o.shopping_list_line_id]
+    line_qty: dict[str, int] = {
+        uuid_key(line.id): line.quantity
+        for line in repository.get(ShoppingListLine).all(
+            EntityField(ShoppingListLine, "id").in_(line_ids))
+        if line.quantity
+    } if line_ids else {}
+
     obs_cost_by_item: dict[str, UnitPrice] = {}
     for sid_key, obs_list in obs_by_item.items():
         cost = get_stock_item_unit_cost_with_unit_at(obs_list)
@@ -226,10 +252,19 @@ def _unit_price_map(repository, stock_item_ids: list) -> tuple[dict, dict]:
         found = units.find_unit(cost.unit)
         # `/ factor` for the same reason `_item_price` divides: "$60 per dozen"
         # is a per-item price of $5, not $60.
-        pack = (cost.amount / found.factor
-                if found is not None and found.dimension == units.COUNT
-                else cost.item_price)
-        obs_cost_by_item[sid_key] = UnitPrice(cost.amount, cost.unit, pack)
+        counted = found is not None and found.dimension == units.COUNT
+        pack = cost.amount / found.factor if counted else cost.item_price
+        # The whole pack: what the multipack cost when its count was recorded;
+        # otherwise a count observation's shelf item is the pack (the same
+        # reading `pack` takes of "$9 for 3 punnets"), and a measured one
+        # without a count says nothing about one pack.
+        whole = cost.pack_price
+        if whole is None and counted:
+            latest = max((o for o in obs_list if o.total_measure),
+                         key=lambda o: o.observed_at)
+            qty = line_qty.get(uuid_key(latest.shopping_list_line_id))                 if latest.shopping_list_line_id else None
+            whole = latest.total_price / qty if qty else cost.amount
+        obs_cost_by_item[sid_key] = UnitPrice(cost.amount, cost.unit, pack, whole)
 
     return offer_by_item, obs_cost_by_item
 
@@ -346,6 +381,12 @@ def _price_line(
         if converted is not None:
             return converted * price.amount, None
         return None, _measured_gap(ing_def, price)
+
+    # "1 pack" is the whole pack, not one item from it (QA2-18): a 12-egg
+    # carton at $6.00 is $6.00 a pack and $0.50 an egg.
+    if (ing_def is not None and ing_def.canonical == units.WHOLE_PACK_UNIT
+            and price.whole_pack_amount is not None):
+        return qty * price.whole_pack_amount, None
 
     # Counted (no unit, an unrecognised unit, or an explicit count unit).
     if ing_def is not None and ing_def.dimension == units.COUNT:

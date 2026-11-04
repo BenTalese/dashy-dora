@@ -18,7 +18,13 @@
         @update:model-value="(v) => emit('update:modelValue', v)"
         @hide="onHide"
     >
-        <q-card class="dora-dialog" :class="cardClass" :style="cardStyle">
+        <q-card
+            ref="cardRef"
+            class="dora-dialog"
+            :class="cardClass"
+            :style="cardStyle"
+            @keydown.tab="wrapFocus"
+        >
             <!-- Standard header: title on the left, optional close on the right -->
             <template v-if="title || $slots.header">
                 <q-card-section class="dora-dialog__header row items-center no-wrap">
@@ -48,6 +54,8 @@
 </template>
 
 <script setup lang="ts">
+    import { ref } from 'vue';
+    import type { QCard } from 'quasar';
     import { ICONS } from 'src/style/icons';
     import BaseButton from 'src/components/BaseButton.vue';
 
@@ -86,6 +94,40 @@
 
     function onHide() {
         emit('cancel');
+    }
+
+    // ── Focus trap (FU-976) ─────────────────────────────────────────────
+    // QDialog pulls focus back when it lands *elsewhere in the page*, but its
+    // portal is the last thing in <body>: Tab past the last control (the
+    // waste dialog's last tile, in walk D) leaves the document for the
+    // browser's own chrome, where no focus event can catch it. So Tab on the
+    // last tabbable element wraps to the first, and Shift+Tab on the first
+    // wraps to the last — every dialog built on this shell gets it.
+    const cardRef = ref<QCard | null>(null);
+    const TABBABLE =
+        'a[href], button, input:not([type="hidden"]), select, textarea, [tabindex]';
+
+    function wrapFocus(e: KeyboardEvent) {
+        const root = cardRef.value?.$el as HTMLElement | undefined;
+        if (!root) return;
+        const items = Array.from(root.querySelectorAll<HTMLElement>(TABBABLE)).filter(
+            (el) =>
+                el.tabIndex >= 0 &&
+                !el.hasAttribute('disabled') &&
+                // Rendered — a `v-show`-hidden control can't take focus.
+                el.getClientRects().length > 0,
+        );
+        const first = items[0];
+        const last = items[items.length - 1];
+        if (!first || !last) return;
+        const active = document.activeElement;
+        if (e.shiftKey && active === first) {
+            e.preventDefault();
+            last.focus();
+        } else if (!e.shiftKey && active === last) {
+            e.preventDefault();
+            first.focus();
+        }
     }
 </script>
 

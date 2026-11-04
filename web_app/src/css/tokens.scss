@@ -158,11 +158,18 @@
     --border-default: hsl(168 18% 84%);
     --border-strong: hsl(168 18% 72%);
     --divider: hsl(168 14% 86%);
-    --focus-ring: var(--brand-primary);
-    /* Halo derived from the theme's brand at :root, so every theme follows it
-       automatically. Was a Pesto-green literal that 5 of 14 theme blocks
-       overrode and the other 9 inherited (13-R40 / finalisation 20-R8). */
-    --ring-focus: color-mix(in srgb, var(--brand-primary) 35%, transparent);
+    /* The one focus-indicator token (FU-941, 2026-11-04). The primary as
+       *ink*, not as a fill: a focus outline is a non-text mark owed D-002's
+       3:1 against the ground it sits on, and --brand-primary is tuned as a
+       fill — in Lemon Tart and Sourdough light it measured 1.35-2.34:1 on the
+       surface ladder. --primary-ink clears 3:1 (4.5+) on every surface in
+       every theme, and themes whose primary already reads as ink point it
+       straight back at --brand-primary, so nothing else moves.
+       There used to be a second token, --ring-focus (a 35-45 % wash of the
+       primary), documented as a soft-halo tier — but all eight of its uses
+       painted it as a 2px *outline*, where the wash measured well under 3:1.
+       One model now: `outline: 2px solid var(--focus-ring)`. */
+    --focus-ring: var(--primary-ink);
 
     /* ────────────────────────────── Overlays ─────────────────────── */
     --overlay-scrim: hsla(168, 30%, 10%, 0.55);
@@ -283,12 +290,11 @@
      * hand-painted `flat` variant in the stock filter panel, and the
      * settings pages' soft sunken fill).
      *
-     * The tokens live here rather than in either component because there
-     * are still **two** implementations — `BaseSegmented` (a q-btn-toggle
-     * wrapper) and `settings/DoraSegmented` (a hand-rolled radiogroup) —
-     * and D-015 wants one anatomy even where there is more than one
-     * mechanism. Change the shape here and both move together. Merging the
-     * two components is FU-848.
+     * Drawn by one component, `BaseSegmented` (a radiogroup). There used
+     * to be two — a q-btn-toggle wrapper and `settings/DoraSegmented` —
+     * which is why the values live here as tokens; the two were merged by
+     * FU-848 (2026-11-04). `--seg-active-ink` on `--seg-active-bg` is
+     * measured ≥4.5:1 in every theme — re-measure if either changes.
      */
     --seg-track-bg: var(--surface-sunken);
     --seg-track-border: var(--border-default);
@@ -312,6 +318,12 @@
     --font-size-xl: 1.25rem;
     --font-size-2xl: 1.5rem;
     --font-size-3xl: 1.875rem;
+
+    /* ────────────────────────────── Font families ────────────────── */
+    /* Body type is Nunito, set once on `body` (A2) — never re-declared. The
+       monospace stack is for machine strings a user copies or compares: API
+       keys, audit-log ids, version hashes, backend URLs. */
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
     /* ────────────────────────────── Elevation ────────────────────── */
     --elevation-1: 0 1px 2px hsla(0, 0%, 0%, 0.06);
@@ -339,6 +351,7 @@
     --seg-ink-hover: var(--accent-ink);
     --seg-active-bg: var(--brand-primary);
     --seg-active-ink: var(--text-on-primary);
+    --focus-ring: var(--primary-ink);
     --lifecycle-cleared: var(--text-muted);
     --neutral-muted: var(--text-muted);
 }

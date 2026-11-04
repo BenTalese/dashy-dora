@@ -32,8 +32,8 @@
                     autofocus
                 />
 
-                <q-select
-                    outlined
+                <BaseSelect
+                    :dense="false"
                     label="Cuisine"
                     v-model="form.cuisine_id"
                     :options="cuisineOptions"
@@ -42,8 +42,8 @@
                     clearable
                 />
 
-                <q-select
-                    outlined
+                <BaseSelect
+                    :dense="false"
                     label="Category"
                     v-model="form.category_id"
                     :options="categoryOptions"
@@ -52,8 +52,8 @@
                     clearable
                 />
 
-                <q-select
-                    outlined
+                <BaseSelect
+                    :dense="false"
                     label="Collection"
                     v-model="form.recipe_collection_id"
                     :options="collectionOptions"
@@ -78,6 +78,7 @@
 <script lang="ts" setup>
     import { storeToRefs } from 'pinia';
     import BaseButton from 'src/components/BaseButton.vue';
+    import BaseSelect from 'src/components/BaseSelect.vue';
     import BaseDialog from 'src/components/BaseDialog.vue';
     import FormErrorSummary from 'src/components/FormErrorSummary.vue';
     import type { Recipe } from 'src/models/recipe';

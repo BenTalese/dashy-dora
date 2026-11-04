@@ -163,8 +163,18 @@
 
     // Only offer the comparison when this meal's own figure can be compared —
     // "lighter than an estimate we don't trust" isn't an answer.
+    //
+    // FU-976 — and not on one day of a cook batch: the server answers that with
+    // an empty list every time (`compute_lighter_alternatives`, FU-956 — one day
+    // of a batch can't take a different recipe), so the item was a dead end.
+    // R-003: this reads the server's own `cook_batch_id` fact and mirrors that
+    // refusal rather than deciding anything new; no `can_go_lighter` flag
+    // exists on the entry DTO to read instead.
     const canGoLighter = computed(
-        () => props.entry.kcal_per_serving !== null && props.entry.kcal_is_reliable,
+        () =>
+            props.entry.kcal_per_serving !== null
+            && props.entry.kcal_is_reliable
+            && !props.entry.cook_batch_id,
     );
 
     // PROPOSAL_MEAL_PLANS_PART_2 — a linked cook batch (one cook, several days),

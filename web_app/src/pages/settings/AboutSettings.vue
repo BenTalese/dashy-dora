@@ -531,6 +531,6 @@
     }
 
     .text-mono {
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-family: var(--font-mono);
     }
 </style>

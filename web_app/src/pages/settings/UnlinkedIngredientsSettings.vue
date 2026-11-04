@@ -46,20 +46,18 @@
                         </span>
                     </div>
                     <div class="settings-card__row-aux unlinked-row__aux">
-                        <q-select
+                        <BaseSelect
                             v-model="picks[group.raw_text]"
                             :options="stockItemOptions(group.raw_text)"
                             emit-value
                             map-options
-                            outlined
-                            dense
                             use-input
                             fill-input
                             hide-selected
                             input-debounce="80"
                             label="Link to stock item"
                             class="unlinked-row__picker"
-                            @filter="(value, update) => onFilter(group.raw_text, value, update)"
+                            @filter="(value: string, update: FilterUpdate) => onFilter(group.raw_text, value, update)"
                         >
                             <template #no-option>
                                 <q-item>
@@ -68,7 +66,7 @@
                                     </q-item-section>
                                 </q-item>
                             </template>
-                        </q-select>
+                        </BaseSelect>
                         <BaseButton
                             variant="primary"
                             :label="linkingKey === group.raw_text ? 'Linking…' : 'Link'"
@@ -123,6 +121,7 @@
     import { computed, onMounted, reactive, ref, watch } from 'vue';
     import { useQuasar } from 'quasar';
     import BaseButton from 'src/components/BaseButton.vue';
+    import BaseSelect from 'src/components/BaseSelect.vue';
     import CreateStockItemDialog from 'src/components/stock/CreateStockItemDialog.vue';
     import type { CreateStockItemPrefill } from 'src/components/stock/createStockItemPrefill';
     import SettingsPageHeader from 'src/components/settings/SettingsPageHeader.vue';
@@ -171,10 +170,11 @@
         }));
     }
 
+    type FilterUpdate = (cb: () => void) => void;
     function onFilter(
         rawText: string,
         value: string,
-        update: (cb: () => void) => void,
+        update: FilterUpdate,
     ) {
         // Quasar's use-input picker hands us (value, update) — value is
         // the current text, update is a commit callback so the filtered

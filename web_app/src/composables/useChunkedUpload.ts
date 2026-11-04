@@ -9,8 +9,13 @@
  * they were raw `fetch`es with their own CSRF header and error reader);
  * `inFlight` / `lastUploadId` were dropped — neither page read them
  * (18-R17).
+ *
+ * The composable remembers the last id it staged: picking a second file aborts
+ * the first, and leaving the page aborts whatever is still staged, so the
+ * server's upload area doesn't keep one .bin per abandoned pick (FU-977 (2)).
+ * A staged file the server already consumed just 204s on that abort.
  */
-import { ref } from 'vue';
+import { getCurrentScope, onScopeDispose, ref } from 'vue';
 import UploadsApiService from 'src/services/api/uploadsApiService';
 import { NormalisedApiError } from 'src/services/api/axiosHttpClient';
 
@@ -29,13 +34,17 @@ const uploads = new UploadsApiService();
 export function useChunkedUpload() {
     // 0..1 inclusive. Stays at 0 until the first chunk lands.
     const progress = ref(0);
+    // The id this composable staged last and hasn't aborted yet.
+    let staged: string | null = null;
 
     async function upload(file: File, options: ChunkedUploadOptions = {}): Promise<string> {
         const chunkSize = options.chunkSize ?? DEFAULT_CHUNK_BYTES;
         const maxAttempts = options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
 
         progress.value = 0;
+        if (staged) void abort(staged);
         const started = await uploads.startAsync(file.size);
+        staged = started.upload_id;
         // The server can dictate a larger chunk size than the caller
         // suggested; honour whichever is larger to avoid extra round-trips.
         const effectiveChunkSize = Math.max(started.chunk_size, chunkSize);
@@ -58,6 +67,7 @@ export function useChunkedUpload() {
      *  204 either way). */
     async function abort(uploadId: string | null): Promise<void> {
         if (!uploadId) return;
+        if (uploadId === staged) staged = null;
         try {
             await uploads.abortAsync(uploadId);
         } catch {
@@ -67,6 +77,12 @@ export function useChunkedUpload() {
 
     function reset() {
         progress.value = 0;
+    }
+
+    if (getCurrentScope()) {
+        onScopeDispose(() => {
+            if (staged) void abort(staged);
+        });
     }
 
     return { progress, upload, abort, reset };

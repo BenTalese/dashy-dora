@@ -11,7 +11,8 @@
                      Stock Overview filter + detail page + create dialog
                      so location selection is identical wherever it shows
                      up. -->
-                <q-select
+                <BaseSelect
+                    :dense="false"
                     v-model="targetLocationId"
                     :options="filteredOptions"
                     emit-value
@@ -21,7 +22,6 @@
                     hide-selected
                     input-debounce="200"
                     clearable
-                    outlined
                     label="Destination location"
                     @filter="onFilter"
                 />
@@ -41,6 +41,7 @@
 <script setup lang="ts">
     import { ref, watch } from 'vue';
     import BaseButton from 'src/components/BaseButton.vue';
+    import BaseSelect from 'src/components/BaseSelect.vue';
     import BaseDialog from 'src/components/BaseDialog.vue';
 
     // Local narrowing ref backing the searchable picker — mirrors the

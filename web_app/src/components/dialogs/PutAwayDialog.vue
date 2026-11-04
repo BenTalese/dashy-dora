@@ -89,7 +89,7 @@
                     </div>
                 </q-card-section>
                 <q-card-section class="q-pt-none">
-                    <q-select
+                    <BaseSelect
                         v-model="assignChoice"
                         :options="locationOptions"
                         emit-value
@@ -99,8 +99,6 @@
                         hide-selected
                         input-debounce="200"
                         clearable
-                        outlined
-                        dense
                         label="Location"
                         autofocus
                         @filter="filterLocations"
@@ -127,6 +125,7 @@
     import { ICONS } from 'src/style/icons';
     import BaseDialog from 'src/components/BaseDialog.vue';
     import BaseButton from 'src/components/BaseButton.vue';
+    import BaseSelect from 'src/components/BaseSelect.vue';
     import { useLocationStore } from 'src/stores/locationStore';
     import { useStockItemStore } from 'src/stores/stockItemStore';
     import type { LocationNode } from 'src/models/location';
@@ -290,7 +289,7 @@
 
 <style scoped>
     .put-away-group {
-        border: 1px solid var(--surface-border);
+        border: 1px solid var(--border-default);
         border-radius: 8px;
         padding: 8px 12px;
     }
@@ -303,7 +302,7 @@
     .put-away-group__items {
         margin-top: 6px;
         padding-left: 28px;
-        border-left: 2px solid var(--surface-border);
+        border-left: 2px solid var(--border-default);
         margin-left: 10px;
     }
     .put-away-item {

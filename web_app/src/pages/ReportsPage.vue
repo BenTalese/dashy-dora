@@ -142,7 +142,7 @@
     import ReportsLede from 'src/components/reports/ReportsLede.vue';
     import SpendCard from 'src/components/reports/SpendCard.vue';
     import WasteCard from 'src/components/reports/WasteCard.vue';
-    import { categoricalColour } from 'src/composables/useThemePalette';
+    import { categoricalColour, categoricalColours } from 'src/composables/useThemePalette';
     import { useSlotLoader } from 'src/composables/useSlotLoader';
     import { useFeatureFlags } from 'src/composables/useFeatureFlags';
     import { useMoneyEnabled } from 'src/composables/useMoneyEnabled';
@@ -262,8 +262,14 @@
      *  whatever the hash landed on here (FU-814). Stores go through
      *  `storeColour` in the card. Do not put a store back in here. */
     function colourFor(key: string): string {
-        return categoricalColour(key);
+        return groupColours.value.get(key) ?? categoricalColour(key);
     }
+    /** FU-976 — assigned over the whole set of groups the chart shows, so two
+     *  groups never share a bar colour (a bare per-key hash put "Pantry
+     *  staples" and "Fruit & Veg" on the same hue). */
+    const groupColours = computed(() =>
+        categoricalColours((spendByCategory.value?.rows ?? []).map((r) => r.category)),
+    );
 
     // ── Loaders ──────────────────────────────────────────────────────────
     // A gated-off card must not fetch: the endpoint would 403 (R-058) and the

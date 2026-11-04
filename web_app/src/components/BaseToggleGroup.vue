@@ -3,7 +3,7 @@
         <div class="toggle-group__header">
             <div class="toggle-group__label">{{ label }}</div>
             <BaseButton
-                variant="ghost"
+                variant="subtle"
                 dense
                 :label="allSelected ? 'Clear all' : 'Select all'"
                 :disable="selectableValues.length === 0"

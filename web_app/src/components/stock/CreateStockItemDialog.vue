@@ -70,14 +70,14 @@
                         @update:model-value="clearField('name')"
                         :rules="[(v: string) => (!!v && v.trim().length > 0) || 'Name is required']"
                     />
-                    <q-select
+                    <BaseSelect
+                        :dense="false"
                         v-model="form.stock_level_id"
                         :options="stockLevels"
                         :option-label="(o: StockLevel) => o.name"
                         :option-value="(o: StockLevel) => o.stock_level_id"
                         emit-value
                         map-options
-                        outlined
                         label="Stock level"
                         :error="!!fieldErrors.stock_level_id"
                         :error-message="fieldErrors.stock_level_id"
@@ -105,14 +105,15 @@
                                 <q-item-section>{{ scope.opt.name }}</q-item-section>
                             </q-item>
                         </template>
-                    </q-select>
+                    </BaseSelect>
                     <!-- Round-10: location picker mirrors the filter +
                          detail-page picker — path-labelled options walked
                          from the location tree, searchable on type,
                          clearable. The dialog hydrates the tree on open
                          so the picker is populated even if the parent
                          page hasn't loaded it yet. -->
-                    <q-select
+                    <BaseSelect
+                        :dense="false"
                         v-model="form.stock_location_id"
                         :options="locationOptions"
                         emit-value
@@ -122,7 +123,6 @@
                         hide-selected
                         input-debounce="200"
                         clearable
-                        outlined
                         label="Location (optional)"
                         :error="!!fieldErrors.stock_location_id"
                         :error-message="fieldErrors.stock_location_id"
@@ -135,13 +135,13 @@
                          per-batch fact that changes over the item's life,
                          so it lives on the detail page / stocktake, not
                          here. Stock group takes its place. -->
-                    <q-select
+                    <BaseSelect
+                        :dense="false"
                         v-model="form.stock_group_id"
                         :options="groupOptions"
                         emit-value
                         map-options
                         clearable
-                        outlined
                         label="Stock group (optional)"
                         :error="!!fieldErrors.stock_group_id"
                         :error-message="fieldErrors.stock_group_id"
@@ -153,17 +153,16 @@
                          so it belongs on the create form rather than only on
                          the detail page. Option list mirrors the detail
                          page's picker, logo and all, so the two surfaces
-                         read the same. Plain q-select, matching its siblings
-                         here — this dialog is still on the pre-BaseSelect
-                         shape (FU-675); migrate the whole form at once, not
-                         one field into a different scale. -->
-                    <q-select
+                         read the same. Full-height (`:dense="false"`) like
+                         every field in this form, so the whole form sits at
+                         one scale (FU-675). -->
+                    <BaseSelect
+                        :dense="false"
                         v-model="form.usual_store_id"
                         :options="storeOptions"
                         emit-value
                         map-options
                         clearable
-                        outlined
                         label="Usual store (optional)"
                         :error="!!fieldErrors.usual_store_id"
                         :error-message="fieldErrors.usual_store_id"
@@ -188,7 +187,7 @@
                                 </q-item-section>
                             </q-item>
                         </template>
-                    </q-select>
+                    </BaseSelect>
 
                     <div class="row items-center q-gutter-sm">
                         <q-toggle v-model="form.is_essential" label="Essential" />
@@ -244,6 +243,7 @@
     import BaseTooltip from 'src/components/BaseTooltip.vue';
     import { storeToRefs } from 'pinia';
     import BaseButton from 'src/components/BaseButton.vue';
+    import BaseSelect from 'src/components/BaseSelect.vue';
     import BaseDialog from 'src/components/BaseDialog.vue';
     import FormErrorSummary from 'src/components/FormErrorSummary.vue';
     import StockLevelDot from 'src/components/stock/StockLevelDot.vue';
@@ -456,6 +456,6 @@
         object-fit: cover;
         border-radius: 4px;
         flex-shrink: 0;
-        background: var(--surface-default);
+        background: var(--surface-component);
     }
 </style>

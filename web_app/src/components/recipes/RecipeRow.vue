@@ -82,7 +82,7 @@
                     <span v-if="moneyEnabled && cost.value !== null" class="recipe-row__fact">
                         <q-icon :name="ICONS.savings" size="14px" />
                         <span>
-                            {{ formatMoney(cost.value) }}<span
+                            {{ cost.text }}<span
                                 v-if="!cost.judgeable"
                                 aria-hidden="true"
                             >*</span>
@@ -148,7 +148,6 @@
     import type { Recipe } from 'src/models/recipe';
     import { useRecipeDisplay } from 'src/composables/useRecipeDisplay';
     import { useMoneyEnabled } from 'src/composables/useMoneyEnabled';
-    import { formatMoney } from 'src/composables/useMoney';
     import { computed } from 'vue';
 
     const props = withDefaults(

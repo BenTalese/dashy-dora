@@ -68,6 +68,14 @@ class AddLineRequest(BaseModel):
     planned_store_id: UUID | None = None
 
 
+# The one answer for "add to a finished list", shared by the single-line and
+# bulk routes and the assistant's add paths (FU-969 (4)), so they can't drift.
+LIST_DONE_REFUSAL = (
+    "This list is finished: its lines are a receipt and can't be added to. "
+    "Start a new list instead."
+)
+
+
 @dataclass(slots=True)
 class AddLineResponse:
     line_id: UUID | None = None
@@ -172,10 +180,7 @@ def add_line(shopping_list_id: UUID):
     if _Response.list_not_found:
         return not_found("ShoppingList", shopping_list_id)
     if _Response.list_done:
-        return business_rule_violation(
-            "This list is finished — its lines are a receipt and can't be "
-            "added to. Start a new list instead."
-        )
+        return business_rule_violation(LIST_DONE_REFUSAL)
     if _Response.no_anchor:
         return business_rule_violation(
             "A line needs at least one of stock_item_id or product_id."

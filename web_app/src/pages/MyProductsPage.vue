@@ -252,10 +252,8 @@
                         empty-text="Any store"
                         dialog-title="Store"
                     />
-                    <q-select
+                    <BaseSelect
                         v-model="linkedStockItemFilter"
-                        outlined
-                        dense
                         emit-value
                         map-options
                         clearable
@@ -320,52 +318,91 @@
             </div>
 
             <!-- Two shapes, one data path — the compact branch is the same
-                 `filteredProducts` the grid renders (the cookbook's shape). -->
-            <div v-else-if="viewMode === 'grid'" key="prod-grid" class="row q-col-gutter-md">
-                <!-- Owner 2026-10-15: two to a row on a phone (one card was the
-                     whole screen). -->
-                <!-- The key carries a photo version so a replaced custom-product
-                     photo refetches: the card's thumb only reloads when the id
-                     or has-image flag changes, and a re-upload changes neither. -->
-                <div
-                    v-for="product in filteredProducts"
-                    :key="`${product.product_id}:${photoVersion.get(product.product_id) ?? 0}`"
-                    class="col-6 col-md-4"
-                >
-                    <ProductCard
-                        :product="product"
-                        :bulk-mode="bulkMode"
-                        :selected="selectedIds.has(product.product_id)"
-                        :watch-threshold="watchByProduct.get(product.product_id)?.threshold_unit_price ?? null"
-                        @watch-price="openWatch(product)"
-                        @toggle-select="toggleSelect(product.product_id)"
-                        @open-stock-item="goToStockItem"
-                        @link="openLinkDialog(product)"
-                        @unlink="onUnlinkSingle(product)"
-                        @toggle-active="onToggleActive(product)"
-                        @price-history="onViewPriceHistory(product.product_id)"
-                        @photo="openPhoto(product)"
-                        @pack-count="openPackCount(product)"
-                        @delete="onDeleteSingle(product)"
-                    />
-                </div>
-            </div>
+                 `filteredProducts` the grid renders (the cookbook's shape).
 
-            <!-- `no-wrap`: Quasar's `.column` wraps, and in a wrapping column
-                 each row sizes to its content, which pushed a long name's row
-                 past a phone's edge (owner 2026-10-15). -->
-            <div v-else key="prod-rows" class="column no-wrap q-gutter-sm">
-                <ProductRow
-                    v-for="product in filteredProducts"
-                    :key="product.product_id"
-                    :product="product"
-                    :bulk-mode="bulkMode"
-                    :selected="selectedIds.has(product.product_id)"
-                    @toggle-select="toggleSelect(product.product_id)"
-                    @link="openLinkDialog(product)"
-                    @unlink="onUnlinkSingle(product)"
-                />
-            </div>
+                 FU-968: both shapes are virtualised. A companion that pushes a
+                 few thousand products mounted a card per product — 2,859 cards,
+                 ~5.6 s of main-thread work and 125 MB of heap on a 2000-item
+                 pantry. Only the rows near the viewport mount now. Unlike the
+                 stock list (its own scroll pane, fixed row height) this page
+                 scrolls the window, so `scroll-target="body"`; and card height
+                 follows card width and content, so the item size is an
+                 estimate that Quasar replaces with each row's measured height.
+                 Small lists render whole either way (the slice is bigger than
+                 them), so there is no threshold switch to keep in step. -->
+            <q-virtual-scroll
+                v-else-if="viewMode === 'grid'"
+                key="prod-grid"
+                scroll-target="body"
+                :items="productGridRows"
+                :virtual-scroll-item-size="GRID_ROW_ESTIMATE_PX"
+                :virtual-scroll-slice-size="8"
+            >
+                <!-- One virtual item per grid row: a row of cards stretches to
+                     its tallest card, so rows (not cards) are the unit whose
+                     height Quasar measures. Horizontal gutter only — the
+                     vertical gap is the row's own bottom padding, because a
+                     negative top margin (what `q-col-gutter-md` uses) is not
+                     part of a measured height and would desync the spacers.
+                     Owner 2026-10-15: two to a row on a phone (one card was
+                     the whole screen). -->
+                <template #default="{ item: gridRow }">
+                    <div :key="gridRow.key" class="row q-col-gutter-x-md q-pb-md">
+                        <!-- The key carries a photo version so a replaced
+                             custom-product photo refetches: the card's thumb
+                             only reloads when the id or has-image flag
+                             changes, and a re-upload changes neither. -->
+                        <div
+                            v-for="product in gridRow.products"
+                            :key="`${product.product_id}:${photoVersion.get(product.product_id) ?? 0}`"
+                            class="col-6 col-md-4"
+                        >
+                            <ProductCard
+                                :product="product"
+                                :bulk-mode="bulkMode"
+                                :selected="selectedIds.has(product.product_id)"
+                                :watch-threshold="watchByProduct.get(product.product_id)?.threshold_unit_price ?? null"
+                                @watch-price="openWatch(product)"
+                                @toggle-select="toggleSelect(product.product_id)"
+                                @open-stock-item="goToStockItem"
+                                @link="openLinkDialog(product)"
+                                @unlink="onUnlinkSingle(product)"
+                                @toggle-active="onToggleActive(product)"
+                                @price-history="onViewPriceHistory(product.product_id)"
+                                @photo="openPhoto(product)"
+                                @pack-count="openPackCount(product)"
+                                @delete="onDeleteSingle(product)"
+                            />
+                        </div>
+                    </div>
+                </template>
+            </q-virtual-scroll>
+
+            <!-- Each row sits in a padded wrapper rather than taking a
+                 `q-gutter-sm` margin, for the same measured-height reason as
+                 the grid above. The wrapper is block-level, so a long name
+                 still ellipsises inside the phone's width (owner 2026-10-15). -->
+            <q-virtual-scroll
+                v-else
+                key="prod-rows"
+                scroll-target="body"
+                :items="filteredProducts"
+                :virtual-scroll-item-size="COMPACT_ROW_ESTIMATE_PX"
+                :virtual-scroll-slice-size="30"
+            >
+                <template #default="{ item: product }">
+                    <div :key="product.product_id" class="q-pb-sm">
+                        <ProductRow
+                            :product="product"
+                            :bulk-mode="bulkMode"
+                            :selected="selectedIds.has(product.product_id)"
+                            @toggle-select="toggleSelect(product.product_id)"
+                            @link="openLinkDialog(product)"
+                            @unlink="onUnlinkSingle(product)"
+                        />
+                    </div>
+                </template>
+            </q-virtual-scroll>
         </FadeTransition>
 
         <PageCountsFooter v-if="products.length > 0" :counts="footerCounts" />
@@ -385,10 +422,8 @@
                 </div>
             </q-card-section>
             <q-card-section class="q-pt-none">
-                <q-select
+                <BaseSelect
                     v-model="bulkAddTargetListId"
-                    outlined
-                    dense
                     emit-value
                     map-options
                     :options="activeListOptions"
@@ -494,10 +529,8 @@
                 <div class="text-caption dora-text-muted">{{ linkTarget?.name }}</div>
             </q-card-section>
             <q-card-section class="q-pt-none">
-                <q-select
+                <BaseSelect
                     v-model="linkChoiceStockItemId"
-                    outlined
-                    dense
                     use-input
                     input-debounce="150"
                     :options="linkStockItemOptions"
@@ -711,6 +744,26 @@
             return true;
         }),
     );
+
+    // ── Virtualised results (FU-968) ────────────────────────────────────
+    // The grid's column count mirrors its `col-6 col-md-4` classes: two
+    // columns below Quasar's md breakpoint, three from md up. The estimates
+    // only seed the spacers until each row is measured; they are not layout.
+    const GRID_ROW_ESTIMATE_PX = 360;
+    const COMPACT_ROW_ESTIMATE_PX = 72;
+    const gridColumns = computed(() => ($q.screen.gt.sm ? 3 : 2));
+    const productGridRows = computed(() => {
+        const columns = gridColumns.value;
+        const rows: { key: string; products: Product[] }[] = [];
+        const list = filteredProducts.value;
+        for (let i = 0; i < list.length; i += columns) {
+            const slice = list.slice(i, i + columns);
+            // Keyed by position: a delete or re-sort shifts products between
+            // rows, and an id-joined key remounted every later row's cards.
+            rows.push({ key: `row-${rows.length}`, products: slice });
+        }
+        return rows;
+    });
 
     const footerCounts = computed(() => [
         { label: 'Shown', value: filteredProducts.value.length },

@@ -139,54 +139,80 @@ def _mark_image():
         return None
 
 
-def _paste_centre_mark(pil, size: int) -> None:
-    """Composite the D/D wordmark into the middle of an RGB QR, in place."""
-    from PIL import Image, ImageDraw
+@lru_cache(maxsize=8)
+def _scaled_mark(size: int):
+    """The mark resized for one QR edge length, plus its white-ring pad.
+    Cached per size: the LANCZOS resize was ~4 ms of every QR on the print
+    sheet (FU-961), and a sheet asks for the same size two thousand times."""
+    from PIL import Image
 
     mark = _mark_image()
     if mark is None:
-        return
-
+        return None
     mark_w = max(1, round(size * _MARK_WIDTH_RATIO))
     mark_h = max(1, round(mark_w * mark.height / mark.width))
     pad = max(1, round(size * _MARK_PAD_RATIO))
+    # LANCZOS here, unlike the NEAREST used for the matrix: the mark is
+    # curved artwork, and nearest-neighbour would alias its bowls badly.
+    return mark.resize((mark_w, mark_h), Image.LANCZOS), pad
+
+
+def _paste_centre_mark(pil, size: int) -> None:
+    """Composite the D/D wordmark into the middle of a QR image, in place."""
+    from PIL import ImageDraw
+
+    scaled_and_pad = _scaled_mark(size)
+    if scaled_and_pad is None:
+        return
+    scaled, pad = scaled_and_pad
 
     # Knock out a white rectangle first, then lay the glyph inside it. Doing
     # it in this order means the ring is genuinely blank rather than
     # semi-transparent over dark modules.
-    box_w, box_h = mark_w + pad * 2, mark_h + pad * 2
+    box_w, box_h = scaled.width + pad * 2, scaled.height + pad * 2
     left, top = (size - box_w) // 2, (size - box_h) // 2
     ImageDraw.Draw(pil).rectangle(
         [left, top, left + box_w - 1, top + box_h - 1], fill="white",
     )
-
-    # LANCZOS here, unlike the NEAREST used for the matrix: the mark is
-    # curved artwork, and nearest-neighbour would alias its bowls badly.
-    scaled = mark.resize((mark_w, mark_h), Image.LANCZOS)
     pil.paste(scaled, (left + pad, top + pad), scaled)
 
 
+# A fixed mask pattern instead of qrcode's best-mask search (FU-961). The
+# search builds the matrix under all eight masks and scores each with the
+# spec's penalty rules in pure Python — ~8 ms of the ~19 ms each QR cost, and
+# so ~20 s of a 2000-item "print every item" sheet. Any mask decodes (the
+# decoder reads the mask id from the format bits), so this changes only how
+# the modules look, never the payload — labels already printed keep scanning.
+# 6 is the mask with the lowest mean penalty over 150 random Dora payloads
+# (all version 6 at level H; 2 was a close second), i.e. the one the search
+# would most nearly have picked anyway.
+_QR_MASK_PATTERN = 6
+
+
 def _render_qr_png(payload: str, size: int) -> bytes:
-    """qrcode picks a box_size that lets the matrix fit roughly inside the
-    requested pixel size. We render then resize for a precise edge length
-    so callers get the size they asked for."""
-    # box_size of 10 is plenty of detail; border of 2 keeps the QR
-    # scannable when surrounded by other ink.
+    """Render the QR at one pixel per module straight from the matrix, then
+    scale it to exactly the edge length the caller asked for. (It used to go
+    through qrcode's PIL image factory at box_size=10, which draws every
+    module as its own rectangle only to resize the result anyway.)"""
+    from PIL import Image
+
     qr = qrcode.QRCode(
         version=None,
         error_correction=qrcode.constants.ERROR_CORRECT_H,
-        box_size=10,
+        # border of 2 keeps the QR scannable when surrounded by other ink.
         border=2,
+        mask_pattern=_QR_MASK_PATTERN,
     )
     qr.add_data(payload)
     qr.make(fit=True)
-    img = qr.make_image(fill_color="black", back_color="white")
-    # PIL .resize uses LANCZOS for high-quality downscale; box-pixels look
-    # crisp because the source is monochrome.
-    from PIL import Image
-    pil = img.convert("RGB")
-    if pil.size != (size, size):
-        pil = pil.resize((size, size), Image.NEAREST)
+    matrix = qr.get_matrix()  # includes the border, True = dark module
+    edge = len(matrix)
+    img = Image.new("L", (edge, edge))
+    img.putdata([0 if dark else 255 for row in matrix for dark in row])
+    # NEAREST keeps module edges hard (the source is monochrome). RGB rather
+    # than staying in L so the RGBA centre mark composites the same way it
+    # always has.
+    pil = img.resize((size, size), Image.NEAREST).convert("RGB")
     # After the resize, so the mark is sized against the edge length the
     # caller actually asked for and never picks up the matrix's NEAREST
     # rescale.
@@ -195,6 +221,24 @@ def _render_qr_png(payload: str, size: int) -> bytes:
     buffer = io.BytesIO()
     pil.save(buffer, format="PNG")
     return buffer.getvalue()
+
+
+def _render_item_qr_png(stock_item_id: UUID, size: int) -> bytes:
+    """An item's QR never changes (the payload is just its id), so the bytes
+    of the two sizes Dora asks for (the sheet cell and the default label) are
+    cached: a second "print every item", or reprinting a sheet after a
+    misfeed, skips the encode entirely (FU-961). Any other `?size=` renders
+    fresh, so a caller varying it can't fill the cache with 15 KB images."""
+    if size in (QR_SHEET_CELL_SIZE, QR_DEFAULT_SIZE):
+        return _cached_item_qr_png(stock_item_id, size)
+    return _render_qr_png(_qr_payload_for_item(stock_item_id), size)
+
+
+@lru_cache(maxsize=4096)
+def _cached_item_qr_png(stock_item_id: UUID, size: int) -> bytes:
+    """Bounded: a sheet cell is ~1-2 KB and a default label ~4 KB, so a full
+    cache is under ~16 MB per worker."""
+    return _render_qr_png(_qr_payload_for_item(stock_item_id), size)
 
 
 def _parse_dora_link(value: str) -> UUID | None:
@@ -227,7 +271,7 @@ def stock_item_qr(stock_item_id: UUID):
     item = repo.get(StockItem).by_id(stock_item_id)
     if item is None:
         return not_found("StockItem", stock_item_id)
-    png = _render_qr_png(_qr_payload_for_item(item.id), size)
+    png = _render_item_qr_png(item.id, size)
     response = Response(png, mimetype="image/png")
     response.headers["Cache-Control"] = "private, max-age=300"
     return response
@@ -311,7 +355,7 @@ class _SheetItem:
 
 
 def _qr_data_uri(stock_item_id: UUID, size: int) -> str:
-    png = _render_qr_png(_qr_payload_for_item(stock_item_id), size)
+    png = _render_item_qr_png(stock_item_id, size)
     return "data:image/png;base64," + base64.b64encode(png).decode("ascii")
 
 

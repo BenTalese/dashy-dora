@@ -11,7 +11,14 @@
          `StockItem`, the nav item says Stock — and this card was the last place
          calling them the pantry. -->
     <DashboardCard :icon="ICONS.inventory_2" title="My stock">
-        <div class="dora-stock-body">
+        <!-- FU-976 (3) — the summary call failed. A donut of zeros would read
+             as "you have no stock"; say it couldn't load instead. -->
+        <CardLoadError
+            v-if="failed"
+            line="I couldn't load your stock counts."
+            @retry="emit('retry')"
+        />
+        <div v-else class="dora-stock-body">
             <svg
                 viewBox="0 0 36 36"
                 class="dora-donut"
@@ -86,6 +93,7 @@
      */
     import { ICONS } from 'src/style/icons';
     import DashboardCard from 'src/components/dashboard/DashboardCard.vue';
+    import CardLoadError from 'src/components/dashboard/CardLoadError.vue';
 
     export type DonutSegment = {
         label: string;
@@ -97,17 +105,25 @@
         link: string | null;
     };
 
-    defineProps<{
-        total: number;
-        inStock: number;
-        low: number;
-        out: number;
-        segments: DonutSegment[];
-        lowLink: string;
-        outLink: string;
-    }>();
+    withDefaults(
+        defineProps<{
+            total: number;
+            inStock: number;
+            low: number;
+            out: number;
+            segments: DonutSegment[];
+            lowLink: string;
+            outLink: string;
+            /** The summary call failed — show `CardLoadError`, not zeros. */
+            failed?: boolean;
+        }>(),
+        { failed: false },
+    );
 
-    const emit = defineEmits<{ (e: 'open', path: string): void }>();
+    const emit = defineEmits<{
+        (e: 'open', path: string): void;
+        (e: 'retry'): void;
+    }>();
 </script>
 
 <style scoped lang="scss">

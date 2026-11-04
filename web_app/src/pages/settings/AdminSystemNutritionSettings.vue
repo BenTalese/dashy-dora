@@ -16,10 +16,9 @@
             </template>
 
             <SettingsRow label="Nutrition mode">
-                <DoraSegmented
+                <BaseSegmented
                     :model-value="mode"
                     :options="modeOptions"
-                    :disabled="saving"
                     @update:model-value="onModeChange"
                 />
             </SettingsRow>
@@ -134,10 +133,9 @@
                          already inside that condition. The old toggle carried
                          one, plus a "switch to complex" banner that could
                          never render — dropped rather than carried forward. -->
-                    <DoraSegmented
+                    <BaseSegmented
                         :model-value="ratingScheme"
                         :options="ratingSchemeOptions"
-                        :disabled="saving"
                         @update:model-value="onRatingSchemeChange"
                     />
                 </SettingsRow>
@@ -227,7 +225,7 @@
     import SettingsRow from 'src/components/settings/SettingsRow.vue';
     import type { RatingScheme } from 'src/composables/useNutritionRating';
     import SettingsPageHeader from 'src/components/settings/SettingsPageHeader.vue';
-    import DoraSegmented, { type DoraSegmentedOption } from 'src/components/settings/DoraSegmented.vue';
+    import BaseSegmented, { type BaseSegmentedOption } from 'src/components/BaseSegmented.vue';
     import { useRecipeStore } from 'src/stores/recipeStore';
 
     type NutritionMode = 'off' | 'simple' | 'complex';
@@ -240,12 +238,12 @@
 
     // Short enough for a segmented control; the provenance line under it
     // carries the detail that would not fit here.
-    const ratingSchemeOptions: DoraSegmentedOption<RatingScheme>[] = [
+    const ratingSchemeOptions: BaseSegmentedOption<RatingScheme>[] = [
         { label: 'None', value: 'none' },
         { label: 'Health stars', value: 'health_star' },
         { label: 'Nutri-Score', value: 'nutri_score' },
     ];
-    const modeOptions: DoraSegmentedOption<NutritionMode>[] = [
+    const modeOptions: BaseSegmentedOption<NutritionMode>[] = [
         { label: 'Off', value: 'off' },
         { label: 'Simple', value: 'simple' },
         { label: 'Complex', value: 'complex' },

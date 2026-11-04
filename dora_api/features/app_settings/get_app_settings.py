@@ -90,7 +90,6 @@ class AppSettingsDto:
     vapid_subject: str
     piper_bin: str
     piper_bundled_voice_dir: str
-    email_enabled: bool
     audit_retention_days: int
     public_url: str
 
@@ -144,7 +143,6 @@ def _to_dto(setting) -> AppSettingsDto:  # noqa: ANN001 — duck-typed AppSettin
         vapid_subject=setting.vapid_subject or "mailto:admin@dora.local",
         piper_bin=setting.piper_bin or "",
         piper_bundled_voice_dir=setting.piper_bundled_voice_dir or "",
-        email_enabled=bool(setting.email_enabled),
         audit_retention_days=int(setting.audit_retention_days or 365),
         public_url=setting.public_url or "",
     )

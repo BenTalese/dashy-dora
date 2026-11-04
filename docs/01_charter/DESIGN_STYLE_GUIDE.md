@@ -95,8 +95,7 @@ R-002 forbids.
 | Default border / card outline | `--border-default` |
 | Strong border (emphasis, hover) | `--border-strong` |
 | Divider (in-card separators) | `--divider` |
-| Focus ring colour | `--focus-ring` |
-| Focus ring halo | `--ring-focus` |
+| Focus ring (outline or halo) | `--focus-ring` — the only focus token. Resolves to `--primary-ink`, so it clears D-002's 3:1 non-text floor on every surface in every theme (`--brand-primary` measured 1.35–2.34:1 in Lemon Tart / Sourdough light). The old `--ring-focus` 35–45 % wash was retired 2026-11-04 (FU-941): all eight uses painted it as a 2px outline, where a wash can't reach 3:1 |
 | Scrim (modal backdrop) | `--overlay-scrim` |
 | Hover veil (on page) | `--overlay-hover` · on coloured surfaces `--overlay-hover-on-coloured` |
 | Active veil | `--overlay-active` · on coloured `--overlay-active-on-coloured` |
@@ -189,8 +188,10 @@ the five `--elevation-*` tokens are the whole vocabulary.
 - In-card separators: `--divider`, `1px`.
 - Hover/emphasis border: `--border-strong`.
 - **Focus is always visible.** Every interactive element shows a focus ring on
-  keyboard focus: `outline: 2px solid --focus-ring; outline-offset: 2px`, or a
-  `0 0 0 3px --ring-focus` halo. Never `outline: none` without a replacement.
+  keyboard focus: `outline: 2px solid --focus-ring; outline-offset: 2px`, or —
+  where an outline would be clipped — a `0 0 0 3px --focus-ring` box-shadow.
+  One token, one colour: no softened wash (it fails 3:1). Never `outline: none`
+  without a replacement.
   This is not optional and not theme-dependent.
 
 ## A7 · Iconography
@@ -255,7 +256,9 @@ Quasar's raw defaults (casing, sizing, shadows) unstyled.
   legend (D-013). Don't ship a bare coloured dot as the only signal.
 
 ## B2a · Segmented & toggle groups
-- **One choice of several → `BaseSegmented`** (a `q-btn-toggle` wrapper). Small,
+- **One choice of several → `BaseSegmented`** (a `radiogroup`: roving tabindex,
+  arrow keys move and select; `dense` for compact chrome, `spread` to share the
+  full width — FU-848 merged the old `settings/DoraSegmented` into it). Small,
   mutually-exclusive vocabularies only (2–4 options); anything longer is a
   select.
 - **Several independent choices at once → `BaseToggleGroup`.** A labelled row of
@@ -266,7 +269,8 @@ Quasar's raw defaults (casing, sizing, shadows) unstyled.
   row wraps (`flex-wrap`) — it never h-scrolls (D-011).
 - Selected = `--brand-primary` fill + `--text-on-primary`. Both components carry
   the full state set (hover / active / focus-visible / disabled / selected,
-  D-016) and expose `aria-pressed` per option.
+  D-016). `BaseSegmented` exposes `aria-checked` per option (radio semantics);
+  `BaseToggleGroup` exposes `aria-pressed` (independent toggles).
 - **Options that can't be chosen stay in place, disabled + tooltip'd** — don't
   filter them out. A row that reflows as options drop away costs the user their
   spatial memory (the meal-plan builder's past weekdays are the reference case).
@@ -571,7 +575,7 @@ Quasar's raw defaults (casing, sizing, shadows) unstyled.
   pages ("you can't easily/smoothly edit multiple inputs in a row"); stock detail
   was unaffected precisely because it only gates *buttons* on `busy`.
 - **Violation signal:** `:disable="saving"` / `:disabled="savingX"` on a
-  `q-input`, `q-select`, `q-toggle`, `q-btn-toggle`, `DoraSegmented` or a
+  `q-input`, `q-select`, `q-toggle`, `q-btn-toggle`, `BaseSegmented` or a
   custom field wrapper. Concurrency is not a reason to keep it — per-field
   PATCHes are independent, and a double-toggle is last-write-wins, which is
   already the behaviour the user asked for.

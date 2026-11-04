@@ -528,6 +528,8 @@ def test__bootstrap_admin__creates_first_admin_on_empty_install(api):
     from dora_api.app import db
     with app.app_context():
         db.session.execute(sa_delete(db.metadata.tables["User"]))
+        # A fresh install's household timezone is the UTC default.
+        db.session.execute(db.metadata.tables["AppSetting"].update().values(timezone="UTC"))
         db.session.commit()
 
     s = _fresh_session()
@@ -536,6 +538,7 @@ def test__bootstrap_admin__creates_first_admin_on_empty_install(api):
         "username": "first-admin",
         "password": "Abcdefghij1",
         "email": "first-admin@example.com",
+        "timezone": "Australia/Sydney",
     })
     assert response.status_code == 200, response.text
     body = response.json()
@@ -544,6 +547,12 @@ def test__bootstrap_admin__creates_first_admin_on_empty_install(api):
     me = s.get(f"{BASE}/me")
     assert me.status_code == 200, me.text
     assert me.json()["is_admin"] is True
+    # QA2-12 — the household starts on the setup device's timezone, so
+    # skipping onboarding doesn't leave "today" on UTC.
+    with app.app_context():
+        tz = db.session.execute(
+            db.metadata.tables["AppSetting"].select()).mappings().first()["timezone"]
+    assert tz == "Australia/Sydney"
     # One-shot: a second call is refused.
     again = s.post(f"{BASE}/bootstrap-admin", json={
         "username": "second", "password": "Abcdefghij1",

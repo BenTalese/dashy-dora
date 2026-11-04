@@ -192,7 +192,7 @@
                             editingDetail.lines.length === 1 ? '' : 's'
                         }}
                     </div>
-                    <q-select
+                    <BaseSelect
                         v-model="lineAddSelection"
                         use-input
                         input-debounce="200"
@@ -201,8 +201,6 @@
                         option-label="name"
                         emit-value
                         map-options
-                        outlined
-                        dense
                         clearable
                         label="Add a stock item…"
                         @filter="onLineFilter"
@@ -215,7 +213,7 @@
                                 </q-item-section>
                             </q-item>
                         </template>
-                    </q-select>
+                    </BaseSelect>
 
                     <q-list bordered separator class="q-mt-md">
                         <div
@@ -294,6 +292,7 @@
     import { formatDate as formatLocaleDate } from 'src/composables/useDateFormat';
     import AppSpinner from 'src/components/AppSpinner.vue';
     import BaseButton from 'src/components/BaseButton.vue';
+    import BaseSelect from 'src/components/BaseSelect.vue';
     import BaseDialog from 'src/components/BaseDialog.vue';
     import BaseTooltip from 'src/components/BaseTooltip.vue';
     import LineChoicePicker from 'src/components/shoppingList/LineChoicePicker.vue';

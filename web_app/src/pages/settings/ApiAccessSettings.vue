@@ -162,15 +162,13 @@
                                 </q-item-section>
                                 <q-item-section side class="mapping-row__assign">
                                     <div class="row q-gutter-xs items-center no-wrap">
-                                        <q-select
+                                        <BaseSelect
                                             :model-value="m.store_id"
                                             :options="storeOptions"
                                             option-value="value"
                                             option-label="label"
                                             emit-value
                                             map-options
-                                            dense
-                                            outlined
                                             clearable
                                             label="Store"
                                             class="mapping-row__select"
@@ -320,7 +318,9 @@
     import BaseTooltip from 'src/components/BaseTooltip.vue';
     import AppSpinner from 'src/components/AppSpinner.vue';
     import { formatDateTime } from 'src/composables/useDateFormat';
+    import { nameCollator } from 'src/composables/useMoney';
     import BaseButton from 'src/components/BaseButton.vue';
+    import BaseSelect from 'src/components/BaseSelect.vue';
     import BaseDialog from 'src/components/BaseDialog.vue';
     import { ICONS } from 'src/style/icons';
     import { copyToClipboard, useQuasar } from 'quasar';
@@ -362,8 +362,12 @@
     const stores = ref<Store[]>([]);
     const storesApi = new StoresApiService();
 
+    // Sorted with the household-locale collator (FU-977 (6)); the API hands
+    // stores back in insertion order.
     const storeOptions = computed(() =>
-        stores.value.map(s => ({ value: s.store_id, label: s.name }))
+        stores.value
+            .map(s => ({ value: s.store_id, label: s.name }))
+            .sort((a, b) => nameCollator().compare(a.label, b.label))
     );
 
     function pendingCountFor(sourceId: string): number {
@@ -556,7 +560,7 @@
         }
     }
     .reveal-readout :deep(input) {
-        font-family: var(--font-mono, monospace);
+        font-family: var(--font-mono);
         font-size: 0.9rem;
     }
 </style>

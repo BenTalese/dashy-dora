@@ -1,5 +1,6 @@
 <template>
     <q-select
+        ref="inner"
         v-bind="forwardedAttrs"
         :class="{ 'base-select--chips': rendersChips }"
         :model-value="modelValue"
@@ -8,8 +9,8 @@
         :use-input="resolvedUseInput"
         :display-value="resolvedDisplayValue"
         :stack-label="emptyText ? true : undefined"
-        outlined
-        dense
+        :outlined="resolvedOutlined"
+        :dense="dense"
         @update:model-value="(v: TValue) => emit('update:modelValue', v)"
     >
         <!-- Close affordance, dialog case only. Quasar's select dialog has no
@@ -67,10 +68,11 @@
      * into an anchored menu on a phone would trade a mild annoyance for a
      * genuinely cramped one.
      */
-    import { computed, useAttrs, useSlots } from 'vue';
-    import { useQuasar } from 'quasar';
+    import { computed, ref, useAttrs, useSlots } from 'vue';
+    import { type QSelect, useQuasar } from 'quasar';
     import { ICONS } from 'src/style/icons';
     import BaseButton from 'src/components/BaseButton.vue';
+    import type { BaseSelectExposed } from 'src/components/baseSelectTypes';
 
     defineOptions({ inheritAttrs: false });
 
@@ -109,9 +111,29 @@
              * and this is the value shown while the model is empty.
              */
             emptyText?: string;
+            /**
+             * Dense by default — the app's standard field scale. `:dense="false"`
+             * is for a form whose other fields are full-height `q-input`s
+             * (a create/edit dialog), so the select doesn't sit a size smaller
+             * than its neighbours (FU-675: migrate a form at one scale).
+             */
+            dense?: boolean;
         }>(),
-        { useInput: false, dialogTitle: 'Choose an option' },
+        { useInput: false, dialogTitle: 'Choose an option', dense: true },
     );
+
+    // Re-exposed so a typeahead that resets its own input text (the recipe
+    // ingredient picker) can still reach QSelect's methods through a ref.
+    const inner = ref<QSelect | null>(null);
+    defineExpose<BaseSelectExposed>({
+        updateInputValue: (value, noFilter) => inner.value?.updateInputValue(value, noFilter),
+        showPopup: () => inner.value?.showPopup(),
+        hidePopup: () => inner.value?.hidePopup(),
+        focus: () => inner.value?.focus(),
+        blur: () => inner.value?.blur(),
+        validate: () => inner.value?.validate() ?? true,
+        resetValidation: () => inner.value?.resetValidation(),
+    });
 
     const emit = defineEmits<{ (e: 'update:modelValue', value: TValue): void }>();
 
@@ -172,6 +194,17 @@
      * either, and Vue hands them through verbatim.
      */
     const attrs = useAttrs();
+
+    /** Outlined unless the call site picked another QField design. A
+     *  `borderless` select is an inline, in-row control (the stock detail
+     *  page's level / location / group pickers), where an outline would
+     *  draw a box the surrounding row already draws. */
+    const resolvedOutlined = computed(
+        () => !['borderless', 'filled', 'standout'].some(
+            (k) => k in attrs && attrs[k] !== false && attrs[k] !== undefined,
+        ),
+    );
+
     const forwardedAttrs = computed(() => {
         // A caller-supplied placeholder always wins over the empty-state one.
         const placeholder = attrs.placeholder ?? resolvedPlaceholder.value;

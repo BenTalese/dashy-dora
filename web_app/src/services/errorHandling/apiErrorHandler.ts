@@ -34,6 +34,17 @@ function extractEntryMsg(entry: ApiErrorEntry | string): string {
     return entry?.msg ?? '';
 }
 
+/**
+ * True when the http client has already put up its global "Something on the
+ * server tripped" toast for this error (every 5xx outside `/auth/me`), so a
+ * caller's own failure toast would be the second one for the same click
+ * (FU-976: two error toasts for one price-save failure). A catch block that
+ * toasts should skip its own toast when this is true.
+ */
+export function isAlreadyNotified(err: unknown): boolean {
+    return err instanceof NormalisedApiError && err.status >= 500;
+}
+
 export function extractFieldErrors(err: unknown): ExtractedErrors {
     if (!(err instanceof NormalisedApiError)) {
         return {
@@ -44,7 +55,7 @@ export function extractFieldErrors(err: unknown): ExtractedErrors {
 
     // 5xx already triggers a global Notify in the http client — leave the
     // form's general slot blank so users aren't told twice.
-    if (err.status >= 500) return EMPTY;
+    if (isAlreadyNotified(err)) return EMPTY;
 
     if (err.isNetworkError) {
         return {

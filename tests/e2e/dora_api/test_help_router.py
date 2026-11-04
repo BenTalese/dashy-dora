@@ -1,14 +1,14 @@
 """FU-519 tail — e2e for the /api/help router.
 
-Three read-only endpoints behind the Help panel:
+Two read-only endpoints behind the Help panel (the changelog endpoint went
+with the What's new page, 2026-11-04):
 
   - GET /help/version    — current version + best-effort GitHub update check
     (network failure degrades to `latest_version: null` + `error`, never 5xx),
-  - GET /help/changelog  — CHANGELOG.md parsed into per-version entries,
   - GET /help/food-fact  — random pick from the curated local list (shape +
     membership only; the pick is deliberately non-deterministic).
 
-All three require an authenticated session (they're not in
+Both require an authenticated session (they're not in
 PUBLIC_ENDPOINTS) — pinned via a fresh anonymous client.
 """
 import requests
@@ -81,29 +81,6 @@ def test__get_version__Shape__MatchesContractAndCurrentVersion(api):
 
 #endregion version
 
-#region ---------------- changelog ----------------
-
-
-def test__get_changelog__ReadsRepoChangelog__ContentBearingEntries(api):
-    resp = requests.get(f"{HELP}/changelog")
-
-    assert resp.status_code == 200, resp.text
-    entries = resp.json()["entries"]
-    assert entries, "expected CHANGELOG.md at the repo root to parse into entries"
-    assert set(entries[0].keys()) == {"version", "date", "body"}
-    # Keep-a-changelog shape: an [Unreleased] block heads the file.
-    versions = [e["version"] for e in entries]
-    assert "Unreleased" in versions
-    # Entries carry real markdown bodies, not empty splits.
-    assert any(e["body"].strip() for e in entries)
-    # Released entries carry their heading date.
-    dated = [e for e in entries if e["version"] != "Unreleased"]
-    if dated:
-        assert any(e["date"] for e in dated)
-
-
-#endregion changelog
-
 #region ---------------- food fact ----------------
 
 
@@ -124,7 +101,7 @@ def test__get_food_fact__ReturnsOneCuratedFact(api):
 
 def test__help_endpoints__Anonymous__401(api):
     anon = requests.Session()
-    for path in ("version", "changelog", "food-fact"):
+    for path in ("version", "food-fact"):
         assert_problem(anon.get(f"{HELP}/{path}"), 401)
 
 

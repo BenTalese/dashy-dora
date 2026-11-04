@@ -56,6 +56,11 @@ class _LocaleSpec:
     # The month form inside the weekday heading, where it differs from the
     # date's (de-DE prints "30.10.2026" but "Fr., 30. Okt.").
     day_months: tuple[str, ...] | None = field(default=None)
+    # The weekday on its own, where it differs from the heading's form (de-DE
+    # heads "Fr., 30. Okt." but writes a lone weekday "Fr"; Intl's
+    # `{weekday: 'short'}`, as the SPA prints it). Found by
+    # `scripts/check_locale_format.py` (FU-969 (6)).
+    weekdays_alone: tuple[str, ...] | None = field(default=None)
 
 
 def _spec(locale: str | None) -> _LocaleSpec:
@@ -97,8 +102,9 @@ def format_day(value: date, locale: str | None) -> str:
 
 
 def format_weekday(value: date, locale: str | None) -> str:
-    """The locale's short weekday: "Fri", "Fr."."""
-    return _spec(locale).weekdays[value.weekday()]
+    """The locale's short weekday on its own: "Fri", "Fr"."""
+    spec = _spec(locale)
+    return (spec.weekdays_alone or spec.weekdays)[value.weekday()]
 
 
 def format_list_label(value: date, today: date, locale: str | None) -> str:
@@ -538,6 +544,7 @@ _LOCALES: dict[str, _LocaleSpec] = {
         months=('01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'),
         day_months=('Jan.', 'Feb.', 'M\xe4rz', 'Apr.', 'Mai', 'Juni', 'Juli', 'Aug.', 'Sept.', 'Okt.', 'Nov.', 'Dez.'),
         weekdays=('Mo.', 'Di.', 'Mi.', 'Do.', 'Fr.', 'Sa.', 'So.'),
+        weekdays_alone=('Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'),
         group='.', decimal=',', min_grouping=1, indian_grouping=False,
         currency_affixes={
             'AUD': ('', '\xa0AU$'),

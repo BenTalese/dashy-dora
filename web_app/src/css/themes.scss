@@ -126,9 +126,6 @@
     --border-default: hsl(205 12% 28%);
     --border-strong: hsl(205 12% 40%);
     --divider: hsl(205 12% 24%);
-    /* Stronger halo than the :root 35 %: the dark Pesto surface swallows the
-       softer wash (the only per-theme focus override — finalisation 20-R8). */
-    --ring-focus: color-mix(in srgb, var(--brand-primary) 45%, transparent);
 
     --semantic-positive: hsl(150 48% 40%);
     --semantic-positive-soft: hsla(150, 48%, 40%, 0.20);
@@ -810,8 +807,6 @@
     --border-default: hsl(214 8% 28%);
     --border-strong: hsl(214 8% 42%);
     --divider: hsl(214 8% 22%);
-    --focus-ring: var(--brand-primary);
-    --ring-focus: color-mix(in srgb, var(--brand-primary) 40%, transparent);
 
     --semantic-positive: hsl(150 42% 55%);
     --semantic-positive-soft: hsla(150, 42%, 55%, 0.16);
@@ -933,8 +928,6 @@
     --border-default: hsl(330 14% 28%);
     --border-strong: hsl(330 14% 42%);
     --divider: hsl(330 14% 23%);
-    --focus-ring: var(--brand-primary);
-    --ring-focus: color-mix(in srgb, var(--brand-primary) 40%, transparent);
 
     --semantic-positive: hsl(145 55% 58%);
     --semantic-positive-soft: hsla(145, 55%, 58%, 0.16);

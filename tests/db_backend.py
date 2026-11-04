@@ -20,6 +20,11 @@ from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
+# FU-952: two pytest runs at once used to share `data/dora.test.db` and corrupt
+# each other. `DORA_TEST_DB_FILE` gives a run its own file (and snapshot).
+SQLITE_TEST_DB = _REPO_ROOT / "data" / os.environ.get("DORA_TEST_DB_FILE", "dora.test.db")
+SQLITE_SNAPSHOT_DB = SQLITE_TEST_DB.with_name(SQLITE_TEST_DB.stem + ".snapshot.db")
+
 # Dedicated test database on the compose.dev.yml Postgres. A separate DB from
 # the dev `dora` one on purpose — the suite is destructive (drop_all + seed).
 _DEFAULT_PG_URL = "postgresql+psycopg://dora:dora@localhost:5432/dora_test"
@@ -45,4 +50,4 @@ def configure_db_env() -> None:
         os.environ["DORA_DB_URL"] = postgres_url()
     else:
         (_REPO_ROOT / "data").mkdir(parents=True, exist_ok=True)
-        os.environ["DORA_DB_PATH"] = str(_REPO_ROOT / "data" / "dora.test.db")
+        os.environ["DORA_DB_PATH"] = str(SQLITE_TEST_DB)

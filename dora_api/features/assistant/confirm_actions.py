@@ -42,7 +42,7 @@ from dora_api.domain.stock_status import (StockStatus, is_missing,
 from dora_api.features.meal_plans.update_meal_plan import (
     UpdateMealPlanEntryRequest, UpdateMealPlanHandler, UpdateMealPlanRequest)
 from dora_api.features.shopping_lists.manage_shopping_list_lines import (
-    AddLineHandler, AddLineRequest, UpdateLineHandler, UpdateLineRequest)
+    LIST_DONE_REFUSAL, AddLineHandler, AddLineRequest, UpdateLineHandler, UpdateLineRequest)
 from dora_api.features.shopping_lists.trim_to_budget import (
     TrimToBudgetHandler, TrimToBudgetRequest)
 from dora_api.features.app_settings.clock import household_today
@@ -687,9 +687,11 @@ def commit_add_recipe_to_list(payload: dict[str, Any]) -> dict[str, Any]:
             # ValueError); anything else is a real failure and raises.
             missing += 1
             continue
-        if response.item_not_found or response.list_not_found or response.list_done:
-            # A finished list refuses lines; count it with the misses so the
-            # reply says something rather than nothing.
+        if response.list_done:
+            # A finished list refuses every line: say so instead of
+            # "couldn't be added" per ingredient (FU-969 (4)).
+            return {"ok": False, "message": LIST_DONE_REFUSAL}
+        if response.item_not_found or response.list_not_found:
             missing += 1
         elif response.already_on_list:
             already += 1

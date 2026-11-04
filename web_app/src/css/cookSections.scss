@@ -1,0 +1,46 @@
+// ── Cook mode's three panels — ingredients, tools, all steps ─────────────
+//
+// FU-942: the ingredients panel moved into `CookIngredientsPanel.vue` while
+// the tools and all-steps panels stayed on `RecipeCookMode.vue`, and the
+// three must keep wearing one shape. So the shared section / card / row
+// treatment lives here and both files `@use` it inside their *scoped* style
+// blocks — each gets its own scoped copy, and there is still one place to
+// change it (R-001 / R-003, same reason as `recipeSteps.scss`).
+
+// Owner feedback 2026-09-01: *"should we aim for consistency across the 3
+// sections ingredients, tools and steps?"* — yes. One header treatment and
+// one card/row treatment, shared by all three, so the panels read as three
+// views of the same recipe. The per-section counts ("6 total") are gone
+// with them: the list is right there, and the number was the only thing
+// making the three headers different shapes.
+.cook-section__head {
+    font-size: var(--font-size-md);
+    font-weight: 600;
+}
+.cook-section__title {
+    color: var(--text-primary);
+}
+// Owner feedback 2026-09-13: *"Add some gap between ingredients, tools and
+// steps areas"*. The three expansion items were flush against each other,
+// so three separate panels read as one striped block — which undercut the
+// 09-01 pass that gave them a shared shape in the first place. Shared
+// shape, separated objects.
+.cook-section {
+    margin-bottom: var(--space-4);
+}
+// calm cards for the section bodies. No mid-cook stock-level colour noise;
+// just legible names + quantities.
+.cook-card {
+    // `--surface-card` does not exist (FU-764); the card surface token is
+    // `--surface-component`. Until now this declaration was invalid and the
+    // group cards inherited q-card's own background.
+    background: var(--surface-component);
+}
+// per-step highlight. A soft tint + accented border on
+// ingredient rows / tool chips that the current step references; the
+// unhighlighted neighbours dim slightly when at least one highlight is
+// active, so the eye lands where it should.
+.cook-row--highlighted {
+    background: var(--semantic-info-soft, color-mix(in srgb, var(--brand-primary) 12%, transparent));
+    border-left: 3px solid var(--brand-primary);
+}

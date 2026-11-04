@@ -35,9 +35,14 @@ describe('openHtmlDocumentAsync', () => {
         const pending = openHtmlDocumentAsync('/x/print-view', 'X');
         expect(openSpy).toHaveBeenCalled();
         await pending;
-        expect(m.get).toHaveBeenCalledWith('/x/print-view');
+        expect(m.get).toHaveBeenCalledWith('/x/print-view', {});
         expect(m.post).not.toHaveBeenCalled();
         expect(target.location.replace).toHaveBeenCalledWith('blob:doc');
+    });
+
+    it('passes a per-document timeout through to the fetch (FU-961)', async () => {
+        await openHtmlDocumentAsync('/x/sheet', 'X', undefined, { timeoutMs: 120_000 });
+        expect(m.get).toHaveBeenCalledWith('/x/sheet', { timeoutMs: 120_000 });
     });
 
     it('POSTs when a body is given', async () => {

@@ -313,9 +313,9 @@ class AppSetting(BaseEntity):
     piper_bin: str = ""
     piper_bundled_voice_dir: str = ""
     # Misc operational.
-    # `email_enabled` was DORA_EMAIL_ENABLED — the install-wide "email
-    # subsystem is switched on" flag surfaced via /api/health features.email.
-    email_enabled: bool = False
+    # `email_enabled` removed 2026-11-04 (FU-906): nothing read it. Mail
+    # sends whenever an SMTP username is set, so that is the real control
+    # (`features.email_smtp_configured`). Column dropped in d5a9c3e7f2b1.
     audit_retention_days: int = 365
     public_url: str = ""
 
@@ -358,6 +358,5 @@ class AppSetting(BaseEntity):
         VAPID_SUBJECT = "vapid_subject"
         PIPER_BIN = "piper_bin"
         PIPER_BUNDLED_VOICE_DIR = "piper_bundled_voice_dir"
-        EMAIL_ENABLED = "email_enabled"
         AUDIT_RETENTION_DAYS = "audit_retention_days"
         PUBLIC_URL = "public_url"

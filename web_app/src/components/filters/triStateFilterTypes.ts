@@ -18,7 +18,7 @@ export type TriStateOption = {
 };
 
 /** Caller-supplied sort axis. When `sortOptions` is non-empty the
- *  component renders a small `q-btn-toggle` below the search bar
+ *  component renders a small `BaseSegmented` below the search bar
  *  with one entry per axis. The active axis's `compare` runs
  *  against the option list before grouping. */
 export type TriStateSort = {

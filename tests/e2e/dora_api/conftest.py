@@ -3,7 +3,7 @@ import shutil
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from tests.db_backend import IS_POSTGRES, configure_db_env
+from tests.db_backend import IS_POSTGRES, SQLITE_SNAPSHOT_DB, SQLITE_TEST_DB, configure_db_env
 
 # Pick the DB backend and pin the env BEFORE importing `dora_api.app` so
 # `DoraConfig.get_db_connection_string()` resolves it at import. SQLite (a temp
@@ -18,8 +18,8 @@ configure_db_env()
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 (_REPO_ROOT / "data").mkdir(parents=True, exist_ok=True)
-_TEST_DB_PATH = _REPO_ROOT / "data" / "dora.test.db"
-_SNAPSHOT_DB_PATH = _REPO_ROOT / "data" / "dora.test.snapshot.db"
+_TEST_DB_PATH = SQLITE_TEST_DB
+_SNAPSHOT_DB_PATH = SQLITE_SNAPSHOT_DB
 
 import pytest
 import requests

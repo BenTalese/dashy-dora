@@ -2,7 +2,7 @@
     <div class="settings-page">
         <SettingsPageHeader
             title="Email"
-            description="Whether this install sends email, and how it connects to a mail server."
+            description="How this install connects to a mail server. Dora sends email once an SMTP username is set."
             :icon="ICONS.mark_email_read"
         />
 
@@ -12,22 +12,12 @@
                  knows the password save will be refused until it's configured. -->
             <EncryptionKeyBanner secret-label="the SMTP password" />
 
-            <SettingsSection>
-                <template #title>Email subsystem</template>
-                <template #description>
-                    Turn this off if the install should never send email.
-                </template>
+            <!-- The "Email enabled" toggle that sat here was deleted
+                 2026-11-04 (FU-906): nothing read it. Mail sends whenever an
+                 SMTP username is set, so the SMTP fields are the control.
 
-                <SettingsRow label="Email enabled">
-                    <q-toggle
-                        v-model="draft.email_enabled"
-                        @update:model-value="() => onSaveField('email_enabled')"
-                    />
-                </SettingsRow>
-            </SettingsSection>
-
-            <!-- Owner 2026-10-15: a one-off how-to, collapsed so it stops
-                 standing between the toggle and the SMTP fields. -->
+                 Owner 2026-10-15: a one-off how-to, collapsed so it stops
+                 standing in front of the SMTP fields. -->
             <CollapsibleCard header-toggles reveals="Gmail steps" class="gmail-card">
                 <template #header>
                     <div class="gmail-card__title">
@@ -62,8 +52,7 @@
                         paste the App Password as the SMTP password.
                     </li>
                     <li>
-                        Turn <strong>Email enabled</strong> on and try a
-                        password reset (or any email-emitting flow) to
+                        Try a password reset (or any email-emitting flow) to
                         confirm it works.
                     </li>
                 </ol>
@@ -121,7 +110,7 @@
                         v-model="draft.smtp_username"
                         outlined dense clearable
                         placeholder="dora@example.com"
-                        @blur="() => onSaveField('smtp_username')"
+                        @blur="() => onSaveField('smtp_username', refreshFlags)"
                     />
                 </SettingsRow>
 
@@ -192,6 +181,19 @@
                     verification and password-reset emails.
                 </template>
 
+                <!-- FU-969: both facts come from /health (R-003), refreshed
+                     after the username or URL is saved. Hidden until the flags
+                     land so it can't flash on first paint. -->
+                <SettingsNotice
+                    v-if="flagsLoaded && emailSmtpConfigured && !publicUrlConfigured"
+                    title="Email is set up, but the public URL isn't"
+                >
+                    Links in Dora's emails need this install's address. Until
+                    it's set, the weekly deals email isn't sent, and on a
+                    production install the login page hides
+                    <strong>Forgot password?</strong>.
+                </SettingsNotice>
+
                 <SettingsRow label="Public URL" stacked>
                     <q-input
                         v-model="draft.public_url"
@@ -220,13 +222,18 @@
     import SettingsPageHeader from 'src/components/settings/SettingsPageHeader.vue';
     import EncryptionKeyBanner from 'src/components/settings/EncryptionKeyBanner.vue';
     import CollapsibleCard from 'src/components/CollapsibleCard.vue';
+    import SettingsNotice from 'src/components/settings/SettingsNotice.vue';
+    import { useFeatureFlags } from 'src/composables/useFeatureFlags';
 
-    type EmailField = 'email_enabled' | 'smtp_host' | 'smtp_port'
+    type EmailField = 'smtp_host' | 'smtp_port'
         | 'smtp_username' | 'smtp_from' | 'smtp_use_tls'
         | 'public_url';
 
+    const {
+        flagsLoaded, emailSmtpConfigured, publicUrlConfigured, refresh: refreshFlags,
+    } = useFeatureFlags();
+
     const { draft, ready, save } = useAppSettingDrafts({
-        email_enabled: false,
         smtp_host: '',
         smtp_port: 587,
         smtp_username: '',
@@ -235,8 +242,8 @@
         public_url: '',
     });
 
-    function onSaveField(field: EmailField) {
-        void save({ [field]: draft[field] }, 'Email settings saved.');
+    function onSaveField(field: EmailField, afterSave?: () => unknown) {
+        void save({ [field]: draft[field] }, 'Email settings saved.', afterSave);
     }
 
     const publicUrlHasError = computed(() => {
@@ -249,7 +256,7 @@
         // The server validates too; bailing here shows the inline error
         // rather than a toast.
         if (publicUrlHasError.value) return;
-        void save({ public_url: (draft.public_url ?? '').trim() }, 'Email settings saved.');
+        void save({ public_url: (draft.public_url ?? '').trim() }, 'Email settings saved.', refreshFlags);
     }
 
     // The SMTP password is write-only: the server never returns it, only

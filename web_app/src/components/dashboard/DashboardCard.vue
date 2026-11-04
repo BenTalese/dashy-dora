@@ -47,6 +47,10 @@
     }
     .dora-card-head {
         display: flex;
+        /* Width question: when the `#action` control can't share the title's
+           line (Reports' SpendCard segmented on a 375px phone) it drops to its
+           own line instead of widening the card past the viewport. */
+        flex-wrap: wrap;
         align-items: center;
         gap: var(--space-2);
         margin-bottom: var(--space-4);

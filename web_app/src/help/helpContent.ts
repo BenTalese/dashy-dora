@@ -1084,7 +1084,7 @@ export const HELP_TOPICS: HelpTopic[] = [
             {
                 slug: 'email-push-admin',
                 title: 'Email and push setup (admin)',
-                summary: 'SMTP details, the email switch, the public URL used in links, and the keys for web push.',
+                summary: 'SMTP details (email sends once a username is set), the public URL used in links, and the keys for web push.',
                 note: 'Secrets are stored encrypted and need DORA_SECRET_ENCRYPTION_KEY on the server.',
                 path: '/settings/admin/system/email',
             },

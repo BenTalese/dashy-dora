@@ -17,11 +17,7 @@ export interface HealthInfo {
     schema_version: string | null;
     profile: string;
     features: {
-        auth: boolean;
-        audit: boolean;
         scanning: boolean;
-        multi_user: boolean;
-        email: boolean;
         // True iff DORA_SECRET_ENCRYPTION_KEY is set on the backend.
         secret_encryption_configured: boolean;
         // Two string-valued "flags" ride in the same map (finalisation 13-R16):
@@ -135,6 +131,32 @@ export default class HealthApiService {
 }
 
 let sharedInfo: Promise<HealthInfo> | null = null;
+
+/**
+ * FU-974 — let the network-status boot probe (`useNetworkStatus`) answer the
+ * first info read too, so a cold load makes one `/health` request, not two.
+ *
+ * The direction matters. The probe is a `cache: 'no-store'` fetch that the
+ * service worker leaves to the network, so its success really means "the
+ * server answered"; this XHR can be served from the SW's NetworkFirst cache
+ * while offline. So the *probe* feeds the info, never the other way round:
+ * when it got a body, every policy composable reads that; when it didn't
+ * (offline, unreachable, no URL yet), the normal XHR runs as before and may
+ * still be answered from cache — which is what keeps the policies right offline.
+ *
+ * No-op once an info read is already in flight or settled.
+ */
+export function adoptHealthProbe(probe: Promise<HealthInfo | null>): void {
+    if (sharedInfo) return;
+    const adopted: Promise<HealthInfo> = probe.then((info) => {
+        if (info) return info;
+        // Only drop our own promise — an `invalidateHealthInfo()` + refetch
+        // in the meantime owns `sharedInfo` now.
+        if (sharedInfo === adopted) sharedInfo = null;
+        return new HealthApiService().getInfoAsync();
+    });
+    sharedInfo = adopted;
+}
 
 /** Drop the shared probe so the next `getInfoAsync()` refetches. The policy
  *  composables' `refresh…()` call this after an admin save. */

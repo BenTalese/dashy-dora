@@ -106,14 +106,12 @@
                     matches are auto-selected from the column names.
                 </template>
                 <div class="mapping-grid">
-                    <q-select
+                    <BaseSelect
                         v-for="target in targetFields"
                         :key="target"
                         v-model="columnMap[target]"
                         :options="columnOptions"
                         :label="targetLabel(target)"
-                        outlined
-                        dense
                         clearable
                         emit-value
                         map-options
@@ -128,7 +126,7 @@
                                 <BaseTooltip>Required</BaseTooltip>
                             </q-icon>
                         </template>
-                    </q-select>
+                    </BaseSelect>
                 </div>
             </SettingsSection>
 
@@ -284,6 +282,7 @@
 <script lang="ts" setup>
     import BaseTooltip from 'src/components/BaseTooltip.vue';
     import BaseButton from 'src/components/BaseButton.vue';
+    import BaseSelect from 'src/components/BaseSelect.vue';
     import BaseDialog from 'src/components/BaseDialog.vue';
     import SettingsPageHeader from 'src/components/settings/SettingsPageHeader.vue';
     import SettingsSection from 'src/components/settings/SettingsSection.vue';

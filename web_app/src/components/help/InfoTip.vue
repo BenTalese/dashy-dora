@@ -91,7 +91,7 @@
         color: var(--text-secondary);
     }
     .info-tip:focus-visible {
-        outline: 2px solid var(--ring-focus);
+        outline: 2px solid var(--focus-ring);
         outline-offset: 1px;
         border-radius: 50%;
     }

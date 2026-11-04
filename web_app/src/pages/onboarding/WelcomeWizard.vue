@@ -169,7 +169,7 @@
                     </div>
                     <div class="welcome-font">
                         <div class="welcome-font__label">Font</div>
-                        <DoraSegmented
+                        <BaseSegmented
                             :model-value="form.fontFamily"
                             :options="FONT_OPTIONS"
                             @update:model-value="(v) => (form.fontFamily = v)"
@@ -222,12 +222,10 @@
                         </label>
                         <label class="household-field household-field--grow">
                             <span class="household-field__label">Timezone</span>
-                            <q-select
+                            <BaseSelect
                                 dark
                                 v-model="household.timezone"
                                 :options="timezoneOptions"
-                                outlined
-                                dense
                                 use-input
                                 hide-selected
                                 fill-input
@@ -239,12 +237,10 @@
                         </label>
                         <label class="household-field household-field--grow">
                             <span class="household-field__label">Language &amp; format</span>
-                            <q-select
+                            <BaseSelect
                                 dark
                                 v-model="household.locale"
                                 :options="localeOptions"
-                                outlined
-                                dense
                                 emit-value
                                 map-options
                                 options-dense
@@ -254,7 +250,7 @@
                     </div>
                     <div class="welcome-font household-units">
                         <div class="welcome-font__label">Units</div>
-                        <DoraSegmented
+                        <BaseSegmented
                             :model-value="household.measurementSystem"
                             :options="UNIT_OPTIONS"
                             :disabled="!featuresLoaded"
@@ -344,22 +340,18 @@
                     @remove="removeOwnItem"
                 >
                     <template #add-fields>
-                        <q-select
+                        <BaseSelect
                             dark
                             v-model="ownItem.group_name"
                             :options="groupNameOptions"
-                            outlined
-                            dense
                             clearable
                             label="Group"
                             class="stock-step__own-select"
                         />
-                        <q-select
+                        <BaseSelect
                             dark
                             v-model="ownItem.location_name"
                             :options="locationNameOptions"
-                            outlined
-                            dense
                             clearable
                             label="Location"
                             class="stock-step__own-select"
@@ -522,11 +514,12 @@
 <script lang="ts" setup>
     import { ICONS } from 'src/style/icons';
     import BaseButton from 'src/components/BaseButton.vue';
+    import BaseSelect from 'src/components/BaseSelect.vue';
     import ImageEditTile from 'src/components/ImageEditTile.vue';
     import PresetAvatarPicker from 'src/components/PresetAvatarPicker.vue';
     import UserAvatar from 'src/components/UserAvatar.vue';
     import DoraMascot from 'src/components/dora/DoraMascot.vue';
-    import DoraSegmented from 'src/components/settings/DoraSegmented.vue';
+    import BaseSegmented from 'src/components/BaseSegmented.vue';
     import OnboardingConfetti from 'src/components/onboarding/OnboardingConfetti.vue';
     import OnboardingPickPanel, { type PickSection } from 'src/components/onboarding/OnboardingPickPanel.vue';
     import OnboardingStepRail from 'src/components/onboarding/OnboardingStepRail.vue';
@@ -542,7 +535,7 @@
     import { refreshCookingPolicy } from 'src/composables/useCookingPolicy';
     import { refreshMoneyPolicy } from 'src/composables/useMoney';
     import { useMeasurementSystem } from 'src/composables/useMeasurementSystem';
-    import type { DoraSegmentedOption } from 'src/components/settings/DoraSegmented.vue';
+    import type { BaseSegmentedOption } from 'src/components/BaseSegmented.vue';
     import {
         MEASUREMENT_SYSTEM_CHOICES, TIMEZONE_CHOICES, deviceLocale, deviceTimezone,
         filterTimezones, localeOptionsWith,
@@ -868,7 +861,7 @@
     const localeOptions = computed(() => localeOptionsWith(household.locale));
     const householdBaseline = ref<HouseholdDraft | null>(null);
     let savedHousehold: Partial<HouseholdDraft> | null = null;
-    const UNIT_OPTIONS: DoraSegmentedOption<MeasurementSystem>[] =
+    const UNIT_OPTIONS: BaseSegmentedOption<MeasurementSystem>[] =
         MEASUREMENT_SYSTEM_CHOICES.map((c) => ({ label: c.short, value: c.value }));
     // Shared with the Region / Cooking settings pages (R-003; finalisation 14-R9).
     const timezoneOptions = ref<string[]>([...TIMEZONE_CHOICES]);

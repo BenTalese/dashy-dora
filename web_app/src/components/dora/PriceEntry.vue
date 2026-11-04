@@ -48,13 +48,13 @@
                 :rules="[(v) => (v != null && v > 0) || 'Required']"
                 hide-bottom-space
             />
-            <q-select
+            <BaseSelect
                 v-model="unit"
                 :options="unitOptions"
-                dense outlined emit-value map-options
+                emit-value map-options
                 class="col"
                 label="Unit"
-                :rules="[(v) => !!v || 'Required']"
+                :rules="[(v: string | null) => !!v || 'Required']"
                 hide-bottom-space
             />
         </div>
@@ -80,11 +80,11 @@
                 :rules="[(v) => isBlank(v) || v > 0 || 'Must be > 0']"
                 hide-bottom-space
             />
-            <q-select
+            <BaseSelect
                 v-if="storeOptions.length > 0"
                 v-model="storeId"
                 :options="storeOptions"
-                dense outlined emit-value map-options clearable
+                emit-value map-options clearable
                 class="col"
                 label="Store (optional)"
                 hide-bottom-space
@@ -123,6 +123,7 @@
 <script setup lang="ts">
     import { computed, ref, watch } from 'vue';
     import BaseButton from 'src/components/BaseButton.vue';
+    import BaseSelect from 'src/components/BaseSelect.vue';
     import MoneyInput from 'src/components/MoneyInput.vue';
     import { formatMoney } from 'src/composables/useMoney';
     import { ICONS } from 'src/style/icons';

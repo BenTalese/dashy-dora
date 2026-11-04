@@ -17,7 +17,7 @@
 // Extracted 2026-08-19 from `useQrLabels.openQrSheetAsync` when the recipe
 // Print button turned out to be an un-swept R-045 violation of the same shape
 // (reported as "Print button 404s"). Any future print view calls this.
-import AxiosHttpClient from 'src/services/api/axiosHttpClient';
+import AxiosHttpClient, { type RequestOptions } from 'src/services/api/axiosHttpClient';
 
 const http = new AxiosHttpClient();
 
@@ -51,11 +51,15 @@ export class PopupBlockedError extends Error {
  *  Throws `PopupBlockedError` if the browser refused the tab, or whatever
  *  `AxiosHttpClient` throws if the fetch failed; the caller owns the wording,
  *  because "couldn't load your QR labels" and "couldn't print this recipe"
- *  are not the same sentence. */
+ *  are not the same sentence.
+ *
+ *  `options.timeoutMs` lifts the client's default ceiling for one document
+ *  that is legitimately slow to render (the every-item QR sheet). */
 export async function openHtmlDocumentAsync(
     path: string,
     placeholderTitle: string,
     body?: unknown,
+    options: Pick<RequestOptions, 'timeoutMs'> = {},
 ): Promise<void> {
     // `noopener` is deliberately NOT passed: with it, `window.open` returns
     // null by spec and there'd be no handle to navigate. The opener reference
@@ -80,11 +84,11 @@ export async function openHtmlDocumentAsync(
 
     try {
         const html = body === undefined
-            ? await http.get<string>(path)
+            ? await http.get<string>(path, options)
             // A print view only rides a POST because its selection would
             // overflow the request line; it is still a read, so it retries
             // like the GET path does.
-            : await http.post<string>(path, body, { retryAsRead: true });
+            : await http.post<string>(path, body, { ...options, retryAsRead: true });
         const url = objectUrlFor(new Blob([html], { type: 'text/html' }));
         // `replace`, not `href`: the placeholder shouldn't sit in the tab's
         // history where Back would return the user to "Preparing…".

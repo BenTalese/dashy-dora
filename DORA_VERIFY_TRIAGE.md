@@ -145,6 +145,17 @@ device packs for hardware items.
 
 ---
 
+## Owner-confirmed — every check from 2026-10-23 to 2026-11-04 (2026-11-04)
+The owner walked the running app and the device/operator checks ("consider all checked off, I've looked through the app"; FU-965 and FU-918 "not worried"). Deleted from DORA_VERIFY.md: every section from "Owner decisions built (2026-11-04)" down to "Finalisation Stage 2 — units 1–10" (about 60 lines: browser rechecks, Android, voice with a real mic, camera, wake lock, install prompt, hosted AI keys, Postgres `upgrade head`, gunicorn export, the FU-965 production row counts). FU-710/715/736/797/729/739/722/751/628/629/389/737 resolved on the same word.
+
+## Verified live — the 2026-11-04 finish-off sweep (2026-11-04)
+Each agent built the PWA SPA and drove a throwaway seeded backend with scratch Playwright (Chrome). No new lines were added to DORA_VERIFY for these.
+- Page splits (cook mode, recipe page, cookbook filters, shopping list, stock item + overview): every face, tab, dialog and the main writes driven at 1280 and 375; no page errors; cookbook filter row measured at two lines at 1280.
+- Email settings: the public-URL warning shows and hides as SMTP and the URL are set and cleared.
+- My Products virtualised: 1,904 products, first card 146 ms, scrolling to the end and search unchanged, focus stays in cards.
+- Tokens: segmented label, focus outline and accent marks measured in Lemon Tart light, Pesto light and Pesto dark (all at or above their floors).
+- Selects and segmented controls: 22 routes crawled; menu and dialog modes, arrow keys, one Tab stop, 44px on touch, no sideways scroll.
+
 ## Verified live — 11-02 / 11-03 owner changes (2026-11-03)
 Rebuilt PWA SPA; seeded backend on 127.0.0.1:5186 and a fresh unseeded one on 5187; scratch Playwright (Chrome, en-US, America/New_York). 5 lines deleted.
 - Preferred buys coexist: Brown Onions (no linked product, one preferred buy added) — list row menu lists "QA Brand Oat", picking it relabels the row; its item page shows the Preferred buys card; recipe editor offers a "Preferred buy" picker listing it. Full Cream Milk / Free Range Eggs (linked) — list menu lists the Coles/Woolworths offers with prices; recipe editor offers "Product". Olive oil (linked + a preferred buy) hides the card.

@@ -109,7 +109,10 @@ describe('stock overview + QR sheet — selection travels in the body', () => {
     it('keeps the GET "print all" QR sheet', async () => {
         await openQrSheetAsync({ layout: 'a4-21up' });
 
-        expect(m.openHtmlDocumentAsync).toHaveBeenCalledWith('/stock-items/qr/sheet?layout=a4-21up', 'QR sheet');
+        // FU-961: the every-item sheet gets its own longer client ceiling.
+        expect(m.openHtmlDocumentAsync).toHaveBeenCalledWith(
+            '/stock-items/qr/sheet?layout=a4-21up', 'QR sheet', undefined, { timeoutMs: 120_000 },
+        );
         expect(m.post).not.toHaveBeenCalled();
     });
 });

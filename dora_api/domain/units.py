@@ -347,10 +347,9 @@ UNIT_TABLE: dict[str, UnitDef] = {
     "sticks": UnitDef(MASS, 113.0, "stick"),
 
     # ── Count — base ea (new — B1, FU-227) ────────────────────────────
-    # "pack" is a placeholder: long-term a pack is N items, but without a
-    # per-product pack size we can't know N (see plan §7 / Risk). For now
-    # a pack means "the thing the price is per" with factor 1, identical
-    # to ea — explicit aliasing for UI clarity, not different math.
+    # "pack" keeps factor 1 against ea for conversions, but a pack is N items
+    # once the product records N: recipe costing prices "1 pack" at the whole
+    # shelf price, never one item from it (see WHOLE_PACK_UNIT, QA2-18).
     "ea": UnitDef(COUNT, 1.0, "ea"),
     "each": UnitDef(COUNT, 1.0, "ea"),
     "unit": UnitDef(COUNT, 1.0, "ea"),
@@ -630,6 +629,12 @@ FOOD_SPECIFIC_MASS_UNITS: dict[str, FoodSpecificMass] = {
         portion_measures=("stick", "stalk"),
     ),
 }
+
+
+# The canonical unit that means "the whole shelf pack" in a recipe line. Recipe
+# costing bills "1 pack" at the pack's price, not at one countable item from it
+# (a 12-egg carton at $6.00 is $6.00 a pack, $0.50 an egg; QA2-18).
+WHOLE_PACK_UNIT = "pack"
 
 
 # Words that name a *part of* a shelf item, never the item itself. A recipe

@@ -1,124 +1,251 @@
 <template>
-    <q-btn-toggle
-        class="dora-segmented-btn"
-        rounded
-        unelevated
-        :model-value="modelValue"
-        :options="options"
-        no-caps
-        toggle-color="primary"
-        @update:model-value="(v: T) => emit('update:modelValue', v)"
-    />
+    <div
+        class="base-segmented"
+        :class="{ 'base-segmented--dense': dense, 'base-segmented--spread': spread }"
+        role="radiogroup"
+        :aria-disabled="disabled || undefined"
+        @keydown="onKeydown"
+    >
+        <button
+            v-for="(opt, i) in options"
+            :key="String(opt.value)"
+            :ref="(el) => setOptRef(el, i)"
+            type="button"
+            role="radio"
+            class="base-segmented__opt"
+            :class="{ 'base-segmented__opt--active': isActive(opt.value) }"
+            :aria-checked="isActive(opt.value)"
+            :tabindex="i === tabStop ? 0 : -1"
+            :disabled="isOptDisabled(opt)"
+            @click="pick(opt.value)"
+        >
+            <q-icon v-if="opt.icon" :name="opt.icon" size="16px" class="base-segmented__icon" />
+            <span v-if="opt.label" class="base-segmented__label">{{ opt.label }}</span>
+        </button>
+    </div>
 </template>
 
-<script setup lang="ts" generic="T">
+<script setup lang="ts" generic="T extends string | number | boolean">
     /*
-     * Thin wrapper around q-btn-toggle so every single-select row of buttons
-     * in the app shares one anatomy: a pill-shaped sunken track with the
-     * active segment as a brand-primary pill inside it. Pass dense / spread /
-     * size etc. through as normal attrs — Vue's default inheritAttrs forwards
-     * them onto the root.
+     * The app's single-select row of buttons (B2a / D-015): a pill-shaped
+     * sunken track with the active segment as a brand-primary pill inside it.
+     * The anatomy's values are the `--seg-*` tokens in tokens.scss.
      *
-     * **The pill used to be opt-in and is now the only shape** (owner,
-     * 2026-09-03: *"I've found a couple instances of single select option rows
-     * of buttons that are inconsistent with the latest designs … update [them]
-     * to be styled like recipe view's step style picker"*). It arrived as a
-     * `pill` prop on 2026-08-31 for that one call site; four of the nineteen
-     * consumers had since adopted it and the rest hadn't, which is exactly the
-     * split the owner walked into. A shape prop with a clear winner is not a
-     * variant, it's a migration that never finished — so the prop is gone and
-     * the squared block with it (D-015).
+     * **One component since FU-848 (2026-11-04).** There used to be two: this
+     * file was a `q-btn-toggle` wrapper, and `settings/DoraSegmented.vue` drew
+     * the same anatomy as a hand-rolled radiogroup. They shared tokens, so they
+     * couldn't drift on colour — but nothing stopped the next change landing on
+     * one of them. The hand-rolled one survived, under this name, because it had
+     * the better bones:
      *
-     * `rounded` + `unelevated` are set here rather than at the call sites for
-     * the same reason: they are part of the anatomy, not a per-site choice.
-     * Call sites that used to pass `flat`, `color="grey"`, `text-color` or
-     * `toggle-text-color` had those removed in the same pass — `flat`
-     * suppresses the active fill (which is why two of them then hand-painted
-     * it back), and the grey/white pair is a hardcoded palette R-002 forbids.
+     *   - real `radiogroup` / `radio` semantics (`aria-checked`), with a roving
+     *     tabindex and arrow-key movement — the WAI-ARIA radio-group pattern. A
+     *     `q-btn-toggle` is a row of independent `aria-pressed` buttons, one Tab
+     *     stop each, with no arrow keys;
+     *   - it wraps on desktop and scrolls sideways on a phone, which the
+     *     five-option font-family picker needs;
+     *   - none of the `!important` fight the q-btn-toggle version waged against
+     *     Quasar's `.text-primary` utility to keep the active label readable
+     *     (D-002) — the active ink is just `--seg-active-ink`, which measures
+     *     ≥4.5:1 on `--seg-active-bg` in every theme.
      *
-     * The anatomy's values are tokens (`--seg-*` in tokens.scss), shared with
-     * `settings/DoraSegmented.vue`, which is the same control drawn as a
-     * hand-rolled radiogroup. Two mechanisms, one anatomy; merging them is
-     * FU-848.
+     * The Quasar props the old wrapper's consumers passed through `$attrs` are
+     * mapped deliberately rather than left to go inert:
+     *   - `dense` → the `dense` prop below (a compact 30px segment);
+     *   - `spread` → the `spread` prop (segments share the full width);
+     *   - `size` → retired. The old wrapper had to pin the label to
+     *     `--font-size-sm` anyway because `size="sm"` rendered it at 10px
+     *     (under D-003's floor), so `size` only ever changed padding — which is
+     *     what `dense` says.
+     *   - option `disable` (Quasar's spelling) is honoured alongside `disabled`.
+     * `aria-label`, `class` and `style` fall through to the radiogroup root.
      */
-    defineProps<{
+    import type { ComponentPublicInstance } from 'vue';
+    import { computed, ref } from 'vue';
+
+    export interface BaseSegmentedOption<V> {
+        label?: string;
+        value: V;
+        icon?: string;
+        disabled?: boolean;
+        /** Quasar's spelling, accepted so option lists built for q-btn-toggle
+         *  keep working. */
+        disable?: boolean;
+    }
+
+    const props = defineProps<{
         modelValue: T;
-        options: {
-            label?: string;
-            icon?: string;
-            value: T;
-            [k: string]: unknown;
-        }[];
+        options: readonly BaseSegmentedOption<T>[];
+        /** Disables the whole group. A *semantic* reason only — never a
+         *  transient `saving` flag (D-019). */
+        disabled?: boolean;
+        /** Compact segments, for toolbars, card headers and filter panels. */
+        dense?: boolean;
+        /** Segments share the full width of the track. */
+        spread?: boolean;
     }>();
     const emit = defineEmits<{ (e: 'update:modelValue', value: T): void }>();
+
+    const optEls = ref<(HTMLButtonElement | null)[]>([]);
+    function setOptRef(el: Element | ComponentPublicInstance | null, i: number) {
+        optEls.value[i] = el instanceof HTMLButtonElement ? el : null;
+    }
+
+    function isActive(v: T): boolean {
+        return props.modelValue === v;
+    }
+
+    function isOptDisabled(opt: BaseSegmentedOption<T>): boolean {
+        return Boolean(props.disabled || opt.disabled || opt.disable);
+    }
+
+    /** The one option reachable by Tab: the selected one, or the first enabled
+     *  option when nothing (or a disabled option) is selected. */
+    const tabStop = computed(() => {
+        const active = props.options.findIndex((o) => isActive(o.value) && !isOptDisabled(o));
+        if (active >= 0) return active;
+        return props.options.findIndex((o) => !isOptDisabled(o));
+    });
+
+    function pick(v: T): void {
+        if (v === props.modelValue) return;
+        emit('update:modelValue', v);
+    }
+
+    /** Arrow keys move *and* select, as a native radio group does. Disabled
+     *  options are skipped; the ends wrap. */
+    function onKeydown(e: KeyboardEvent): void {
+        const n = props.options.length;
+        if (n === 0 || props.disabled) return;
+        let step: 1 | -1;
+        let from = tabStop.value;
+        switch (e.key) {
+            case 'ArrowRight':
+            case 'ArrowDown':
+                step = 1;
+                break;
+            case 'ArrowLeft':
+            case 'ArrowUp':
+                step = -1;
+                break;
+            case 'Home':
+                step = 1;
+                from = -1;
+                break;
+            case 'End':
+                step = -1;
+                from = n;
+                break;
+            default:
+                return;
+        }
+        e.preventDefault();
+        for (let k = 1; k <= n; k++) {
+            const i = (((from + step * k) % n) + n) % n;
+            const opt = props.options[i];
+            if (opt && !isOptDisabled(opt)) {
+                pick(opt.value);
+                optEls.value[i]?.focus();
+                return;
+            }
+        }
+    }
 </script>
 
 <style scoped lang="scss">
-    /*
-     * The track. `rounded` on QBtnToggle rounds the *group's* outer ends; the
-     * segments inside stay square, so the selected one reads as a block
-     * clipped by a curve. Rounding each segment to the pill radius makes the
-     * active fill a pill sitting in a pill-shaped track.
-     *
-     * The track needs its own outline for the unselected segments to sit *in*
-     * something — without it a pill-shaped fill floats on the page with
-     * nothing to be a segment of.
-     */
-    .dora-segmented-btn {
+    .base-segmented {
+        display: inline-flex;
+        flex-wrap: wrap;
+        align-items: stretch;
+        gap: var(--seg-track-pad);
+        padding: var(--seg-track-pad);
         border: 1px solid var(--seg-track-border);
         border-radius: var(--seg-radius);
         background: var(--seg-track-bg);
-        padding: var(--seg-track-pad);
         max-width: 100%;
     }
-    .dora-segmented-btn :deep(.q-btn) {
+    .base-segmented__opt {
+        all: unset;
+        box-sizing: border-box;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        padding: 8px 14px;
+        min-height: 36px;
         border-radius: var(--seg-radius);
+        cursor: pointer;
         color: var(--seg-ink);
-    }
-    /* Quasar draws the inter-segment divider as a right border on every button
-       but the last. Between two pills it reads as a stray tick. */
-    .dora-segmented-btn :deep(.q-btn::before),
-    .dora-segmented-btn :deep(.q-btn-group > .q-btn:not(:last-child)) {
-        border-right: 0;
-    }
-    .dora-segmented-btn :deep(.q-btn:not([aria-pressed='true']):hover) {
-        color: var(--seg-ink-hover);
-    }
-
-    /*
-     * Active-segment ink (D-002). `toggle-color="primary"` makes Quasar emit
-     * its `.text-primary` utility on the selected button — and that utility
-     * carries `!important`, so it beat every attempt to set readable ink from
-     * a call site. In `flat` mode, where the caller painted its own brand-
-     * primary fill, the result was primary-on-primary: measured at
-     * rgb(53,151,102) text on rgb(53,151,102) background in pesto-dark — a
-     * 1:1 ratio, i.e. an invisible label (reported 2026-08-18 on the cookbook
-     * Ingredients filter's sort toggle).
-     *
-     * `--seg-active-ink` resolves to `--text-on-primary`, the token that
-     * exists for exactly this job, and every theme defines it against its own
-     * brand-primary. Matching Quasar's `!important` is the only thing that
-     * beats `!important` — specificity alone can't — hence the flag here
-     * rather than a deeper selector.
-     */
-    .dora-segmented-btn :deep(.q-btn[aria-pressed='true']) {
-        color: var(--seg-active-ink) !important;
-    }
-
-    /*
-     * Label floor (D-003 / B2). Quasar's `size` prop sets the button's
-     * font-size directly — `sm` is **10px**, `xs` is 8px — so every call site
-     * passing `size="sm"` (most of them, to get a compact control) was
-     * rendering its label under the 12px hard floor, on an *interactive*
-     * element where B2 asks for 14. Measured live on the dashboard at chunk 6:
-     * "7 days" / "14 days" / "Month" / "Year" / "All" all came back at 10px.
-     *
-     * Fixed here rather than at the call sites: the size prop is doing real
-     * work (padding, height, density) and only its type scale is wrong, so
-     * pinning the label alone keeps the compact control and makes the label
-     * legible. One place, so the nineteen consumers can't drift (D-015).
-     */
-    .dora-segmented-btn :deep(.q-btn__content) {
+        /* D-003: interactive labels are 14px. */
         font-size: var(--font-size-sm);
+        font-weight: 500;
+        line-height: 1;
+        white-space: nowrap;
+        transition: color 0.18s ease, background-color 0.18s ease, font-weight 0s;
+    }
+    /* Horizontal padding stays close to the old dense q-btn's (~4px): a
+       card header holding three dense segments has to fit a 375px phone. */
+    .base-segmented--dense .base-segmented__opt {
+        padding: 4px 10px;
+        min-height: 30px;
+    }
+    .base-segmented--spread {
+        display: flex;
+        width: 100%;
+    }
+    .base-segmented--spread .base-segmented__opt {
+        flex: 1 1 0;
+        min-width: 0;
+    }
+    /* A pointer that can hover — a tapped segment on a phone would otherwise
+       keep the hover tint until the next tap elsewhere (R-085). */
+    @media (hover: hover) {
+        .base-segmented__opt:not(.base-segmented__opt--active):not([disabled]):hover {
+            color: var(--seg-ink-hover);
+        }
+    }
+    .base-segmented__opt:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 1px;
+    }
+    .base-segmented__opt--active {
+        background: var(--seg-active-bg);
+        color: var(--seg-active-ink);
+        font-weight: 600;
+    }
+    .base-segmented__opt[disabled] {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+    .base-segmented__icon { flex: 0 0 auto; }
+    .base-segmented__label {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* Width question ("does it fit?"): on a narrow layout the row scrolls
+       sideways inside its own track rather than wrapping into a ragged
+       second line (D-011). A spread row never needs to — its segments
+       shrink instead. */
+    @media (max-width: 599px) {
+        .base-segmented:not(.base-segmented--spread) {
+            overflow-x: auto;
+            scrollbar-width: none;
+            flex-wrap: nowrap;
+        }
+        .base-segmented::-webkit-scrollbar { display: none; }
+    }
+
+    /* Finger question (R-085): D-004's 44px floor on a coarse pointer, dense or
+       not — the same lift `BaseButton` gets, so a segmented control stays level
+       with the buttons beside it. A mouse keeps the compact sizes above.
+       (Not a hit-area pseudo-element: the phone-width track scrolls, and an
+       overflow container would clip — and scroll — anything drawn outside it.) */
+    @media (pointer: coarse) {
+        .base-segmented__opt,
+        .base-segmented--dense .base-segmented__opt {
+            min-height: 44px;
+        }
     }
 </style>

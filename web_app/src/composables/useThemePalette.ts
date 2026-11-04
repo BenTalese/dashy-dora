@@ -127,9 +127,38 @@ export function seriesColour(index: number): string {
  * renders and across cards. Six slots, so distinct keys can collide (FU-843).
  */
 export function categoricalColour(key: string): string {
+    return seriesColour(categoricalSlot(key));
+}
+
+function categoricalSlot(key: string): number {
     let hash = 0;
     for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) | 0;
-    return seriesColour(Math.abs(hash));
+    return Math.abs(hash) % CHART_RAMP_FALLBACKS.length;
+}
+
+/**
+ * Colours for every category shown together in one chart, with no two sharing
+ * a hue while the ramp has room (FU-976: "Pantry staples" and "Fruit & Veg"
+ * hashed to the same bar colour). Each key starts on its `categoricalColour`
+ * slot, so most keep the hue they'd get alone; a key whose slot is already
+ * taken moves to the next free one. Keys are placed in sorted order, so the
+ * result depends on the *set*, not on the order rows arrive in (a spend ranking
+ * reshuffling between ranges does not recolour anything). Past six distinct
+ * keys the ramp runs out and colours repeat — the ramp is six tokens deep.
+ */
+export function categoricalColours(keys: readonly string[]): Map<string, string> {
+    const slots = CHART_RAMP_FALLBACKS.length;
+    const taken = new Set<number>();
+    const out = new Map<string, string>();
+    for (const key of [...new Set(keys)].sort()) {
+        let slot = categoricalSlot(key);
+        if (taken.size < slots) {
+            while (taken.has(slot)) slot = (slot + 1) % slots;
+        }
+        taken.add(slot);
+        out.set(key, seriesColour(slot));
+    }
+    return out;
 }
 
 export function useThemePalette() {

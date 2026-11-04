@@ -67,6 +67,7 @@
     import PasswordField from 'src/components/PasswordField.vue';
     import { useFormErrors } from 'src/composables/useFormErrors';
     import { useAuthStore } from 'src/stores/authStore';
+    import { deviceTimezone } from 'src/models/regionChoices';
     import { reactive, ref } from 'vue';
     import { useRouter } from 'vue-router';
 
@@ -101,6 +102,8 @@
                 // Blank means "no address" — send null, not "", so the
                 // server stores NULL rather than an empty string.
                 email: form.email.trim() || null,
+                // QA2-12 — skipping onboarding must not leave the household on UTC.
+                timezone: deviceTimezone(),
             });
             $q.notify({
                 type: 'positive',

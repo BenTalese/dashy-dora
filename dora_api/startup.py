@@ -21,11 +21,18 @@ from dora_api.infrastructure.configuration_manager import DORA_CONFIG
 from dora_api.infrastructure.logging_setup import configure_logging
 from dora_api.infrastructure.middleware import MIDDLEWARE
 from dora_api.infrastructure.profile import is_test
-from dora_api.infrastructure.utils import get_attributes_ending_with
-from dora_api.jobs import register_jobs
-from dora_api.persistence.seed import seed_dev_data
-from dora_api.persistence.seed_dense import seed_dense_data
-from dora_api.persistence.seed_showcase import reset_showcase
+from dora_api.infrastructure.utils import get_attributes_ending_with, import_feature_modules
+
+# FU-977 (5): walk the feature packages through the import guard BEFORE the
+# imports below reach into them (jobs -> alerts/deals/..., the seeders), so a
+# broken feature package is named in one "Feature package ... failed to import"
+# line instead of surfacing as a bare traceback from `dora_api/jobs.py`.
+import_feature_modules("dora_api.features")
+
+from dora_api.jobs import register_jobs  # noqa: E402 - after the guarded walk above
+from dora_api.persistence.seed import seed_dev_data  # noqa: E402
+from dora_api.persistence.seed_dense import seed_dense_data  # noqa: E402
+from dora_api.persistence.seed_showcase import reset_showcase  # noqa: E402
 
 
 def bootstrap(is_test_env: bool = False):

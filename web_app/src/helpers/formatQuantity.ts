@@ -8,6 +8,7 @@
 // `NO_SPACE_UNITS`), emitted into `generated/units_table.ts` — one source,
 // not a mirror kept in sync by hand (finalisation 20-R3, R-003).
 import { NO_SPACE_UNITS } from 'src/generated/units_table';
+import { formatNumber } from 'src/composables/useMoney';
 
 /** Decimal places a quantity is ever shown to. Two is enough for the
  *  fractions a recipe actually uses (0.25, 0.5, 1.33) and short enough to read
@@ -27,11 +28,14 @@ const MAX_DECIMALS = 2;
  * preview had its own local `round()` and the rail had none, which is exactly
  * how the two diverged.
  */
-function formatNumber(value: number): string {
+function formatAmount(value: number): string {
     if (!Number.isFinite(value)) return '';
-    // `toFixed` then strip: `Math.round(v * 100) / 100` still prints artefacts
-    // of its own (0.145 -> 0.14500000000000002 territory).
-    return Number(value.toFixed(MAX_DECIMALS)).toString();
+    // `toFixed` first: `Math.round(v * 100) / 100` still prints artefacts of
+    // its own (0.145 -> 0.14500000000000002 territory). Then the household
+    // locale's decimal mark through the one number formatter (D-006,
+    // FU-969 (2)): "1,5 kg" under de-DE. Display-only: every caller renders
+    // the string; quantity inputs bind the raw number, never this text.
+    return formatNumber(Number(value.toFixed(MAX_DECIMALS)), { digits: MAX_DECIMALS, grouping: false });
 }
 
 export function formatQuantity(
@@ -40,7 +44,7 @@ export function formatQuantity(
 ): string {
     const qty = (quantity === null || quantity === undefined || quantity === '')
         ? ''
-        : (typeof quantity === 'number' ? formatNumber(quantity) : String(quantity));
+        : (typeof quantity === 'number' ? formatAmount(quantity) : String(quantity));
     const trimmedUnit = (unit ?? '').trim();
     if (!qty && !trimmedUnit) return '';
     if (!trimmedUnit) return qty;

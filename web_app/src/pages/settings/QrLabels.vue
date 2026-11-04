@@ -32,12 +32,10 @@
                     label="Filter items"
                     class="qr-head__filter"
                 />
-                <q-select
+                <BaseSelect
                     v-model="sheetLayout"
                     :options="layoutOptions"
                     label="Sheet layout"
-                    outlined
-                    dense
                     emit-value
                     map-options
                     class="qr-head__layout"
@@ -95,6 +93,7 @@
     import { Notify } from 'quasar';
     import SearchInput from 'src/components/SearchInput.vue';
     import BaseButton from 'src/components/BaseButton.vue';
+    import BaseSelect from 'src/components/BaseSelect.vue';
     import SettingsPageHeader from 'src/components/settings/SettingsPageHeader.vue';
     import { ICONS } from 'src/style/icons';
     import { computed, onMounted, ref } from 'vue';

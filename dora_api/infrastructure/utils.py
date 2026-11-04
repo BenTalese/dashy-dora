@@ -5,7 +5,7 @@ import os
 import pkgutil
 import re
 from pathlib import Path
-from typing import Any, List
+from typing import Any, List, NoReturn
 
 from pydantic import BaseModel
 
@@ -44,7 +44,7 @@ def _to_package_name(path_to_search: Path | str) -> str:
     return s.replace("/", ".")
 
 
-def _raise_import_failure(name: str) -> None:
+def _raise_import_failure(name: str) -> NoReturn:
     """`pkgutil.walk_packages` swallows an ImportError from a sub-*package*
     when no `onerror` is given, so a feature package that fails to import
     silently drops every route under it and the app boots with a hole in its
@@ -71,7 +71,25 @@ def _iter_submodules(package_name: str):
         # is sub-packages we'll recurse into (info.ispkg=True).
         if info.ispkg:
             continue
-        yield importlib.import_module(info.name)
+        try:
+            module = importlib.import_module(info.name)
+        except Exception:
+            # A plain module (not a package) isn't covered by `onerror`;
+            # give it the same operator-facing line (FU-977 (5)).
+            _raise_import_failure(info.name)
+        yield module
+
+
+def import_feature_modules(package_name: str = "dora_api.features") -> None:
+    """Import every feature module through the import-failure guard.
+
+    `startup.py` calls this before its own imports that reach into a feature
+    (`dora_api.jobs`, the seeders), so a broken feature package is reported
+    as "Feature package … failed to import" rather than as a bare traceback
+    from whichever of those imports happened to touch it first (FU-977 (5)).
+    Modules are cached, so the later router walk costs nothing extra."""
+    for _ in _iter_submodules(package_name):
+        pass
 
 
 def get_classes_ending_with(term: str, path_to_search: Path | str):

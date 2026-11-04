@@ -157,24 +157,12 @@
              attached to a reason. The dialogs themselves are untouched — the
              global QuickAddSheet and LogPriceSheet keep every other caller. -->
 
-        <!-- FU-840 / §3.13 — the banner carries its own Retry. Its copy used to
-             say "Try refreshing", which pointed at the manual refresh button that
-             D3 deliberately removed; and when the summary fails the whole grid
-             renders nothing (every card reads off `summary`), so this banner was
-             the only thing on the page with no way forward. -->
-        <q-banner v-if="loadError" class="dora-bg-negative-soft text-negative q-mb-md" dense rounded>
-            {{ loadError }}
-            <template #action>
-                <BaseButton
-                    variant="ghost"
-                    dense
-                    :icon="ICONS.refresh"
-                    label="Try again"
-                    :loading="loading"
-                    @click="loadAll"
-                />
-            </template>
-        </q-banner>
+        <!-- FU-976 (3) — the page-wide "I couldn't load your dashboard"
+             banner is gone. It replaced the whole grid whenever
+             `/dashboard/summary` failed, although only two cards (Next to cook
+             and My stock) read off that call; every other card has its own
+             loader. The summary is now one more slot: its two cards show their
+             own `CardLoadError` + Try again, and the rest render as normal. -->
 
         <!-- D1's second band — the rotating "Dora says" welcome — merged into
              the hero above (see the note there). What survives here is the
@@ -225,7 +213,7 @@
              DashboardCard shell so the placeholders match the loaded cards by
              construction. -->
         <div
-            v-if="loading && !summary"
+            v-if="summaryLoading && !summary && !slotFailed('summary')"
             key="dash-loading"
             class="row q-col-gutter-lg dora-cards"
             aria-hidden="true"
@@ -248,7 +236,7 @@
 
         <!-- `q-col-gutter-lg` is 24px = `--space-6`, which is what B4 specifies
              between sibling cards; this grid was on `-md` (16px). -->
-        <div v-else-if="summary" key="dash-content" class="row q-col-gutter-lg dora-cards">
+        <div v-else key="dash-content" class="row q-col-gutter-lg dora-cards">
             <!-- The zone band headers (Phase 2) are gone with the zones
                  themselves — owner, 2026-09-04. They were full-width flex items
                  whose CSS `order` forced a line break before each band; with one
@@ -264,7 +252,9 @@
                 <NextToCookCard
                     :entries="nextToCook"
                     :has-planned-meals="hasPlannedMeals"
+                    :failed="slotFailed('summary')"
                     @cook="cookPlannedMeal"
+                    @retry="loadSummary"
                 />
             </div>
 
@@ -327,14 +317,16 @@
                 :style="{ order: cardCssOrder('stock_items') }"
             >
                 <StockDonutCard
-                    :total="summary.stock_items.total"
+                    :total="summary?.stock_items.total ?? 0"
                     :in-stock="stockInStockCount"
-                    :low="summary.stock_items.low_stock"
-                    :out="summary.stock_items.out_of_stock"
+                    :low="summary?.stock_items.low_stock ?? 0"
+                    :out="summary?.stock_items.out_of_stock ?? 0"
                     :segments="stockSegments"
                     :low-link="stockLowLink"
                     :out-link="stockOutLink"
+                    :failed="slotFailed('summary')"
                     @open="goTo"
+                    @retry="loadSummary"
                 />
             </div>
 
@@ -444,7 +436,12 @@
     import { ICONS } from 'src/style/icons';
     // FU-820 — dates come from the shared date authority (D-006/R-003); the
     // page's own copies parsed `YYYY-MM-DD` as UTC midnight.
-    import { formatDate, formatRelativeDay } from 'src/composables/useDateFormat';
+    import {
+        formatDate,
+        formatRelativeDay,
+        householdHour,
+        householdTodayDate,
+    } from 'src/composables/useDateFormat';
     import { buildCalendarCells } from 'src/helpers/dashboardCalendar';
     import FadeTransition from 'src/components/transitions/FadeTransition.vue';
     import AppSkeleton from 'src/components/AppSkeleton.vue';
@@ -567,8 +564,10 @@
     const { stockLevels } = storeToRefs(stockLevelStore);
 
     const summary = ref<DashboardSummary | null>(null);
-    const loading = ref(false);
-    const loadError = ref<string | null>(null);
+    // Starts true: `loadAll` runs in `onMounted`, i.e. after the first render,
+    // and a false start would paint the grid's empty states for one frame
+    // before the skeleton (D-007).
+    const summaryLoading = ref(true);
 
     // FU-825's per-day dismissal (`dora.dashboard.welcome_dismissed_day` +
     // `epochDay`) is gone with the welcome band: the message lives in the hero
@@ -626,6 +625,9 @@
     // So each slot now records whether it failed (`useSlotLoader`), and its
     // card renders <CardLoadError> instead of "nothing here yet".
     type SlotId =
+        // FU-976 (3) — the bulk summary is a slot like any other: it feeds Next
+        // to cook and My stock, and its failure is theirs to show, not the page's.
+        | 'summary'
         | 'use_it_up'
         | 'budget'
         | 'price_drops'
@@ -675,8 +677,11 @@
         return name ? name.charAt(0).toUpperCase() + name.slice(1) : '';
     });
 
+    // FU-970 — the household's wall clock, not the device's, like the strip
+    // and Next to cook (`locale_policy.timezone`). Reactive on the zone, so a
+    // cold load re-greets once `/health` lands.
     const greeting = computed(() => {
-        const h = new Date().getHours();
+        const h = householdHour();
         if (h < 5) return 'Up late';
         if (h < 12) return 'Good morning';
         if (h < 17) return 'Good afternoon';
@@ -800,12 +805,14 @@
     // the skip-reminder banner was up, on the reasoning that the banner *was*
     // the message; that only made sense while both were bands competing for the
     // same slot. A header does not compete with a banner underneath it.
-    const welcomeMessage = computed(() => pickWelcome());
+    // FU-970 — keyed on the household's day: a household a day behind its
+    // device was told "Friday!" on its Thursday.
+    const welcomeMessage = computed(() => pickWelcome(householdTodayDate()));
     // FU-823 — the hint pool is filtered by the install's feature gates, so a
     // money-off household is never told to set a grocery budget and a
     // product-less one isn't sold the deals card (feedback L254 / ADR-005).
     const welcomeHint = computed(() =>
-        pickHint({ money: moneyEnabled.value, products: productsEnabled.value })
+        pickHint({ money: moneyEnabled.value, products: productsEnabled.value }, householdTodayDate())
     );
 
     // ── Helpers ──────────────────────────────────────────────────────────
@@ -919,20 +926,13 @@
     // be re-deciding on the way past.
 
     async function loadSummary() {
-        loading.value = true;
-        loadError.value = null;
+        summaryLoading.value = true;
         try {
-            summary.value = await dashboardApiService.getSummaryAsync();
-        } catch (err) {
-            // This one is fatal to the grid — every card reads off `summary`, so
-            // the banner is the whole page's state. The copy no longer says "try
-            // refreshing": D3 deliberately removed the refresh button, so that
-            // sentence pointed at a control that doesn't exist. The banner now
-            // carries its own Retry (§3.13).
-            loadError.value = "I couldn't load your dashboard.";
-            console.warn('dashboard summary failed', err);
+            await loadSlot('summary', async () => {
+                summary.value = await dashboardApiService.getSummaryAsync();
+            });
         } finally {
-            loading.value = false;
+            summaryLoading.value = false;
         }
     }
 
@@ -982,6 +982,17 @@
             restockRadar.value = await dashboardApiService.getRestockRadarAsync();
         });
     }
+    // FU-897 — the server hides rows already on an active list, so a list edit
+    // changes what the card should show. Every add/remove path through
+    // `AddToListButton` ends in `shoppingListStore.refreshAsync()`, which
+    // replaces `membership`; refetch on that. The first hydration (prev null) is
+    // skipped — `loadAll` already fetched the radar alongside it.
+    watch(
+        () => shoppingListStore.membership,
+        (next, prev) => {
+            if (prev) void loadRestockRadar();
+        },
+    );
 
     // `onStockItemCreated` went with the quick-action "Add item" dialog. The
     // dialog itself is untouched; every other caller opens it from the surface
@@ -1243,13 +1254,14 @@
         font-size: var(--font-size-sm);
         line-height: 1.4;
     }
-    /* The icon takes the accent ink, not the fill tone — R-069, same rule the
-       greeting follows. `margin-top` optically seats an 18px glyph against a
-       `sm` first line rather than hanging above it. */
+    /* The icon takes the accent *mark*, not the fill tone (R-069) and not the
+       text ink either: an icon is a graphic, owed D-002's 3:1 (FU-850).
+       `margin-top` optically seats an 18px glyph against a `sm` first line
+       rather than hanging above it. */
     .dora-hero-hint__icon {
         flex-shrink: 0;
         margin-top: 1px;
-        color: var(--accent-ink);
+        color: var(--accent-mark);
     }
     .dora-hero-actions {
         grid-area: 1 / 3;

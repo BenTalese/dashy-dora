@@ -67,16 +67,14 @@ export function useFeatureFlags() {
         // Named-flag computeds keep call sites concise + type-safe at the
         // read site without exposing the raw map shape. Add more as new
         // flags ship — keys here mirror the backend `_feature_flags()` map.
-        auth: computed(() => readFlag('auth')),
-        audit: computed(() => readFlag('audit')),
+        // `auth`, `audit`, `multiUser` and `email` were dropped 2026-11-04
+        // (FU-906): nothing read them, and the server no longer publishes them.
         scanning: computed(() => readFlag('scanning')),
         // 2026-08-20 — install-wide stocktake master switch. Unlike most
         // flags here this one defaults ON server-side, so a failed probe (or
         // the moment before the probe lands) leaves the surface visible
         // rather than blinking a feature the household uses in and out.
         stocktake: computed(() => readFlagDefaultOn('stocktake')),
-        multiUser: computed(() => readFlag('multi_user')),
-        email: computed(() => readFlag('email')),
         // No `assistant` flag — AI mode has no install-wide gate (per-user
         // opt-in only), so there's nothing for the server to publish.
         money: computed(() => readFlag('money')),
@@ -97,6 +95,11 @@ export function useFeatureFlags() {
         // as emailSmtpConfigured) and short-circuits `usePushSubscription`
         // before it tries to fetch the public key.
         pushVapidConfigured: computed(() => readFlag('push_vapid_configured')),
+        // True when `AppSetting.public_url` is set. Read by the admin Email
+        // page with `emailSmtpConfigured` for its "SMTP set up but no public
+        // URL" warning (FU-969): scheduled mail has no request to take a host
+        // from, so without it the weekly deals email is skipped.
+        publicUrlConfigured: computed(() => readFlag('public_url_configured')),
         // Onboarding C-5.3 — products feature (linked products, price history,
         // ingestion). Per-surface gating when off is FU-182.
         products: computed(() => readFlag('products')),

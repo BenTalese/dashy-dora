@@ -14,6 +14,7 @@ import { Notify } from 'quasar';
 import { OFFLINE_COPY } from 'src/helpers/offlineCopy';
 import { computed, readonly, ref } from 'vue';
 import { getBackendBaseUrl } from 'src/services/api/backendUrl';
+import { adoptHealthProbe, type HealthInfo } from 'src/services/api/healthApiService';
 
 // Reads the runtime backend URL (env-baked, capacitor Preferences, or the
 // browser localStorage override — see `services/api/backendUrl.ts`) and
@@ -53,7 +54,12 @@ let inFlight: Promise<boolean> | null = null;
 
 // Eats AbortError so we can race against a timeout without surfacing
 // scary-looking unhandled rejections in the console.
-async function probeOnce(): Promise<boolean> {
+//
+// `onBody` is the boot probe's hook (FU-974): when given, a 2xx body is parsed
+// and handed over so the health info load can reuse it instead of fetching
+// `/health` a second time. Only called with a parsed body; the caller treats
+// "never called" as "no body".
+async function probeOnce(onBody?: (body: HealthInfo) => void): Promise<boolean> {
     const url = resolveHealthUrl();
     // on native before the user has picked an instance, the URL
     // resolves to empty; skip the probe cleanly rather than firing a
@@ -71,6 +77,14 @@ async function probeOnce(): Promise<boolean> {
             cache: 'no-store',
             signal: controller.signal,
         });
+        if (res.ok && onBody) {
+            try {
+                onBody((await res.json()) as HealthInfo);
+            } catch {
+                // An unparseable body is still a reachable server; the info
+                // load just fetches its own copy.
+            }
+        }
         return res.ok;
     } catch {
         return false;
@@ -112,7 +126,10 @@ function scheduleNext(delayMs: number) {
  * `online`, rather than leaving us pinned offline until the browser
  * deigns to fire its `online` event.
  */
-async function runProbe(force = false): Promise<boolean> {
+async function runProbe(
+    force = false,
+    onBody?: (body: HealthInfo) => void,
+): Promise<boolean> {
     if (inFlight) return inFlight;
     if (!online.value && !force) {
         // No point hitting the API while the browser says we're offline —
@@ -122,7 +139,7 @@ async function runProbe(force = false): Promise<boolean> {
         return false;
     }
     reconnecting.value = !apiReachable.value;
-    inFlight = probeOnce();
+    inFlight = probeOnce(onBody);
     let ok: boolean;
     try {
         ok = await inFlight;
@@ -230,8 +247,15 @@ function boot() {
     if (typeof document !== 'undefined') {
         document.addEventListener('visibilitychange', onVisible);
     }
-    // First probe runs immediately so the banner state settles fast.
-    void runProbe();
+    // First probe runs immediately so the banner state settles fast — and it
+    // doubles as the first health-info load (FU-974: a cold load used to fetch
+    // `/health` twice, once here and once via `getInfoAsync`). Whatever the
+    // probe ends with — a body, a failure, or the offline early-return — the
+    // shared info promise settles: null hands the info load back to its own XHR.
+    let settleInfo!: (info: HealthInfo | null) => void;
+    adoptHealthProbe(new Promise<HealthInfo | null>((resolve) => { settleInfo = resolve; }));
+    let body: HealthInfo | null = null;
+    void runProbe(false, (b) => { body = b; }).finally(() => settleInfo(body));
 }
 
 export function useNetworkStatus() {

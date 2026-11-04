@@ -22,6 +22,32 @@ semver — major bumps signal schema or breaking-config changes.
   why), and the sign-in page hides "Forgot password?" until it can.
 
 ### Changed
+- **Finish-off sweep (2026-11-04).** Settings → Email has no "Email enabled"
+  switch any more (it switched nothing): Dora sends mail once SMTP is set up,
+  and the page now warns when SMTP is set but the public URL isn't, since email
+  links need it. Restock radar hides items already on a shopping list, and a
+  row drops out as soon as you add it from the card. The cookbook's desktop
+  filters fit on two lines at 1280px. Cookbook cost chips say "/ serve".
+  Quantities use your region's decimal mark ("1,5 kg" in German). The
+  dashboard greeting follows the household's timezone, and a new install
+  starts on the setup device's timezone even if onboarding is skipped.
+- **Help's What's new page is gone**, along with its About button, Dora's
+  "What's new?" chip and the `/api/help/changelog` endpoint. Ask Dora "what
+  version are you" for the version and whether an update is out.
+- **One kind of dropdown and one kind of button row.** Every dropdown uses the
+  shared select: short lists open as a menu, long or searchable ones as a
+  dialog with a close button on phones. Single-choice button rows are one
+  keyboard-accessible control (arrow keys move the choice, one Tab stop, 44px
+  segments on touch). Small actions like Select all, +7d and audit paging now
+  look like buttons. The keyboard focus ring is one solid outline that is
+  readable in every theme (it was faint in Lemon Tart and Sourdough light).
+- **Faster at scale.** My Products draws only the cards on screen (first card
+  in 0.15 s instead of 3.2 s on 1,900 products), and printing QR labels for
+  every item takes seconds instead of timing out (57 s to 6 s on 2,000 items;
+  a reprint is near-instant).
+- **Internal:** the recipe, cook mode, cookbook, shopping list, stock item and
+  stock overview pages are split into smaller components with shared state
+  composables; no behaviour change.
 - **Version 1.0.0 (2026-11-01).** The first release version.
 - **Configuration is environment variables only.** `dapi.appsettings.json` is
   gone; an old copy under `<DORA_DATA_DIR>/config/` is ignored and safe to
@@ -109,6 +135,24 @@ semver — major bumps signal schema or breaking-config changes.
   guide they name directly.
 
 ### Fixed
+- **Finish-off sweep (2026-11-04).** A recipe ingredient of "1 pack" costs the
+  whole pack (a $6 carton of 12 eggs is $6.00, not $0.50). The buy verdict
+  compares prices per unit, so a smaller pack no longer reads as "cheapest
+  you've paid". A missing recipe shows a proper page with a way back. If the
+  dashboard summary fails, only its two cards say so and the rest still load.
+  A failed price save shows one error, not two. Tab stays inside open dialogs.
+  Spend-by-group bars never share a colour. "Find a lighter option" no longer
+  appears on batch-cooked days, where it had nothing to offer. A cold load
+  makes one health request, not two. Asking Dora to add to a finished list
+  says the list is finished. A failed restore can be retried with the same
+  file, and abandoned uploads are cleared. The import template's example row
+  imports as-is on a fresh install. A broken feature package is named in the
+  boot log. The store picker in Store mappings is sorted. "Today" labels
+  update as soon as the household timezone loads. A Dora page served by the
+  API itself (the desktop app, single-origin installs) talks to its own
+  address. Reports no longer scrolls sideways on a phone. Several controls
+  that had no background or border because they named a missing colour token
+  now follow the theme.
 - **Owner decisions, 2026-11-04.** A cook-mode timer keeps running when you
   move to another step, with a small band to pause it or jump back. Meal-plan
   templates remember batch cooks and fresh meals. "Save as template" keeps

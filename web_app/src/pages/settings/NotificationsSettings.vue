@@ -27,15 +27,13 @@
                         thing it is about started, as if you had dismissed it.
                     </InfoTip>
                 </template>
-                <q-select
+                <BaseSelect
                     :model-value="currentUser.alert_discard_after_days"
                     :options="discardOptions"
                     option-value="value"
                     option-label="label"
                     emit-value
                     map-options
-                    outlined
-                    dense
                     class="deals-day-select"
                     @update:model-value="onDiscardChange"
                 />
@@ -216,15 +214,13 @@
 
                 <template v-if="currentUser.deals_email_enabled">
                     <SettingsRow inline label="Send on">
-                        <q-select
+                        <BaseSelect
                             v-model="sendDealsOnDay"
                             :options="dayOptions"
                             option-value="value"
                             option-label="label"
                             emit-value
                             map-options
-                            outlined
-                            dense
                             class="deals-day-select"
                             @update:model-value="onSendDealsOnDayChange"
                         />
@@ -271,6 +267,7 @@
     import SettingsNotice from 'src/components/settings/SettingsNotice.vue';
     import InfoTip from 'src/components/help/InfoTip.vue';
     import BaseButton from 'src/components/BaseButton.vue';
+    import BaseSelect from 'src/components/BaseSelect.vue';
     import AuthApiService from 'src/services/api/authApiService';
     import BaseTooltip from 'src/components/BaseTooltip.vue';
     import { formatMoney } from 'src/composables/useMoney';

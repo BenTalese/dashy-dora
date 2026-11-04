@@ -189,7 +189,6 @@ def configure_mappings(db: SQLAlchemy):
         Column("vapid_subject", String(255), nullable=False, server_default="mailto:admin@dora.local"),
         Column("piper_bin", String(1024), nullable=False, server_default=""),
         Column("piper_bundled_voice_dir", String(1024), nullable=False, server_default=""),
-        Column("email_enabled", Boolean, nullable=False, server_default=false()),
         Column("audit_retention_days", Integer, nullable=False, server_default="365"),
         Column("public_url", String(500), nullable=False, server_default=""),
     )

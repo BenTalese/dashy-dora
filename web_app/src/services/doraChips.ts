@@ -28,7 +28,6 @@ export const BASIC_CHIP_POOL: DoraIntentId[] = [
     'how_do_i',
     'show_around',
     'guides',
-    'whats_new',
     'food_fact',
     'tell_me_something',
     'joke',
@@ -65,7 +64,6 @@ export const AI_CHIP_POOL: { label: string; prompt: string }[] = [
     // Planning
     { label: "What's the plan?", prompt: "what's on the meal plan this week" },
     // App help
-    { label: "What's new?", prompt: "what's new in the app" },
     { label: 'How do I…?', prompt: 'how do I add a stock item' },
     { label: 'What can I do here?', prompt: 'what can I do on this page' },
     { label: 'Show me around', prompt: 'give me a tour of the app' },
@@ -100,7 +98,6 @@ export const INTENT_TO_AI_CHIP: Partial<Record<DoraIntentId, { label: string; pr
     show_around: { label: 'Show me around', prompt: 'give me a tour of the app' },
     page_help: { label: 'What can I do here?', prompt: 'what can I do on this page' },
     how_do_i: { label: 'How do I…?', prompt: 'how do I add a stock item' },
-    whats_new: { label: "What's new?", prompt: "what's new in the app" },
     report_issue: { label: 'I found an issue', prompt: 'i found an issue' },
 };
 

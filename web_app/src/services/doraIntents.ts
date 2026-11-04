@@ -29,7 +29,6 @@ export type DoraIntentId =
     | 'goodbye'
     | 'page_help'
     | 'show_around'
-    | 'whats_new'
     | 'version'
     | 'tell_me_something'
     | 'food_fact'
@@ -212,7 +211,7 @@ const PAGE_HELP: { match: (path: string) => boolean; summary: string; mood: Dora
     {
         match: (p) => p === '/help',
         summary:
-            "You're already here! Guides by area, the full changelog, and me.",
+            "You're already here! Guides by area, About, and me.",
         mood: 'excited',
     },
 ];
@@ -748,11 +747,6 @@ export const INTENTS: ReadonlyArray<{
                   'what is this', 'what is this page', 'what does this page do'],
     },
     {
-        id: 'whats_new',
-        label: "What's new?",
-        matches: ['new', 'changelog', 'release', 'updated', 'recent updates'],
-    },
-    {
         id: 'version',
         label: 'What version are you?',
         matches: ['version', 'build number', 'what build'],
@@ -859,7 +853,6 @@ export const QUICK_ACTIONS: DoraIntentId[] = [
     'shopping_list_status',
     'add_to_list',
     'page_help',
-    'whats_new',
     'joke',
     'guides',
 ];
@@ -914,7 +907,7 @@ export async function runIntent(
             return {
                 text: summary.text,
                 mood: summary.mood,
-                suggestions: ['guides', 'how_do_i', 'whats_new'],
+                suggestions: ['guides', 'how_do_i', 'version'],
             };
         }
 
@@ -924,21 +917,6 @@ export async function runIntent(
                     "Quick tour: Dashboard is home. Stock is your pantry. Locations is where things live. Recipes and Meals plan what you'll cook. Product Search hunts deals. Settings is preferences (and admin tools if you're an admin). Anywhere specific I can drop you?",
                 mood: 'confident',
                 suggestions: ['guides', 'page_help'],
-            };
-        }
-
-        case 'whats_new': {
-            const versionInfo = context.fetchVersion ? await context.fetchVersion() : null;
-            const updateBit = versionInfo?.updateAvailable
-                ? ` There's also a newer version (${versionInfo.latest}) available.`
-                : '';
-            return {
-                // The Help-page changelog is the one place updates are written
-                // up, so the reply points there rather than listing highlights
-                // that go stale (finalisation 11-R23).
-                text: `You're on Dashy Dora ${versionInfo?.current ?? 'an unknown version'}. The Help page has the full changelog.${updateBit}`,
-                mood: versionInfo?.updateAvailable ? 'super_excited' : 'excited',
-                navigateTo: { path: '/help/whats-new', label: "Open What's new" },
             };
         }
 

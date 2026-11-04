@@ -18,7 +18,7 @@ def resolve_timezone(tz_name: str | None) -> ZoneInfo:
     # date boundary stays defined even if the stored value is somehow invalid.
     try:
         return ZoneInfo(tz_name or "UTC")
-    except (ZoneInfoNotFoundError, ValueError):
+    except (ZoneInfoNotFoundError, ValueError, OSError):
         return ZoneInfo("UTC")
 
 
@@ -26,7 +26,9 @@ def is_valid_timezone(tz_name: str) -> bool:
     try:
         ZoneInfo(tz_name)
         return True
-    except (ZoneInfoNotFoundError, ValueError):
+    # OSError: a name that is a tzdata folder ("America") raises
+    # PermissionError on Windows and IsADirectoryError on Linux.
+    except (ZoneInfoNotFoundError, ValueError, OSError):
         return False
 
 

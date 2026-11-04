@@ -107,7 +107,7 @@
         background: color-mix(in srgb, var(--text-primary) 4%, transparent);
     }
     .settings-nav-group__eyebrow--link:focus-visible {
-        outline: 2px solid var(--ring-focus);
+        outline: 2px solid var(--focus-ring);
         outline-offset: -2px;
     }
     .settings-nav-group__list {

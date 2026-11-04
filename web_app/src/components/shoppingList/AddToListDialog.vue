@@ -14,13 +14,11 @@
         card-style="min-width: 0; width: min(560px, 92vw)"
     >
         <q-card-section>
-            <q-select
+            <BaseSelect
                 v-model="targetListId"
                 :options="listOptions"
                 emit-value
                 map-options
-                outlined
-                dense
                 label="Add to"
             />
             <q-input
@@ -122,6 +120,7 @@
 <script lang="ts" setup>
     import AddToListRowItem from 'src/components/shoppingList/AddToListRowItem.vue';
     import BaseButton from 'src/components/BaseButton.vue';
+    import BaseSelect from 'src/components/BaseSelect.vue';
     import BaseDialog from 'src/components/BaseDialog.vue';
     import { ICONS } from 'src/style/icons';
     import { useShoppingListStore } from 'src/stores/shoppingListStore';

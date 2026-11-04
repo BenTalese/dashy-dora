@@ -33,7 +33,7 @@
             </SettingsRow>
 
             <SettingsRow v-if="budgetActive" label="Period">
-                <DoraSegmented
+                <BaseSegmented
                     :model-value="budgetPeriodDraft"
                     :options="budgetPeriodOptions"
                     @update:model-value="onBudgetPeriodChange"
@@ -55,7 +55,7 @@
     import SettingsRow from 'src/components/settings/SettingsRow.vue';
     import { ICONS } from 'src/style/icons';
     import SettingsPageHeader from 'src/components/settings/SettingsPageHeader.vue';
-    import DoraSegmented, { type DoraSegmentedOption } from 'src/components/settings/DoraSegmented.vue';
+    import BaseSegmented, { type BaseSegmentedOption } from 'src/components/BaseSegmented.vue';
 
     // budget input prefix follows the install currency symbol.
     const { currencySymbol } = useMoney();
@@ -76,7 +76,7 @@
         () => budgetAmountDraft.value != null && budgetAmountDraft.value > 0,
     );
 
-    const budgetPeriodOptions: DoraSegmentedOption<BudgetPeriod>[] = [
+    const budgetPeriodOptions: BaseSegmentedOption<BudgetPeriod>[] = [
         { label: 'Weekly', value: 'weekly' },
         { label: 'Monthly', value: 'monthly' },
     ];

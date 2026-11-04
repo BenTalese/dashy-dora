@@ -93,7 +93,6 @@ export type AppSettings = {
     vapid_subject: string;
     piper_bin: string;
     piper_bundled_voice_dir: string;
-    email_enabled: boolean;
     audit_retention_days: number;
     public_url: string;
     // install-wide image-encode policy, applied at upload time by the shared

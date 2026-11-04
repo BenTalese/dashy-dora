@@ -42,9 +42,8 @@
                 autofocus
             />
             <!-- Optional sort axis selector. Renders only when the caller
-                 hands in `sortOptions`. `q-btn-toggle` with `outline` so
-                 the buttons read as distinct segments — the previous
-                 `flat` look was too subtle. -->
+                 hands in `sortOptions`. A `BaseSegmented`
+                 radiogroup, compact to fit the narrow panel. -->
             <div
                 v-if="sortOptionsList.length > 0"
                 class="tri-state-filter__sort row items-center q-px-sm q-py-xs q-gutter-sm"
@@ -53,7 +52,8 @@
                 <BaseSegmented
                     v-model="activeSort"
                     :options="sortToggleOptions"
-                    class="tri-state-filter__sort-toggle"
+                    dense
+                    aria-label="Sort by"
                 />
             </div>
             <q-separator v-if="sortOptionsList.length > 0" />
@@ -265,15 +265,6 @@
         border-radius: var(--radius-md);
         margin: 0 8px 4px;
     }
-    // The track, the segment shape and the active fill are all BaseSegmented's
-    // now (2026-09-03). This block used to redraw all three from scratch —
-    // squared segments, its own outline, its own `aria-pressed` fill — because
-    // the call site passed `flat`, which suppresses Quasar's active
-    // background. Dropping `flat` gives the fill back natively, and the shared
-    // anatomy gives the shape, so the only thing left worth saying here is how
-    // wide the segments sit inside this narrow filter panel.
-    .tri-state-filter__sort-toggle :deep(.q-btn) {
-        min-height: 28px;
-        padding: 0 14px;
-    }
+    // The track, the segment shape, the active fill and the compact size are
+    // all BaseSegmented's (`dense`) — nothing left to override here.
 </style>

@@ -102,7 +102,7 @@ INTENTIONALLY_OMITTED: dict[str, str] = {
     "DORA_SMTP_USERNAME": "migration-only; SMTP lives on AppSetting.",
     "DORA_SMTP_USE_TLS": "migration-only; SMTP lives on AppSetting.",
     "DORA_SMTP_FROM": "migration-only; SMTP lives on AppSetting.",
-    "DORA_EMAIL_ENABLED": "migration-only; AppSetting.email_enabled.",
+    "DORA_EMAIL_ENABLED": "migration-only; AppSetting.email_enabled (since dropped, FU-906).",
     "DORA_PUBLIC_URL": "migration-only; AppSetting.public_url.",
     "DORA_AUDIT_RETENTION_DAYS": "migration-only; AppSetting.audit_retention_days.",
     "DORA_VAPID_PUBLIC_KEY": "migration-only; push keys live on AppSetting.",

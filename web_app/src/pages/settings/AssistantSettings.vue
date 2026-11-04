@@ -35,13 +35,11 @@
                         information.
                     </InfoTip>
                 </template>
-                <q-select
+                <BaseSelect
                     :model-value="modeValue"
                     :options="modeOptions"
                     emit-value
                     map-options
-                    outlined
-                    dense
                     class="assistant-mode-select"
                     @update:model-value="onModeChange"
                 />
@@ -127,12 +125,10 @@
                             />
                         </SettingsRow>
                         <SettingsRow label="Model" stacked>
-                            <q-select
+                            <BaseSelect
                                 v-if="state.ollama.models.length"
                                 v-model="state.ollama.model"
                                 :options="state.ollama.models"
-                                outlined
-                                dense
                                 use-input
                                 fill-input
                                 hide-selected
@@ -351,6 +347,7 @@
 
 <script lang="ts" setup>
     import BaseButton from 'src/components/BaseButton.vue';
+    import BaseSelect from 'src/components/BaseSelect.vue';
     import { ICONS } from 'src/style/icons';
     import { storeToRefs } from 'pinia';
     import AssistantApiService, {
@@ -757,7 +754,7 @@
         background: color-mix(in srgb, var(--text-primary) 4%, transparent);
     }
     .provider-card__head:focus-visible {
-        outline: 2px solid var(--ring-focus);
+        outline: 2px solid var(--focus-ring);
         outline-offset: -2px;
     }
     .provider-card__chevron {

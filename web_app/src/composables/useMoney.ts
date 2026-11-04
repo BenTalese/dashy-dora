@@ -134,18 +134,22 @@ export interface NumberFormatOptions {
     /** Fewest fractional digits to show (default 0) — `1` keeps "4.0" for a
      *  star rating where the trailing zero is part of the reading. */
     minDigits?: number;
+    /** Thousands grouping (default true). Quantities turn it off: "1500 g",
+     *  as a recipe writes it, not "1,500 g". */
+    grouping?: boolean;
 }
 
 /** A plain number in the household locale, grouped ("1,208" / "1.208").
  *  Non-finite input renders as a dash, like `formatMoney`. */
 export function formatNumber(
     value: number | null | undefined,
-    { digits = 2, minDigits = 0 }: NumberFormatOptions = {},
+    { digits = 2, minDigits = 0, grouping = true }: NumberFormatOptions = {},
 ): string {
     if (value === null || value === undefined || !Number.isFinite(value)) return '–';
     return numberFormatter({
         minimumFractionDigits: Math.min(minDigits, digits),
         maximumFractionDigits: digits,
+        useGrouping: grouping,
     }).format(value);
 }
 

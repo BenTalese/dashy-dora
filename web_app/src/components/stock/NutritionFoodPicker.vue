@@ -236,7 +236,11 @@
         align-items: center;
         gap: var(--space-2);
         font-size: var(--font-size-sm);
-        color: var(--text-warning);
+        /* Body ink, not --semantic-warning: the warning fill measures
+           2.0-2.2:1 as text in every light theme (D-002), and the icon +
+           wording already carry the signal. Was `--text-warning`, which
+           never existed, so the line inherited this colour anyway. */
+        color: var(--text-primary);
         padding: var(--space-2) 0;
     }
     .food-picker__empty {

@@ -41,6 +41,45 @@ next.
 
 ---
 
+## 2026-11-04 (later): **Owner's direction list answered; the whole "work I can do alone" backlog built (uncommitted)**
+
+**Owner answers:** FU-965 and FU-918 not worried (closed). FU-897 hide them. FU-763 keep, wrap if long (already
+wraps; closed). FU-773 force two lines. FU-973 close. FU-972 backups stay manual. FU-906 delete redundant
+settings. FU-962/930 iOS not possible (skip). Every "needs me or a device" check counted as done: the owner has
+walked the app. Then, mid-session: remove the Help What's new page.
+
+**Built (agents on disjoint files, then two diff reviewers):** FU-978 (pack pricing, per-unit buy verdict, recipe
+not-found page, "/ serve" chip, same-origin meta, setup timezone); dashboard FU-897/976/970/974; FU-906 (`email_enabled`
+dropped, migration `d5a9c3e7f2b1`, single head) + FU-773 + FU-969 (3); FU-977 + FU-969 rest; speed FU-968/961 (FU-908
+already scoped, pinned); page splits FU-942/934/780; tokens FU-834/764/941/850/839; components FU-675/677/848.
+What's new page, route, chip, intent and `/api/help/changelog` removed. `tests/db_backend.py` takes
+`DORA_TEST_DB_FILE` so parallel pytest runs don't collide (FU-952 part).
+
+**Review fixes applied here:** buy-verdict sized vs sizeless samples were rescaled against each other ($5.50 → $66);
+a folder-name timezone 500'd setup (`OSError`); the import template's group was a dev-seed name (now onboarding's
+"Pantry", test checks onboarding's JSON); a counted observation off a shopping list now prices "1 pack" at line
+total / line quantity (new `test_recipe_cost_pack_observation.py`); the QR PNG cache holds only the two standard
+sizes; a doubled `<style scoped>` killed the phone list picker's styling; the stock Overview tab's "–" empty
+state (now `empty-text`); My Products grid rows keyed by position; cook mode no longer speaks the placeholder
+step (FU-982, resolved).
+
+**Ledgers:** 43 FUs moved to resolved; new FU-980 (unnamed radiogroups), FU-981 (small leftovers, 13 parts),
+FU-983 (pack-pricing edges), FU-984 (double toasts), FU-985 (dashboard/Dora Score cookability unscoped),
+FU-986 (warning ink tier, D-002). DORA_VERIFY: the 10-23..11-04 sections deleted on the owner's word (recorded in
+DORA_VERIFY_TRIAGE); three lines added for what the drives couldn't reach.
+
+**Gates:** vitest 916 / 100 files, vue-tsc and eslint clean; pytest 2745 passed, 1 skipped, 1 xfailed; every agent
+drove its surface live on a seeded backend. `test__backup__assistant_providers__round_trip_without_keys` fails when
+run alone (needs an earlier test's encryption key; FU-981 (6)).
+
+**Standards close-gate:** no unexplained violations; the one carve-out is R-003 in `MealPlanEntryMenu.vue` (mirrors
+the server's batch rule; commented). Style guide A1/A6 (focus ring) and B2a/D-019 (segmented) updated. No new ADR:
+the page splits reuse R-011 provide/inject.
+
+**Next up:** owner: commit, then build/tag/deploy 1.0.0. Open calls still unanswered: support channel (FU-557), CI (FU-721).
+
+---
+
 ## 2026-11-04: **Owner answers to 19 decision FUs, built (uncommitted)**
 
 **Owner:** 943 yes, 939 yes, 940 D1 yes / D2 skip / D4 no, 978 QA2-44 as is, 685 no, 969 yes, 938 keep both, 768 yes,

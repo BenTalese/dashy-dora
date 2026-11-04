@@ -22,6 +22,7 @@
 // different list, so "2 rashers" scaled to "2.5" here while the server
 // treated a rasher as a counted sub-item (finalisation 20-R4, R-003).
 import { COUNTABLE_UNITS } from 'src/generated/units_table';
+import { formatNumber } from 'src/composables/useMoney';
 
 const FRACTION_GLYPHS: ReadonlyArray<readonly [number, string]> = [
     [0.25, '¼'],
@@ -65,7 +66,9 @@ function formatContinuous(value: number): string {
         return String(whole);
     }
     const rounded = Math.round(value * 10) / 10;
-    return parseFloat(rounded.toFixed(1)).toString();
+    // The household's decimal mark (D-006, FU-969 (2)): "7,6" under de-DE.
+    // The string is display-only: it goes straight to `formatQuantity`.
+    return formatNumber(rounded, { digits: 1, grouping: false });
 }
 
 /** Scale a recipe quantity for a new headcount. Returns a value ready to

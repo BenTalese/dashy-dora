@@ -83,6 +83,29 @@ describe('BaseSelect — prop forwarding', () => {
         const wrapper = mountSelect({ options: longList });
         expect(wrapper.findComponent(QSelect).props('useInput')).toBe(false);
     });
+
+    // FU-675: the last raw q-selects moved over, and three things they needed
+    // had to be forwardable rather than forcing a site to stay raw.
+    it('is dense + outlined by default, with dense overridable for full-height forms', () => {
+        const dflt = mountSelect({ options: shortList }).findComponent(QSelect);
+        expect(dflt.props('dense')).toBe(true);
+        expect(dflt.props('outlined')).toBe(true);
+        expect(mountSelect({ options: shortList, dense: false }).findComponent(QSelect).props('dense'))
+            .toBe(false);
+    });
+
+    it('drops its outline when the call site picks borderless', () => {
+        const q = mountSelect({ options: shortList, borderless: true }).findComponent(QSelect);
+        expect(q.props('outlined')).toBe(false);
+        expect(q.props('borderless')).toBe(true);
+    });
+
+    it('re-exposes the QSelect methods a typeahead reaches for through a ref', () => {
+        const vm = mountSelect({ options: longList }).vm as unknown as Record<string, unknown>;
+        for (const m of ['updateInputValue', 'hidePopup', 'showPopup', 'focus', 'validate']) {
+            expect(typeof vm[m]).toBe('function');
+        }
+    });
 });
 
 describe('BaseSelect — the close affordance', () => {

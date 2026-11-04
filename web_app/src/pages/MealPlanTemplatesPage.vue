@@ -158,9 +158,8 @@
                         <q-item-section class="dora-text-muted">Add at least one template.</q-item-section>
                     </q-item>
                 </q-list>
-                <q-select
+                <BaseSelect
                     :model-value="null"
-                    outlined dense
                     :options="templateOptions"
                     label="Add a template"
                     emit-value map-options
@@ -184,6 +183,7 @@
     import BaseTooltip from 'src/components/BaseTooltip.vue';
     import { ICONS } from 'src/style/icons';
     import BaseButton from 'src/components/BaseButton.vue';
+    import BaseSelect from 'src/components/BaseSelect.vue';
     import BaseDialog from 'src/components/BaseDialog.vue';
     import { storeToRefs } from 'pinia';
     import { useQuasar } from 'quasar';

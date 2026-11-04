@@ -1,8 +1,12 @@
 // runtime-configurable Dora API base URL.
 //
 // The SPA runs in three shapes:
-//   - web (dev / prod PWA): baseURL follows the current origin (env-baked
-//     `VITE_API_BASE_URL` if provided, else `${protocol}//${hostname}:5170/api`).
+//   - web (dev / prod PWA): baseURL follows the current origin. A page the
+//     API served itself (Flask's SPA routes: the desktop bundle, a
+//     single-origin deploy) carries a `dora-api-same-origin` meta tag and
+//     uses `${origin}/api`; otherwise the env-baked `VITE_API_BASE_URL` if
+//     provided, else `${protocol}//${hostname}:5170/api` (the shipped
+//     split-port compose: nginx on 5174, API on 5170). QA2-21.
 //   - Capacitor native (Android APK / iOS): the app is served from
 //     `capacitor://localhost` (Android WebView remaps to `https://localhost`),
 //     so it CANNOT infer a backend from `window.location`. The user picks
@@ -31,7 +35,18 @@ let loaded = false;
 // re-exported for the callers that only ever reached it from here.
 export { isNativePlatform } from 'src/helpers/platform';
 
+/** Set by `dora_api/features/spa/serve_spa.py` (`SAME_ORIGIN_META`) on the
+ *  index.html it serves: the page and the API share an origin. */
+function servedByApi(): boolean {
+    if (typeof document === 'undefined') return false;
+    return document.querySelector('meta[name="dora-api-same-origin"]') !== null;
+}
+
 function envDefault(): string {
+    // The server knows it served this page, which beats any build-time guess.
+    if (!isNativePlatform() && servedByApi() && typeof window !== 'undefined') {
+        return `${window.location.origin}/api`;
+    }
     const env = import.meta.env.VITE_API_BASE_URL;
     if (env && env.length > 0) return env.replace(/\/+$/, '');
     if (isNativePlatform()) {

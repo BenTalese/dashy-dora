@@ -61,10 +61,14 @@ only claims to be the recent ones, and its empty copy now says so rather than
 claiming everything is stocked.
 
 The list-membership filter *Before you shop* also applied ("only show what
-isn't already on a list") deliberately did **not** come across — see
-`DORA_FOLLOWUPS.md` FU-897. Each row carries `AddToListButton`, which already
-shows its own on-a-list state, so the fact is on screen; using it to *hide*
-rows is a separate call the owner hasn't made.
+isn't already on a list") did not come across at first, pending the owner's
+call (FU-897). He made it: **hide them.** An item already on an active list has
+been dealt with, so it no longer earns a row here. The rule is
+`stock_items_on_active_lists` — the one *Before you shop* used, lifted into the
+shopping-lists feature rather than re-derived (R-003): any line, ticked or not,
+on a list that isn't done. The SPA refetches this card when the shopping-list
+store's membership changes, so a row added from the card's own cart button
+drops out straight away.
 """
 import logging
 from dataclasses import dataclass, field
@@ -76,6 +80,7 @@ from dora_api.domain.entities.stock_item import StockItem
 from dora_api.domain.stock_status import (LOW_STOCK_SEQUENCE,
                                           OUT_OF_STOCK_SEQUENCE)
 from dora_api.features.routers import DASHBOARD_ROUTER
+from dora_api.features.shopping_lists._active_membership import     stock_items_on_active_lists
 from dora_api.features.stock_items._level_access import resolve_levels_by_item
 from dora_api.features.stock_items.planned_demand import gather_planned_demand
 from dora_api.infrastructure.api_response import ok
@@ -160,8 +165,14 @@ class GetRestockRadarHandler:
             self.repository, recorded_by_item=recorded_by_item,
         )
 
+        # FU-897 (owner: hide them) — already on an active list means already
+        # dealt with. Applied before the cap, so a hidden row frees its slot.
+        already_listed = stock_items_on_active_lists(self.repository)
+
         rows: List[RestockRow] = []
         for item in items:
+            if item.id in already_listed:
+                continue
             level = levels.get(item.id)
             if level is None or item.stock_level_last_updated is None:
                 continue

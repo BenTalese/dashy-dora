@@ -61,8 +61,10 @@ from dora_api.features.app_settings.clock import (
     household_locale, household_timezone, household_today,
 )
 from dora_api.features.routers import STOCK_ITEM_ROUTER
-from dora_api.features.shopping_lists._line_price import (is_bought_line,
-                                                        line_paid_unit_price)
+from dora_api.domain import units
+from dora_api.domain.entities.product import Product
+from dora_api.features.shopping_lists._line_price import (
+    harvest_observation_fields, is_bought_line, line_paid_unit_price)
 from dora_api.features.stock_items._level_access import resolve_levels_by_item
 from dora_api.features.stock_items.pantry_belief import (
     PantryBelief, gather_beliefs_for_items,
@@ -70,6 +72,7 @@ from dora_api.features.stock_items.pantry_belief import (
 from dora_api.features.stock_items.planned_demand import (
     URGENCY_BLOCKING, URGENCY_WATCH, PlannedDemand, gather_planned_demand,
 )
+from dora_api.features.stock_items.your_prices import per_unit_in_canonical
 from dora_api.infrastructure.api_response import forbidden, not_found, ok
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
@@ -745,6 +748,53 @@ def _data_used_dto(inputs: VerdictInputs) -> VerdictDataUsedDto:
 # ── Data gathering (the only part that touches the repo) ──────────────
 
 
+# One bought line as the price axis first sees it: what was paid for one item,
+# when, and the size of the product it was (None for a product-less line).
+RawPriceSample = tuple[float, datetime, "float | None", "str | None"]
+
+
+def comparable_price_samples(
+    raw: list[RawPriceSample],
+) -> list[tuple[float, datetime]]:
+    """Put pack prices of different sizes on one scale (QA2-17).
+
+    A line's paid price is per *pack*, and packs differ: $1.80 for 1 L after
+    usually paying $3.50 for 2 L is dearer, not "the cheapest in 3 months".
+    Each sample is folded the way a finished line becomes a price observation
+    (`harvest_observation_fields`) and normalised per canonical unit
+    (`per_unit_in_canonical`, the "Your prices" rule, R-003), then re-expressed
+    at the **newest** purchase's size. The last price stays exactly what was
+    paid and "usual" becomes what that size usually costs, so the amounts the
+    card shows are still plain pack prices. Samples in another dimension than
+    the newest one (a sizeless line beside litres) can't be compared and are
+    left out, and so are sizeless lines beside sized ones: a sizeless line folds
+    to "1 ea", which would read a 12-egg carton as twelve of them. ``raw`` must
+    be newest first; the result keeps that order.
+    """
+    folded: list[tuple[float, tuple[str, bool], float, datetime]] = []
+    for price, at, size_value, size_unit in raw:
+        total, measure, unit, _ = harvest_observation_fields(
+            unit_price=price, quantity=1, size_value=size_value, size_unit=size_unit,
+        )
+        per_unit = per_unit_in_canonical(
+            total_price=total, total_measure=measure, unit=unit)
+        if per_unit is None:
+            continue
+        canonical = (per_unit[1], bool(size_value and size_unit))
+        measure_in_canonical = units.convert(measure, unit, canonical[0])
+        if not measure_in_canonical:
+            continue
+        folded.append((per_unit[0], canonical, measure_in_canonical, at))
+    if not folded:
+        return []
+    _, reference_unit, reference_measure, _ = folded[0]
+    return [
+        (per_unit * reference_measure, at)
+        for per_unit, canonical, _, at in folded
+        if canonical == reference_unit
+    ]
+
+
 def _stock_level_band(level: StockLevel | None) -> str:
     if level is None:
         return "unknown"
@@ -825,10 +875,18 @@ def gather_verdict_inputs_for_items(
         },
     )
 
+    # The bought product's size, so pack prices of different sizes compare per
+    # unit (QA2-17). One query for every line's product.
+    product_ids = list({l.selected_product_id for l in lines if l.selected_product_id})
+    products_by_id: dict[UUID, Product] = {
+        p.id: p for p in repository.get(Product).all(
+            EntityField(Product, "id").in_(product_ids))
+    } if product_ids else {}
+
     out: dict[UUID, VerdictInputs] = {}
     for item in items:
         item_lines = lines_by_item.get(item.id, [])
-        samples: list[tuple[float, datetime]] = []
+        raw_samples: list[RawPriceSample] = []
         for line in item_lines:
             # R-061 — only a bought line is a purchase: ticked, and not
             # deferred by trim-to-budget (same rule as `spend_lines`).
@@ -842,9 +900,16 @@ def gather_verdict_inputs_for_items(
             price = line_paid_unit_price(line)
             if price is None:
                 continue
-            samples.append((price, completed_at))
-        samples.sort(key=lambda s: s[1], reverse=True)
-        unique_dates = sorted({_local_date(s[1], tz) for s in samples})
+            product = products_by_id.get(line.selected_product_id)
+            raw_samples.append((
+                price, completed_at,
+                product.size_value if product is not None else None,
+                product.size_unit if product is not None else None,
+            ))
+        raw_samples.sort(key=lambda s: s[1], reverse=True)
+        samples = comparable_price_samples(raw_samples)
+        # Every priced purchase is a purchase date, comparable price or not.
+        unique_dates = sorted({_local_date(s[1], tz) for s in raw_samples})
 
         out[item.id] = VerdictInputs(
             price_samples=samples,

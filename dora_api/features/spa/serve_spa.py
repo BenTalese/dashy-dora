@@ -24,7 +24,7 @@ import mimetypes
 import os
 from pathlib import Path
 
-from flask import abort, send_from_directory
+from flask import Response, abort, send_from_directory
 
 from dora_api.features.routers import SPA_ROUTER
 from dora_api.infrastructure.api_response import endpoint_not_found
@@ -66,6 +66,26 @@ def _spa_dir() -> Path | None:
     return None
 
 
+# QA2-21 — this page and the API share an origin here, so the SPA should call
+# `/api` on it. Without a baked `VITE_API_BASE_URL` the SPA guesses
+# `<host>:5170/api`, which is right for the split-port compose (nginx on 5174,
+# API on 5170) and wrong for every Flask-served page on another port: the
+# desktop bundle's random port, or a single-origin deploy behind a proxy.
+# nginx serves the build untouched, so the compose path never sees this tag;
+# `backendUrl.ts` reads it (name shared there).
+SAME_ORIGIN_META = '<meta name="dora-api-same-origin" content="1">'
+
+
+def _index_response(root: Path) -> Response:
+    """`index.html`, marked as served by the API itself."""
+    html = (root / "index.html").read_text(encoding="utf-8")
+    html = html.replace("<head>", "<head>" + SAME_ORIGIN_META, 1)
+    response = Response(html, mimetype="text/html")
+    # Same as nginx's `location = /index.html`: the shell always revalidates.
+    response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 def _serve_file_or_index(requested: str | None):
     """Send the requested file from the SPA dir, or fall back to
     index.html when the path doesn't match a file (history-mode
@@ -82,9 +102,9 @@ def _serve_file_or_index(requested: str | None):
             candidate.relative_to(root)
         except ValueError:
             abort(404)
-        if candidate.is_file():
+        if candidate.is_file() and candidate != (root / "index.html").resolve():
             return send_from_directory(root, requested)
-    return send_from_directory(root, "index.html")
+    return _index_response(root)
 
 
 @SPA_ROUTER.route("/", methods=["GET"])

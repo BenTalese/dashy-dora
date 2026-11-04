@@ -25,39 +25,33 @@
                 inline
             />
 
-            <q-select
+            <BaseSelect
                 v-if="form.startFrom === 'template'"
                 v-model="form.templateId"
                 :options="templateOptions"
                 :loading="loadingPickers"
                 emit-value
                 map-options
-                outlined
-                dense
                 label="Template"
                 :hint="templateOptions.length === 0 ? 'No saved templates yet.' : ''"
             />
-            <q-select
+            <BaseSelect
                 v-if="form.startFrom === 'recipe'"
                 v-model="form.recipeId"
                 :options="recipeOptions"
                 :loading="loadingPickers"
                 emit-value
                 map-options
-                outlined
-                dense
                 label="Recipe"
                 :hint="recipeOptions.length === 0 ? 'No saved recipes yet.' : 'Adds every ingredient with a linked stock item.'"
             />
-            <q-select
+            <BaseSelect
                 v-if="form.startFrom === 'meal_plan'"
                 v-model="form.mealPlanId"
                 :options="mealPlanOptions"
                 :loading="loadingPickers"
                 emit-value
                 map-options
-                outlined
-                dense
                 label="Meal plan"
                 :hint="mealPlanOptions.length === 0 ? 'No meal plans yet.' : 'Aggregates ingredients across the plan, scaled by servings.'"
             />
@@ -111,14 +105,12 @@
                 label="Plan this shop for (optional)"
                 clearable
             />
-            <q-select
+            <BaseSelect
                 v-else
                 v-model="form.mergeIntoListId"
                 :options="mergeOptions"
                 emit-value
                 map-options
-                outlined
-                dense
                 label="Add to existing list"
                 :hint="mergeOptions.length === 0 ? 'No active lists yet.' : ''"
             />
@@ -137,6 +129,7 @@
 
 <script lang="ts" setup>
     import BaseButton from 'src/components/BaseButton.vue';
+    import BaseSelect from 'src/components/BaseSelect.vue';
     import BaseDialog from 'src/components/BaseDialog.vue';
     import { storeToRefs } from 'pinia';
     import { useQuasar } from 'quasar';

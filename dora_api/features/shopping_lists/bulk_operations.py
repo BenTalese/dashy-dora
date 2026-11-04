@@ -27,7 +27,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from dora_api.domain.entities.shopping_list import ShoppingList, ShoppingListLine
 from dora_api.features.routers import SHOPPING_LIST_ROUTER
 from dora_api.features.shopping_lists.manage_shopping_list_lines import (
-    AddLineHandler, AddLineRequest, RemoveLineByStockItemHandler)
+    LIST_DONE_REFUSAL, AddLineHandler, AddLineRequest, RemoveLineByStockItemHandler)
 from dora_api.infrastructure.api_response import (bad_request, business_rule_violation, no_content,
                                                   not_found, ok)
 from dora_api.infrastructure.decorators import has_request_body
@@ -102,9 +102,7 @@ def bulk_add_lines(shopping_list_id: UUID):
     if _Response.list_not_found:
         return not_found("ShoppingList", shopping_list_id)
     if _Response.list_done:
-        return business_rule_violation(
-            "This list is finished — its lines are a receipt. Start a new list to add to it."
-        )
+        return business_rule_violation(LIST_DONE_REFUSAL)
     _LOGGER.info(
         f"Bulk-add on list {shopping_list_id}: added {_Response.added}, "
         f"already-on {_Response.already_on_list}, "

@@ -291,23 +291,23 @@
                                     </span>
                                 </div>
                                 <div class="builder-row__controls">
-                                    <q-select
+                                    <BaseSelect
                                         v-if="dayOptions.length > 1"
                                         v-model="entry.scheduled_for"
-                                        outlined dense options-dense emit-value map-options
+                                        options-dense emit-value map-options
                                         class="builder-day-select"
                                         :options="dayOptions"
                                     >
                                         <BaseTooltip>Move to another day</BaseTooltip>
-                                    </q-select>
-                                    <q-select
+                                    </BaseSelect>
+                                    <BaseSelect
                                         v-model="entry.slot"
-                                        outlined dense options-dense
+                                        options-dense
                                         class="builder-slot-select"
                                         :options="slotNames"
                                     >
                                         <BaseTooltip>Which meal slot</BaseTooltip>
-                                    </q-select>
+                                    </BaseSelect>
                                 </div>
                             </div>
                         </div>
@@ -497,6 +497,7 @@
     import BaseTooltip from 'src/components/BaseTooltip.vue';
     import { ICONS } from 'src/style/icons';
     import BaseButton from 'src/components/BaseButton.vue';
+    import BaseSelect from 'src/components/BaseSelect.vue';
     import NumberStepper from 'src/components/NumberStepper.vue';
     import BaseDialog from 'src/components/BaseDialog.vue';
     import BaseSegmented from 'src/components/BaseSegmented.vue';

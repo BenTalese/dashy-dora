@@ -148,7 +148,7 @@
         margin-bottom: -1px;
     }
     .settings-mnav__group:focus-visible {
-        outline: 2px solid var(--ring-focus);
+        outline: 2px solid var(--focus-ring);
         outline-offset: -2px;
     }
     .settings-mnav__group--active {

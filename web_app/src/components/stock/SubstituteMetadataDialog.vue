@@ -42,11 +42,9 @@
                         label="Qty"
                         hide-bottom-space
                     />
-                    <q-select
+                    <BaseSelect
                         v-model="unitInDraft"
                         :options="unitOptions"
-                        outlined
-                        dense
                         emit-value
                         map-options
                         use-input
@@ -71,11 +69,9 @@
                         label="Qty"
                         hide-bottom-space
                     />
-                    <q-select
+                    <BaseSelect
                         v-model="unitOutDraft"
                         :options="unitOptions"
-                        outlined
-                        dense
                         emit-value
                         map-options
                         use-input
@@ -119,6 +115,7 @@
     import { computed, ref, watch } from 'vue';
     import { useUnitOptions } from 'src/composables/useUnitOptions';
     import BaseButton from 'src/components/BaseButton.vue';
+    import BaseSelect from 'src/components/BaseSelect.vue';
     import BaseDialog from 'src/components/BaseDialog.vue';
     import { ICONS } from 'src/style/icons';
 

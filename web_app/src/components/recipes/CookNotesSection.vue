@@ -82,7 +82,7 @@
         }
     }
     .cook-notes__head:focus-visible {
-        outline: 2px solid var(--ring-focus);
+        outline: 2px solid var(--focus-ring);
         outline-offset: -2px;
     }
     // Preserve the cook's own line breaks.

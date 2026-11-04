@@ -74,3 +74,18 @@ def test__an_observation_with_a_pack_count_yields_an_item_price():
 
     obs.pack_count = None
     assert get_stock_item_unit_cost_with_unit_at([obs]).item_price is None
+
+
+def test__an_observation_with_a_pack_count_yields_the_whole_pack_price():
+    # QA2-18: "$5.50 for 12 eggs, 700 g" is one carton, so "1 pack" is $5.50.
+    from datetime import UTC, datetime
+    from types import SimpleNamespace
+
+    from dora_api.domain.stock_status import get_stock_item_unit_cost_with_unit_at
+
+    obs = SimpleNamespace(total_price=5.50, total_measure=700.0, unit="g",
+                          observed_at=datetime.now(UTC), pack_count=12)
+    assert get_stock_item_unit_cost_with_unit_at([obs]).pack_price == pytest.approx(5.50)
+
+    obs.pack_count = None   # may span several packs: unknown
+    assert get_stock_item_unit_cost_with_unit_at([obs]).pack_price is None

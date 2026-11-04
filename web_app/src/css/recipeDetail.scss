@@ -1,0 +1,73 @@
+// ── The recipe page's shared section chrome ──────────────────────────────
+//
+// FU-934 (01-R36): `RecipeDetailPage.vue` split into a page plus
+// `RecipeMasthead`, `RecipeStatusStrip`, `RecipeIngredientRail` and
+// `RecipeDetailsDrawers`. Each block took its own rules with it; the few that
+// more than one of them wears — the section heading row (Ingredients, Method,
+// the drawers), the scrolling pane, the masthead grid the loading skeleton
+// mirrors, the small-caps key label and the inline chip — live here. Every
+// file `@use`s this inside its *scoped* style block, so each gets its own
+// scoped copy at the specificity it always had, and there is still one place
+// to change them (R-001 / R-003; same pattern as `cookSections.scss`).
+
+/* The photo/identity grid. The page's loading shell draws the same grid so
+   the skeleton has the real layout's shape (D-007). */
+.rn__masthead {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: var(--space-5, 20px);
+    align-items: start;
+}
+
+/* The rail and the method each follow a long recipe down the page, and each
+   pane scrolls inside itself rather than the page (owner ask). */
+.rn__pane {
+    max-height: calc(100vh - 220px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+.rn__sechead {
+    display: flex; align-items: center; gap: var(--space-3, 12px);
+    padding-bottom: var(--space-2, 8px);
+    margin-bottom: var(--space-3, 12px);
+    border-bottom: 1px solid var(--border-default);
+}
+.rn__sectitle {
+    font-size: 0.9375rem; font-weight: 700;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--text-secondary);
+    margin: 0;
+}
+.rn__seccount {
+    font-size: 0.8125rem; color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+/* The heading row owns the section's controls now (owner feedback
+   2026-08-27): title, count, then everything you can do to the section,
+   pushed to the right edge. */
+.rn__sechead > .rn__seccount { margin-right: auto; }
+.rn__secedit { flex: none; }
+
+/* The small-caps key over a value — a status-strip cell, a version fact. */
+.rn__cellk {
+    font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.07em;
+    text-transform: uppercase; color: var(--text-muted);
+}
+
+.rn__chip { margin-left: var(--space-1, 4px); }
+
+/* ── Phone ────────────────────────────────────────────────────────────── */
+@media (max-width: 1023px) {
+    /* At 375px the method heading holds a title, a count, a three-way
+       switch and a Done button. Squeezed onto one line the switch got
+       144px and wrapped every label, so the heading grew to 71px of
+       stacked words. It takes its own full-width line instead (see
+       `.rn__modes` on the page), where the three options are readable and
+       evenly sized. */
+    .rn__sechead { flex-wrap: wrap; }
+    .rn__secedit { order: 2; }
+
+    .rn__masthead { grid-template-columns: 1fr; }
+    /* A phone scrolls the page, not two nested panes. */
+    .rn__pane { max-height: none; overflow: visible; }
+}

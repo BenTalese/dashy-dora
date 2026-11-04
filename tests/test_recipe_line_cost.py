@@ -136,6 +136,29 @@ def test__line_cost__AMeasuredPackCountedByItem__StaysUnpriced():
     assert _line_cost(_ing("Eggs", 3, None), UnitPrice(0.0079, "g")) is None
 
 
+def test__line_cost__OnePack__IsTheWholePackNotOneItem():
+    """QA2-18: "1 pack eggs" against a 12-egg carton at $6.00 is $6.00, not the
+    $0.50 one egg costs."""
+    carton = UnitPrice(0.50, "ea", pack_amount=0.50, whole_pack_amount=6.00)
+    assert _line_cost(_ing("Eggs", 1, "pack"), carton) == pytest.approx(6.00)
+    assert _line_cost(_ing("Eggs", 2, "packs"), carton) == pytest.approx(12.00)
+    # A bare count is still per item.
+    assert _line_cost(_ing("Eggs", 3, None), carton) == pytest.approx(1.50)
+
+
+def test__line_cost__OnePackOfAMeasuredProduct__IsPriced():
+    """A 500 g bag of pasta has no per-item price, but "1 pack" of it does."""
+    pasta = UnitPrice(0.004, "g", whole_pack_amount=2.00)
+    assert _line_cost(_ing("Pasta", 1, "pack"), pasta) == pytest.approx(2.00)
+
+
+def test__line_cost__OnePackWithNoWholePackPrice__FallsBackToTheCount():
+    # A price source that can't say what one pack cost keeps the old reading.
+    assert _line_cost(
+        _ing("Eggs", 1, "pack"), UnitPrice(0.50, "ea", pack_amount=0.50),
+    ) == pytest.approx(0.50)
+
+
 # ── No quantity at all ────────────────────────────────────────────────────
 
 

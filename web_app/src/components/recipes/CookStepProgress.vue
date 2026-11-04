@@ -217,7 +217,7 @@
     }
     .cook-progress__segment--clickable:focus-visible .cook-progress__bar {
         height: 16px;
-        box-shadow: 0 0 0 3px var(--focus-ring, color-mix(in srgb, var(--brand-primary) 45%, transparent));
+        box-shadow: 0 0 0 3px var(--focus-ring);
     }
     @media (prefers-reduced-motion: reduce) {
         .cook-progress__bar { transition: none; }

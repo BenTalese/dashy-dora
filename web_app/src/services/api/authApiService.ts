@@ -25,6 +25,9 @@ export type BootstrapAdminCommand = {
     username: string;
     password: string;
     email: string | null;
+    /** QA2-12 — this device's IANA zone, the household's starting timezone
+     *  (the server keeps any zone already set). */
+    timezone?: string;
 };
 export type UpdateMeCommand = {
     send_deals_on_day?: number;

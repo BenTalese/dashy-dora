@@ -28,6 +28,10 @@ export { PopupBlockedError };
 
 const http = new AxiosHttpClient();
 
+/** Client ceiling for the every-item QR sheet — matches gunicorn's worker
+ *  `timeout` (gunicorn.conf.py), past which the server gives up anyway. */
+const PRINT_ALL_TIMEOUT_MS = 120_000;
+
 /** A short, quotable description of why a QR call failed.
  *
  *  The detail page used to swallow the error whole and render a flat
@@ -99,5 +103,15 @@ export async function openQrSheetAsync(options: {
     const query = options.layout
         ? `?${new URLSearchParams({ layout: options.layout }).toString()}`
         : '';
-    return openHtmlDocumentAsync(`/stock-items/qr/sheet${query}`, 'QR sheet');
+    // "Print every item" is the one sheet whose size the user doesn't choose:
+    // ~3 ms of QR encode per item server-side, so a 2000-item pantry is ~6 s
+    // on a desktop and several times that on a small self-host box (FU-961).
+    // Give this one request the server's own worker ceiling (gunicorn
+    // `timeout`, 120 s) rather than raising the app-wide 30 s default.
+    return openHtmlDocumentAsync(
+        `/stock-items/qr/sheet${query}`,
+        'QR sheet',
+        undefined,
+        { timeoutMs: PRINT_ALL_TIMEOUT_MS },
+    );
 }

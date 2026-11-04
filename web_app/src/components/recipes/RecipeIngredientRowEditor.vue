@@ -20,11 +20,9 @@
                      label rendered *beside* the text still sitting in the
                      input, so creating "apple" from typed text read back as
                      the item twice. -->
-                <q-select
+                <BaseSelect
                     ref="itemSelect"
                     v-model="draft.stock_item_id"
-                    dense
-                    outlined
                     clearable
                     use-input
                     fill-input
@@ -72,7 +70,7 @@
                             </q-item-section>
                         </q-item>
                     </template>
-                </q-select>
+                </BaseSelect>
 
                 <div v-if="isFreeText" class="row items-center q-gutter-xs q-mt-xs">
                     <q-icon :name="ICONS.edit" size="14px" class="dora-text-muted" />
@@ -243,12 +241,13 @@
      */
     import { computed, ref, watch } from 'vue';
     import { usesOffers } from 'src/models/shoppingList';
-    import { QSelect, useQuasar } from 'quasar';
+    import { useQuasar } from 'quasar';
     import { storeToRefs } from 'pinia';
 
     import BaseButton from 'src/components/BaseButton.vue';
     import BaseDialog from 'src/components/BaseDialog.vue';
     import BaseSelect from 'src/components/BaseSelect.vue';
+    import type { BaseSelectExposed } from 'src/components/baseSelectTypes';
     import { ICONS } from 'src/style/icons';
     import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { useUnitOptions } from 'src/composables/useUnitOptions';
@@ -298,7 +297,7 @@
     const draft = ref<IngredientPatch | null>(null);
     const typed = ref('');
     const creating = ref(false);
-    const itemSelect = ref<QSelect | null>(null);
+    const itemSelect = ref<BaseSelectExposed | null>(null);
     /** The anchor rule is real, but a *fresh* row hasn't broken it yet — it
      *  simply hasn't been filled in. Showing the red the instant the dialog
      *  opens is the dialog complaining about its own empty state, which is

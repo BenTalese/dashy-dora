@@ -96,7 +96,7 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        background: var(--surface-muted);
+        background: var(--surface-sunken);
         color: var(--text-secondary);
         opacity: 0.55;
     }

@@ -52,7 +52,7 @@
                 </template>
 
                 <SettingsRow label="Cadence">
-                    <DoraSegmented
+                    <BaseSegmented
                         :model-value="draft.stocktake_default_cadence_band"
                         :options="BAND_OPTIONS"
                         @update:model-value="onBandChange"
@@ -87,7 +87,7 @@
     import SettingsSection from 'src/components/settings/SettingsSection.vue';
     import SettingsRow from 'src/components/settings/SettingsRow.vue';
     import SettingsPageHeader from 'src/components/settings/SettingsPageHeader.vue';
-    import DoraSegmented, { type DoraSegmentedOption } from 'src/components/settings/DoraSegmented.vue';
+    import BaseSegmented, { type BaseSegmentedOption } from 'src/components/BaseSegmented.vue';
     import type { CadenceBand } from 'src/services/api/stocktakeApiService';
     import { useFeatureFlags } from 'src/composables/useFeatureFlags';
     import { refreshStocktakePolicy } from 'src/composables/useStocktakePolicy';
@@ -96,7 +96,7 @@
      * PROPOSAL_STOCKTAKE_MODE §8: the global stocktake dials, each a
      * single-value control saved on change.
      */
-    const BAND_OPTIONS: DoraSegmentedOption<CadenceBand>[] = [
+    const BAND_OPTIONS: BaseSegmentedOption<CadenceBand>[] = [
         { label: 'Weekly', value: 'weekly' },
         { label: 'Fortnightly', value: 'fortnightly' },
         { label: 'Monthly', value: 'monthly' },

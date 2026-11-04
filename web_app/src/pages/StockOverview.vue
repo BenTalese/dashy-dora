@@ -383,9 +383,9 @@
                     <q-icon :name="ICONS.checklist" />
                     <span class="text-weight-medium">{{ bulkSelection.size }} selected</span>
                     <q-space />
-                    <BaseButton variant="ghost" dense label="Select visible" @click="selectVisible" />
+                    <BaseButton variant="subtle" dense label="Select visible" @click="selectVisible" />
                     <BaseButton
-                        variant="ghost"
+                        variant="subtle"
                         dense
                         label="Deselect all"
                         :disable="bulkSelection.size === 0"
@@ -669,11 +669,6 @@
     import PageCountsFooter from 'src/components/PageCountsFooter.vue';
     import FilterChip from 'src/components/chips/FilterChip.vue';
     import ScanOverlay from 'src/components/ScanOverlay.vue';
-    import {
-        buildScanActionOptions,
-        resolveScanLevelOutcome,
-        type ScanAction,
-    } from 'src/helpers/scanActions';
     import BulkMoveLocationDialog from 'src/components/stock/BulkMoveLocationDialog.vue';
     import CreateStockItemDialog from 'src/components/stock/CreateStockItemDialog.vue';
     import MarkAsWastedDialog from 'src/components/stock/MarkAsWastedDialog.vue';
@@ -681,10 +676,6 @@
     import StockItemRow from 'src/components/stock/StockItemRow.vue';
     import StockLevelDot from 'src/components/stock/StockLevelDot.vue';
     import ListTransition from 'src/components/transitions/ListTransition.vue';
-    // FU-572: the bulk paths write list membership and levels straight to the
-    // server, so they invalidate the verdict cache themselves — the per-item
-    // helpers that used to do it for them are no longer in the loop.
-    import { invalidateBuyVerdict } from 'src/composables/useBuyVerdict';
     import { useFilterPanelExpanded } from 'src/composables/useFilterPanelExpanded';
     import { useLogPrice } from 'src/composables/useLogPrice';
     import { useMoneyEnabled } from 'src/composables/useMoneyEnabled';
@@ -693,6 +684,8 @@
     import { useShortcut } from 'src/composables/useShortcut';
     import { useStockFilters, STOCK_SORT_OPTIONS } from 'src/composables/useStockFilters';
     import { useStockItemActions } from 'src/composables/useStockItemActions';
+    import { useStockBulkActions } from 'src/composables/useStockBulkActions';
+    import { useStockScan } from 'src/composables/useStockScan';
     import type { Membership } from 'src/models/shoppingList';
     import type { StockLevel } from 'src/models/stockLevel';
     import { useStockOverviewExport } from 'src/composables/useStockOverviewExport';
@@ -700,15 +693,10 @@
         STOCK_ROW_HEIGHT_DESKTOP,
         STOCK_ROW_HEIGHT_MOBILE,
     } from 'src/helpers/stockRowMetrics';
-    import BarcodeApiService from 'src/services/api/barcodeApiService';
     import { useStockGroupStore } from 'src/stores/stockGroupStore';
-    import StockItemApiService from 'src/services/api/stockItemApiService';
     import StocktakeApiService from 'src/services/api/stocktakeApiService';
-    import WasteApiService, { type WasteReason } from 'src/services/api/wasteApiService';
-    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { useRecipeStore } from 'src/stores/recipeStore';
     import { useShoppingListStore } from 'src/stores/shoppingListStore';
-    import ShoppingListApiService from 'src/services/api/shoppingListApiService';
     import { useStockItemStore } from 'src/stores/stockItemStore';
     import { useStockLevelStore } from 'src/stores/stockLevelStore';
     import { usePantryBeliefs } from 'src/composables/usePantryBeliefs';
@@ -716,11 +704,9 @@
     import StockItemDetailPage from 'src/pages/StockItemDetailPage.vue';
     import { computed, onMounted, ref, watch } from 'vue';
     import { useRoute, useRouter } from 'vue-router';
-    import { useConfirm } from 'src/composables/useConfirm';
 
     const $q = useQuasar();
 
-    const { choose } = useConfirm();
     const { scanningEnabled } = useScanningEnabled();
     // 2026-08-20 — install-wide stocktake switch. Gates the toolbar button,
     // the row's needs-check marker and the queue fetch below.
@@ -736,8 +722,6 @@
     // actively annoying on a phone.
     const compactToolbar = computed(() => $q.screen.lt.sm);
     const stockGroupStore = useStockGroupStore();
-    const stockItemApi = new StockItemApiService();
-    const barcodeApi = new BarcodeApiService();
     const overviewExport = useStockOverviewExport();
     const stocktakeApi = new StocktakeApiService();
     const stocktakeOverdue = ref(0);
@@ -815,7 +799,6 @@
     const pantryBeliefs = usePantryBeliefs();
     const locationStore = useLocationStore();
     const shoppingListStore = useShoppingListStore();
-    const shoppingListApi = new ShoppingListApiService();
     const recipeStore = useRecipeStore();
 
     const { stockItems } = storeToRefs(stockItemStore);
@@ -1014,357 +997,34 @@
     ]);
 
     // ── Bulk select mode ─────────────────────────────────────────────────
-    const bulkMode = ref(false);
-    const bulkSelection = ref<Set<string>>(new Set());
-    const bulkBusy = ref(false);
-
-    function toggleBulk(id: string) {
-        const wasSelected = bulkSelection.value.has(id);
-        if (wasSelected) bulkSelection.value.delete(id);
-        else bulkSelection.value.add(id);
-        bulkSelection.value = new Set(bulkSelection.value);
-        // 2026-08-15 feedback: unticking the last item leaves bulk mode
-        // running with an empty selection and every action disabled —
-        // a dead-end bar the user then has to dismiss by hand. Treat
-        // "deselected the last one" as backing out of the mode — and
-        // 2026-08-20 feedback extended that to `deselectAll` below, which
-        // reaches the same empty selection by a different route and so
-        // shouldn't leave the user in a different state.
-        if (wasSelected && bulkSelection.value.size === 0) bulkMode.value = false;
-    }
-    function selectVisible() {
-        for (const item of filters.filteredStockItems.value) {
-            bulkSelection.value.add(item.stock_item_id);
-        }
-        bulkSelection.value = new Set(bulkSelection.value);
-    }
-    function cancelBulk() {
-        bulkMode.value = false;
-        bulkSelection.value = new Set();
-    }
-    function deselectAll() {
-        // 2026-08-20 feedback: "for mobile we made it so deselecting the last
-        // item would stop bulk select. I would expect the same for using the
-        // deselect all button." Same end state either way — an empty selection
-        // with the bar still up is a dead end whichever button emptied it.
-        // (That makes this equivalent to Cancel; it stays because on a phone
-        // the bulk bar is what's on screen, not the toolbar's Cancel.)
-        cancelBulk();
-    }
-
-    async function bulkAddToPrimary() {
-        if (bulkSelection.value.size === 0) return;
-        bulkBusy.value = true;
-        try {
-            const ids = [...bulkSelection.value];
-            // The first item goes through `addToList` because resolving the
-            // quick-add target is the interactive bit — it may find no draft,
-            // or prompt when several exist. It returns the list it landed on,
-            // which is exactly what the rest of the batch needs (that return
-            // value is documented for this caller). Silent so the per-item
-            // toast doesn't precede the summary.
-            const listId = await actions.addToList(ids[0]!, null, { silent: true });
-            if (!listId) return; // no draft, or the user cancelled the picker.
-
-            const rest = ids.slice(1);
-            let added = 1;
-            let already = 0;
-            if (rest.length > 0) {
-                const result = await shoppingListApi.bulkAddLinesAsync(listId, rest);
-                added += result.added;
-                already += result.already_on_list;
-            }
-            await shoppingListStore.refreshAsync();
-            ids.forEach((id) => invalidateBuyVerdict(id));
-            $q.notify({
-                type: 'positive',
-                message: already > 0
-                    ? `Added ${added} to your list, ${already} already on it.`
-                    : `Added ${added} item${added === 1 ? '' : 's'} to your list.`,
-            });
-            cancelBulk();
-        } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not add all items.',
-                caption: toastCaption(err),
-            });
-        } finally {
-            bulkBusy.value = false;
-        }
-    }
-
-    async function bulkRestock() {
-        if (bulkSelection.value.size === 0) return;
-        // The one "most-stocked level" (`stockLevelStore.stockedLevel`, by
-        // sequence), resolved once rather than per item.
-        const top = stockLevelStore.stockedLevel;
-        if (!top) {
-            $q.notify({
-                type: 'negative',
-                message: 'No stock levels configured.',
-            });
-            return;
-        }
-        bulkBusy.value = true;
-        try {
-            const ids = [...bulkSelection.value];
-            const { updated_count } = await stockItemApi.bulkSetLevelAsync(
-                ids, top.stock_level_id,
-            );
-            // The bulk endpoint writes server-side, so the store's rows are
-            // stale until refetched — one refresh for the batch.
-            await stockItemStore.getStockItemsAsync();
-            ids.forEach((id) => stockItemStore.invalidateLevelOverlays(id));
-            // Bypasses `stockItemStore`'s own mutations, so the recipe list's
-            // stock-derived facts (cookable, missing counts) have to be marked
-            // stale here too — a batch restock changes what's cookable.
-            recipeStore.invalidateRecipes();
-            $q.notify({
-                type: 'positive',
-                message: `Marked ${updated_count} item${updated_count === 1 ? '' : 's'} restocked.`,
-            });
-            cancelBulk();
-        } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not restock.',
-                caption: toastCaption(err),
-            });
-        } finally {
-            bulkBusy.value = false;
-        }
-    }
-
-    // ── Bulk log waste ──────────────────────────────────────────────────
-    // Reuses the single-item MarkAsWastedDialog (R-001). One reason
-    // applies to the whole selection ("these all went off"). Each
-    // selected item gets its own StockItemWasteEvent + its expiry
-    // cleared (same shape as the single-item flow in StockItemRow).
-    const wasteApi = new WasteApiService();
-    const bulkWasteOpen = ref(false);
-    const bulkWasteItemName = computed(() => {
-        const n = bulkSelection.value.size;
-        return `${n} item${n === 1 ? '' : 's'}`;
+    // The selection, the seven bulk-bar actions and the list picker they
+    // share live in `useStockBulkActions` (FU-934 / 05-R33); the bar and its
+    // two dialogs stay in this template.
+    const {
+        bulkMode,
+        bulkSelection,
+        bulkBusy,
+        toggleBulk,
+        selectVisible,
+        cancelBulk,
+        deselectAll,
+        bulkAddToPrimary,
+        bulkRestock,
+        bulkWasteOpen,
+        bulkWasteItemName,
+        bulkWasteSubline,
+        openBulkWasteDialog,
+        onBulkMarkAsWasted,
+        bulkAddToListPrompt,
+        bulkRemoveFromListPrompt,
+        moveDialogOpen,
+        openMoveDialog,
+        bulkMove,
+        bulkPrintQrs,
+    } = useStockBulkActions({
+        visibleItems: () => filters.filteredStockItems.value,
+        openQrSheet: (ids) => overviewExport.openQrSheet(ids),
     });
-    const bulkWasteSubline = computed(() =>
-        'One reason applies to every selected item.',
-    );
-    function openBulkWasteDialog() {
-        if (bulkSelection.value.size === 0) return;
-        bulkWasteOpen.value = true;
-    }
-    async function onBulkMarkAsWasted(reason: WasteReason) {
-        if (bulkSelection.value.size === 0) return;
-        const ids = [...bulkSelection.value];
-        bulkBusy.value = true;
-        // 2026-08-22 feedback: this used to be up to THREE sequential
-        // requests per selected item (log, clear the expiry, re-read the
-        // row) — the slowest thing on the bulk bar by a wide margin. One
-        // call now does the lot, and the server echoes each item's previous
-        // expiry back so Undo can still put it right.
-        let succeeded: Array<{
-            event_id: string;
-            stock_item_id: string;
-            original_expiry: string | null;
-        }> = [];
-        try {
-            const result = await wasteApi.logEventsBulkAsync({
-                stock_item_ids: ids,
-                reason,
-            });
-            succeeded = result.events.map((e) => ({
-                event_id: e.event_id,
-                stock_item_id: e.stock_item_id,
-                original_expiry: e.previous_expiry_date,
-            }));
-            // The expiry clears happened server-side, so the store's copies
-            // are stale — one refresh for the whole batch.
-            await stockItemStore.getStockItemsAsync();
-        } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not log any as wasted.',
-                caption: toastCaption(err),
-            });
-            return;
-        } finally {
-            bulkBusy.value = false;
-        }
-        const okCount = succeeded.length;
-        const failCount = ids.length - okCount;
-        if (okCount === 0) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not log any as wasted.',
-            });
-            return;
-        }
-        const failSuffix = failCount > 0
-            ? ` (${failCount} could not be logged)`
-            : '';
-        $q.notify({
-            type: 'info',
-            message: `Logged ${okCount} item${okCount === 1 ? '' : 's'} as wasted${failSuffix}.`,
-            timeout: 6000,
-            actions: [{
-                label: 'Undo',
-                color: 'white',
-                handler: () => {
-                    void (async () => {
-                        try {
-                            // Deletes and expiry restores in one call — the
-                            // server only restores where a date was echoed,
-                            // so items that never had an expiry don't gain one.
-                            await wasteApi.deleteEventsBulkAsync({
-                                events: succeeded.map((s) => ({
-                                    event_id: s.event_id,
-                                    restore_expiry_date: s.original_expiry,
-                                })),
-                            });
-                            await stockItemStore.getStockItemsAsync();
-                            $q.notify({
-                                type: 'positive',
-                                message: 'Undone.',
-                            });
-                        } catch (err) {
-                            $q.notify({
-                                type: 'negative',
-                                message: 'Could not undo.',
-                                caption: toastCaption(err),
-                            });
-                        }
-                    })();
-                },
-            }],
-        });
-        cancelBulk();
-    }
-
-    // ── Bulk add to list ────────────────────────────────────────────────
-    // Round-18: always prompt for the target list, then add every
-    // selected item to it. The server's addLineAsync already de-dupes
-    // ("already on list"); items already on a DIFFERENT list still get
-    // added (multi-list membership is fine).
-    async function pickActiveListId(title: string, source: 'all' | 'present-only'): Promise<string | null> {
-        const m = shoppingListStore.membership;
-        const all = (m?.active_lists ?? []).filter((l) => l.status !== 'done');
-        let candidates = all;
-        if (source === 'present-only') {
-            const ids = new Set<string>();
-            for (const sid of bulkSelection.value) {
-                const entry = m?.items.find((i) => i.stock_item_id === sid);
-                entry?.unticked_list_ids.forEach((lid) => ids.add(lid));
-            }
-            candidates = all.filter((l) => ids.has(l.shopping_list_id));
-        }
-        if (candidates.length === 0) {
-            $q.notify({
-                type: 'info',
-                message: source === 'present-only'
-                    ? 'None of the selected items are on a list.'
-                    : 'No active lists. Create one first.',
-            });
-            return null;
-        }
-        return await choose({
-            title: title,
-            items: candidates.map((l) => ({ label: l.name, value: l.shopping_list_id })),
-            initial: candidates[0]!.shopping_list_id,
-        });
-    }
-
-    async function bulkAddToListPrompt() {
-        if (bulkSelection.value.size === 0) return;
-        const listId = await pickActiveListId('Add to which list?', 'all');
-        if (!listId) return;
-        bulkBusy.value = true;
-        try {
-            const ids = [...bulkSelection.value];
-            const { added, already_on_list } =
-                await shoppingListApi.bulkAddLinesAsync(listId, ids);
-            await shoppingListStore.refreshAsync();
-            ids.forEach((id) => invalidateBuyVerdict(id));
-            $q.notify({
-                type: 'positive',
-                message: already_on_list > 0
-                    ? `${added} added, ${already_on_list} already on list.`
-                    : `${added} added.`,
-            });
-            cancelBulk();
-        } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not add all items.',
-                caption: toastCaption(err),
-            });
-        } finally {
-            bulkBusy.value = false;
-        }
-    }
-
-    async function bulkRemoveFromListPrompt() {
-        if (bulkSelection.value.size === 0) return;
-        const listId = await pickActiveListId('Remove from which list?', 'present-only');
-        if (!listId) return;
-        bulkBusy.value = true;
-        try {
-            // Was: fetch the list detail, work out which lines match the
-            // selection, then DELETE each one. The bulk endpoint takes stock
-            // item ids and is a no-op per item that isn't on the list, so
-            // both the detail read and the loop are gone — `removed_count`
-            // is the honest number.
-            const ids = [...bulkSelection.value];
-            const { removed_count } =
-                await shoppingListApi.bulkRemoveByStockItemAsync(listId, ids);
-            await shoppingListStore.refreshAsync();
-            ids.forEach((id) => invalidateBuyVerdict(id));
-            const listName = shoppingListStore.summaries.find(
-                (s) => s.shopping_list_id === listId,
-            )?.display_name ?? 'list';
-            $q.notify({
-                type: 'positive',
-                message: `Removed ${removed_count} from "${listName}".`,
-            });
-            cancelBulk();
-        } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not remove from list.',
-                caption: toastCaption(err),
-            });
-        } finally {
-            bulkBusy.value = false;
-        }
-    }
-
-    // ── Bulk move location ───────────────────────────────────────────────
-    const moveDialogOpen = ref(false);
-    function openMoveDialog() {
-        moveDialogOpen.value = true;
-    }
-    async function bulkMove(locationId: string | null) {
-        if (bulkSelection.value.size === 0) return;
-        bulkBusy.value = true;
-        try {
-            await stockItemApi.bulkMoveAsync([...bulkSelection.value], locationId);
-            await stockItemStore.getStockItemsAsync();
-            $q.notify({
-                type: 'positive',
-                message: 'Items moved.',
-            });
-            moveDialogOpen.value = false;
-            cancelBulk();
-        } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not move items.',
-                caption: toastCaption(err),
-            });
-        } finally {
-            bulkBusy.value = false;
-        }
-    }
 
     // ── Navigation ───────────────────────────────────────────────────────
     // `goToList` retired with the "On N lists" chip; the
@@ -1391,170 +1051,31 @@
         if (!open) createDialogPrefill.value = null;
     });
 
-    // ── Bulk-print QRs (post-N5 polish) ───────────────────────────────────
-    // Fires the same QR-sheet endpoint Data → Barcodes & QR uses, scoped to
-    // the current bulk selection so the user can stocktake-print without
-    // round-tripping through that page.
-    function bulkPrintQrs() {
-        if (bulkSelection.value.size === 0) return;
-        overviewExport.openQrSheet(Array.from(bulkSelection.value));
-    }
-
     // ── Scan overlay (N5 + FU-378 action-first mode) ─────────────────────
-    // `scanAction` is a *persistent* selection shown + switched inside the
-    // overlay: the user always sees what a scan does and can change it
-    // without leaving the camera. `open` is the legacy N5 jump-to-detail
-    // flow (closes on decode); a `level` action stays open and sets that
-    // level on every scanned item (covers the stocktake scan-to-check case
-    // — decision §7a #4). Opening the Scan button resets to the `open`
-    // default (navigate-on-scan unless you pick an action).
-    const overviewScanOpen = ref(false);
-    const scanOverlayRef = ref<InstanceType<typeof ScanOverlay> | null>(null);
-    const scanAction = ref<ScanAction>({ kind: 'open' });
-
-    // The full action menu, rebuilt from the live level rows so a renamed
-    // seed level shows its custom name (R-003 — no hardcoded level literals).
-    const scanActionOptions = computed(() => buildScanActionOptions(stockLevels.value));
-
-    // Current-action display: label, the optional level colour-dot sequence,
-    // the leading icon, and a one-line caption of what each scan will do.
-    const currentScanActionLabel = computed(() =>
-        scanAction.value.kind === 'open'
-            ? 'Open stock item'
-            : `Set to ${scanAction.value.levelName}`,
-    );
-    const currentScanActionSequence = computed<number | null>(() => {
-        if (scanAction.value.kind !== 'level') return null;
-        const id = scanAction.value.levelId;
-        return stockLevelStore.levelById.get(id ?? '')?.sequence ?? null;
-    });
-    const currentScanActionIcon = computed(() =>
-        scanAction.value.kind === 'open' ? ICONS.open_in_new : undefined,
-    );
-    const scanActionCaption = computed(() =>
-        scanAction.value.kind === 'open'
-            ? 'Scan an item to open it.'
-            : 'Each item you scan is set to this level.',
-    );
-
-    function isCurrentScanAction(action: ScanAction): boolean {
-        const cur = scanAction.value;
-        if (action.kind === 'open') return cur.kind === 'open';
-        return cur.kind === 'level' && cur.levelId === action.levelId;
-    }
-
-    function selectScanAction(action: ScanAction) {
-        scanAction.value = action;
-    }
-
-    function openScan() {
-        // Reset to the navigate-on-scan default each time the button is
-        // pressed; switching to a level action happens inside the overlay.
-        scanAction.value = { kind: 'open' };
-        overviewScanOpen.value = true;
-    }
-
-    // Look up a stock item's display name for the scan result banner.
-    function stockItemName(id: string): string | undefined {
-        return stockItems.value.find((si) => si.stock_item_id === id)?.name;
-    }
-
-    // Apply the chosen level to a scanned item. Reuses the shared
-    // updateStockLevelAsync mutation (R-003) so it behaves exactly like the
-    // in-row level swap (optimistic + offline-queue + auto-add hook). Any
-    // result other than a resolvable stock item is reported and skipped —
-    // we don't derail the scan loop into the add-item flow.
-    async function onScanLevelDecoded(value: string, action: Extract<ScanAction, { kind: 'level' }>) {
-        const overlay = scanOverlayRef.value;
-        try {
-            const result = await barcodeApi.lookupAsync(value);
-            const outcome = resolveScanLevelOutcome(result, action.levelName, stockItemName);
-            if (!outcome.ok || !outcome.stockItemId) {
-                overlay?.pushResult(outcome.message, 'bad');
-                return;
-            }
-            await stockItemStore.updateStockLevelAsync({
-                stock_item_id: outcome.stockItemId,
-                stock_level_id: action.levelId,
-            });
-            overlay?.pushResult(outcome.message, 'good');
-        } catch {
-            overlay?.pushResult('Lookup failed. Try again.', 'bad');
-        }
-    }
-
-    async function onOverviewScanDecoded(value: string) {
-        // Route level actions to the loop-apply handler; everything else is
-        // the legacy open/navigate flow below.
-        if (scanAction.value.kind === 'level') {
-            await onScanLevelDecoded(value, scanAction.value);
-            return;
-        }
-        try {
-            const result = await barcodeApi.lookupAsync(value);
-            // both stock-item kinds route directly. `UNIQUE` on
-            // StockItemProduct.product_id guarantees there's no multi-link
-            // ambiguity to handle. **P8-02 invariant: already-mapped EANs
-            // never trigger the OFF lookup or the add flow** — they jump
-            // straight to the existing item so no duplicate is created.
-            if (result.kind === 'stock_item' || result.kind === 'stock_item_via_product') {
-                overviewScanOpen.value = false;
-                void router.push(`/stock/${result.id}`);
-                return;
-            }
-            // `product_no_link` — the Product exists (probably from ingestion)
-            // but no stock item is linked. Skip OFF (the user's own Product
-            // data wins over an open-data suggestion) and open the add-item
-            // dialog with a barcode-only prefill; the dialog registers the
-            // EAN against the new stock item on save. Deeper "link into an
-            // existing item" flow is deferred (see FU-056 Phase-2 Products
-            // UI).
-            if (result.kind === 'product_no_link') {
-                overviewScanOpen.value = false;
-                createDialogPrefill.value = {
-                    barcode: value,
-                    source: 'product_no_link',
-                };
-                createDialogOpen.value = true;
-                return;
-            }
-            // `unknown` — the EAN is genuinely not in Dora. Ask Open Food
-            // Facts. On a hit, seed the dialog with the OFF suggestion; on
-            // a miss (or network failure — OFF returns `found: false` for
-            // both), open the dialog with only the barcode so the user can
-            // still one-tap add + register the EAN. The barcode registers
-            // against the new stock item on submit either way.
-            overviewScanOpen.value = false;
-            let prefill: CreateStockItemPrefill = { barcode: value, source: 'unknown' };
-            try {
-                const off = await barcodeApi.offLookupAsync(value);
-                if (off.found) {
-                    prefill = {
-                        barcode: value,
-                        source: 'off',
-                        name: off.name ?? undefined,
-                        brand: off.brand ?? undefined,
-                        imageUrl: off.image_url ?? undefined,
-                        categories: off.categories ?? undefined,
-                        quantity: off.quantity ?? undefined,
-                    };
-                }
-            } catch {
-                // OFF endpoint itself failed (server-side, distinct from a
-                // "found: false" miss). Fall through to the barcode-only
-                // prefill so the user isn't blocked — the add still works,
-                // and the EAN still gets registered on submit.
-            }
+    // The action switcher, its display state and the decode handlers live in
+    // `useStockScan` (FU-934 / 05-R33); the overlay and its action menu stay
+    // in this template, bound with `ref="scanOverlayRef"`. A code Dora doesn't
+    // know opens the create dialog above, seeded from the scan.
+    const {
+        overviewScanOpen,
+        scanAction,
+        scanActionOptions,
+        currentScanActionLabel,
+        currentScanActionSequence,
+        currentScanActionIcon,
+        scanActionCaption,
+        isCurrentScanAction,
+        selectScanAction,
+        openScan,
+        onOverviewScanDecoded,
+    } = useStockScan({
+        stockItems: () => stockItems.value,
+        stockLevels: () => stockLevels.value,
+        openCreateDialog: (prefill) => {
             createDialogPrefill.value = prefill;
             createDialogOpen.value = true;
-        } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Lookup failed.',
-                caption: err instanceof Error ? err.message : String(err),
-            });
-        }
-    }
+        },
+    });
 
     async function loadStockGroups() {
         // A failed load leaves the group filter empty rather than failing the page.
@@ -1743,7 +1264,7 @@
         background: color-mix(in srgb, var(--text-primary) 18%, transparent);
     }
     .stock-splitter--peeking :deep(.dora-splitter__separator):hover {
-        background: var(--accent-ink);
+        background: var(--accent-mark);
     }
     /* Peek pane. Its panel owns the scroll now, so pin the embedded
        detail header. Losing that header on scroll was the 2026-06-18

@@ -48,12 +48,10 @@
         <!-- ── Filters ───────────────────────────────────────────────── -->
         <section class="audit-filters">
             <div class="row q-col-gutter-sm">
-                <q-select
+                <BaseSelect
                     v-model="filters.severity"
                     :options="severityOptions"
                     label="Severity"
-                    outlined
-                    dense
                     clearable
                     multiple
                     emit-value
@@ -171,7 +169,7 @@
 
         <div class="row items-center q-gutter-sm q-mt-md">
             <BaseButton
-                variant="ghost"
+                variant="subtle"
                 dense
                 :icon="ICONS.chevron_left"
                 label="Previous"
@@ -182,7 +180,7 @@
                 Page {{ page }} of {{ pageCount }} ({{ formatNumber(total) }} {{ total === 1 ? 'event' : 'events' }})
             </div>
             <BaseButton
-                variant="ghost"
+                variant="subtle"
                 dense
                 :icon-right="ICONS.chevron_right"
                 label="Next"
@@ -190,12 +188,10 @@
                 @click="reload(page + 1)"
             />
             <q-space />
-            <q-select
+            <BaseSelect
                 v-model="size"
                 :options="[25, 50, 100, 200]"
                 label="Per page"
-                outlined
-                dense
                 style="min-width: 110px"
                 @update:model-value="reload(1)"
             />
@@ -255,6 +251,7 @@
 
 <script lang="ts" setup>
     import BaseButton from 'src/components/BaseButton.vue';
+    import BaseSelect from 'src/components/BaseSelect.vue';
     import { formatDateTime as formatLocaleDateTime } from 'src/composables/useDateFormat';
     import { formatNumber } from 'src/composables/useMoney';
     import BaseDialog from 'src/components/BaseDialog.vue';
@@ -466,7 +463,7 @@
     /* `classes: 'text-mono'` lands on cells q-table renders itself, outside this
        component's scope attribute, so the rule has to reach through. */
     :deep(.text-mono) {
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-family: var(--font-mono);
         font-size: var(--font-size-xs);
     }
 </style>

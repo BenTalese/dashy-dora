@@ -767,3 +767,53 @@ def test__planned_meal_tips_an_unsure_low_item_to_buy():
     ))
     assert planned.strength > plain.strength
     assert planned.verdict == "buy"
+
+
+# ── Pack sizes compared per unit (QA2-17) ─────────────────────────────
+
+
+def test__price_samples__compare_pack_sizes_per_unit():
+    """$1.80 for 1 L after $3.50 for 2 L is dearer per litre, not cheaper.
+    Each sample is re-expressed at the newest purchase's size; the newest
+    keeps exactly what was paid."""
+    from dora_api.features.stock_items.get_buy_verdict import (
+        comparable_price_samples)
+
+    samples = comparable_price_samples([
+        (1.80, _dt(2), 1.0, "L"),
+        (3.50, _dt(30), 2.0, "L"),
+        (3.40, _dt(60), 2000.0, "ml"),
+    ])
+    assert [round(p, 2) for p, _ in samples] == [1.80, 1.75, 1.70]
+
+
+def test__price_samples__another_dimension_is_left_out():
+    from dora_api.features.stock_items.get_buy_verdict import (
+        comparable_price_samples)
+
+    samples = comparable_price_samples([
+        (4.00, _dt(2), 500.0, "g"),
+        (3.00, _dt(30), None, None),        # sizeless: per item, not per gram
+        (7.00, _dt(60), 1.0, "kg"),
+    ])
+    assert [round(p, 2) for p, _ in samples] == [4.00, 3.50]
+
+
+def test__price_samples__sizeless_and_count_sized_lines_do_not_mix():
+    """A sizeless line folds to "1 ea" and a 12-egg carton to "12 ea": the same
+    unit, but rescaling one by the other made a $5.50 line read as $66."""
+    from dora_api.features.stock_items.get_buy_verdict import (
+        comparable_price_samples)
+
+    sized_first = comparable_price_samples([
+        (6.00, _dt(2), 12.0, "ea"),
+        (5.50, _dt(30), None, None),
+        (6.60, _dt(60), 12.0, "ea"),
+    ])
+    assert [round(p, 2) for p, _ in sized_first] == [6.00, 6.60]
+    sizeless_first = comparable_price_samples([
+        (5.50, _dt(2), None, None),
+        (6.00, _dt(30), 12.0, "ea"),
+        (5.00, _dt(60), None, None),
+    ])
+    assert [round(p, 2) for p, _ in sizeless_first] == [5.50, 5.00]

@@ -29,7 +29,8 @@ from dora_api.features.assistant import (app_knowledge, confirm_actions,
                                           shopping_actions, tools)
 from dora_api.features.routers import ASSISTANT_ROUTER
 from dora_api.infrastructure.llm.factory import unavailable_client
-from dora_api.infrastructure.api_response import ok
+from dora_api.features.shopping_lists.manage_shopping_list_lines import LIST_DONE_REFUSAL
+from dora_api.infrastructure.api_response import business_rule_violation, ok
 from dora_api.infrastructure.auth_helpers import (
     rate_limit, rate_limit_remaining_seconds,
 )
@@ -531,6 +532,10 @@ def commit_action():
         for item in _Request.items
     ]
     result = shopping_actions.commit_add(_Request.shopping_list_id, resolved)
+    if result.get("list_done"):
+        # Same list-level 422 as the bulk-add route (FU-969 (4)); DoraChat
+        # shows the message instead of a "Nothing to add." reply.
+        return business_rule_violation(LIST_DONE_REFUSAL)
     return ok({
         **result,
         "shopping_list_id": str(_Request.shopping_list_id),

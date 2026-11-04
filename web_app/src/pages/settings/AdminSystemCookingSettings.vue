@@ -49,7 +49,7 @@
                 </template>
 
                 <SettingsRow label="Cooking style">
-                    <DoraSegmented
+                    <BaseSegmented
                         :model-value="draft.batch_features_enabled ? 'batch' : 'fresh'"
                         :options="cookingStyleOptions"
                         @update:model-value="onCookingStyleChange"
@@ -66,7 +66,7 @@
     import SettingsSection from 'src/components/settings/SettingsSection.vue';
     import SettingsRow from 'src/components/settings/SettingsRow.vue';
     import SettingsPageHeader from 'src/components/settings/SettingsPageHeader.vue';
-    import DoraSegmented, { type DoraSegmentedOption } from 'src/components/settings/DoraSegmented.vue';
+    import BaseSegmented, { type BaseSegmentedOption } from 'src/components/BaseSegmented.vue';
     import { refreshCookingPolicy } from 'src/composables/useCookingPolicy';
 
     // FU-615: the two install-wide household cooking settings (headcount +
@@ -79,7 +79,7 @@
     });
 
     type CookingStyle = 'fresh' | 'batch';
-    const cookingStyleOptions: DoraSegmentedOption<CookingStyle>[] = [
+    const cookingStyleOptions: BaseSegmentedOption<CookingStyle>[] = [
         { label: 'Fresh', value: 'fresh' },
         { label: 'Batch', value: 'batch' },
     ];

@@ -1,6 +1,13 @@
 <template>
     <DashboardCard :icon="ICONS.restaurant_menu" title="Next to cook">
-        <ul v-if="entries.length > 0" class="dora-cook-list">
+        <!-- FU-976 (3) — the summary call that feeds this card failed. Its own
+             error, not the empty state ("Nothing planned") and not the page's. -->
+        <CardLoadError
+            v-if="failed"
+            line="I couldn't load your planned meals."
+            @retry="emit('retry')"
+        />
+        <ul v-else-if="entries.length > 0" class="dora-cook-list">
             <li
                 v-for="entry in entries"
                 :key="`${entry.recipe_id}-${entry.scheduled_for}-${entry.slot}`"
@@ -107,6 +114,7 @@
     import { formatRelativeDay } from 'src/composables/useDateFormat';
     import BaseButton from 'src/components/BaseButton.vue';
     import DashboardCard from 'src/components/dashboard/DashboardCard.vue';
+    import CardLoadError from 'src/components/dashboard/CardLoadError.vue';
     import { useBatchEnabled } from 'src/composables/useBatchEnabled';
     import type { UpcomingMealPlanEntry } from 'src/models/dashboard';
 
@@ -124,11 +132,16 @@
             /** Whether the week holds any planned meal at all — what separates
              *  "nothing planned" from "planned, and already cooked". */
             hasPlannedMeals?: boolean;
+            /** The summary call failed — show `CardLoadError`, not an empty state. */
+            failed?: boolean;
         }>(),
-        { hasPlannedMeals: false },
+        { hasPlannedMeals: false, failed: false },
     );
 
-    const emit = defineEmits<{ (e: 'cook', entry: UpcomingMealPlanEntry): void }>();
+    const emit = defineEmits<{
+        (e: 'cook', entry: UpcomingMealPlanEntry): void;
+        (e: 'retry'): void;
+    }>();
 
     /** Read only for the two empty states now — the per-row pool label came off
      *  in the 09-08 density pass (see the block comment above). */

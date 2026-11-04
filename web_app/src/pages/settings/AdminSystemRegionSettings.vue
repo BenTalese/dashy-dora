@@ -48,11 +48,9 @@
                     label="Currency"
                     help="What your prices are in."
                 >
-                    <q-select
+                    <BaseSelect
                         :model-value="currencyDraft"
                         :options="currencyOptions"
-                        outlined
-                        dense
                         use-input
                         hide-selected
                         fill-input
@@ -77,11 +75,9 @@
                     label="Language & format"
                     help="Decides symbol placement, decimal marks and date order."
                 >
-                    <q-select
+                    <BaseSelect
                         :model-value="localeDraft"
                         :options="localeOptions"
-                        outlined
-                        dense
                         use-input
                         hide-selected
                         fill-input
@@ -115,11 +111,9 @@
                     label="Units"
                     help="Which units the app offers when you enter a quantity or a price."
                 >
-                    <q-select
+                    <BaseSelect
                         :model-value="systemDraft"
                         :options="MEASUREMENT_SYSTEM_CHOICES"
-                        outlined
-                        dense
                         emit-value
                         map-options
                         options-dense
@@ -133,11 +127,9 @@
                     label="Timezone"
                     help="Fixes the &quot;today&quot; boundary, wherever the server runs."
                 >
-                    <q-select
+                    <BaseSelect
                         :model-value="timezoneDraft"
                         :options="timezoneOptions"
-                        outlined
-                        dense
                         use-input
                         hide-selected
                         fill-input
@@ -164,6 +156,7 @@
     import { ICONS } from 'src/style/icons';
     import { useQuasar } from 'quasar';
     import BaseButton from 'src/components/BaseButton.vue';
+    import BaseSelect from 'src/components/BaseSelect.vue';
     import { useAppSettingsStore } from 'src/stores/appSettingsStore';
     import { computed, onMounted, ref } from 'vue';
     import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';

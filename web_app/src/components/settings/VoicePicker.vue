@@ -378,7 +378,7 @@
         padding: 12px 14px;
         border-radius: 10px;
         border: 2px solid color-mix(in srgb, var(--text-primary) 10%, transparent);
-        background: var(--surface-card, transparent);
+        background: var(--surface-component);
         transition: border-color 0.18s ease, background-color 0.18s ease;
     }
     .voice-card--selectable { cursor: pointer; }
@@ -386,7 +386,7 @@
         border-color: color-mix(in srgb, var(--accent-mark) 45%, transparent);
     }
     .voice-card--selectable:focus-visible {
-        outline: 2px solid var(--ring-focus);
+        outline: 2px solid var(--focus-ring);
         outline-offset: 2px;
     }
     .voice-card--active {
@@ -470,7 +470,7 @@
     .voice-card__btn:hover:not(:disabled) {
         background: color-mix(in srgb, var(--brand-accent) 20%, transparent);
     }
-    .voice-card__btn:focus-visible { outline: 2px solid var(--ring-focus); outline-offset: 2px; }
+    .voice-card__btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
     .voice-card__btn:disabled {
         opacity: 0.5;
         cursor: not-allowed;

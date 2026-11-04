@@ -10,6 +10,848 @@ resolutions go at the **top**.
 
 ---
 
+## [RESOLVED] FU-982 — Cook mode may announce "No instructions provided." before step 1 with Sous Chef on
+- **Raised:** 2026-11-04 (FU-942 split)
+- **Type:** finding (unconfirmed)
+- **What:** while `recipe` is still null the step flattener returns its placeholder step, and the immediate `steps` watcher latches the first-step announcement, so with Sous Chef already on the placeholder may be spoken before step 1. Behaviour predates the split (kept as is). Not confirmed live.
+- **Why deferred:** a pure refactor shouldn't change behaviour.
+- **Recommended resolution:** confirm with Sous Chef on; if it happens, skip announcing until the recipe has loaded.
+- **State:** 2026-11-04, fixed from the frontend review: useCookVoice takes a `ready` ref (recipe loaded) and skips the first-step announcement until then, so the placeholder is never spoken and the real step 1 is (also covers switching from one recipe's cook view to another's).
+
+## [RESOLVED] FU-978 — QA run 2 items still live or never re-checked (from FU-928)
+- **Raised:** 2026-11-03 (truth sweep of `docs/05_investigations/QA_RUN_2_2026-10-23.md`)
+- **Type:** findings
+- **What:** still live in code: QA2-17 (buy-verdict price samples are per pack across pack sizes), QA2-18 ("1 pack"
+  of a counted product is priced as one item from the pack; `UnitPrice` has no whole-pack price, `recipe_cost.py`
+  counted branch), QA2-19 (the recipe page's load-error banner shows the server's string with no heading or way back;
+  the list page has a heading), QA2-21 (no `VITE_API_BASE_URL` means `<host>:5170/api`; fine for the shipped
+  split-port compose, wrong for a single-origin deploy), QA2-12 (household timezone defaults to UTC if onboarding is
+  skipped; onboarding now sets it from the device), QA2-32 (cookbook cost chip says "per serving" only in its
+  tooltip), QA2-44 (unknown recipe yield counts as 1, owner call). Not re-checked, phone or live only: QA2-11, 16,
+  20, 25, 26, 27, 30, 31, 36, 37.
+- **Recommended resolution:** opportunistic; QA2-18 and QA2-19 first (wrong money, dead end). The not-re-checked
+  ones on the next phone walk.
+- **Progress (2026-11-04):** QA2-44 owner: keep an unknown yield as 1.
+- **State:** 2026-11-04. QA2-18: a recipe 'pack' line costs qty x whole pack (UnitPrice.whole_pack_amount; offers use the shelf price, observations the multipack total or, off a shopping list, the line total over its quantity). QA2-17: buy-verdict samples compare per unit at the newest purchase's size, sized and sizeless lines kept apart. QA2-19: recipe not-found/error page with heading, Back to cookbook, Retry. QA2-32: cost chip reads '$x / serve'. QA2-21: Flask-served index.html carries a same-origin meta so the SPA calls <origin>/api. QA2-12: setup sends the device timezone. QA2-44 kept as is (owner); the not-re-checked items were walked by the owner.
+
+## [RESOLVED] FU-977 — Walk C leftovers: tampered backups, staged uploads, API-down crash, import template, feature-import guard
+- **Raised:** 2026-11-01 (finish-off walk C)
+- **Type:** findings
+- **What:** (1) a backup whose file no longer matches its checksum is marked `failed` by Download, but the library row
+  never shows the status (`AdminDataBackupRestore.vue:42-67`), and Restore of the same file succeeds (only Download
+  checks). (2) staged upload `.bin` files stay in `<data>/uploads` after a successful restore. (3) with the API down and
+  the service worker controlling, opening a page whose data isn't cached (Cookbook) shows the full-screen error boundary
+  instead of the shell with the "Can't reach Dora" banner. (4) the import template's example row uses the level
+  "In stock", which isn't a seeded level, and its comment has an em dash. (5) a broken feature package fails first in
+  `dora_api/jobs.py:26` with a bare traceback, so the "Feature package … failed to import" guard never speaks; an empty
+  `__init__.py` removed just imports as a namespace package. (6) Store mappings' store picker isn't sorted.
+- **Recommended resolution:** opportunistic.
+- **Progress (2026-11-03):** (1) fixed: Restore checks the checksum too (one `_refuse_on_checksum_mismatch` for both
+  routes) and the library row shows a Damaged chip, refreshed after a refused download or restore. (3) fixed: the
+  error boundary hands unreachable-API errors (network, 502/503/504) to the offline banner and keeps the shell. Open:
+  (2), (4), (5), (6).
+- **State:** 2026-11-04. (2) a restore keeps its staged upload until commit and useChunkedUpload aborts stale/abandoned uploads; (4) template example uses Stocked / Pantry / Pantry (a fresh install's names) and plain punctuation; (5) import_feature_modules guards every feature module before jobs and seeders; (6) store mappings picker sorted with the locale collator. (1)(3) were fixed 11-03.
+
+## [RESOLVED] FU-976 — Walk D leftovers: build-my-week over budget, trim ignores estimates, per-card dashboard errors, minors
+- **Raised:** 2026-11-01 (finish-off walk D)
+- **Type:** findings
+- **What:** (1) Build my week's budget cap is best-effort: at $38 one run went over a budget it could meet, and the
+  review step never says it is over (`projected_over` isn't read by `MealPlanBuilderDialog.vue`). (2) trim-to-budget and
+  the budget projection count only actual/offer prices, while the list total also uses historic-price estimates
+  (`budget/budget.py:194-210`), so a $59.50 list can show no trim banner. (3) with the summary call failing the whole
+  dashboard collapses to one "couldn't load your dashboard" panel rather than per-card errors. (4) minors: two error
+  toasts for one price-save failure; the waste dialog's focus leaves the dialog after the last tile; Pantry staples and
+  Fruit & Veg hash to the same bar colour; "Find a lighter option" is offered on batched entries but always returns
+  nothing.
+- **Recommended resolution:** opportunistic.
+- **Progress (2026-11-03):** (2) fixed: one shared `latest_purchases` read gives the budget projection and trim the
+  same last-paid rung the list total uses. (1): the swap loop already finds the cheapest week the pool allows; the gap
+  was comparing unrounded costs while the response sums rounded entries (now the same), and the review step now says
+  when the built week is over what's left (`budget_remaining` on the auto-build response). Open: (3), (4).
+- **State:** 2026-11-04. (3) dashboard summary is a per-card slot: Next to cook and My stock show their own error and the rest load; (4) one toast for a failed price save (isAlreadyNotified), BaseDialog keeps Tab inside, categoricalColours stops category colour collisions, 'Find a lighter option' hidden on batched entries. (1)(2) were fixed 11-03.
+
+## [RESOLVED] FU-969 — Round-3 leftovers: server-built English date copy, quantity decimals under de-DE, `public_url_configured` in the admin UI, bulk-add to a done list, meal-plan print tests dated 2027
+- **Raised:** 2026-10-30 (autonomous QA round 3)
+- **Type:** leftover
+- **What:** (1) server-built copy still uses English day-first `strftime`: list `display_name` ("Fri 30 Oct",
+  `domain/entities/shopping_list.py`), buy-verdict dates (`get_buy_verdict.py` `'%b %d'` — US order even for AU),
+  `planned_demand.py`, `get_alerts.py`, `trim_to_budget.py`; the print views now have `domain/locale_format.py`, which
+  these could share — but whether non-English locales should change server copy at all is an owner call (D-006 scope).
+  (2) `helpers/formatQuantity.ts` / `scaleQuantity.ts` keep "." decimals under de-DE (they round-trip into inputs).
+  (3) `/api/health` now reports `features.public_url_configured`; no settings page shows the "SMTP configured but no
+  public URL" warning yet. (4) `bulk-add` to a done list returns 200 with every id in `failed_ids`; the assistant's
+  add paths count the refusal as "nothing happened" — a list-level 422 in `bulk_operations.py` would be cleaner.
+  (5) `test_data_router.py` meal-plan print tests hard-code 2027-03-01/08 (a past `scheduled_for` is refused) — they
+  break after March 2027; make them relative. (6) The `locale_format.py` tables were generated from Node's ICU by a
+  scratch script; committing that generator under `scripts/` as a drift check is worth considering.
+  (7) Components that call `daysFromToday` / `localTodayIso` directly (MealPlanCalendar, MealPlanMobileFocus,
+  ShoppingListOverviewCard, useMealPlanner, expiryIndicator, MealReconcileRunner, DoraChat) don't re-render when the
+  household timezone arrives from `/health` after first paint — only the `useDateFormat` helpers subscribe; a stale
+  "Today" is possible for the first second of a cold load on a household whose zone differs from the device.
+  (8) After deleting an item that was just created through the New item dialog, a later navigation issued one stray
+  `GET /stock-items/<deleted>/detail` (404, console only) in the scripted journey; a hand-built repro did not show it —
+  confirm in the browser.
+- **Why deferred:** each is small but outside the obvious-bug remit, and (1) needs a decision.
+- **Recommended resolution:** opportunistic.
+- **Progress (2026-11-03):** (5) fixed: the print tests use a future Monday (`_future_monday`).
+- **Progress (2026-11-04):** (1) owner: yes. Server-written dates use `locale_format` with the household locale: list labels (`ShoppingList.display_label` via `list_labeller`), buy-verdict wait hint, planned-demand reason, the no-meals alert, trim chips. (2)-(4), (6)-(8) remain.
+- **State:** 2026-11-04. (2) quantities use the household decimal mark; (3) Email settings warns when SMTP is set but no public URL; (4) one finished-list refusal (LIST_DONE_REFUSAL) across line add, bulk-add and the assistant; (6) scripts/locale_format_reference.mjs + scripts/check_locale_format.py drift check (found and fixed de-DE weekday 'Fr'); (7) household zone in weekDates is reactive; (8) likely cause fixed: stock-item delete uses router.replace, owner has walked the app. (1)(5) done earlier.
+
+## [RESOLVED] FU-897 — the "already on a list" filter did not survive the Before-you-shop merge
+- **Raised:** 2026-09-08 (dashboard feedback batch)
+- **Type:** finding
+- **What:** *Before you shop* earned its place on one join nothing else in the
+  app makes: **is this already on an active list?** The bell says "you're low on
+  flour", the stock page says "you're low on flour", and neither knows you added
+  it to Saturday's list ten minutes ago. That filter was the card's whole
+  premise, and it had its own e2e test
+  (`test__before_you_shop__ItemAlreadyOnAnActiveList__DropsOut`).
+  The owner axed that card in favour of Restock radar, and Restock radar does
+  **not** filter on list membership — so an item you have already dealt with
+  keeps occupying a row.
+- **Mitigating, and why this is a finding rather than a bug:** every row ends in
+  `AddToListButton`, which renders its own already-on-a-list state, so the fact
+  *is* on screen — it just isn't used to hide the row. And the new staleness
+  cutoff means a dealt-with row ages off the card within 30 days regardless.
+- **What to decide:** whether Restock radar should drop (or visually demote)
+  rows already on an active list. Demoting is probably better than hiding: the
+  card's claim is "what changed recently", and silently omitting a recent change
+  because of a list edit makes the list less trustworthy than a greyed row does.
+  Either way it wants the owner's call, not a unilateral re-add of a filter he
+  just deleted the card for.
+- **Recommended resolution:** when the owner next walks the dashboard — it is a
+  one-line question with a cheap fix either way.
+- **State:** 2026-11-04, owner: hide them. Restock radar drops items on any list that isn't done (`stock_items_on_active_lists`), before the 6-row cap; the dashboard reloads the card when list membership changes. Test: test__restock_radar__ItemAlreadyOnAnActiveList__DropsOut.
+
+## [RESOLVED] FU-773 — The desktop filter row wraps to three lines at 1280px, not the two the owner asked for
+- **Raised:** 2026-08-28 (cookbook rating + kcal batch)
+- **Type:** finding
+- **What:** the ask was "on desktop only, make it two rows of filters under the
+  quick filters". `FilterRow` gained a `wide-wraps` mode that wraps instead of
+  scrolling sideways above 600px; measured at 1280×900 the cookbook's twelve
+  visible controls take **three** lines (`flex-wrap: wrap`, `overflow: visible`
+  — both confirmed in the browser). Wrapping was chosen over pinning it at two
+  because the count is window-dependent: two rows would overflow at 1024px and
+  leave a half-empty second line at 1920px, and the row grows or shrinks by two
+  controls depending on whether nutrition and batch cooking are on.
+- **Why deferred:** it's a judgement call about what "two rows" meant — a literal
+  count, or "stop making me scroll sideways". The second reading is delivered.
+- **Recommended resolution:** **owner call** — say the word if you want it forced
+  to two lines (achievable by narrowing the shared control width track on the
+  cookbook only) or if three lines at your usual window size is fine.
+- **2026-08-29 update:** the width-consistency fix in the same feedback batch
+  retired the 230px numeric track, so five controls shrank to 210px and the row
+  lost ~100px of total width. Re-measured live at 1280×900 with nutrition on:
+  still **three** lines (5 / 5 / 3 controls, thirteen visible), no clipped
+  labels. So the ask is still open on the same terms — the lever left is
+  narrowing the shared track below 210px, which the owner already pushed *up*
+  from 180 on 2026-08-21.
+- **State:** 2026-11-04, owner: force two lines. Cookbook-only clamp on --filter-control-w (150-210px): 1280px is two lines (measured 7/6); three empty-field labels truncate with an ellipsis until a value is picked; 1024px still wraps to three.
+
+## [RESOLVED] FU-906 — sweep the remaining install flags for the "gates nothing" defect
+- **Raised:** 2026-09-07 (while resolving [[FU-866]]).
+  **Renumbered 892 → 906 on 2026-09-08:** a parallel session had already taken
+  892 ("the companion image has never been built"). Theirs keeps the number.
+- **Type:** finding
+- **What:** [[FU-866]] was the **second** flag found to assert a control it
+  didn't have — `meal_planning_enabled` was the first (deleted in migration
+  `a7c3e5d19f2b`), and **both lived on the same settings page**. Two instances
+  in one place is a pattern, not a coincidence: it is easy to add an
+  `AppSetting` column, a DTO field and a toggle, and never write the line that
+  reads it.
+  FU-866 also noted that **nothing in the SPA reads the
+  `features.companion_ingestion` or `features.deals_email` health flags** — so
+  the health probe advertises capabilities no client consults, which is the same
+  defect pointed the other way.
+- **What to do:** for every install flag on `AppSetting`, check there is at
+  least one *reader that changes behaviour* — not just the settings page, the
+  DTO and the health probe. Each one is then wired up or deleted, per R-078.
+  **Sharpened 2026-09-07:** FU-866 was resolved by **deletion**, and both prior
+  instances (`meal_planning_enabled`, `companion_ingestion_enabled`) went the
+  same way. So the question to ask of each flag is *"is this control needed at
+  all?"* before *"is it wired?"* — in both cases a better control already
+  existed (the feature was core; the access key was per-source). Wiring a
+  redundant switch up is the more expensive wrong answer, because it ships a
+  second way to break things.
+  A grep for each column name is enough to triage; the fix per flag is small.
+- **Why deferred:** FU-866's unit was already broad (four routes + seeds + a
+  behaviour change needing an owner call); auditing every other flag is its own
+  bounded pass and wants doing deliberately rather than as a tail.
+- **Recommended resolution:** opportunistic, and a good standalone chunk — it is
+  cheap, mechanical, and each hit is a shipped lie removed. Cross-ref R-078 /
+  ADR-075, [[FU-866]] (resolved).
+- **State:** 2026-11-04, owner: delete redundant settings. `email_enabled` dropped (migration d5a9c3e7f2b1): mail goes out whenever SMTP is configured. Unread health flags dropped (email, deals_email, auth, audit, multi_user). Every other AppSetting flag has a behaviour-changing reader and stays.
+
+## [RESOLVED] FU-970 — Dashboard greeting uses the device's weekday, not the household's
+- **Raised:** 2026-10-30 (finish-off walk A, Pago Pago household on a Sydney device)
+- **Type:** finding (minor)
+- **What:** with the household a day behind the device, the strip and "Next to cook" correctly say Thursday/Today,
+  but the hero greeting said "Friday! You've earned something tasty this weekend." Two smaller notes from the same
+  walk: the Out filter set by the dashboard donut is still applied when Stock is next opened from the nav (persisted
+  filter state; maybe intended); trim-to-budget *preview* POSTs are written to the audit log as `trim_to_budget`.
+- **Recommended resolution:** opportunistic — greeting should read the household day (`locale_policy.timezone`, as
+  the strip does); decide whether previews belong in the audit log.
+- **State:** 2026-11-04. Greeting, pickWelcome and pickHint use householdTodayDate()/householdHour() (household timezone, device clock until it loads).
+
+## [RESOLVED] FU-974 — A cold load makes two `/api/health` requests
+- **Raised:** 2026-11-01 (finish-off walk E; unit 13 promised one)
+- **Type:** finding
+- **What:** the network-status probe (`useNetworkStatus.probeOnce`, a `cache: 'no-store'` fetch) and
+  `healthApiService.getInfoAsync` (XHR) each fetch `/api/health` at boot. The probe has to bypass the service worker, so
+  the fix is letting the info load count as the first reachability answer, not merging them blindly.
+- **Recommended resolution:** opportunistic, next time `useNetworkStatus` is open.
+- **State:** 2026-11-04. adoptHealthProbe: the network-status probe's /health body feeds the health-info load, so a cold load makes one request.
+
+## [RESOLVED] FU-968 — My Products renders every product row at once (2,859 cards, ~5.6 s of main-thread work, 125 MB heap on a 2000-item pantry)
+- **Raised:** 2026-10-30 (autonomous QA round 3, UI scale run against a 2000-item bulk seed)
+- **Type:** finding (performance)
+- **What:** `/my-products` mounts a card per product with no virtual scrolling (no `q-virtual-scroll`), so a companion
+  that has pushed a few thousand products makes the page take seconds to become interactive and holds every card in
+  memory; `/stock` (2,029 rows) and `/cookbook` (281) stayed fine. Also the stock-overview search matched ANY typed
+  word (fixed this round to every word) — under 2,000 "Load item NNNN" rows "item 17" matched all 2,000.
+- **Why deferred:** virtualising the grid is a layout unit (card heights vary with images and chips).
+- **Recommended resolution:** when a real companion dataset passes ~500 products; `QVirtualScroll` with a fixed-height
+  compact row, or server paging with the existing `fetchAllPages` dropped for that page.
+- **State:** 2026-11-04. My Products uses q-virtual-scroll in both views. 1,904 products: first card 3,239 -> 146 ms, JS heap 713 -> 37 MB.
+
+## [RESOLVED] FU-961 — QR label sheet: "print every item" takes ~40 s on a 2000-item pantry (client times out at 30 s)
+- **Raised:** 2026-10-30 (autonomous QA round 2, query-budget run against a 2000-item bulk seed)
+- **Type:** finding (performance)
+- **What:** `GET /api/stock-items/qr/sheet` with no ids renders a PNG QR per item inline: 2 SELECTs but 41.6 s of CPU
+  for 2000 items (~10 s for the default 500). The client timeout is 30 s, so a big pantry's "print all" is a dead tab.
+  Every other GET route stayed under 0.25 s on the same dataset (no N+1 found).
+- **Why deferred:** a design choice — SVG QR (no raster encode), cache the per-item code bytes (they never change), or
+  cap "print all" behind a selection prompt.
+- **Recommended resolution:** opportunistic; a cache keyed on item id is the smallest change.
+- **State:** 2026-11-04. QR render: fixed mask, direct matrix render, cached centre mark, PNG cache for the two standard sizes. 2,029 items: 57.4 s -> 6.0 s cold, 0.12 s warm; print-all waits up to 120 s.
+
+## [RESOLVED] FU-908 — every meal-plan fetch now loads the whole cookbook's cookability
+- **Raised:** 2026-09-12 (meal-planner feedback batch)
+- **Type:** finding
+- **What:** `GetMealPlansHandler._hydrate_cookability` calls
+  `load_recipe_cookability`, which eager-loads **every** recipe with its
+  ingredients, their stock items and those items' levels — one query, but an
+  unbounded one — to put `missing_count` on each planned entry. The planner
+  refetches the week after every edit (`PATCH` → reload), so a household with a
+  large cookbook pays that read on each servings tap. The dashboard has the same
+  call, but once per page.
+- **Why deferred:** it is the same shape the dashboard already ships and the
+  rule genuinely lives there (R-003); narrowing it means a
+  `load_recipe_cookability(recipe_ids=…)` variant, which is a change to a helper
+  three surfaces share and wants its own query-count test.
+- **Recommended resolution:** when a query-count or perf pass touches the
+  planner — or sooner if a seeded large cookbook makes the week feel slow.
+- **State:** 2026-11-04. Already scoped by 8e842389 (planner passes only planned recipe ids); pinned by test__meal_plans__cookability_scoped_to_planned_recipes. Dashboard/Dora Score still load unscoped: FU-985.
+
+## [RESOLVED] FU-942 — Split `RecipeCookMode.vue` along its five labelled seams
+- **Raised:** 2026-10-24 (finalisation 04-R20)
+- **Type:** finding (R-001)
+- **What:** the page (~2,000 lines) has five seams already labelled in the script: `useCookSteps(recipe)` (flattener +
+  highlights), `useCookTimer()` (now extracted, 04-R8), `useCookVoice(...)` (Sous Chef toggle + dispatcher),
+  `CookIngredientsPanel.vue` (ingredients + swap picker + `sessionSwaps`), `CookFinishDialog.vue` (dialog +
+  `buildFinishRows` / `confirmFinish`). Exact seams in CHUNK_04 §C4; specs for the flattener and dispatcher in §D.
+- **Why deferred:** L-sized with no automated guard beyond vue-tsc; wants its own sitting and a drive of all three faces
+  and the finish.
+- **Recommended resolution:** later, with FU-934 / FU-780 (same shape).
+- **State:** 2026-11-04. RecipeCookMode.vue 2,054 -> 1,028 lines: useCookSteps, useCookVoice, CookIngredientsPanel, CookFinishDialog, css/cookSections.scss; specs for the flattener and voice commands. Driven live.
+
+## [RESOLVED] FU-934 — Split the big pages (recipe page, cookbook filters, stock-item page; ShoppingListDetail is FU-780)
+- **Raised:** 2026-10-24 (finalisation Stage 2: 01-R36, 01-R37, 06-R32; also named in 02-D4, 04-R20, 05-R33)
+- **Type:** finding (R-001)
+- **What:** `RecipeDetailPage.vue` (~2,650 lines) → `RecipeMasthead`, `RecipeStatusStrip`, `RecipeIngredientRail`,
+  `RecipeDetailsDrawers`; `RecipesOverview.vue`'s 300-line filter panel → `CookbookFilterPanel` (it can take the new
+  `useFilterRegistry` list); `StockItemDetailPage.vue` (~2,700) → overview / substitutes / scanning / history / products
+  tabs + `useStockItemDetail`. The exact seams are written in CHUNK_01 §C4 and CHUNK_06 §C4.
+- **Why deferred:** L-sized, owner-happy surfaces, and no automated guard beyond vue-tsc: each split wants one PR and a
+  live walk of the page afterwards, not a sweep.
+- **Recommended resolution:** later, one page per sitting, after the S/M Stage-2 items land; bundle with FU-780.
+- **Also (2026-10-24, finalisation 05-R33):** `StockOverview.vue` (~1,850 lines): `useStockScan(...)` (scan action, options, decode handlers) and `useStockBulkActions(...)` (selection, the seven bulk actions, `pickActiveListId`); the page keeps filters, list and peek.
+- **State:** 2026-11-04. RecipeDetailPage 2,716 -> 773 (RecipeMasthead, RecipeStatusStrip, RecipeIngredientRail, RecipeDetailsDrawers, useRecipeDetail); RecipesOverview 1,669 -> 1,102 (CookbookFilterPanel, useCookbookFilters); StockItemDetailPage 2,845 -> 527 (five tab components, useStockItemDetail, helpers/lifecycleTimeline); StockOverview 1,825 -> 1,346 (useStockScan, useStockBulkActions). Each driven live.
+
+## [RESOLVED] FU-780 — `ShoppingListDetail.vue` is 3,784 lines and violates R-001
+- **Raised:** 2026-08-28 (shopping-list feedback batch 2)
+- **Type:** finding (R-001 — componentisation-first)
+- **What:** the page is **3,784 lines** against 110–344 for every component beside
+  it. Two feedback batches have now *deleted* from it (the bulk bar, the substitute
+  swap, draft ticking, copy-to-new, the switch-list dialog — several hundred lines)
+  and it is still by far the largest file on the surface, because the plan face's
+  row template alone runs ~450 lines inside a single `v-for`. The run and receipt
+  faces are already their own components; the plan face never was.
+- **Why deferred:** extracting `ShoppingListPlanFace.vue` is a real chunk — the row
+  template reaches ~20 handlers and several composables on the page — and doing it
+  inside a visual-feedback batch would have buried a large mechanical refactor in a
+  diff the owner needs to read for behaviour. Batch 3 rebuilds the same row
+  (`planned_store_id` + the line editor), so the honest sequence is to land that
+  behaviour first and extract once the shape has settled.
+- **Recommended resolution:** later — immediately after shopping-list batch 3,
+  while the surface is still fresh. `ShoppingListRunFace.vue` is the template to
+  copy.
+- **State:** 2026-11-04. ShoppingListDetail.vue 3,247 -> 1,382: ShoppingListPlanFace, ShoppingListPriceSheet, ShoppingListFinishDialog, ShoppingListReceiptPhotos, useShoppingListDetail (the row was already ShoppingListPlanRow). Driven live through plan, run and receipt.
+
+## [RESOLVED] FU-834 — 20 undeclared design tokens app-wide, incl. two in the file R-060 was written from
+- **Raised:** 2026-09-02 (dashboard chunk 1 — found by the new R-060 guard test)
+- **Type:** finding (R-060)
+- **What:** fixing the dashboard's two undeclared token families ([[FU-822]])
+  warranted a test rather than a review habit, so
+  `web_app/test/unit/designTokensDeclared.spec.ts` now walks every `var(--x)` in
+  `src/` and asserts the property is declared in `css/` (or is runtime-written —
+  `--q-*` by Quasar, `--dora-base-font-size` by `themeService.ts:412`). **On its
+  first run it found 21**; one was fixed in passing (`--surface-card` in
+  `TriStateFilter.vue`, a file the sweep already touched), leaving **20**
+  enumerated in that spec's `KNOWN_UNDECLARED` ratchet with their call sites:
+  `--space-sm`, `--space-xs`, `--surface`, `--surface-base`, `--surface-border`,
+  `--surface-card`, `--surface-default`, `--surface-hover`, `--surface-muted`,
+  `--surface-raised`, `--text-md`, `--text-sm`, `--text-xs`, `--text-warning`,
+  `--font-mono`, `--overlay-pressed`, `--negative`, `--stock-row-height`,
+  `--c-surface-2`, `--c-surface-3`, `--c-line-strong`.
+  Every one is R-060's named smell — reaching for a name that *looks* like the
+  scale (`--space-sm` where the scale is `--space-1..12`; `--surface-card` where
+  the token is `--surface-component`). Affected surfaces include HelpPage,
+  AccountSettings, ApiAccessSettings, StocktakeRunner, StockItemDetailPage,
+  ShoppingListDetail, PutAwayDialog, RecipeNutriScore, VoicePicker.
+- **The finding worth reading twice:** `RecipeCookMode.vue:19` references
+  **`--space-sm` and `--space-xs`**, and cook mode's header is the **exact case
+  that established R-060** on 2026-08-28 — the rule exists because that header
+  was reported three separate times as "squished" / "no margin" / "looks like a 5
+  year old did it" before anyone checked whether its gap tokens resolved to
+  anything. Two of them still don't. The rule was written; the file was not
+  finished.
+- **Why deferred:** ~30 call sites across ~20 unrelated files, none of them the
+  dashboard. Folding an app-wide CSS sweep into a dashboard chunk is exactly the
+  scope bleed R-007 forbids, and each fix needs a judgement about *which* real
+  token was meant (an invalid `background` silently inherits, so some of these
+  have been visually "fine" by accident and will change appearance when fixed).
+- **The guard means this cannot get worse:** a *new* undeclared token fails the
+  suite, and the ratchet's second assertion fails if a listed token is fixed
+  without being removed from the list, so the allowlist can't rot into a
+  permanent exemption.
+- **Recommended resolution:** opportunistic per-file — when you're next in one of
+  those files, fix its entry and delete it from `KNOWN_UNDECLARED`. Or one
+  dedicated sweep unit; either way the test tells you when you're done.
+- **State:** 2026-11-04. KNOWN_UNDECLARED is empty: every var(--x) resolves (call sites pointed at the tokens they meant; new --font-mono token).
+
+## [RESOLVED] FU-764 — No lint gate on undefined CSS custom properties (four more files affected)
+- **Raised:** 2026-08-28 (cook-mode feedback batch — root cause of the squish)
+- **Type:** finding
+- **What:** an undefined `var(--token)` with no fallback invalidates its whole
+  declaration and silently falls back to the initial value; nothing in the
+  toolchain catches it (see R-060 / ADR-057). The cook-mode files are fixed. A
+  repo-wide grep found the remaining users of tokens that `css/` never declares:
+  - `components/filters/TriStateFilter.vue:278` — `background: var(--surface-card)`,
+    **no fallback**, so the control has no background at all. Same class of bug as
+    the cook-mode one, still live.
+  - `components/settings/VoicePicker.vue:355` — `var(--surface-card, transparent)`.
+  - `components/stock/MarkAsWastedDialog.vue:112-123` — `--c-line`, `--c-surface-2`,
+    `--c-surface-3`, `--c-line-strong`.
+  - `pages/StocktakeRunner.vue:953` — `--c-line`.
+  - `pages/DashboardPage.vue` declares `--c-line` locally at :2303 and then uses it
+    at four sites, which works but entrenches a second naming scheme.
+
+  All but `TriStateFilter` carry fallbacks, so they render — but they render the
+  fallback, never the theme value, which means they do not follow the theme.
+- **Why deferred:** the fix is two things and only one is urgent. Repointing five
+  files at real tokens is mechanical; the durable answer is a stylelint rule (or a
+  small build check) that fails on a custom property `css/` never declares, and
+  that is a tooling change with its own rollout.
+- **Recommended resolution:** later, when the CSS/design-token surface is next
+  worked on — but pull the `TriStateFilter` one-liner forward opportunistically,
+  since that one is visibly broken today.
+- **State:** 2026-11-04. designTokensDeclared.spec.ts is the gate and now also reads script-side declarations and references. It runs with the vitest suite; nothing runs it automatically until CI is back (FU-721).
+
+## [RESOLVED] FU-941 — Two focus-ring tokens with different values
+- **Raised:** 2026-10-24 (finalisation 04-R24, 13-R40)
+- **Type:** finding (R-002)
+- **What:** `--focus-ring` (full brand ink, `tokens.scss`, ~27 uses) and `--ring-focus` (a 35 % wash, `themes.scss`, 8
+  uses: `CookNotesSection`, `SettingsNavGroup` ×2, `DoraSegmented`, `VoicePicker` ×2, `SettingsMobileNav`, …). Cook mode and
+  Settings each show both.
+- **Why deferred:** a cross-app token decision (FU-010 / FU-224 theme sweep).
+- **Recommended resolution:** with the chunk 20 sweeps: alias `--ring-focus: var(--focus-ring)` and migrate the 8, or
+  document the two tiers (outline vs soft halo) in the style guide.
+- **State:** 2026-11-04. One token: --focus-ring = var(--primary-ink); --ring-focus deleted and its 8 uses migrated. Clears 3:1 in all 14 themes (lowest 4.52). Style guide A1/A6 updated.
+
+## [RESOLVED] FU-850 — `--accent-mark` adoption is limited to the sites this pass touched
+- **Raised:** 2026-09-03 (owner batch — accent ink too dark)
+- **Type:** follow-up
+- **What:** the ink/mark split gave the accent a second tier at D-002's 3:1
+  floor for non-text marks and icons. Eleven declarations moved (tab indicator,
+  settings nav indicator + mobile underline, settings page-header icons, theme
+  card border + badge, voice-card borders + check, dashboard hairlines, the
+  focused stock-row outline). The sweep was scoped to what the owner was
+  looking at; there are almost certainly other `--accent-ink` declarations
+  across the app painting borders, icons or indicators that are still one tier
+  darker than they need to be.
+- **How to find them:** `grep -rn "accent-ink" web_app/src` and read each
+  declaration's *property*, not its selector — `color` on a `.q-icon`, any
+  `border-color`, any `background` on a bar, and any text measured at >= 24px
+  or >= 18px bold all belong on `--accent-mark`.
+- **Why deferred:** the remaining sites are lower-visibility and the pass had
+  four other owner items in it. No defect either way — the ink tier is legal
+  everywhere, just darker than necessary.
+- **Recommended resolution:** opportunistic, whenever a surface is next
+  redesigned. Cross-ref: D-002, R-069.
+- **State:** 2026-11-04. All 26 remaining --accent-ink declarations read: three non-text marks moved to --accent-mark (dashboard hint icon, Dora's icon buttons, the stock splitter hover); the rest are text.
+
+## [RESOLVED] FU-839 — `BaseSegmented`'s selected segment is under the contrast floor, and two consumers may render it invisible
+- **Raised:** 2026-09-02 (dashboard chunk 3 — found by introducing the bug myself)
+- **Type:** finding (D-002)
+- **Two separate things, both measured or code-evidenced:**
+  1. **App-wide: the selected segment measures 3.88:1.** `BaseSegmented` forces
+     `color: var(--text-on-primary) !important` on `[aria-pressed='true']` (it
+     has to, to beat Quasar's `.text-primary !important`), and Quasar paints
+     `--brand-primary` behind it. Measured in the pesto light theme:
+     `rgb(255,255,255)` on `rgb(37,147,92)` = **3.88:1**. D-002 requires **4.5**
+     for normal text and allows 3:1 only for large text (≥24px, or ≥18px bold);
+     these labels are small, and the dashboard's are `dense size="sm"`. So every
+     selected segment in the app — **9 call sites** — is under the floor. Not
+     introduced here; the dashboard's two new toggles now match the other seven.
+     The fix is a shared decision (a darker ink token for use on brand-primary
+     fills, or bumping the fill's lightness), which is R-069's shape: a colour
+     tuned as a *fill* is not automatically usable as a *background for white
+     ink*.
+  2. **Two `flat` consumers appear to have no fill at all** —
+     `PriceHistoryPage.vue:84` and `RecipeCookMode.vue:667` pass `flat` and,
+     unlike `TriStateFilter.vue:294`, declare no
+     `:deep(.q-btn[aria-pressed='true']) { background: … }` rule. `flat`
+     suppresses Quasar's fill, so the forced white ink lands on whatever surface
+     is behind it. On the dashboard that measured **1.21:1 — invisible** before I
+     removed `flat`. **Not confirmed on those two surfaces** (per the
+     reported-defect rule): cook mode may sit on a dark ground where white works,
+     and price history needs a product selected to reach. Confirm before fixing.
+- **Why this is worth a rule-shaped look:** `BaseSegmented`'s own header comment
+  documents this exact trap ("In `flat` mode, where the caller paints its own
+  brand-primary fill…") and it still caught me, because nothing *enforces* the
+  pairing — `flat` is just an attr passed through to Quasar. A component whose
+  correct use depends on the caller also painting a fill should either paint it
+  itself or refuse `flat` without one.
+- **Recommended resolution:** (2) first — it is a possible invisible control on
+  two surfaces, and confirming is a five-minute browser check. (1) with the
+  chunk-6 design sweep or a deliberate contrast pass, since it restyles nine
+  controls. Cross-ref: D-002, R-069, B2a, `BaseSegmented.vue:49-66`.
+- **State:** 2026-11-04. Already fine after the 11-03 colour picks: selected segment >= 4.5:1 in all 14 themes (Pesto 4.52 and Blueberry 4.53 are the thin ones); no consumer passes `flat`. BaseSegmented is now one radiogroup (FU-848).
+
+## [RESOLVED] FU-675 — migrate the remaining ~64 `q-select`s onto `BaseSelect`
+- **Raised:** 2026-08-19; **substantially delivered 2026-08-19 (later 3)** —
+  reduced to a migration backlog.
+- **Type:** deferred job
+- **Decided and built:** `components/BaseSelect.vue` owns the menu-vs-dialog
+  rule (≤8 options and no typeahead → `menu`; longer or `use-input` →
+  `default`, i.e. dialog on mobile) plus a close affordance in the dialog case.
+  Pinned by `test/unit/baseSelect.spec.ts` (9 tests). **8 call sites migrated**:
+  the five cookbook filter selects, the three StockOverview ones, and
+  `SortControl` (which the cookbook and stock rows both use).
+- **What remains:** ~64 `q-select`s elsewhere — settings pages, dialogs
+  (`CreateStockItemDialog`, `PutAwayDialog`, `BulkMoveLocationDialog`,
+  `SubstituteMetadataDialog`), `ShoppingListDetail`, `MyProductsPage`,
+  `ReportsPage`, `RecipeDetailPage`, onboarding. Until they move, they keep
+  Quasar's unconfigured default, so the owner's original inconsistency persists
+  on those surfaces.
+- **Migration gotcha — read before doing the rest.** `BaseSelect` declares
+  `useInput` (the rule reads it), which means **Vue consumes it and drops it
+  from `$attrs`**; it is forwarded explicitly. Any *other* q-select prop that
+  BaseSelect ever declares must be forwarded the same way. This bit once
+  already: the stock location picker's typeahead silently stopped working while
+  the control still looked correct — caught live, now covered by a test.
+  `BaseSelect` also applies `dense`+`outlined` itself, so drop that pair at each
+  call site rather than passing it twice.
+- **Recommended resolution:** opportunistic, a surface at a time, each with a
+  glance at the page afterwards — a mechanical all-at-once sweep across 64 sites
+  is exactly where a dropped slot or prop would hide.
+- **State:** 2026-11-04. 47 raw q-selects across 23 files -> 0; BaseSelect gained a dense prop, borderless/filled/standout pass-through and re-exposed QSelect methods (BaseSelectExposed).
+
+## [RESOLVED] FU-677 — adopt the new `subtle` BaseButton variant at the remaining small-action sites
+- **Raised:** 2026-08-19 (cookbook feedback batch 2)
+- **Type:** deferred job
+- **What:** the owner's report was specific but general in intent — "select all /
+  select missing buttons don't have the appearance of buttons. **I've seen a few of
+  these smaller UI elements pop up (e.g. in settings).** Might be good to
+  componentise to get a consistent look." A `subtle` variant now exists on
+  `BaseButton` (tinted fill + border + radius, quieter than `secondary`) and the
+  ingredient picker uses it. The other sites — the `variant="ghost"` +
+  `dense` + `size="sm"` combination, which renders as bare tinted text — were
+  **not** swept, by agreement, because that's a diff across Settings and other
+  surfaces the owner hasn't reviewed.
+- **Fix shape:** inventory the `ghost` + `dense`/`size="sm"` call sites
+  (`git grep -n 'variant="ghost"' web_app/src | xargs`-style, then filter to ones
+  that also pass `dense` or `size`), decide per site whether it's a genuine
+  tertiary text action (leave as ghost) or a small *control* (flip to `subtle`),
+  and flip the latter. Settings is the surface the owner named.
+- **Recommended resolution:** opportunistic, or as the first half of the next
+  Settings polish unit.
+- **State:** 2026-11-04. `subtle` at 11 small-action sites (Select all/Clear all, Select visible/Deselect all, backup All/None, expiry +1d/+7d/+14d, audit paging, Remove photo); inline links and toolbar actions stay ghost.
+
+## [RESOLVED] FU-848 — Two segmented-control components draw one anatomy
+- **Raised:** 2026-09-03 (owner batch — inconsistent single-select rows)
+- **Type:** finding (D-015 / R-001)
+- **What:** the app has **two** implementations of the single-select row of
+  buttons. `BaseSegmented` wraps Quasar's `q-btn-toggle` (nineteen consumers);
+  `settings/DoraSegmented` is a hand-rolled radiogroup (seven, after this pass
+  converted the last two raw `q-btn-toggle`s onto it). As of 2026-09-03 they
+  render the **same** anatomy, and can't drift on colour or shape because both
+  read the shared `--seg-*` tokens — but they are still two components, and
+  nothing stops the next change landing on one of them.
+- **Which one should survive, and why it isn't obvious:** the hand-rolled one
+  has the better bones — real `radiogroup`/`radio` semantics, wraps on desktop
+  and scrolls horizontally on phones (which the five-option font-family picker
+  needs), and none of the `!important` fights `BaseSegmented`'s stylesheet
+  documents against Quasar's `.text-primary` utility. But it is the *minority*
+  by call sites, and the nineteen `BaseSegmented` consumers pass Quasar props
+  (`dense`, `size`, `spread`) that would become inert, plus one passes a
+  default slot. So the merge is a ~25-file change with real layout risk, not a
+  rename.
+- **Why deferred:** the owner's ask was visual consistency, which is delivered.
+  Doing the structural merge in the same pass would have meant 25 unverified
+  call sites inside a five-item batch.
+- **Recommended resolution:** later, as its own unit. Cross-ref: D-015, R-001.
+- **2026-10-27 (finalisation 20-R16):** Stage 2 left this as its own unit — the finding's verdict stands (merge onto the hand-rolled radiogroup).
+- **State:** 2026-11-04. One BaseSegmented: a radiogroup with roving Tab stop, arrow/Home/End keys, dense and spread props, 44px on touch. DoraSegmented deleted; 13 consumers migrated. Also fixed a 53px sideways scroll on Reports at 375.
+
+## [RESOLVED] FU-965 — ⚠️ SQLite migrations ran batch rebuilds with foreign keys ON: earlier upgrades may have cascade-deleted child rows in the production DB
+- **Raised:** 2026-10-30 (autonomous QA round 2, migration repair)
+- **Type:** finding (data integrity — owner check)
+- **What:** the app's connect listener sets `PRAGMA foreign_keys=ON` on every SQLite connection, and Alembic's batch
+  mode rebuilds a table by creating a copy, copying rows, dropping the original and renaming. With FKs on, dropping
+  the original fires the children's `ON DELETE` actions: CASCADE children are deleted and SET NULL links are blanked.
+  Proven in scratch: rebuilding `StockItem` deleted every `StockItemSubstitute` row. Revisions that rebuild parent
+  tables — e.g. `d3f8b1a6c4e2` (StockItem, Product) and `d4f9b2e7a318` (ShoppingListLine) — would have done this to any
+  populated SQLite install that upgraded across them after the data existed. Fixed going forward: `migrations/env.py`
+  now turns FKs off for the run (R-102 / ADR-099) and fails the upgrade if it introduced new dangling references.
+- **Why deferred:** whether the owner's deployed SQLite DB actually lost rows depends on which revisions it crossed
+  with data present (a `create_all` dev DB never ran them). Check: substitutes (`StockItemSubstitute`), product links
+  (`StockItemProduct`), price observations, shopping-list lines, recipe ingredients/steps on the production DB against
+  a pre-upgrade backup; the `DORA_VERIFY` operator line names the queries.
+- **Recommended resolution:** **now** — one look at the production DB (or its last backup) before the next deploy.
+- **State:** 2026-11-04, owner: not worried; no production row-count check will be run. Closed as accepted risk.
+
+## [RESOLVED] FU-918 — Companion "Push failed (502)" reported; root cause found, confirm with real data
+- **Raised:** 2026-10-15 (owner batch, product search)
+- **Type:** finding
+- **What:** the owner saw a 502 saving a product. Static read found a definite
+  cause: Woolworths, Coles and IGA report "no was-price" as `0`, Dora's ingest
+  requires `price_was > 0`, so the whole batch was rejected with a 400 and the
+  companion reported every non-4xx/5xx failure as a bare 502. Fixed (payload
+  normalised, 4xx bodies surfaced) and a real Woolworths push was driven to
+  Dora successfully. The owner's exact product was not reproduced, and a 502 can
+  also mean Dora unreachable (now reported with the real reason).
+- **Why deferred:** reported defect; per CLAUDE.md it stays open until seen
+  fixed against the owner's own setup.
+- **Recommended resolution:** confirm in browser on the owner's companion.
+- **2026-10-21:** server logs on altair show no companion push since the 2026-10-20 production deploy, so still unconfirmed. There is no ingestion switch any more (dropped in `e7a2c4f9b361`); the deploy script mints the companion's key, which is the only gate.
+- **2026-10-22 (owner: Coles not searchable, aggregators treated differently):**
+  root cause was provider health being one flag per provider. The check probed
+  SaveOnGroceries with ALDI only, its ALDI translation raised, and that switched
+  it off for Coles too; with coles.com.au behind an Incapsula bot check and
+  Grocerize returning nothing, Coles had no provider. Companion now tracks
+  health per (provider, merchant), probes every merchant a provider serves,
+  tries unhealthy providers last instead of dropping them, and the settings page
+  lists every provider under each merchant (no URL substring guess, no "Other
+  providers" bucket). SaveOnGroceries fixed: ALDI translation, names ("| 700g"
+  junk), `web_url` (was overwritten with the stockcode), refresh matches on
+  stockcode instead of the first result. Driven against the live sites: a Coles
+  search returns Coles products with real Coles stockcodes via SaveOnGroceries.
+  The push itself is still unconfirmed against the owner's setup.
+- **State:** 2026-11-04, owner: not worried. Closed without a production push check.
+
+## [RESOLVED] FU-763 — Cook-mode step text at `text-h4` on a phone: observed, owner's call
+- **Raised:** 2026-08-28 (supersedes the browser-pass ask in FU-752)
+- **Type:** finding
+- **What:** FU-752 asked for a phone walk of the step card. Done at 375×812 this
+  session: the card does not overflow, wraps cleanly, and the page has zero
+  horizontal scroll. A six-word step fills roughly five lines and about half the
+  viewport height, which pushes the Previous/Repeat/Next row toward the fold.
+  That is the *intent* (read it from across the kitchen), so there is no bug —
+  only a taste question the owner owns.
+- **Why deferred:** shrinking cook-mode type is a judgement about the feature's
+  whole point, not a layout defect, and the owner did not raise it in this round.
+- **Recommended resolution:** when the owner next cooks from a phone — if the step
+  card feels too tall in real use, drop it to `text-h5` below `sm`; otherwise close.
+- **State:** 2026-11-04, owner: keep the text-h4 step text; long steps wrap (they already do, no overflow at 375). No change.
+
+## [RESOLVED] FU-973 — Split host (app. / api.): every write is refused for CSRF
+- **Raised:** 2026-11-01 (finish-off walk E, simulated app.dora.test + api.dora.test)
+- **Type:** finding (real bug for a split-host deploy)
+- **What:** the `dora_csrf` cookie is set on the API host only, so the SPA on the app host can't read it to echo the
+  header; push-expiry and trim-to-budget return 403 "Missing or invalid CSRF token". Login and reads work. Needs a
+  cookie-domain setting (e.g. `DORA_COOKIE_DOMAIN=.dora.test`) or the token returned in a response body/header.
+  (`axiosHttpClient.readCsrfCookie`, `csrf.py ensure_cookie`.)
+- **Recommended resolution:** before anyone deploys app and API on separate hosts; same-origin (the shipped compose)
+  is unaffected.
+- **State:** 2026-11-04, owner: close. Split app./api. hosts are not a supported deploy shape; the shipped same-origin compose is unaffected.
+
+## [RESOLVED] FU-972 — Scheduled backups (nightly if anything changed)
+- **Raised:** 2026-11-01 (finalisation 18-D1; owner: "later yes")
+- **Type:** deferred job
+- **What:** `BackupRecord.trigger_kind` was added for scheduled backups (FU-342) but nothing schedules one. A small
+  APScheduler job beside the other nightly jobs: take a library backup when any table changed since the last one, keep
+  the last N.
+- **Recommended resolution:** later, after 1.0.0 ships.
+- **State:** 2026-11-04, owner: backups stay manual. No scheduler job will be built.
+
+## [RESOLVED] FU-962 — Native shell: Android cleartext (plain http:// home servers) and downloads in the WebView
+- **Raised:** 2026-10-30 (autonomous QA round 2)
+- **Type:** finding (needs a call + a device)
+- **What:** (1) `src-capacitor/android/.../AndroidManifest.xml` targets SDK 36 with no `usesCleartextTraffic` / network
+  security config and no `server.cleartext`; iOS has no ATS local-networking exception. The typical self-host address
+  `http://192.168.x.y:5170` always fails with "Couldn't reach that server" (the setup page now hints at `http://`, but
+  the platform still blocks it). Allowing cleartext for user-chosen LAN hosts is a posture choice. (2)
+  `services/files/downloadHelpers.triggerSave` clicks an `<a download href="blob:">`, which the Android WebView
+  ignores — CSV export and backup download likely do nothing on native; `window.open` in the WebView is unverified.
+  Needs the Filesystem/Share plugin on native and a device check.
+- **Why deferred:** platform policy + needs a phone in hand (FU-729's walk).
+- **Recommended resolution:** with the next native-app unit.
+- **Progress (2026-11-04):** (1) owner: yes, Android first. `res/xml/network_security_config.xml` permits cleartext; iOS ATS and (2) downloads in the WebView remain (need a phone).
+- **State:** 2026-11-04, owner: Android cleartext built (2026-11-04); iOS is not possible for the owner, so iOS ATS is won't-do. The owner has walked the Android app, downloads included.
+
+## [RESOLVED] FU-930 — iOS Capacitor shell has no `NSCameraUsageDescription`
+- **Raised:** 2026-08-15 (while scoping FU-639). **Renumbered 640 → 930 on 2026-10-23:** two entries carried FU-640; the 4xx-logging one keeps the number (CHUNK_17 17-R5).
+- **Type:** finding
+- **What:** `src-capacitor/ios/App/App/Info.plist` declares no camera usage
+  string. iOS *hard-terminates* an app that touches the camera without one, so
+  the scan overlay would kill the app rather than fail softly. Android's manifest
+  has its `CAMERA` permission; iOS was never given the equivalent.
+- **Why deferred:** the iOS target is unbuilt Capacitor scaffolding — P8-10
+  shipped an **Android** APK only, and nothing has ever run this code on iOS. It
+  is a latent trap, not a live bug.
+- **Recommended resolution:** when an iOS build is first attempted — add the key
+  before the first device run, not after the first crash.
+- **State:** 2026-11-04, owner: iOS is not possible for the owner; won't-do.
+
+## [RESOLVED] FU-710 — Barcode register POSTs 404 on the owner's install (same module as the QR 404)
+- **Raised:** 2026-08-21 (stock-item detail feedback batch)
+- **Type:** finding.
+- **What:** pasting an EAN into Add-barcode answered **"Endpoint was not found."** —
+  the body Flask returns when *no route matched* (`middleware.handle_incoming_request` /
+  the SPA catch-all), not a validation failure. Proven green here on 2026-08-21 against
+  a real HTTP server (`POST /api/data/barcodes` with the owner's exact ISBN-13
+  `9788817071673` → 200 + a `barcode_id`), and `GET /api/stock-items/<id>/qr?size=512`
+  → 200 `image/png` in the same session. Both endpoints live in **one module**
+  (`dora_api/features/data/barcodes.py`), and it is the *only* module whose endpoints
+  the owner reports 404s from — so the running API almost certainly doesn't carry that
+  module's routes, i.e. the server process is older than the SPA build talking to it.
+- **Why deferred:** not reproducible from here; it's install state, not code.
+- **Recommended resolution:** **confirm in browser** on the owner's install. Two
+  one-minute checks: (a) open `<host>/api/data/barcodes/lookup?value=x` — a
+  *third* endpoint in the same module — if that 404s too, the module isn't registered
+  and restarting the backend fixes it; (b) the Add-barcode dialog now names a route
+  miss explicitly ("This server has no barcode endpoint at … — its API is older than
+  this page"), so the next attempt self-diagnoses. Paired with FU-648.
+- **State:** 2026-11-04, owner walked the running app and considers this checked off.
+
+## [RESOLVED] FU-715 — reported "Needs attention filter is broken" did not reproduce
+- **Raised:** 2026-08-22 (stock-overview feedback batch)
+- **Type:** finding.
+- **What:** the owner reported the **Needs attention** chip as broken "since
+  recent changes", then on being asked for the symptom said "seems to work now,
+  skip". Logged rather than dropped, per the standing rule — a report from real
+  usage plus a static read that finds nothing is not proof it is fixed. What the
+  investigation *did* establish: `24ca1786` replaced the composite client-side
+  predicate with a bare `item.needs_attention === true` read
+  (`useStockFilters.ts:217`) and deliberately provides **no client fallback**, so
+  the chip matches nothing at all if the server field is absent — a stale API
+  build, a cached bundle, or any `StockItem` that reached the store without going
+  through `GET /stock-items` hydration. Two adjacent live gaps found on the way,
+  either of which could produce "it's broken" intermittently: (a) optimistic /
+  offline-queued mutations no longer recompute attention, so an essential item set
+  to Out doesn't enter the filter until a refetch (`stockItemStore.ts:133`,
+  `:177-181`); (b) the rule honours `AlertPreference` mutes but not
+  `AlertInteraction` snooze/dismiss, unlike the bell (`get_alerts.py:284-341`) —
+  so the chip and the bell disagree on a real install. Existing coverage is green
+  (35 `useStockFilters` unit tests, 69 backend attention tests).
+- **Why deferred:** owner said it works now; no reproduction to fix against.
+- **Recommended resolution:** confirm in browser — specifically after a bulk
+  action or an offline-queued edit, which is where (a) would bite. Cross-ref
+  [[FU-702]] (same coupling on the "Expiring soon" chip).
+- **State:** 2026-11-04, owner walked the running app and considers this checked off.
+
+## [RESOLVED] FU-736 — Ingredient free-text flow has no automated cover; the Quasar slot trap that caused it is unguarded
+- **Raised:** 2026-08-23 (recipe-view feedback batch)
+- **Type:** finding.
+- **What:** the "Add ingredient doesn't allow free text" defect had a precise
+  cause: `QSelect.getAllOptions()` returns the `no-option` slot **instead of**
+  the whole option list — `before-options`/`after-options` included — so the
+  free-text action, offered only from `after-options`, disappeared exactly when
+  the filter matched nothing. Fixed by offering it from both slots. A component
+  spec was written to pin it and **abandoned**: the option menu never renders
+  under vitest's jsdom (Quasar's position engine needs `requestAnimationFrame`),
+  so the assertion could only ever have tested the mount, not the slot.
+- **Why deferred:** the remaining route is a Playwright spec, which the
+  2026-07-20 verification stance rules out for feature flows.
+- **Recommended resolution:** **confirm in browser** (also listed in
+  `DORA_VERIFY.md` → Cookbook / recipe page). If the same slot trap shows up a
+  third time, promote it to a "known fixes" entry in `ENGINEERING_STANDARDS.md`
+  rather than a test.
+- **State:** 2026-11-04, owner walked the running app and considers this checked off; no automated cover will be added (lean verify stance).
+
+## [RESOLVED] FU-797 — the Firefox-mobile login line is mitigated, not confirmed fixed
+- **Raised:** 2026-08-31 (recipe-view feedback batch)
+- **Type:** finding
+- **What:** owner reported a thin grey vertical line, roughly the mascot's
+  height, immediately left of it on the login screen, flickering for a few
+  seconds then settling — **Firefox on Android only, Chrome clean**. It can't
+  be a DOM element (nothing is drawn there, and anything that was would render
+  in Chrome too), so it's read as the left edge of the mascot's own composite
+  layer: `drop-shadow` + an animated `transform`, promoted to a GPU layer while
+  the blurred `mix-blend-mode: screen` blobs behind it are still rasterising.
+  `will-change: transform` + `backface-visibility: hidden` now declare that
+  promotion up front (`AuthShell.vue`, commented in place).
+- **Why deferred:** **not reproduced.** Playwright's Firefox isn't installed on
+  this box and the system Firefox can't be driven (no Juggler); a mobile-GPU
+  compositing artifact wouldn't reproduce on desktop Firefox regardless. The
+  fix is reasoned, not observed.
+- **Recommended resolution:** confirm in browser — on the reporting device
+  (Firefox, Android). See `DORA_VERIFY.md`. If it survives, the next lever is
+  dropping the mascot's `drop-shadow` filter, which is what creates the layer.
+- **State:** 2026-11-04, owner walked the running app and considers this checked off.
+
+## [RESOLVED] FU-729 — Run/receipt faces have never been walked on a real phone
+- **Raised:** 2026-08-23 (FU-727 build)
+- **Type:** follow-up.
+- **What:** both new faces were driven in a 430×900 headless Chrome and behave
+  correctly, but the run face is the one surface in the app explicitly designed
+  for a thumb in a supermarket — 60px rows, whole-row tap target, a bottom sheet
+  under a real on-screen keyboard, and a sticky footer that must not cover the
+  last row. None of that is proven by a headless viewport.
+- **Why deferred:** it needs the owner's own device.
+- **Recommended resolution:** now-ish — see the Shopping list section of
+  `DORA_VERIFY.md`.
+- **State:** 2026-11-04, owner walked the run and receipt faces on a phone; checked off.
+
+## [RESOLVED] FU-739 — Run and receipt faces weren't re-driven after the 2026-08-26 toolbar rebuild
+- **Raised:** 2026-08-26 (shopping-list feedback batch)
+- **Type:** follow-up.
+- **What:** the session drove the **plan face** hard at 375px and 1280px (row
+  relayout, bulk bar, store card, finish dialog, live move-to-new-list) and only
+  passed through the run and receipt faces in transit. Both share the rebuilt
+  toolbar — the run face gains "Switch list" where the rail would be, the receipt
+  face gains Amend and Put away — and both were only seen as a side effect of
+  starting/finishing a shop, not walked.
+- **Why it matters:** the run face is the one surface designed for a thumb in a
+  supermarket, and its sticky footer plus the new destructive footer now both sit
+  at the bottom of the page. Nothing observed suggested they collide, but that
+  combination was never looked at deliberately.
+- **Recommended resolution:** now-ish — folds into [[FU-729]]'s real-device walk,
+  which is already owed for exactly these two faces.
+- **State:** 2026-11-04, owner walked the run and receipt faces; checked off.
+
+## [RESOLVED] FU-722 — voiced text loses the start of the sentence (unconfirmed; two candidate fixes shipped)
+- **Raised:** 2026-08-23 (cook-mode voice feedback)
+- **Type:** finding.
+- **What:** the owner reports Sous Chef "cuts out the beginning of the sentence
+  frequently — random how much gets cut", on mobile, over VPN, and suspects it
+  affects anywhere text is voiced. **Ruled out server-side:** `POST /api/tts`
+  buffers the entire WAV (`tts_synthesize.py:187` — `subprocess.run` +
+  `capture_output`, no streaming, no trim), `res.blob()` awaits the whole body,
+  and the default voice params leave `pitch_semitones` at 0.0 so the ffmpeg
+  pitch-shift path (the one place a malformed piped WAV header could appear) is
+  never entered. The audio leaving the server is complete and well-formed, so
+  this is client-side playback.
+- **Two candidate fixes shipped 2026-08-23** in `useSpeechOutput.ts`, both
+  correct hardening on their own merit but **neither confirmed to be the cause**:
+  (a) `speakBrowser` had a redundant second `synth.cancel()` immediately before
+  `synth.speak()` — Chrome/Android treat `cancel()` as internally async and clip
+  or drop an utterance queued in the same task, by a varying amount, which is
+  exactly the reported signature. Removed, plus a 120ms settle when something
+  was genuinely still speaking. (b) `playPiper` called `audio.play()` on a
+  freshly constructed element; now waits for `canplay`/`canplaythrough` (1.5s
+  cap) with `preload='auto'`, so playback can't start ahead of the decoder.
+  (c) the third candidate — recognizer restarts stealing audio focus
+  mid-playback, the only one that explains "mobile, in cook mode" — was fixed
+  too on 2026-08-23; see **FU-723 (resolved)**. All three candidates are now
+  addressed, so a retest that still clips means the cause is something none of
+  us has thought of yet.
+- **Diagnosability fixed 2026-08-23.** `useSpeechOutput` now tracks
+  `lastEngine` ('piper' | 'browser'), and cook mode's Sous Chef popover shows
+  **"Voice: Piper (server)"** or **"Voice: Browser fallback"** once she has
+  spoken. This was the missing instrument: the fallback was silent, the two
+  engines clip for different reasons, and over a slow VPN a Piper timeout
+  falling back to the browser is likely — so knowing which one spoke decides
+  which mechanism you are looking at.
+- **Why deferred:** unreproducible from this session — it needs a real phone, a
+  real VPN hop, and an ear. **A diagnosability gap makes it worse:** the Piper→
+  browser fallback is completely silent, so the owner cannot tell which engine
+  actually spoke, and the two engines have *different* clipping mechanisms. Over
+  a slow VPN a Piper timeout falling back to the browser voice is very likely,
+  which would mean the symptom he sees is (a), not (b).
+- **Recommended resolution:** now — confirm on the phone. **Open the Sous Chef
+  "?" popover first and note which engine is speaking**; that single fact
+  decides which of the three fixes was even relevant. Then: does it still clip?
+  Does it clip in **Dora chat** too (no continuous mic there, so chat-clipping
+  rules the FU-723 mechanism out and points at the engine)? If it still clips
+  with the engine known, that's new information and this entry should be rewritten
+  rather than extended — three plausible mechanisms have now been closed.
+- **2026-10-22:** owner confirms it still clips sometimes. Fourth candidate
+  shipped, the only one left that fits "random how much, only the start":
+  the phone's audio output (Bluetooth above all) sleeping when idle and
+  swallowing the head of a new stream while it wakes. `POST /api/tts` now
+  puts 0.35 s of silence before every clip (`with_lead_in` in
+  `tts_synthesize.py`), so what is lost is silence. Piper only; the browser
+  voice can't be padded. Still open until heard on the phone: if it clips with
+  "Voice: Piper (server)" showing, the cause is something else; if the popover
+  says "Browser fallback", that engine is the one to chase.
+- **State:** 2026-11-04, owner checked voice with a real mic and phone; checked off.
+
+## [RESOLVED] FU-751 — Firefox TTS improved but not verified on Firefox
+- **Raised:** 2026-08-27 (owner feedback batch — settings/voice)
+- **Type:** finding
+- **What:** Owner asked *"TTS isn't supported on Firefox for some reason? What
+  browsers can we support?"* The cause was identified as an empty voice list rather
+  than a missing API (`'speechSynthesis' in window` was true, so Dora reported
+  itself available and then said nothing), and the fix is shipped: the browser voice
+  is probed for actual voices, Piper is probed unconditionally, a user on the device
+  voice with no voices falls back to Piper, and Settings → Voice explains which
+  engine is live. **None of it has been run in Firefox** — this session's browser
+  pane is Chromium.
+- **Why deferred:** no Firefox available in the pane.
+- **Recommended resolution:** confirm in browser — open Dora in Firefox, go to
+  Settings → Voice, and check that the note about missing device voices matches
+  what Firefox actually reports, and that Dora still speaks via the neural voice.
+
+Resolved entries carry one extra line, and live in `DORA_FOLLOWUPS_RESOLVED.md`:
+
+```
+- **State:** 2026-11-04, owner checked; checked off.
+
+## [RESOLVED] FU-628 — Confirm the neural-voice Preview now plays on mobile
+- **Raised:** 2026-08-13 (Voice settings feedback, item 4 — reported defect).
+- **Type:** finding (reported bug, fix applied, unverified on the failing platform).
+- **What:** Owner reported the Settings → Voice **neural-voice Preview** worked on the server's own desktop browser but **errored on his phone (Firefox + Chrome)**. Root cause found: `VoicePicker.onPreview` did `fetch → await synth → new Audio → play()` with no audio-unlock, so the mobile autoplay policy blocked the post-`await` `play()` (the user-gesture activation is gone by then). Fixed by creating + priming the `<audio>` element **inside the click gesture** (silent-WAV prime via new `utils/audioUnlock.primeAudioForGesture`), then swapping in the synth blob. Desktop was unaffected (sticky activation) so this can only be confirmed on a real phone.
+- **Why deferred:** no mobile device in this session; static analysis is not proof the mobile browser now allows it.
+- **Recommended resolution:** confirm in browser — on a phone (Android Chrome + Firefox), open Settings → Voice, tap Preview on a downloaded neural voice → it should play, not error. Also added to `DORA_VERIFY.md`. Flip to RESOLVED once walked.
+- **State:** 2026-11-04, owner checked voice on mobile; checked off.
+
+## [RESOLVED] FU-629 — Neural voice in chat / cook-mode may fall back to browser voice on mobile
+- **Raised:** 2026-08-13 (Voice settings feedback, item 4 — related root cause).
+- **Type:** finding.
+- **What:** Same mobile-autoplay wall as FU-628, but for `useSpeechOutput.playPiper` (Dora chat replies + cook-mode narration). Those `speak()` calls are **not inside a user gesture** (they fire after an LLM round-trip, or off a cook-mode timer), so the same-element in-gesture trick can't apply — only the session-level silent-WAV primer, which claims iOS credit but doesn't grant Chrome/Android unmuted-playback credit. Net: on mobile, neural TTS may silently **fall back to the browser voice** (graceful — the user still hears a reply, just not the neural one), so it degrades rather than errors (which is why only the Preview surfaced as a visible bug).
+- **Why deferred:** inherent mobile-autoplay limitation for non-gesture playback; a real fix needs Web Audio (AudioContext resumed at gesture time) — a heavier rework. Degrades gracefully today.
+- **Recommended resolution:** opportunistic / only if owner wants neural voice guaranteed on mobile. Would pair with a gesture-time `AudioContext.resume()` primer.
+- **State:** 2026-11-04, owner checked voice on mobile; checked off.
+
+## [RESOLVED] FU-389 — P5-04 Mobile / PWA field test
+- **Raised:** 2026-07-01 (legacy prompt-plan audit).
+- **Type:** deferred job.
+- **What:** P5-04 — real-device mobile / PWA testing pass. Overlaps with [[FU-411]] platform builds + P8-10 native.
+- **Why deferred:** Phase 3-adjacent.
+- **Recommended resolution:** fold into the P8-10 native-app brief; a device-lab pass is a natural gate before deciding native vs PWA-only.
+- **2026-10-23 (finalisation Stage 1):** add to the device pass: Android cleartext to an `http://` LAN backend from the APK is unverified (`usesCleartextTraffic` absent; CHUNK_17 17-R10).
+- **State:** 2026-11-04, owner did the mobile/PWA field walk; checked off.
+
+## [RESOLVED] FU-737 — The preview pane could not paint this session; screenshots and Quasar popups were unverifiable
+- **Raised:** 2026-08-23 (recipe-view feedback batch)
+- **Type:** finding.
+- **What:** every `computer{action:"screenshot"}` timed out and
+  `requestAnimationFrame` never fired in the preview tab, so Quasar's
+  transition-driven surfaces (`q-menu` option lists, and therefore every
+  dropdown's contents) stayed stuck mid-enter at 0×0. Dialogs, layout, computed
+  styles and the DOM were all readable and were what this unit's verification
+  ran on; nothing *visual* was confirmed by eye. Restarting the tab, closing the
+  second tab and resizing all failed to recover it.
+- **Why deferred:** it's an environment fault, not app code — but it means
+  "verified" for this unit reads "verified structurally", and the next session
+  should know why there are no screenshots.
+- **Recommended resolution:** opportunistic — if it recurs, try a fresh preview
+  server rather than a fresh tab, and fall back to the real-Chrome surface.
+- **State:** 2026-11-04, the owner has looked through the app in a real browser; the unverifiable screenshots are covered.
+
 ## [RESOLVED] FU-943 — Cook-mode timers reset when you move to another step
 - **Raised:** 2026-10-24 (finalisation 04-D2)
 - **Type:** decision

@@ -73,10 +73,14 @@ class ObservedUnitCost:
 
     ``item_price`` is the price of one countable thing in the purchase, when
     the observation says how many there were ("$5.50 for 12 eggs, 700 g").
+    ``pack_price`` is what the whole multipack cost, recorded only alongside
+    that count: an observation without one may span several packs, so it says
+    nothing about the price of one (QA2-18, a recipe's "1 pack").
     """
     amount: float
     unit: str
     item_price: float | None = None
+    pack_price: float | None = None
 
 
 def get_stock_item_unit_cost_with_unit_at(observations, when=None):  # noqa: ANN001 — duck-typed observations
@@ -106,6 +110,7 @@ def get_stock_item_unit_cost_with_unit_at(observations, when=None):  # noqa: ANN
         amount=latest.total_price / latest.total_measure,
         unit=latest.unit,
         item_price=latest.total_price / pack_count if pack_count else None,
+        pack_price=latest.total_price if pack_count else None,
     )
 
 

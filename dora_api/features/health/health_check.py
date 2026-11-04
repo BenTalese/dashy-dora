@@ -120,8 +120,11 @@ def _feature_flags(setting) -> dict[str, bool]:
     Reads runtime state cheaply — DB-backed flags pull from the
     AppSettings singleton; env-driven flags read the env var directly.
 
-    Key contract: keys never *removed*. New install-wide flags get
-    added here whenever C-cross §2.6 grows its admin panel. Per ADR-002,
+    Key contract: a key is removed only once no client reads it (an absent
+    key reads as false through `useFeatureFlags`, so an older SPA is safe).
+    A key nothing consults is dropped rather than kept as an advertisement
+    (FU-906). New install-wide flags get added here whenever C-cross §2.6
+    grows its admin panel. Per ADR-002,
     every consumer reads the truth through this endpoint, not direct
     AppSetting access on the client.
 
@@ -132,8 +135,11 @@ def _feature_flags(setting) -> dict[str, bool]:
     conservative defaults.
     """
     flags: dict[str, bool] = {
-        "auth": True,           # always — session cookies + login flow
-        "audit": True,          # always — audit_log + audit panel
+        # `auth`, `audit` and `multi_user` (always-true constants) and `email`
+        # (the `AppSetting.email_enabled` column) were dropped 2026-11-04
+        # (FU-906): no client read any of them, so they advertised nothing.
+        # `deals_email` went with them — always False since its column was
+        # dropped in e4b7c2a9f1d3.
         "scanning": False,      # resolved below — off by default
         # 2026-08-20 — install-wide stocktake master switch. Default TRUE:
         # the feature ships on, and an install has to switch it off. If the
@@ -143,14 +149,11 @@ def _feature_flags(setting) -> dict[str, bool]:
         # `buy_verdict` was here until 2026-08-19 (D-12). It is a per-user
         # display preference now, on `/auth/me` — an install-wide flag would be
         # answering a personal question with a household answer.
-        "multi_user": True,     # register + admin role
-        # the install-wide `email` switch, and the two
-        # `*_configured` R-014 signals (used by the SPA to reveal-and-disable
+        # The two `*_configured` R-014 signals (used by the SPA to reveal-and-disable
         # per-user channel toggles), now read through the operational-config
         # resolver so admin edits in Settings take effect without a restart.
         # Set conservatively here; resolved in the try block below alongside
         # the other AppSetting-driven flags.
-        "email": False,
         "email_smtp_configured": False,
         "push_vapid_configured": False,
         # True iff `AppSetting.public_url` is set. Scheduled mail (the weekly
@@ -178,7 +181,6 @@ def _feature_flags(setting) -> dict[str, bool]:
         # no real off switch; see migration a7c3e5d19f2b.
         "money": False,
         "nutrition": False,
-        "deals_email": False,
         # Products is a data-presence overlay (PROPOSAL_PRODUCTS_AS_OVERLAY /
         # true iff product data has been ingested — not an admin/user
         # flag. Conservative default false; derived from Product rows below.
@@ -238,7 +240,6 @@ def _feature_flags(setting) -> dict[str, bool]:
         from dora_api.features.app_settings.operational_config import \
             resolved_operational_config
         op_config = resolved_operational_config()
-        flags["email"] = bool(op_config.email_enabled)
         flags["email_smtp_configured"] = bool(op_config.smtp_username)
         flags["public_url_configured"] = bool((op_config.public_url or "").strip())
         flags["push_vapid_configured"] = bool(

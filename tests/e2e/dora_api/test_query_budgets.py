@@ -138,3 +138,46 @@ def test__recipes_cookable_filter__select_count_flat_as_recipes_grow(api):
         "The cookability/expiring maps regressed to per-recipe loads — see the "
         "identity-map trap documented in get_recipes.py _restrict_query.",
     )
+
+
+# ── GET /api/meal-plans — FU-908: a plan read grades only the recipes the plans
+#    reference, never the whole cookbook. The planner refetches after every edit,
+#    so an unbounded cookability load here is paid on each servings tap. ───────
+def test__meal_plans__cookability_scoped_to_planned_recipes(api, monkeypatch):
+    from dora_api.features.meal_plans import get_meal_plans as module
+
+    seen: list[set | None] = []
+    real = module.load_recipe_cookability
+
+    def _spy(repository, recipe_ids=None):
+        seen.append(None if recipe_ids is None else set(recipe_ids))
+        return real(repository, recipe_ids)
+
+    monkeypatch.setattr(module, "load_recipe_cookability", _spy)
+
+    def _recipe(name: str) -> str:
+        resp = requests.post(f"{BASE}/recipes", json={"name": name, "ingredients": []})
+        assert resp.status_code in (200, 201), resp.text
+        return resp.json()["recipe_id"]
+
+    today = requests.get(f"{BASE}/meal-plans/today").json()["today"]
+    slot = requests.get(f"{BASE}/meal-slots").json()[0]["name"]
+    planned = _recipe("_fu908_planned")
+    plan = requests.post(f"{BASE}/meal-plans", json={
+        "name": "_fu908_plan", "start_date": today,
+        "entries": [{"recipe_id": planned, "scheduled_for": today, "slot": slot}],
+    })
+    assert plan.status_code == 201, plan.text
+    plan_id = plan.json()["meal_plan_id"]
+    unplanned = {_recipe(f"_fu908_unplanned_{i}") for i in range(EXTRA)}
+
+    seen.clear()
+    for url in (f"{BASE}/meal-plans", f"{BASE}/meal-plans?filter=meal_plan_id:eq:{plan_id}"):
+        resp = requests.get(url)
+        assert resp.status_code == 200, resp.text
+
+    assert len(seen) == 2, seen
+    for ids in seen:
+        assert ids is not None, "a meal-plan read loaded the whole cookbook's cookability"
+        assert planned in {str(i) for i in ids}
+        assert not unplanned & {str(i) for i in ids}

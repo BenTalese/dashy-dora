@@ -20,6 +20,7 @@ import type { Recipe } from 'src/models/recipe';
 import { recipeImageUrl } from 'src/services/api/recipeApiService';
 import { inferenceTooltip as hintTooltip } from 'src/helpers/inferenceHint';
 import { totalMinutes } from 'src/helpers/recipeTime';
+import { formatUnitPrice } from 'src/composables/useMoney';
 import { useRecipeVocabStore } from 'src/stores/recipeVocabStore';
 
 export interface RecipeDisplay {
@@ -37,7 +38,7 @@ export interface RecipeDisplay {
      *  `value` is null when money is off (the server sends nothing), when
      *  nothing on the recipe could be priced, or when the recipe has no
      *  servings — the caller draws nothing in all three cases. */
-    cost: ComputedRef<{ value: number | null; judgeable: boolean }>;
+    cost: ComputedRef<{ value: number | null; text: string; judgeable: boolean }>;
     /** Why the cost figure carries an asterisk. Only meaningful when
      *  `cost.judgeable` is false. */
     costTooltip: ComputedRef<string>;
@@ -98,8 +99,12 @@ export function useRecipeDisplay(recipe: () => Recipe): RecipeDisplay {
     const cost = computed(() => {
         const r = recipe();
         const total = r.estimated_cost_total_count;
+        const value = r.estimated_cost_per_serving ?? null;
         return {
-            value: r.estimated_cost_per_serving ?? null,
+            value,
+            // QA2-32: the chip says it's per serving, not only its tooltip.
+            // `formatUnitPrice` is the app's one money-over-unit format.
+            text: value === null ? '' : formatUnitPrice(value, 'serve'),
             judgeable: total > 0 && r.estimated_cost_priced_count === total,
         };
     });

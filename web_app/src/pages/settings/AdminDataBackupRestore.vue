@@ -140,16 +140,14 @@
                 >
                     <div class="row items-center q-gutter-x-sm q-mb-xs">
                         <BaseButton
-                            variant="ghost"
+                            variant="subtle"
                             dense
-                            size="sm"
                             label="All"
                             @click="toggleGroup(group, true)"
                         />
                         <BaseButton
-                            variant="ghost"
+                            variant="subtle"
                             dense
-                            size="sm"
                             label="None"
                             @click="toggleGroup(group, false)"
                         />

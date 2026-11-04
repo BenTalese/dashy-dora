@@ -28,7 +28,7 @@
 
                     <BaseButton
                         v-if="currentUser.has_image"
-                        variant="ghost"
+                        variant="subtle"
                         dense
                         :icon="ICONS.delete_outline"
                         label="Remove photo"

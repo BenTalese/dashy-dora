@@ -6,7 +6,19 @@
  * them, and those rules are what would silently drift if the two surfaces ever
  * grew their own mappers again.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+// `formatQuantity` reads the household locale from `useMoney`, whose policy
+// probe would pull axios/Quasar into this node run; stub it so the defaults
+// (en-AU) stand.
+vi.mock('src/services/api/healthApiService', () => ({
+    default: class {
+        getInfoAsync() {
+            return new Promise(() => undefined);
+        }
+    },
+    invalidateHealthInfo: () => undefined,
+}));
 
 import {
     rowsFromMealPlanIngredients, rowsFromRecipe, unlinkedFromMealPlan,

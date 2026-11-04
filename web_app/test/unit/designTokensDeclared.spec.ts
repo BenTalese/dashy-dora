@@ -32,53 +32,36 @@ const SRC = join(__dirname, '..', '..', 'src');
 const CSS_DIR = join(SRC, 'css');
 
 /**
- * Custom properties declared at **runtime** rather than in `css/`, so they are
- * legitimately absent from the stylesheets:
+ * Custom properties declared at **runtime** by code this suite can't see, so
+ * they are legitimately absent from the stylesheets:
  *   • `--q-*` — Quasar writes its own palette onto `:root` from
  *     `quasar.variables.scss` at boot.
- *   • `--dora-base-font-size` — written by `themeService.ts:412` for the
- *     user's font-size preference (and referenced with a `16px` fallback).
+ *
+ * Runtime declarations made from *our* code don't belong here — the scan picks
+ * them up itself: `style.setProperty('--x', …)` (the user's font size in
+ * `themeService.ts`, the keyboard inset in `boot/keyboardInset.ts`) and a
+ * quoted key in a style binding (`{ '--stock-row-height': … }` in
+ * `StockOverview.vue`). See `declaredProperties()`.
  */
-// `--vv-inset-*` are the on-screen keyboard's overlap, measured from
-// `visualViewport` by `boot/keyboardInset.ts` — a runtime fact, never a token.
-const RUNTIME_DECLARED = [/^--q-/, /^--dora-base-font-size$/, /^--vv-inset-(top|bottom)$/];
+const RUNTIME_DECLARED = [/^--q-/];
 
 /**
  * Pre-existing undeclared tokens, enumerated so this suite can be **green and
- * still ratcheting**: a new undeclared token fails the build, and fixing one of
- * these forces its removal from the list (the second test asserts every entry
+ * still ratcheting**: a new undeclared token fails the suite, and fixing one of
+ * these forces its removal from the list (the third test asserts every entry
  * is still genuinely broken, so the list cannot rot).
  *
- * Found 2026-09-02 by this test, on its first run. Tracked as **FU-834** — an
- * app-wide sweep, deliberately out of scope for the dashboard chunk that added
- * the guard. Every one of these is R-060's named smell: reaching for a token
- * name that *looks* like the scale (`--space-sm` where the scale is
- * `--space-1..12`; `--surface-card` where the token is `--surface-component`).
- *
- * Note the first two entries: `RecipeCookMode.vue:19` is the **exact file that
- * established R-060** on 2026-08-28 — the rule was written because cook mode's
- * header was reported three times as "squished" before anyone checked whether
- * its gap tokens resolved. Two of them still don't.
+ * Found 2026-09-02 by this test, on its first run (FU-834: 21 tokens). Swept
+ * 2026-11-04: each call site repointed at the token it meant
+ * (`--surface-border` → `--border-default`, `--surface-card` /
+ * `--surface-default` → `--surface-component`, `--surface-muted` →
+ * `--surface-sunken`, `--overlay-pressed` → `--elevation-2`, `--text-warning`
+ * → body ink), `--font-mono` declared as a real token in `tokens.scss`, and
+ * `--stock-row-height` recognised as the runtime declaration it always was.
+ * `--space-sm` / `--space-xs` were only ever a *comment* in
+ * `RecipeCookMode.vue` by then. **The list's target is empty.**
  */
-const KNOWN_UNDECLARED = [
-    '--space-sm',          // RecipeCookMode.vue:19 — scale is --space-1..12
-    '--space-xs',          // RecipeCookMode.vue:19 — ditto
-    '--surface-border',    // PutAwayDialog.vue:294,307
-    '--surface-card',      // VoicePicker.vue:384 (TriStateFilter fixed 2026-09-02)
-    '--surface-default',
-    '--surface-muted',     // RecipeNutriScore.vue:99
-    '--surface-raised',    // StockItemDetailPage.vue:2788
-    '--text-warning',
-    '--font-mono',         // ApiAccessSettings.vue:542
-    '--overlay-pressed',   // ShoppingListDetail.vue:3009
-    '--stock-row-height',
-    // `--c-surface-2`, `--c-surface-3`, `--c-line-strong` and `--c-line` came
-    // off this list on 2026-09-02 (dashboard chunk 6). Retiring the dashboard's
-    // page-local `--c-*` alias layer (FU-747) removed `--c-line` from the
-    // declared set, which exposed all four in `MarkAsWastedDialog.vue` and
-    // `StocktakeRunner.vue` — they had always been painting hard-coded rgba
-    // fallbacks instead of following the theme. Now on real tokens.
-];
+const KNOWN_UNDECLARED: string[] = [];
 
 /** Recursively collect files under `dir` whose name matches one of `exts`. */
 function walk(dir: string, exts: string[]): string[] {
@@ -115,25 +98,52 @@ function declaredProperties(): Set<string> {
             declared.add(m[1]!);
         }
     }
+    // Runtime declarations from script: `el.style.setProperty('--x', …)` and a
+    // quoted key in a `:style` object (`{ '--x': … }`). Both write a real
+    // custom property onto an element; the second form is invisible to the
+    // regex above because the quote sits between the name and the colon.
+    for (const file of walk(SRC, ['.vue', '.ts'])) {
+        const text = readFileSync(file, 'utf8');
+        for (const m of text.matchAll(/setProperty\(\s*['"`](--[A-Za-z0-9_-]+)['"`]/g)) {
+            declared.add(m[1]!);
+        }
+        for (const m of text.matchAll(/['"](--[A-Za-z0-9_-]+)['"]\s*:/g)) {
+            declared.add(m[1]!);
+        }
+    }
     return declared;
 }
 
 type Reference = { token: string; file: string; line: number; hasFallback: boolean };
 
-/** Every `var(--token)` reference in `.vue` / `.scss` / `.ts` under `src/`. */
+/**
+ * Every token reference in `.vue` / `.scss` / `.ts` under `src/`:
+ *   • `var(--token)` anywhere, and
+ *   • a token *name* read from script as a bare string literal —
+ *     `getPropertyValue('--surface-page')`, the Quasar palette map in
+ *     `themeService.ts`, `paletteToken('--semantic-warning', …)`,
+ *     `motionDurationMs('--motion-slow')`. An undeclared name there reads back
+ *     as `''` — the same silent failure, one layer up.
+ * A quoted name followed by `:` is a declaration (see `declaredProperties`),
+ * and so is the first argument of `setProperty`; neither is a reference.
+ */
 function references(): Reference[] {
     const out: Reference[] = [];
     const files = walk(SRC, ['.vue', '.scss', '.css', '.ts']);
     for (const file of files) {
+        const isScript = file.endsWith('.ts') || file.endsWith('.vue');
         const lines = readFileSync(file, 'utf8').split(/\r?\n/);
         lines.forEach((line, i) => {
+            const at = { file: relative(SRC, file).replace(/\\/g, '/'), line: i + 1 };
             for (const m of line.matchAll(/var\(\s*(--[A-Za-z0-9_-]+)\s*(,)?/g)) {
-                out.push({
-                    token: m[1]!,
-                    file: relative(SRC, file).replace(/\\/g, '/'),
-                    line: i + 1,
-                    hasFallback: m[2] === ',',
-                });
+                out.push({ token: m[1]!, ...at, hasFallback: m[2] === ',' });
+            }
+            // Script string literals only, and not in a `//` / `*` comment line
+            // (prose examples like `getPropertyValue('--x')`).
+            if (!isScript || /^\s*(\/\/|\*|\/\*)/.test(line)) return;
+            for (const m of line.matchAll(/(setProperty\(\s*)?(['"])(--[A-Za-z][A-Za-z0-9_-]*)\2(\s*:)?/g)) {
+                if (m[1] || m[4]) continue;
+                out.push({ token: m[3]!, ...at, hasFallback: false });
             }
         });
     }
@@ -164,6 +174,12 @@ describe('R-060 — design tokens are declared before they are referenced', () =
         expect(refs.length).toBeGreaterThan(500);
         expect(declared.has('--surface-component')).toBe(true);
         expect(declared.has('--space-4')).toBe(true);
+        // The script-side scans are live too.
+        expect(declared.has('--stock-row-height')).toBe(true);
+        expect(declared.has('--dora-base-font-size')).toBe(true);
+        expect(
+            refs.some((r) => r.token === '--focus-ring' && r.file === 'services/themeService.ts'),
+        ).toBe(true);
     });
 
     it('introduces no NEW undeclared custom property', () => {

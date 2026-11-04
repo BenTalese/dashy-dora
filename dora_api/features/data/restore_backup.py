@@ -370,13 +370,14 @@ class RestoreBackupHandler:
             _LOGGER.exception("Restore failed; rolled back.")
             return rolled_back("Restore", exc)
 
+        self._consume_staged_upload(request)
         return RestoreSummary(created=created, skipped=skipped, warnings=warnings)
 
     @staticmethod
     def _resolve_backup(req: RestoreBackupRequest) -> tuple[dict | None, DataError | None]:
         """Pull the backup document out of either the inline body or a
-        staged upload. Consumes (unlinks) the staged file on success so
-        the upload area doesn't accumulate one stale .bin per restore.
+        staged upload. The staged file is left in place; `handle` consumes
+        it after a successful commit.
         """
         if req.backup is not None and req.upload_id is not None:
             return None, invalid("Provide exactly one of 'backup' or 'upload_id'.")
@@ -394,13 +395,24 @@ class RestoreBackupHandler:
             return None, invalid(f"Could not parse staged upload as JSON ({exc}).")
         if not isinstance(doc, dict):
             return None, invalid("Staged upload is not a JSON object.")
-        # Consume — the upload was successfully loaded; subsequent calls
-        # with the same id will 404 (which is the intent).
+        # Not consumed here: `handle` unlinks it only after the restore
+        # commits, so a rolled-back or refused restore can be retried with
+        # the same id (FU-977 (2)); the /start sweep clears abandoned ones.
+        return doc, None
+
+    @staticmethod
+    def _consume_staged_upload(req: RestoreBackupRequest) -> None:
+        """Delete the staged upload once the restore it fed has committed, so
+        the upload area doesn't keep one .bin per restore (FU-977 (2))."""
+        if req.upload_id is None:
+            return
+        path = staged_path(str(req.upload_id))
         try:
             os.unlink(path)
-        except OSError:
+        except FileNotFoundError:
             pass
-        return doc, None
+        except OSError as exc:
+            _LOGGER.warning("Could not remove staged upload %s: %s", path, exc)
 
     @staticmethod
     def _resolve_fk_target(backup_key: str, column: str) -> str | None:

@@ -122,7 +122,6 @@ class UpdateAppSettingsRequest(BaseModel):
     vapid_subject: str | None = Field(default=None, max_length=255)
     piper_bin: str | None = Field(default=None, max_length=1024)
     piper_bundled_voice_dir: str | None = Field(default=None, max_length=1024)
-    email_enabled: bool | None = None
     # Retention bounds: 1 day floor (anything less is effectively "no
     # audit"), ~10-year ceiling on a small install DB.
     audit_retention_days: int | None = Field(default=None, ge=1, le=3650)
@@ -365,8 +364,7 @@ class UpdateAppSettingsHandler:
                 _Value = getattr(request, _StrField)
                 setattr(setting, _StrField, (_Value or "").strip())
         for _NumericOrBool in (
-            "smtp_port", "smtp_use_tls",
-            "email_enabled", "audit_retention_days",
+            "smtp_port", "smtp_use_tls", "audit_retention_days",
         ):
             if _NumericOrBool in set_fields:
                 _Value = getattr(request, _NumericOrBool)

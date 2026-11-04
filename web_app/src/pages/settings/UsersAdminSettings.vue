@@ -720,7 +720,7 @@
     }
 
     .generated-password-readout :deep(input) {
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-family: var(--font-mono);
         letter-spacing: 0.05em;
     }
 </style>

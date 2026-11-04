@@ -18,7 +18,7 @@
                 </template>
 
                 <SettingsRow label="Fire for">
-                    <DoraSegmented
+                    <BaseSegmented
                         :model-value="draft.auto_add_mode"
                         :options="MODE_OPTIONS"
                         @update:model-value="onModeChange"
@@ -80,7 +80,7 @@
     import SettingsSection from 'src/components/settings/SettingsSection.vue';
     import SettingsRow from 'src/components/settings/SettingsRow.vue';
     import SettingsPageHeader from 'src/components/settings/SettingsPageHeader.vue';
-    import DoraSegmented, { type DoraSegmentedOption } from 'src/components/settings/DoraSegmented.vue';
+    import BaseSegmented, { type BaseSegmentedOption } from 'src/components/BaseSegmented.vue';
     import InfoTip from 'src/components/help/InfoTip.vue';
     import { insecureContextWarning } from 'src/helpers/cameraAvailability';
     import { useFeatureFlags } from 'src/composables/useFeatureFlags';
@@ -90,7 +90,7 @@
      * FU-511: install-wide auto-add mode, which replaced the per-item
      * `StockItem.auto_add_when_low` toggle. Saved on change.
      */
-    const MODE_OPTIONS: DoraSegmentedOption<AutoAddMode>[] = [
+    const MODE_OPTIONS: BaseSegmentedOption<AutoAddMode>[] = [
         { label: 'Off', value: 'off' },
         { label: 'Essential only', value: 'essential_only' },
         { label: 'All items', value: 'all' },

@@ -86,7 +86,7 @@
                     dense
                     :icon="ICONS.savings"
                 >
-                    {{ formatMoney(cost.value) }}<span
+                    {{ cost.text }}<span
                         v-if="!cost.judgeable"
                         class="recipe-card__part"
                         aria-hidden="true"
@@ -170,7 +170,6 @@
     import type { Recipe } from 'src/models/recipe';
     import { useRecipeDisplay } from 'src/composables/useRecipeDisplay';
     import { useMoneyEnabled } from 'src/composables/useMoneyEnabled';
-    import { formatMoney } from 'src/composables/useMoney';
     import { ref } from 'vue';
 
     const props = withDefaults(

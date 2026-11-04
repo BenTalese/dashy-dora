@@ -6,6 +6,7 @@ import {
 import {
     daysFromToday,
     householdTimezone,
+    localTodayIso,
     onHouseholdTimezoneChange,
     parseLocalIso,
     shiftDays,
@@ -162,6 +163,39 @@ export function weekdayLetters(): { key: string; letter: string }[] {
         const iso = shiftDays(A_MONDAY, i);
         return { key: iso, letter: formatDate(iso, { weekday: 'narrow' }) };
     });
+}
+
+/** The household's calendar day as a local-midnight `Date` — the shape the
+ *  day-keyed pickers (`pickWelcome` / `pickHint`) read with `getDay()` and
+ *  local parts. FU-970: they were handed `new Date()`, i.e. the *device's* day,
+ *  so a household a day behind its device was greeted with tomorrow's weekday.
+ *  Display-only, under `localTodayIso`'s R-021 carve-out; never for state.
+ *  `now` is injectable for tests only. */
+export function householdTodayDate(now: Date = new Date()): Date {
+    // Same fire-and-forget as `formatDate`: the zone arrives with the locale
+    // policy, and nothing else may have asked for it yet.
+    void ensureLocalePolicy();
+    void reactiveHouseholdTimezone();
+    return parseLocalIso(localTodayIso(now)) ?? now;
+}
+
+const hourFormatters = new Map<string, Intl.DateTimeFormat>();
+
+/** The hour (0-23) on the household's wall clock — device-local until the
+ *  household zone is known. For the time-of-day greeting (FU-970). */
+export function householdHour(now: Date = new Date()): number {
+    void ensureLocalePolicy();
+    const tz = reactiveHouseholdTimezone();
+    if (!tz) return now.getHours();
+    let fmt = hourFormatters.get(tz);
+    if (!fmt) {
+        // 'en-GB' + h23 purely for a 0-23 numeric hour part — a data shape,
+        // never a display locale.
+        fmt = new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: 'numeric', hourCycle: 'h23' });
+        hourFormatters.set(tz, fmt);
+    }
+    const hour = Number(fmt.formatToParts(now).find((p) => p.type === 'hour')?.value);
+    return Number.isFinite(hour) ? hour : now.getHours();
 }
 
 export function useDateFormat() {
