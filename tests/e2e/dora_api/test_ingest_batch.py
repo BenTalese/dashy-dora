@@ -70,6 +70,15 @@ def test__ingest__rejects_bad_bearer(api):
     assert resp.status_code == 401, resp.text
 
 
+def test__ingest__bad_key_with_a_malformed_body_is_401_not_a_schema_leak(api):
+    # The key is checked before the body is validated, so a caller without a
+    # key learns nothing about the payload shape from per-field 400s.
+    for url in (INGEST, f"{INGEST}/link-status"):
+        resp = requests.post(url, json={"nonsense": 1},
+                             headers={"Authorization": "Bearer not-a-real-key"})
+        assert resp.status_code == 401, (url, resp.text)
+
+
 def test__ingest__rejects_disabled_key(api):
     sid, key = _mint_key()
     requests.patch(f"{SOURCES}/{sid}", json={"enabled": False})

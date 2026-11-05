@@ -309,3 +309,28 @@ def test__parse__AtwaterEnergyOnly__IsUsedAndEnergy1008TakesPrecedence():
     assert by_ref["444"].kcal_per_100g == pytest.approx(352.0)
     assert by_ref["555"].kcal_per_100g == pytest.approx(379.0)
     assert by_ref["111"].kcal_per_100g == pytest.approx(89.0)
+
+
+def test__run_import__DeadReleaseLink__FlagsReleaseGoneForTheDownloadsPage(monkeypatch):
+    # FU-636: a 404 means USDA replaced the release, so the page offers the
+    # downloads page and a field for the current link, not a retry.
+    from urllib.error import HTTPError
+
+    from dora_api.features.nutrition import dataset_import as di
+
+    def _gone(url, on_progress=None):  # noqa: ANN001
+        raise HTTPError(url, 404, "Not Found", None, None)
+
+    monkeypatch.setattr(di, "_download", _gone)
+    source = next(iter(di._DEFAULT_URLS))
+    di._run_import(source, "https://fdc.nal.usda.gov/fdc-datasets/old.zip")
+    state = di.state_for(source)
+    assert state.phase == "error" and state.release_gone is True
+    assert "downloads page" in state.error
+
+    def _refused(url, on_progress=None):  # noqa: ANN001
+        raise HTTPError(url, 403, "Forbidden", None, None)
+
+    monkeypatch.setattr(di, "_download", _refused)
+    di._run_import(source, "https://www.usda.gov/x.zip")
+    assert di.state_for(source).release_gone is False

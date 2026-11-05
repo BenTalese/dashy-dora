@@ -47,7 +47,12 @@ RUN pip install --no-cache-dir faster-whisper==1.2.1
 #    Quasar project files (quasar.config.js, src/) are already present. Trade-
 #    off: editing any frontend file now busts the npm-install cache layer —
 #    acceptable for a self-host image built infrequently. `.dockerignore`
-#    excludes node_modules/dist so the host's aren't dragged in. ─────────────
+#    excludes node_modules/dist so the host's aren't dragged in.
+#    FU-861: quasar.config.ts reads CURRENT_VERSION from the backend's
+#    version_info.py, and `quasar prepare` loads that config during the
+#    postinstall above — so that one file must be in place before
+#    `npm install`. (Only this file, so backend edits don't bust the layer.) ─
+COPY dora_api/features/help/version_info.py /app/dora_api/features/help/version_info.py
 WORKDIR /app/web_app
 COPY web_app/ ./
 RUN npm install

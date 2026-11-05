@@ -20,7 +20,7 @@ from dora_api.features.app_settings.access import get_or_create_app_setting
 from dora_api.features.nutrition.lookup import resolve_food, search_foods
 from dora_api.features.nutrition.nutrients import NUTRIENT_ATTRS
 from dora_api.features.nutrition.dataset_import import (
-    dataset_label, default_url, start_import, state_for,
+    FDC_DOWNLOADS_PAGE, dataset_label, default_url, start_import, state_for,
 )
 from dora_api.features.nutrition.sources import (
     local_catalogue_size, nutrition_mode, source_statuses,
@@ -106,6 +106,9 @@ def _source_payload():
                 "phase": state.phase,
                 "error": state.error,
                 "default_url": default_url(status.id),
+                # FU-636: the built-in link is dead; where to get a new one.
+                "release_gone": state.release_gone,
+                "downloads_page": FDC_DOWNLOADS_PAGE,
                 # Live counters so the page can draw a real bar instead of an
                 # open-ended spinner. `bytes_total` is 0 when the origin sent
                 # no Content-Length, which the client reads as "indeterminate"

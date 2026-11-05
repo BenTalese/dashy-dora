@@ -12,6 +12,7 @@ server log, so the "Forgot password?" link is a dead end for them on a
 fresh install. Gating it on this flag closes that gap.
 """
 from dora_api.features.app_settings.access import get_or_create_app_setting
+from dora_api.features.auth.setup_demo import is_setup_demo_active, is_setup_demo_available
 from dora_api.features.routers import AUTH_ROUTER
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.api_response import ok
@@ -31,6 +32,12 @@ def get_auth_capabilities():
         # persistent "you're in a demo, it resets periodically" banner and
         # pre-fill the demo login hint without an authenticated call.
         "demo_mode": DORA_CONFIG.is_demo_mode_enabled(),
+        # The first-setup demo (setup_demo.py): the banner offers "Set up
+        # Dora" back to the one-time setup while it's on.
+        "setup_demo": is_setup_demo_active(),
+        # Whether /setup may offer "Look around a demo first" (no users, and
+        # not locked to ADMIN_BOOTSTRAP_EMAIL).
+        "setup_demo_available": is_setup_demo_available(),
         # SEC-3 — whether the login page offers "Create account".
         "registration_enabled": bool(
             get_or_create_app_setting(SqlAlchemyRepository()).registration_enabled

@@ -96,6 +96,40 @@
                             Imported before food groups, sugars, fibre and the vitamins were
                             kept. Import again to add them; ratings read low until then.
                         </div>
+                        <!-- FU-636: the built-in release link died (USDA ships a
+                             new dated file a few times a year). Send the admin to
+                             the downloads page and take the current link here. -->
+                        <div
+                            v-if="source.phase === 'error' && source.release_gone"
+                            class="dataset-row__relink"
+                        >
+                            <a
+                                :href="source.downloads_page"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                class="dataset-row__relink-page"
+                            >
+                                Open the USDA downloads page
+                                <q-icon :name="ICONS.open_in_new" size="14px" />
+                            </a>
+                            <div class="dataset-row__relink-form">
+                                <q-input
+                                    v-model="relinkDrafts[source.id]"
+                                    outlined
+                                    dense
+                                    class="dataset-row__relink-input"
+                                    label="Current CSV link"
+                                    placeholder="https://fdc.nal.usda.gov/fdc-datasets/….zip"
+                                    @keydown.enter.prevent="onImport(source, relinkDrafts[source.id])"
+                                />
+                                <BaseButton
+                                    variant="secondary"
+                                    label="Download"
+                                    :disable="!(relinkDrafts[source.id] ?? '').trim()"
+                                    @click="onImport(source, relinkDrafts[source.id])"
+                                />
+                            </div>
+                        </div>
                         <!-- B10 — an SR Legacy import runs for minutes, and a
                              bare spinner over that span reads as "wedged". The
                              bar is determinate only while the server can name
@@ -217,7 +251,8 @@
     // Nutrition is install-wide (owner call 2026-08-14) — this page replaces
     // the per-user Settings → Nutrition page, which mostly existed to tell you
     // to go ask an admin. Mode + complex-mode source config in one place.
-    import { computed, onMounted, ref, watch } from 'vue';
+    import { computed, onMounted, reactive, ref, watch } from 'vue';
+    import { ICONS } from 'src/style/icons';
     import { useSettingsSave } from 'src/composables/useSettingsSave';
     import { formatNumber } from 'src/composables/useMoney';
     import type { UpdateAppSettingsCommand } from 'src/services/api/appSettingsApiService';
@@ -423,9 +458,12 @@
         }
     }
 
-    async function onImport(source: NutritionSourceStatus) {
+    // FU-636: a pasted current-release link per dataset, for a dead built-in one.
+    const relinkDrafts = reactive<Record<string, string>>({});
+
+    async function onImport(source: NutritionSourceStatus, url?: string) {
         try {
-            const res = await nutritionApi.startDatasetImportAsync(source.id);
+            const res = await nutritionApi.startDatasetImportAsync(source.id, url?.trim() || undefined);
             sources.value = res.sources;
             anyAvailable.value = res.any_available;
             importWatch.watchIfBusy(res);
@@ -474,6 +512,30 @@
         font-size: 0.8125rem;
         line-height: 1.4;
         margin-top: 2px;
+    }
+
+    .dataset-row__relink {
+        margin-top: var(--space-2);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+        max-width: 520px;
+    }
+    .dataset-row__relink-page {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-1);
+        color: var(--primary-ink);
+        font-weight: 600;
+    }
+    .dataset-row__relink-form {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+    }
+    .dataset-row__relink-input {
+        flex: 1 1 auto;
+        min-width: 0;
     }
 
     .dataset-row__bar {

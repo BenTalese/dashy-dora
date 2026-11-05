@@ -259,7 +259,11 @@ Quasar's raw defaults (casing, sizing, shadows) unstyled.
 - Radius `--radius-sm` (or `--radius-pill` for status pills); padding
   `--space-1` vertical / `--space-2` horizontal; text `--font-size-sm`
   (**never below 14px if it carries a value** — D-003).
-- **Semantic chip:** `-soft` background + full-strength semantic text (A1).
+- **Semantic chip:** **solid** semantic fill (owner call 2026-11-06, FU-671:
+  solid over tint). Ink must clear D-002: `text-color="dark"` on **warning** and
+  **negative** (white measures 1.7–3.9:1 there); white only on primary/accent/
+  positive where `--text-on-*` is the sanctioned pairing. A `-soft` background +
+  full-strength semantic text (A1) stays for highlights and callouts, not chips.
 - **Neutral chip:** `--surface-sunken` bg + `--text-secondary`.
 - A chip that encodes a state must be decodable — labelled, tooltip'd, or in a
   legend (D-013). Don't ship a bare coloured dot as the only signal.

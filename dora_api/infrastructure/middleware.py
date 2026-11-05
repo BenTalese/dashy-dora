@@ -39,6 +39,9 @@ PUBLIC_ENDPOINTS = frozenset({
     # creates the first admin and 410s once any user exists.
     "bootstrap_required",
     "bootstrap_admin",
+    # first-setup demo (setup_demo.py): starts only while no user exists and
+    # gates itself. Its reset is NOT public: it needs the demo user's session.
+    "start_setup_demo",
     # pre-auth capability probe (login page reads it to decide whether to
     # render "Forgot password?" — gated on outbound email being real).
     "get_auth_capabilities",
@@ -390,10 +393,22 @@ def audit_incoming_request():
         _LOGGER.debug("body: %s", redact_sensitive(request.get_json(silent=True)))
 
 
+_KEY_BEFORE_BODY_ENDPOINTS = frozenset({"submit_ingestion_batch", "ingest_link_status"})
+
+
 def deserialise_web_request(request_endpoint: str):
     # Endpoints without a registered schema accept no body (e.g. action POSTs).
     if request_endpoint not in REQUEST_BODYS_BY_ENDPOINT:
         return
+
+    # Bearer-keyed ingest routes check the key first, so a caller without
+    # one gets the 401 rather than per-field 400s describing the payload
+    # (found by the companion audit, 2026-11-06).
+    if request_endpoint in _KEY_BEFORE_BODY_ENDPOINTS:
+        from dora_api.infrastructure.ingestion_auth import authenticate_ingestion_request
+        _Source, _AuthError = authenticate_ingestion_request()
+        if _AuthError is not None:
+            return _AuthError
 
     _RequestBodySchema = REQUEST_BODYS_BY_ENDPOINT[request_endpoint]
     try:

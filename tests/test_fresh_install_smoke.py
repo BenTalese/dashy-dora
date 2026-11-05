@@ -84,7 +84,78 @@ print("SMOKE_OK")
 '''
 
 
-def _run_child(temp_db: Path, code: str) -> subprocess.CompletedProcess:
+_SETUP_DEMO_ROUND_TRIP = r"""
+from pathlib import Path
+from dora_api.startup import bootstrap
+from dora_api.app import app
+
+bootstrap(is_test_env=False)  # a real install: upgrade() from empty
+
+def caps(c):
+    return c.get("/api/auth/capabilities").get_json()
+
+client = app.test_client()
+assert caps(client)["setup_demo"] is False
+assert caps(client)["setup_demo_available"] is True
+
+resp = client.post("/api/auth/setup-demo")
+assert resp.status_code == 200, resp.get_data(as_text=True)
+assert resp.get_json()["username"] == "demo"
+me = client.get("/api/auth/me")
+assert me.status_code == 200 and me.get_json()["username"] == "demo", me.get_data(as_text=True)
+assert client.get("/api/stock-items").status_code == 200
+assert caps(client)["setup_demo"] is True
+assert caps(client)["setup_demo_available"] is False
+assert client.get("/api/auth/bootstrap-required").get_json() == {"required": False}
+# Users exist now: neither a second demo nor a first admin.
+assert client.post("/api/auth/setup-demo").status_code == 410
+assert client.post("/api/auth/bootstrap-admin", json={"username": "x", "password": "Abcdefghij1"}).status_code == 410
+
+# The reset needs the demo user's session, and is CSRF-checked.
+assert app.test_client().post("/api/auth/setup-demo/reset").status_code == 401
+assert client.post("/api/auth/setup-demo/reset").status_code == 403
+csrf = client.get_cookie("dora_csrf")
+resp = client.post("/api/auth/setup-demo/reset", headers={"X-CSRF-Token": csrf.value})
+assert resp.status_code == 204, resp.get_data(as_text=True)
+
+fresh = app.test_client()
+assert fresh.get("/api/auth/bootstrap-required").get_json() == {"required": True}
+assert caps(fresh)["setup_demo"] is False
+resp = fresh.post("/api/auth/bootstrap-admin", json={"username": "first", "password": "Abcdefghij1"})
+assert resp.status_code == 200, resp.get_data(as_text=True)
+# The migrations' default rows are back, the showcase's are gone.
+levels = fresh.get("/api/stock-levels").get_json()["items"]
+assert levels, "no stock levels after the reset"
+assert fresh.get("/api/stock-items").get_json()["total"] == 0
+
+# A real first admin deletes any marker, and a marker planted next to real
+# data stays inert: the database has to agree it's the demo.
+from dora_api.infrastructure.configuration_manager import DORA_CONFIG
+marker = DORA_CONFIG.get_data_dir() / "setup_demo.marker"
+assert not marker.exists()
+marker.write_text("stale", encoding="utf-8")
+assert caps(fresh)["setup_demo"] is False
+csrf = fresh.get_cookie("dora_csrf")
+assert fresh.post("/api/auth/setup-demo/reset", headers={"X-CSRF-Token": csrf.value}).status_code == 410
+assert fresh.get("/api/auth/me").status_code == 200
+print("SMOKE_OK")
+"""
+
+
+_SETUP_DEMO_LOCKED = r"""
+from dora_api.startup import bootstrap
+from dora_api.app import app
+
+bootstrap(is_test_env=False)
+client = app.test_client()
+assert client.get("/api/auth/capabilities").get_json()["setup_demo_available"] is False
+assert client.post("/api/auth/setup-demo").status_code == 410
+assert client.get("/api/auth/bootstrap-required").get_json() == {"required": True}
+print("SMOKE_OK")
+"""
+
+
+def _run_child(temp_db: Path, code: str, **extra_env: str) -> subprocess.CompletedProcess:
     env = {
         **os.environ,
         "DORA_DB_PATH": str(temp_db),
@@ -96,6 +167,7 @@ def _run_child(temp_db: Path, code: str) -> subprocess.CompletedProcess:
         "DORA_DEBUG": "false",
         "DORA_DEMO_MODE": "false",
         "DORA_ALLOW_DESTRUCTIVE": "false",
+        **extra_env,
     }
     # `DORA_DB_URL` outranks `DORA_DB_PATH` (see test_migrations._run_migration).
     env.pop("DORA_DB_URL", None)
@@ -124,4 +196,22 @@ def test__fresh_install__showcase_seed_builds_from_empty(temp_db):
     result = _run_child(temp_db, _SHOWCASE_BUILD)
     assert result.returncode == 0 and "SMOKE_OK" in result.stdout, (
         f"showcase seed failed:\n{result.stdout[-4000:]}\n{result.stderr[-4000:]}"
+    )
+
+
+@pytest.mark.slow
+def test__setup_demo__starts_on_an_empty_install_and_resets_to_a_fresh_one(temp_db):
+    result = _run_child(temp_db, _SETUP_DEMO_ROUND_TRIP)
+    assert result.returncode == 0 and "SMOKE_OK" in result.stdout, (
+        f"setup-demo round trip failed:\n{result.stdout[-4000:]}\n{result.stderr[-4000:]}"
+    )
+
+
+@pytest.mark.slow
+def test__setup_demo__refused_on_an_install_locked_to_a_bootstrap_email(temp_db):
+    # The lock exists so a drive-by can't take a fresh install; the demo would
+    # otherwise hand an anonymous visitor an admin session.
+    result = _run_child(temp_db, _SETUP_DEMO_LOCKED, ADMIN_BOOTSTRAP_EMAIL="owner@example.com")
+    assert result.returncode == 0 and "SMOKE_OK" in result.stdout, (
+        f"locked setup-demo check failed:\n{result.stdout[-4000:]}\n{result.stderr[-4000:]}"
     )

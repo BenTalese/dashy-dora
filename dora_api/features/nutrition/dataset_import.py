@@ -58,6 +58,8 @@ _LOGGER = logging.getLogger(__name__)
 # 2026-08-15 — this is what broke the download button). The FDC origin
 # `fdc.nal.usda.gov` serves the same files with no such gate.
 _FDC_HOST = "https://fdc.nal.usda.gov/fdc-datasets"
+# Where an admin finds the current release links when a built-in one dies.
+FDC_DOWNLOADS_PAGE = "https://fdc.nal.usda.gov/download-datasets"
 _DEFAULT_URLS = {
     NUTRITION_SOURCE_USDA_FOUNDATION:
         f"{_FDC_HOST}/FoodData_Central_foundation_food_csv_2026-04-30.zip",
@@ -130,6 +132,9 @@ class ImportState:
     bytes_total: int = 0      # 0 = the server didn't say
     rows_done: int = 0
     error: Optional[str] = None
+    # FU-636: the release link is dead (404), so the page offers the USDA
+    # downloads page and a field for the current link instead of a retry.
+    release_gone: bool = False
 
 
 _LOCK = threading.Lock()
@@ -225,8 +230,9 @@ def _run_import(source: str, url: str) -> None:
         )
     except Exception as exc:  # noqa: BLE001 — any failure becomes UI state
         _LOGGER.exception("Nutrition dataset import failed for '%s'", source)
-        message = _friendly_error(str(exc) or exc.__class__.__name__)
-        _set(source, phase="error", error=message)
+        raw = str(exc) or exc.__class__.__name__
+        _set(source, phase="error", error=_friendly_error(raw),
+             release_gone="HTTP Error 404" in raw)
 
 
 # Every failure here reaches the user as a line of text under a dead button,
@@ -235,9 +241,9 @@ def _run_import(source: str, url: str) -> None:
 def _friendly_error(message: str) -> str:
     if "HTTP Error 404" in message:
         return (
-            "That release URL returned 404, so it has probably been replaced. "
-            "Grab the current CSV link from fdc.nal.usda.gov/download-datasets "
-            "and paste it in as a custom URL."
+            "That release link no longer works, so USDA has probably replaced "
+            "it with a newer one. Open the USDA downloads page, copy the current CSV "
+            "link and paste it below."
         )
     if "HTTP Error 403" in message:
         return (

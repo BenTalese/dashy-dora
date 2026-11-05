@@ -130,12 +130,13 @@ export default class AuthApiService {
      *  can't read), so login-screen surfaces that would only work with
      *  real email (Forgot password?, Resend verification) should hide. */
     getCapabilitiesAsync = async (): Promise<{
-        emailSenderConfigured: boolean; demoMode: boolean; registrationEnabled: boolean;
-        minPasswordLength: number;
+        emailSenderConfigured: boolean; demoMode: boolean; setupDemo: boolean;
+        setupDemoAvailable: boolean; registrationEnabled: boolean; minPasswordLength: number;
     }> => {
         const result = await this.httpClient.get<{
-            email_sender_configured: boolean; demo_mode?: boolean; registration_enabled?: boolean;
-            min_password_length: number;
+            email_sender_configured: boolean; demo_mode?: boolean; setup_demo?: boolean;
+            setup_demo_available?: boolean;
+            registration_enabled?: boolean; min_password_length: number;
         }>(
             '/auth/capabilities',
         );
@@ -144,6 +145,10 @@ export default class AuthApiService {
             // FU-392 — demo / sellable-showcase mode. Optional-chained so an
             // older backend that predates the flag reads as "not a demo".
             demoMode: result.demo_mode ?? false,
+            // The first-setup demo: sample data until "Set up Dora" resets it.
+            setupDemo: result.setup_demo ?? false,
+            // Whether /setup may offer it (no users; not locked to a bootstrap email).
+            setupDemoAvailable: result.setup_demo_available ?? false,
             // SEC-3 — self-serve sign-up is an admin switch, off by default.
             registrationEnabled: result.registration_enabled ?? false,
             minPasswordLength: result.min_password_length,
@@ -160,6 +165,19 @@ export default class AuthApiService {
         await this.httpClient.post<AuthenticatedUser, BootstrapAdminCommand>(
             '/auth/bootstrap-admin', command,
         );
+
+    /** Look around with the showcase data before the first admin exists.
+     *  The server refuses once any user exists, and signs this browser in as
+     *  the demo user. */
+    startSetupDemoAsync = async (): Promise<AuthenticatedUser> =>
+        await this.httpClient.post<AuthenticatedUser, Record<string, never>>(
+            '/auth/setup-demo', {},
+        );
+
+    /** Clear the setup demo out: the install goes back to a fresh one with
+     *  no users, so the next stop is the one-time setup. */
+    resetSetupDemoAsync = async (): Promise<void> =>
+        await this.httpClient.post<void, Record<string, never>>('/auth/setup-demo/reset', {});
 
     logoutAsync = async (): Promise<void> =>
         await this.httpClient.post<void, Record<string, never>>('/auth/logout', {});

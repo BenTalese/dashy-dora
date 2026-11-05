@@ -54,6 +54,24 @@
                 label="Create admin account"
             />
         </q-form>
+
+        <!-- The first-setup demo: look around with sample data first. The
+             banner it brings offers the way back here, which clears the
+             demo out. -->
+        <template v-if="setupDemoAvailable" #card-foot>
+            <div class="setup-foot">
+                <AuthButton
+                    colour="secondary"
+                    :loading="startingDemo"
+                    label="Look around a demo first"
+                    @click="onStartDemo"
+                />
+                <div class="setup-fineprint">
+                    Sample data to explore. Come back here whenever you're ready;
+                    setting up for real clears the demo out.
+                </div>
+            </div>
+        </template>
     </AuthShell>
 </template>
 
@@ -67,6 +85,7 @@
     import PasswordField from 'src/components/PasswordField.vue';
     import { useFormErrors } from 'src/composables/useFormErrors';
     import { useAuthStore } from 'src/stores/authStore';
+    import { useDemoMode } from 'src/composables/useDemoMode';
     import { deviceTimezone } from 'src/models/regionChoices';
     import { reactive, ref } from 'vue';
     import { useRouter } from 'vue-router';
@@ -76,6 +95,9 @@
     const router = useRouter();
 
     const submitting = ref(false);
+    const startingDemo = ref(false);
+    // Off on an install locked to ADMIN_BOOTSTRAP_EMAIL (the server refuses too).
+    const { setupDemoAvailable } = useDemoMode();
     const { fieldErrors, generalError, handleSaveError, reset: resetErrors } = useFormErrors();
 
     const form = reactive({
@@ -89,6 +111,19 @@
             const next = { ...fieldErrors.value };
             delete next[field];
             fieldErrors.value = next;
+        }
+    }
+
+    async function onStartDemo() {
+        startingDemo.value = true;
+        resetErrors();
+        try {
+            await authStore.startSetupDemoAsync();
+            void router.replace('/');
+        } catch (err) {
+            handleSaveError(err, "The demo couldn't be started. Try again.");
+        } finally {
+            startingDemo.value = false;
         }
     }
 
@@ -134,6 +169,16 @@
         -webkit-background-clip: text;
         background-clip: text;
         color: transparent;
+    }
+    .setup-foot {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+    }
+    .setup-fineprint {
+        color: var(--auth-shell-text-muted);
+        font-size: var(--font-size-xs);
+        text-align: center;
     }
     .setup-sub {
         color: var(--auth-shell-text-muted);

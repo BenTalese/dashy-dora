@@ -10,6 +10,11 @@ import AuthApiService from 'src/services/api/authApiService';
 // Module-level so the capabilities probe runs once per backend address and
 // every caller shares the same reactive answer.
 const enabled = ref(false);
+// The first-setup demo (sample data the person chose on /setup), as opposed
+// to an operator's DORA_DEMO_MODE install. It comes and goes within a
+// session, so callers refresh after starting or leaving it.
+const setupDemo = ref(false);
+const setupDemoAvailable = ref(false);
 const loaded = ref(false);
 let inflight: Promise<void> | null = null;
 // R-101 — the address can change while a probe is in flight; only the latest
@@ -23,11 +28,19 @@ function load(): Promise<void> {
         inflight = new AuthApiService()
             .getCapabilitiesAsync()
             .then((caps) => {
-                if (token === requestToken) enabled.value = caps.demoMode;
+                if (token === requestToken) {
+                    enabled.value = caps.demoMode;
+                    setupDemo.value = caps.setupDemo;
+                    setupDemoAvailable.value = caps.setupDemoAvailable;
+                }
             })
             .catch(() => {
                 // Probe failure → assume not a demo (hide the banner).
-                if (token === requestToken) enabled.value = false;
+                if (token === requestToken) {
+                    enabled.value = false;
+                    setupDemo.value = false;
+                    setupDemoAvailable.value = false;
+                }
             })
             .finally(() => {
                 if (token === requestToken) loaded.value = true;
@@ -45,5 +58,5 @@ export function refreshDemoMode(): Promise<void> {
 
 export function useDemoMode() {
     void load();
-    return { demoMode: enabled, demoModeLoaded: loaded };
+    return { demoMode: enabled, setupDemo, setupDemoAvailable, demoModeLoaded: loaded };
 }

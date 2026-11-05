@@ -21,6 +21,10 @@ export interface NutritionSourceStatus {
     phase?: 'idle' | 'downloading' | 'parsing' | 'saving' | 'done' | 'error';
     error?: string | null;
     default_url?: string;
+    /** FU-636: the built-in release link 404'd (USDA replaced the release);
+     *  `downloads_page` is where the current link lives. */
+    release_gone?: boolean;
+    downloads_page?: string;
     /** Bytes received so far in the `downloading` phase. */
     bytes_done?: number;
     /** Total download size from `Content-Length`. **0 means the origin didn't

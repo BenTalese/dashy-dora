@@ -56,6 +56,10 @@
 
         <template #card-foot>
             <div class="login-foot">
+                <!-- The first-setup demo's sign-in, for whoever signed out of it. -->
+                <div v-if="setupDemo" class="login-fineprint">
+                    Exploring the demo? Sign in as <strong>demo</strong>, password <strong>demo</strong>.
+                </div>
                 <AuthButton
                     v-if="registrationEnabled || mode === 'register'"
                     colour="secondary"
@@ -83,6 +87,7 @@
     import { NormalisedApiError } from 'src/services/api/axiosHttpClient';
     import { useFormErrors } from 'src/composables/useFormErrors';
     import { useAuthStore } from 'src/stores/authStore';
+    import { useDemoMode } from 'src/composables/useDemoMode';
     import { onMounted, reactive, ref } from 'vue';
     import { useRoute, useRouter } from 'vue-router';
 
@@ -90,6 +95,7 @@
     const authStore = useAuthStore();
     const router = useRouter();
     const route = useRoute();
+    const { setupDemo } = useDemoMode();
 
     // Pre-auth capability probe. Hides the "Forgot password?" link on
     // installs with no outbound email — dry-run mode logs the reset link

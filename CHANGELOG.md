@@ -6,12 +6,22 @@ semver — major bumps signal schema or breaking-config changes.
 ## [Unreleased]
 
 ### Added
+- **Try a demo before setting up (2026-11-06).** The one-time setup screen has
+  "Look around a demo first": Dora fills with sample data and signs you in as
+  `demo`. A banner says it's a demo and offers "Set up Dora", which clears the
+  demo out and brings you back to first-admin setup on a fresh install. Not
+  offered on an install locked to `ADMIN_BOOTSTRAP_EMAIL` or running as an
+  operator demo (`DORA_DEMO_MODE`).
 - **Support Dora links are live (2026-11-05).** The Support Dora buttons and the
   repo's Sponsor button offer PayPal and GitHub Sponsors; the About page, the
   README and the issue chooser link to them too. Buy Me a Coffee is no longer
   listed.
 
 ### Changed
+- **A dead USDA download link has a way forward:** Settings → Nutrition links
+  to the USDA downloads page and takes the current CSV link to import from.
+- **Dark-theme cards, menus and dialogs use each theme's own surface colour**
+  instead of Quasar's stock grey.
 - **Price charts name their unit (2026-11-06)** ("Price per kg", "per pack"),
   and several "your usual" lines are told apart by colour and dash with their
   labels kept apart.
@@ -104,6 +114,8 @@ semver — major bumps signal schema or breaking-config changes.
 - Every dropdown has an accessible name.
 
 ### Security
+- `/api/ingest` checks the bearer key before reading the body, so a caller
+  without a key gets 401 instead of a description of the payload.
 - **Signing out stops this device's push alerts (2026-11-05).** On a shared
   device the next person to sign in used to keep getting the previous user's
   notifications. The server also refuses to seed the household's default

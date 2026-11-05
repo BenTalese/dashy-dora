@@ -90,6 +90,13 @@ POST /api/ingest        Authorization: Bearer <key>        Idempotency-Key: <bat
 ```
 - **product** → upsert the catalogue. **offer** → set `current_offer` + **append a
   `ProductHistoricOffer`** (the history point).
+- **Producer contract details (FU-960, 2026-11-06):** send `observed_at` as ISO 8601
+  **with an offset** (an offset-less time is read as UTC); `web_url` must be an absolute
+  `http(s)` URL of at most 255 characters, otherwise the product is stored with no link.
+  A record whose store Dora doesn't know is skipped with reason `store_unknown`
+  (alongside `store_not_mapped`). The companion's own `/api/push` answers with
+  `offer_product_ids` (Dora's product id per offer, request order) so its UI can mark
+  each saved card.
 
 **`price_observations[]` removed (FU-227 chunk 7, J1).** Observations are
 the user's own pantry record (PriceEntry widget + `/finish` harvest); the

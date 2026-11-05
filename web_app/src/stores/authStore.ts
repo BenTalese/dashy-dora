@@ -19,6 +19,7 @@ import { clearBuyVerdictCache } from 'src/composables/useBuyVerdict';
 import { usePantryBeliefs } from 'src/composables/usePantryBeliefs';
 import { resetNutritionImportWatch } from 'src/composables/useNutritionImportWatch';
 import { usePlannedDemand } from 'src/composables/usePlannedDemand';
+import { refreshDemoMode } from 'src/composables/useDemoMode';
 import { computed, readonly, ref } from 'vue';
 
 const authApiService = new AuthApiService();
@@ -165,6 +166,24 @@ export const useAuthStore = defineStore('auth', () => {
         bootstrapRequired.value = false;
     };
 
+    /** Start the first-setup demo from /setup: signed in as the demo user,
+     *  and no longer a fresh install until the demo is reset. */
+    const startSetupDemoAsync = async () => {
+        dropSessionState();
+        currentUser.value = await authApiService.startSetupDemoAsync();
+        bootstrapRequired.value = false;
+        await refreshDemoMode();
+    };
+
+    /** Clear the setup demo out and go back to a fresh install, where the
+     *  router sends everyone to /setup. */
+    const leaveSetupDemoAsync = async () => {
+        await authApiService.resetSetupDemoAsync();
+        dropSessionState();
+        bootstrapRequired.value = true;
+        await refreshDemoMode();
+    };
+
     const updateMeAsync = async (command: UpdateMeCommand) => {
         const touchedImage = 'image' in command || 'clear_image' in command;
         currentUser.value = await authApiService.updateMeAsync(command);
@@ -243,6 +262,8 @@ export const useAuthStore = defineStore('auth', () => {
         refreshAsync,
         loginAsync,
         registerAsync,
+        startSetupDemoAsync,
+        leaveSetupDemoAsync,
         setupAdminAsync,
         updateMeAsync,
         changePasswordAsync,

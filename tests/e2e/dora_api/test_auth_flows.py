@@ -98,6 +98,8 @@ def test__capabilities__unauthenticated_and_reports_email_state(api):
         "registration_enabled": False,
         # FU-656: the length rule forms hint before a save.
         "min_password_length": 8,
+        # The first-setup demo: users exist here, so it's neither on nor offered.
+        "setup_demo": False, "setup_demo_available": False,
     }
 
 

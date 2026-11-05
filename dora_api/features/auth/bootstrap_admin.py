@@ -26,6 +26,7 @@ from dora_api.domain.entities.user import User
 from dora_api.features.app_settings.access import get_or_create_app_setting
 from dora_api.features.app_settings.clock import is_valid_timezone
 from dora_api.features.auth.register_user import AuthenticatedUserDto
+from dora_api.features.auth.setup_demo import forget_setup_demo_marker
 from dora_api.features.routers import AUTH_ROUTER
 from dora_api.infrastructure.api_response import gone, ok, too_many_requests, validation_failed
 from dora_api.infrastructure.audit import emit as audit_emit
@@ -171,6 +172,9 @@ def bootstrap_admin():
     repo.add(new_user)
     _apply_setup_timezone(repo, request_body.timezone)
     repo.save_changes()
+    # A real first admin ends any first-setup demo for good (a marker left by
+    # a demo the owner wiped by hand must never re-arm its reset).
+    forget_setup_demo_marker()
 
     # Auto-login the new admin so they don't have to bounce through /login
     # after setup.

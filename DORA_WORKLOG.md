@@ -41,6 +41,54 @@ next.
 
 ---
 
+## 2026-11-06 (night): **First-setup demo; owner decisions close the ledger; companion FUs (uncommitted, both repos)**
+
+**Owner:** decisions on the last open FUs; "trust your judgement" on the companion; and a new ask: a demo option on
+the first-setup screen, a banner saying it's a demo, and a way back to the one-time setup that clears the demo out.
+
+**First-setup demo (new):** `dora_api/features/auth/setup_demo.py` — `POST /auth/setup-demo` (public; only with no
+users, not `DORA_DEMO_MODE`, not locked to `ADMIN_BOOTSTRAP_EMAIL`) writes `<DATA_DIR>/setup_demo.marker`, empties
+every table, seeds `seed_showcase_data`, signs in as `demo`. `POST /auth/setup-demo/reset` (needs the demo user's
+session + CSRF) drops every reflected table incl. alembic_version and runs `upgrade()` — the production fresh-install
+path — then deletes the marker. "Active" = marker AND the DB's only user is `demo`; `bootstrap_admin` deletes the
+marker. Seed failure rebuilds a fresh install. Capabilities: `setup_demo`, `setup_demo_available`. SPA: SetupAdminPage
+button (hidden when unavailable), DemoBanner actionable variant (confirm, toast on failure, full reload after),
+LoginPage demo/demo hint, authStore start/leave actions. A security reviewer found 3 serious holes in my first cut
+(public reset gated only by a file that could outlive the demo; demo bypassing the bootstrap-email lock; a part-seed
+leaving known admin creds with no way out) — all fixed as above. Tests: `test_fresh_install_smoke.py` round trip
+(+ stale/planted marker inert, signed-out reset 401) and locked-install refusal. Driven live twice (Playwright,
+fresh zero-user backend): setup → demo → reset → setup → real admin → /welcome; no marker left.
+
+**Owner decisions closed (9):** FU-857 (keep stored text), FU-671 (solid chips; DESIGN_STYLE_GUIDE B2 updated),
+FU-792 / 837 / 694 / 667 / 657 / 363 (skip / fine / good enough), FU-636 (built: `release_gone` + `downloads_page` on
+the source status, Settings → Nutrition links USDA and takes the current CSV link; test).
+**Companion (5, uncommitted in ../dora-companion):** FU-886, 887, 891, 924, 960 — see their state notes. Dora side:
+`--q-dark` from `--surface-component` (themeService), PROPOSAL_INGESTION_API §2.2 producer contract, and the ingest
+routes check the bearer key before body validation (middleware `_KEY_BEFORE_BODY_ENDPOINTS`; test).
+**Open FUs: 0.**
+
+**Gates:** full pytest 2802 passed / 1 skipped / 1 xfailed + 1 failure (the capabilities exact-dict test missed the two new keys; fixed, auth suite 37 passed); vue-tsc clean; eslint clean; vitest 943 passed. Companion: pytest 122 passed (127 with DORA_REPO_PATH), lint + vue-tsc clean. **Close-gate:** R-104 (no anonymous admin on a locked install; destructive reset
+needs session + CSRF), R-095 (reset can't reach real data: DB corroboration), R-003 (one showcase seed, one fresh-install
+path), D-rules (tokens only in the banner/setup/relink CSS). ADR evaluation: "a flag that must survive wiping its own
+database lives beside it AND is corroborated by it" — one use; documented in the module docstring, not promoted.
+
+**Next up:** nothing open. Commit both repos (owner's call); walk the new DORA_VERIFY section.
+
+---
+
+## 2026-11-06 (late): **Docker build fix: `npm install` couldn't find version_info.py (uncommitted)**
+
+**Owner:** the docker build failed at the quasar/npm install step: "no such file or directory" naming `version_info.py`.
+**Cause:** FU-861 made `web_app/quasar.config.ts` read `CURRENT_VERSION` from `../dora_api/features/help/version_info.py`.
+`npm install` runs `quasar prepare` (postinstall), which loads that config, but the Dockerfile only copies `web_app/`
+before `npm install`; the backend arrives in the later `COPY . .`.
+**Fix:** `Dockerfile` copies just `version_info.py` into `/app/dora_api/features/help/` before `npm install`, so
+backend edits don't bust the npm layer. No other parent-dir reads in `quasar.config.ts`.
+**Not verified:** Docker Desktop wasn't running on this box, so the image build wasn't rerun. Owner to rebuild.
+**Standards:** no R-rule touched; no new ADR. No FUs spun off.
+
+---
+
 ## 2026-11-06 (evening): **Owner batch 5: the open FUs that needed no owner call (uncommitted)**
 
 **Owner:** "do the batch" of Dora-side FUs I could finish alone. Four fix agents on disjoint files, then a backend

@@ -458,6 +458,11 @@ function syncQuasarPaletteFromCssVars() {
     // modes. One token, one source of truth (R-003).
     const page = computed.getPropertyValue('--surface-page').trim();
     if (page) setCssVar('dark-page', page);
+    // FU-924 (a), same gap one layer up: Quasar paints dark cards, menus and
+    // dialogs with `--q-dark` (its stock #1d1d1d grey), which nothing set, so
+    // they ignored each theme's `--surface-component`.
+    const component = computed.getPropertyValue('--surface-component').trim();
+    if (component) setCssVar('dark', component);
 }
 
 function attachSystemListener() {

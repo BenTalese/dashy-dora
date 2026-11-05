@@ -54,6 +54,13 @@ top-to-bottom.
 - [ ] Recipe nutrition card (complex mode) with an unlinked ingredient, one with no amount and one in an unweighable unit: each button opens that row's editor, scrolled into view.
 - [ ] Start a dataset import, leave Settings → Nutrition before it ends: once it finishes, the cookbook's calorie figures refresh without a reload.
 - [ ] Build my week with a budget and a batch-cook recipe: a swap, if any, lands in the same slots.
+
+## First-setup demo + owner batch 6 (2026-11-06)
+- [ ] Fresh install at 375px: /setup shows "Look around a demo first" under the form; the demo loads, the yellow pill reads "This is a demo with sample data." with "Set up Dora"; the pill doesn't hide anything you need (stock summary bar, shopping list footer).
+- [ ] In the demo, sign out: the login page says to sign in as demo/demo; the pill shows without the button.
+- [ ] "Set up Dora" → confirm → you land on /setup with no demo data; create the real admin and the onboarding wizard starts.
+- [ ] Dark themes (Pesto Dark, Blueberry Dark): cards, menus and dialogs now use the theme's surface rather than flat grey; nothing reads too low-contrast.
+- [ ] Companion (dark mode): cards use the theme surface, the OUT OF STOCK banner reads clearly, a batch save fills every saved card's heart, a never-checked provider shows the grey unknown chip.
 - [ ] Cookbook: the Ingredients filter's sort toggle and the recipe method's step-style switch (both now the new segmented control).
 
 ## Touch sizes (2026-11-05) — origin FU-877
