@@ -55,6 +55,8 @@ describe('productSeriesToChart', () => {
             { date: '2026-08-08', value: 2.5, marked: true },
         ]);
         expect(s!.contextPoints).toBeUndefined();
+        // Offers are shelf prices of the pack (FU-911), and the axis says so.
+        expect(s!.unit).toBe('pack');
     });
 
     it('falls back to your own prices — and their baseline — when a product has no offers', () => {
@@ -68,6 +70,7 @@ describe('productSeriesToChart', () => {
         })]);
         expect(s!.points).toEqual([{ date: '2026-08-02', value: 4.2 }]);
         expect(s!.baseline).toEqual({ value: 4, label: 'usually $4.00/kg' });
+        expect(s!.unit).toBe('kg');
     });
 
     it('never draws the baseline against an offer line', () => {
@@ -135,6 +138,7 @@ describe('stockItemHistoryToChart', () => {
         expect(s!.points.map((p) => p.value)).toEqual([3.4, 4]);
         expect(s!.contextPoints?.map((p) => p.value)).toEqual([3.9]);
         expect(s!.baseline).toEqual({ value: 3.5, label: 'usually $3.50/kg' });
+        expect(s!.unit).toBe('kg');
     });
 
     it('omits the context line when there are no offers to draw', () => {

@@ -931,14 +931,6 @@ def seed_dense_data(qa_fixtures: bool = False, money_on: bool = True):
     pizza_v1.version_group_id = _version_group
     pizza_v2.version_group_id = _version_group
 
-    # `updated_at` is when the recipe was last *edited* — distinct from
-    # `last_made_on` (cooked) and `created_at` (added), and the three are what
-    # the version-information panel puts side by side. Two recipes carry one and
-    # the rest don't, because "never edited since it was added" is the majority
-    # state and the panel has to render both.
-    ragu.updated_at = now - timedelta(days=11)      # tweaked after the last cook
-    pizza_v2.updated_at = now - timedelta(days=3)
-
     repo.save_changes()  # recipes + ingredients need ids before steps/sections/links
 
     # ── The ragu's sections + ten structured steps ────────────────────────
@@ -1077,6 +1069,16 @@ def seed_dense_data(qa_fixtures: bool = False, money_on: bool = True):
     # The stock-item History tab renders four kinds — Bought (implicit, from
     # the finished lists below), Cooked, Wasted and Expiry. All four appear
     # here, and one item overflows the per-kind cap.
+    # `updated_at` is when the recipe was last *edited* — distinct from
+    # `last_made_on` (cooked) and `created_at` (added), and the three are what
+    # the version-information panel puts side by side. Two recipes carry one and
+    # the rest don't, because "never edited since it was added" is the majority
+    # state and the panel has to render both. Set here, in the same flush as
+    # the ragu's section pins above: the save path stamps an ingredient change
+    # as an edit (FU-730) unless the writer set the stamp itself.
+    ragu.updated_at = now - timedelta(days=11)      # tweaked after the last cook
+    pizza_v2.updated_at = now - timedelta(days=3)
+
     repo.save_changes()  # CookEvent FKs Recipe.id with no ORM relationship
 
     for _recipe, _days_ago, _meals in [

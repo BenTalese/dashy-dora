@@ -51,6 +51,8 @@ from dora_api.features.app_settings.clock import household_today
 # made tick / add-recipe / trim raise AttributeError on propose
 # (finalisation 11-R1). One resolver, in `shopping_actions`.
 from dora_api.features.assistant.shopping_actions import _primary_list
+from dora_api.features.stock_items._level_access import (
+    resolve_levels_by_item, resolve_levels_for_recipes)
 from dora_api.features.stock_items.move_stock_item import (
     MoveStockItemHandler, MoveStockItemRequest)
 from dora_api.features.stock_items.update_stock_item import (
@@ -149,8 +151,12 @@ def propose_update_stock_level(args: dict) -> dict[str, Any]:
             "summary": f"I'm not sure what level to set {item.name} to. Try 'out', 'low', 'sufficient', or 'well stocked'.",
             "candidates": [],
         }
-    previous = item.stock_level.name if item.stock_level else "(unknown)"
-    if item.stock_level and item.stock_level.id == level.id:
+    # FU-684 / R-032: the include on `_find_stock_item` isn't enough — an
+    # earlier tool in the same turn can leave this item in the identity map
+    # with `stock_level` unset. Resolve the current level by FK.
+    current = resolve_levels_by_item(repo, [item]).get(item.id)
+    previous = current.name if current else "(unknown)"
+    if current and current.id == level.id:
         return {
             "type": "update_stock_level",
             "status": "invalid",
@@ -629,6 +635,9 @@ def propose_add_recipe_to_list(args: dict) -> dict[str, Any]:
         .by_id(recipe.id)
     )
     ingredients = (full.ingredients if full else []) or []
+    # FU-684 / R-032: levels by FK, not off the (possibly identity-map-stale)
+    # relationship the include above was meant to populate.
+    levels_by_item = resolve_levels_for_recipes(repo, [full]) if full else {}
     candidates: list[dict[str, Any]] = []
     for ing in ingredients:
         item = ing.stock_item
@@ -639,7 +648,7 @@ def propose_add_recipe_to_list(args: dict) -> dict[str, Any]:
         # picker modal default: opt-in only).
         if ing.is_optional:
             continue
-        if missing_only and not is_missing(item.stock_level):
+        if missing_only and not is_missing(levels_by_item.get(item.id)):
             continue
         candidates.append({"stock_item_id": str(item.id), "name": item.name})
 

@@ -10,6 +10,219 @@ resolutions go at the **top**.
 
 ---
 
+## [RESOLVED] FU-922 — Product photo can only be set from the cards view
+- **Raised:** 2026-10-17 (owner batch, My products)
+- **Type:** leftover
+- **What:** the compact `ProductRow.vue` has no overflow menu, so a custom
+  product's photo is only reachable from the cards view or at creation.
+  Sibling stock-detail cards `PlannedDemandCard.vue` / `PantryBeliefCard.vue`
+  also still use off-scale spacing (D-017).
+- **Why deferred:** outside the ask.
+- **Recommended resolution:** opportunistic.
+- **State note (2026-11-06):** closed. ProductRow has a camera button ('Add photo' / 'Change photo', custom products only, hidden in bulk mode) wired to MyProductsPage's existing ProductPhotoDialog. D-017 half: the two signal cards were clean; their shared signalCards.scss meta margin moved 2px -> var(--space-1).
+
+## [RESOLVED] FU-907 — the auto builder's budget cap assumes a uniform meals-per-pick
+- **Raised:** 2026-09-12 (meal-planner feedback batch)
+- **Type:** finding
+- **What:** `apply_budget_cap` now counts a pick at
+  `per_serving × servings × meals_per_pick`, where `meals_per_pick` is one
+  scalar for the whole build (1, the number of days when repeating, or the batch
+  span). A batch week whose last chunk is shorter than the span therefore rounds
+  that pick **up**. The cap runs before placement, so the exact per-pick count
+  isn't knowable where it is applied.
+- **Why deferred:** fixing it properly means applying the cap *after* placement
+  (swap entries rather than picks), which is a real restructure of
+  `compute_auto_build` and was outside this batch's scope. The cap is
+  documented best-effort and errs toward under-spending.
+- **Recommended resolution:** opportunistic — if the budget cap is revisited.
+- **State note (2026-11-06):** closed. compute_auto_build places meals first, then budget-caps with each pick's real meal count from the placement (a short last batch counts at its true length); a swapped-in recipe takes the displaced pick's exact cells, preferring a cheaper replacement whose time_of_day fits; the cap targets the pick costing most in total and no longer mutates its input. Uniform meals_per_pick kept as the no-map fallback. Tests in test_build_week.py.
+
+## [RESOLVED] FU-895 — the nutrition panel's other three gap reasons have no way out
+- **Raised:** 2026-09-08 (recipe view feedback batch)
+- **Type:** follow-up
+- **What:** the nutrition panel now names every uncounted ingredient, but only
+  `no_food` and `no_data` carry an action ("Find a food") — those two are fixed
+  by a write against the **stock item**, which the panel can do. The other
+  three are fixed by editing the **ingredient row**: `not_linked` wants the row
+  bound to a pantry item, `no_quantity` wants an amount typed, `no_conversion`
+  wants a unit the rollup can weigh ("2 sprigs" can't be). Today the reader sees
+  the name and the reason and has to scroll up, find the row, and press the
+  pencil themselves.
+- **Why deferred:** the fix is a jump into the ingredients editor (open the
+  region, scroll to the row, focus the right field), which is a different
+  interaction from "open a dialog and pick" and wants its own design pass — the
+  ingredient rows are keyed by `client_id`, and the panel only holds
+  `stock_item_id`, so `not_linked` rows have no anchor to jump to at all
+  without also shipping the ingredient id.
+- **Recommended resolution:** opportunistic — next time the recipe ingredients
+  editor is open for other work.
+- **State note (2026-11-06):** closed. not_linked / no_quantity / no_conversion rows get 'Link to pantry' / 'Add an amount' / 'Change the unit'; the gap DTO now carries recipe_ingredient_id (rollup IngredientInput/UncountedIngredient.ingredient_id), RecipeDetailsDrawers finds the form row by client_id and useRecipeDetail.requestIngredientEdit opens it in RecipeIngredientRail (editing on, scrolled to the row, row editor open); a row edited away since the rollup just opens the list. Test: test_nutrition_recipe_rollup names-the-ingredient case asserts the anchor.
+
+## [RESOLVED] FU-799 — sweep the other prose-parsed domain facts (R-068)
+- **Raised:** 2026-09-01 (cook-mode feedback batch)
+- **Type:** follow-up
+- **What:** cook mode's step timer was recovered by regex from the step's text;
+  it now reads a real `RecipeStep.timer_minutes` and labels the fallback as
+  inferred. Generalised as **R-068**. The same instinct is available anywhere
+  the schema is thinner than the feature — the nearest neighbour is the recipe
+  importer's serving/time/quantity parsing (`_parse_recipe_from_text.py`), which
+  is arguably *fine* under R-068's non-goal (it proposes, the user confirms),
+  but has never been checked against it. Grep for regexes over `.text` /
+  `.notes` / `.instructions` and confirm each one either only affects
+  presentation, or proposes-and-confirms, or is labelled.
+- **Why deferred:** out of scope for a cook-mode feedback batch, and each hit
+  needs its own read of whether it drives behaviour or just presentation.
+- **Recommended resolution:** opportunistic — next time the importer is open.
+
+---
+- **State note (2026-11-06):** closed. Sweep found nothing to move: the cook-mode timer guess is labelled (timerIsDeclared), and ingredient highlighting, voice matching, help search, the AU/UK nutrition word table, the unlinked-ingredient grouping key and the assistant's preview are highlight/search/matching, which R-068 allows. R-068 carve-out comments added to _parse_recipe_from_text.py (the importer proposes a draft the user confirms; infers no timers) and new_recipe_version._VERSION_SUFFIX (the (vN) number only names the copy).
+
+## [RESOLVED] FU-771 — Nutrition mode/scheme changes don't invalidate the recipe list
+- **Raised:** 2026-08-28 (cookbook rating + kcal batch)
+- **Type:** finding
+- **What:** R-062's invalidation covers stock writes, which is where the owner's
+  bug was. Two install-wide levers move every recipe's rollup and are **not**
+  covered: switching nutrition mode / rating scheme on
+  `AdminSystemNutritionSettings.vue`, and a dataset import completing. Both
+  currently rely on the user reloading — plausible for a settings change, less so
+  for an import that finishes while they're on another page.
+- **Why deferred:** both also change cached *feature flags*, which the SPA reads
+  once per session, so a store invalidation alone wouldn't make the surfaces
+  correct — it needs the flag-refresh seam thought through, which is wider than
+  this batch.
+- **Recommended resolution:** opportunistic — next time the health-flag caching
+  or the admin nutrition page is open. Cites **R-062**.
+- **Progress (2026-11-06):** mode/scheme and import-finished invalidation go through useNutritionSettingsSync. Still open: the import half only fires while the admin page is mounted (onBeforeUnmount stops the poll), so an import that finishes after navigating away leaves the recipe list stale; other devices are the known flag-refresh seam.
+- **State note (2026-11-06):** closed. composables/useNutritionImportWatch holds one module-level poll (a re-armed timeout, so reads never overlap; a generation counter retires stale reads) that survives the admin page unmounting and calls syncAfterNutritionChange once when imports go idle; gives up after 5 failed reads; sign-out (authStore.dropSessionState) resets it. Other devices remain the known flag-refresh seam. Test: nutritionImportWatch.spec.
+
+## [RESOLVED] FU-735 — per-serving `kcal` is a masthead fact but isn't in the masthead edit grid
+- **Raised:** 2026-08-23 (recipe-view feedback batch)
+- **Type:** leftover.
+- **What:** the masthead's edit face carries name, collection, cuisine, category,
+  serves, prep, cook, difficulty and when. **Per-serving kcal** is displayed as a
+  fact but is still only editable from the "Calories" disclosure below (and in
+  complex nutrition mode it's server-derived, so it isn't editable at all) — so
+  one visible fact doesn't flip with its neighbours.
+- **Why deferred:** scope — the owner's batch didn't name it, and the right
+  answer depends on whether simple-mode kcal should live in the masthead at all
+  now that the disclosure list is shorter.
+- **Recommended resolution:** opportunistic — next time the recipe masthead or
+  the nutrition mode split is touched.
+- **State note (2026-11-06):** closed. RecipeMasthead's edit grid has a 'kcal per serving' cell (nutrition on, simple mode only; complex mode is the server's rollup), saved through useRecipeEditor's diff. The simple-mode Calories drawer in RecipeDetailsDrawers went so kcal has one editor (R-003).
+
+## [RESOLVED] FU-730 — `Recipe.updated_at` is stamped by the PATCH handler only
+- **Raised:** 2026-08-24 (recipe-view feedback batch).
+- **Type:** finding.
+- **What:** the new edit stamp is written in `update_recipe.handle`. Deliberate
+  — cooking, favouriting and meal-pool adjustments change what *happened* to a
+  recipe, not what it is, and the version panel would be useless if "last
+  updated" moved every time you cooked. But two writers do change the recipe's
+  content and don't stamp it: the **URL/text importer**
+  (`import_recipe_from_content.py`) when it writes into an existing recipe, and
+  any future bulk/vocabulary migration that rewrites recipe rows in place.
+- **Why deferred:** the importer's overwrite path isn't reachable from the
+  recipe page (FU-689 closed won't-do), so nothing user-visible is wrong today.
+- **Recommended resolution:** opportunistic — whenever a second recipe write
+  path is added, stamp it there too (or lift the stamp into the repository's
+  save path for `Recipe`).
+- **State note (2026-11-06):** closed. persistence/recipe_edit_stamp.py: a before_flush hook stamps a persisted recipe when its own columns/relationships change or a RecipeIngredient row is added, changed or removed; not an edit: available_meals, is_favourite, last_made_on, version_group_id (Recipe.NON_EDIT_FIELDS) and an ingredient's selected_product_id (cleared as a side effect of unlinking a product). Recipes inserted earlier in the same transaction are skipped (create and new-version back-fill section ids after their first flush). PATCH still stamps explicitly for its Core-statement writes, now only for non-NON_EDIT_FIELDS, so the favourite star no longer moves 'last updated'. Tests: tests/e2e/dora_api/test_recipe_updated_at_stamp.py (incl. a sectioned create).
+
+## [RESOLVED] FU-705 — `PriceHistoryChart` has no touch interaction
+- **Raised:** 2026-08-21 (prices-surface UX investigation)
+- **Type:** finding
+- **What:** The chart binds `@mousemove` / `@mouseleave` only
+  (`PriceHistoryChart.vue:2`), so on a phone it is a static picture — the
+  crosshair and value tooltip are unreachable and no number can be read off it.
+  Fix is pointer events (`@pointerdown` / `@pointermove`) or an explicit
+  "no chart below `sm`" decision. Same component, secondary issues: no y-axis
+  unit label (nothing stops $/L and $/kg sharing one axis), 5 series draw 5
+  dashed baselines in the same faint style with 5 labels stacked in the same
+  right gutter, and `preserveAspectRatio="none"` will distort if the SVG is ever
+  CSS-scaled.
+- **Why deferred:** read-only investigation.
+- **Recommended resolution:** now — it is shared by the widget sheet and the page,
+  so it pays off under either FU-703 outcome.
+- **Progress (2026-11-06):** PriceHistoryChart binds pointer events, a tapped reading stays (only a mouse leave clears) and the host has touch-action: pan-y. Still open, the secondary issues: no y-axis unit label; multiple baselines share one style and stack their labels; preserveAspectRatio='none' is redundant while viewBox equals the measured size.
+- **State note (2026-11-06):** closed. PriceHistoryChart draws a y-axis unit label from the series' `unit` ('Price per kg' / 'per pack' / 'each', 'Mixed units' when they differ, nothing when unknown); the product series sends observation_unit (price_history.py) so own-price lines name their real unit; several baselines take their series colour and distinct dashes with labels spread at least 11px apart; preserveAspectRatio dropped (viewBox equals the measured size). Specs: priceHistoryChart (+5), priceChartSeries.
+
+## [RESOLVED] FU-684 — ~20 more `item.stock_level` readers carry the same R-032 exposure the buy verdict just proved live
+- **Raised:** 2026-08-19 (stock-signal consolidation, Chunk 1).
+- **Type:** finding.
+- **What:** `GET /api/stock-items/<id>/buy-verdict` included `STOCK_LEVEL` on its
+  load and *still* read `item.stock_level is None`, so `_stock_level_band` returned
+  `"unknown"`, the `need` axis collapsed to thin-data, and the endpoint answered
+  **`unsure/low` for every item** — including an out-of-stock one, which is its
+  most confident `buy`. That is R-032's identity-map corollary biting with the
+  `.include()` present: the session already tracked the instance with the
+  relationship unset, and `contains_eager` didn't repopulate it. Belief's
+  `recorded_sequence` read the same relationship and had the same exposure (it
+  would have silently fallen through to its no-data path). Both now resolve the
+  level by FK through the new
+  `dora_api/features/stock_items/_level_access.py::resolve_levels_by_item`.
+  **Not swept:** every other reader of the relationship — `alerts/get_alerts.py:215`
+  (the attention engine — a silent `None` there suppresses the out/low alerts
+  Chunk 3 is about to consolidate onto), `domain/recipe_cookability.py:62,109`,
+  `assistant/confirm_actions.py:87,159,661`, `assistant/shopping_actions.py:39`,
+  `assistant/tools.py:1012,1146,1454,1514,1515`, `alerts/act_on_alert.py:78`.
+  Each needs the same question asked: is the instance guaranteed fresh on this
+  query, or could the session hand back a noload-empty one?
+- **Why deferred:** scope. The chunk's job was the cadence/constant consolidation;
+  the verdict bug was found because D-11 made belief read the same field. Sweeping
+  a dozen unrelated features unasked is the drive-by the standards warn against.
+- **Fix shape:** audit the list above; where the read isn't provably safe, resolve
+  by FK (`item._stock_level_id`) via `resolve_levels_by_item` rather than adding
+  more `.include()`s — an include is what failed here. `get_alerts.py` is the
+  highest-value one and Chunk 3 opens that file anyway.
+- **Recommended resolution:** the alerts reader **with Chunk 3** (same file, same
+  rebuild); the rest opportunistically. If several turn out to be live bugs, R-032
+  needs a stronger "don't trust `.include()` alone" clause.
+- **Progress (2026-11-06):** GetAlertsHandler.raw_alerts and stock_attention resolve levels by FK (resolve_levels_by_item); the assistant expires the session before each read-only tool; shopping_actions / act_on_alert no longer read .stock_level. Still open: confirm_actions.py ~152 and ~642 trust .include(); recipe_cookability.missing_stock_item_names_for has no levels_by_item (callers get_recipes.py ~614, tools.py ~1174); and the expire_all in run_tool is only safe while every tool is read-only.
+- **State note (2026-11-06):** closed. Cookability count, names, state and each row's is_missing read one FK-resolved map (recipe_cookability `_level_reader`; new `_level_access.resolve_levels_for_recipes`); GetRecipesHandler paginates entities then resolves levels once per page (`_to_dto_page`), handle_by_id and load_recipe_cookability likewise; the assistant's `_stock_coverage`, suggest_recipes, recipe_detail and confirm_actions (update-level, add-recipe-to-list) resolve by FK; an R-032 note sits beside run_tool's expire_all (safe only while tools are read-only). Accepted: `_name_resolution.stock_item_candidate` still reads the level label off the relationship (a label on an ambiguity prompt, covered by the per-tool expire_all). Tests in test_recipe_cookability.py.
+
+## [RESOLVED] FU-664 — Handler call sites can drift from entity signatures silently
+- **Raised:** 2026-08-17 (first-setup onboarding bug).
+- **Type:** finding.
+- **What:** `SeedDemoHandler` was still passing `image=None` to `StockItem` long after
+  the entity dropped the field. Nothing caught it because the only path that constructs
+  those rows is gated behind an idempotency check that's already satisfied on every
+  seeded/dev/e2e database — so a genuine first install was the *only* way to hit it.
+  Worth a sweep for other "only runs once, on a truly empty DB" branches (the rest of
+  the onboarding seeders, `seed_showcase`, the demo-reset path) that no test reaches.
+- **Why deferred:** out of scope for a bug fix; the reported defect itself is fixed and
+  now covered by `tests/e2e/dora_api/test_onboarding_seed_demo.py`.
+- **Recommended resolution:** opportunistic — or now, if a fresh-install smoke test is
+  wanted before the next release.
+- **State note (2026-11-06):** closed. tests/test_fresh_install_smoke.py (slow, ~10s, child process on a throwaway SQLite file): production's upgrade() from empty, bootstrap-required, bootstrap-admin, onboarding state, catalog and onboarding/finish with every default + starter pack + demo; and reset_showcase from empty. The dense seed is left out (every interactive dev boot runs it).
+
+## [RESOLVED] FU-579 — `quasar dev` vite-checker overlay: pre-existing type errors block fresh-browser interaction
+- **Raised:** 2026-07-18 (building the drive.mjs app driver)
+- **Type:** finding
+- **What:** `quasar dev` runs vue-tsc in watch mode via vite-plugin-checker, and its
+  full-screen error overlay intercepts ALL pointer events in any fresh browser session.
+  The errors are pre-existing: `e2e/bulk-waste.spec.ts` ×12 `noUncheckedIndexedAccess`
+  ("Object is possibly 'undefined'" on `items[name]` index access) + `src-pwa/*` ×5
+  (workbox module types / `ServiceWorkerGlobalScope` not in the SPA-mode tsconfig lib).
+  The tree's standalone `vue-tsc` task has been reported clean in past sessions, so the
+  dev-watch config evidently checks a wider file set than the CI task — worth aligning.
+  `drive.mjs` works around it by CSS-hiding the overlay; a human dev opening `quasar
+  dev` fresh sees the overlay too.
+- **Why deferred:** driver-tooling unit; fixing spec types + tsconfig scoping is its own
+  small change (R-008).
+- **Recommended resolution:** opportunistic — null-guard the index accesses in
+  bulk-waste.spec.ts, exclude `src-pwa` from the SPA-mode checker (or add webworker lib),
+  and confirm dev-watch and the `vue-tsc` task check the same set.
+- **Update 2026-07-18 (verify Batch 3 session):** the **bulk-waste half is FIXED** —
+  the ×12 index-access errors turned out to hard-fail `npx quasar build` too (exit 2,
+  no `dist/spa`), breaking `npm run test:e2e` from a clean tree; `itemsByName` now
+  returns a throwing accessor and `vue-tsc --noEmit` is clean. Note the earlier "not
+  visible in the vue-tsc task" observation was wrong — plain `vue-tsc --noEmit` did
+  report them. **Still open:** the `src-pwa/*` ×5 workbox-type errors in the dev-watch
+  checker only (they do NOT appear in `vue-tsc --noEmit` or `quasar build`), so the
+  overlay problem in `quasar dev` may persist — re-test `quasar dev` fresh and scope
+  the checker if it still trips.
+- **Progress (2026-11-06):** src-pwa no longer has custom-service-worker.ts and src-pwa/tsconfig.json sets the WebWorker lib, so the five workbox errors should be gone. Not confirmed: run `quasar dev` in a fresh browser and check no checker overlay appears, then close.
+- **State note (2026-11-06):** closed. The dev checker (quasar.config vite-plugin-checker) runs vueTsc on tsconfig.json and the same eslint command as `npm run lint`; both clean 2026-11-06, and src-pwa's custom-service-worker.ts that raised the five workbox errors no longer exists (src-pwa/tsconfig.json has the WebWorker lib). Not opened in a fresh browser.
+
 ## [RESOLVED] FU-917 — `PriceAlert` carries a dead column and a misleading name
 - **Raised:** 2026-10-15 (price watches now fire as the `price_drop` alert)
 - **Type:** leftover

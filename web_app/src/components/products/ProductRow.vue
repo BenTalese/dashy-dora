@@ -6,7 +6,7 @@
         actions as `ProductCard`; only the layout and the action *count* differ.
 
         Left → right:
-          Name · · ·  [% off] [store] [$price] [🔗] [🛒]
+          Name · · ·  [% off] [store] [$price] [🔗] [🛒] [📷 custom only]
           brand · size
     -->
     <q-card
@@ -71,7 +71,8 @@
                 {{ hasPrice(product) ? formatMoney(product.price_now) : NO_PRICE_YET }}
             </span>
 
-            <!-- OD-1: the row carries the two *safe* everyday actions only.
+            <!-- OD-1: the row carries the two *safe* everyday actions only
+                 (plus a custom product's photo, below).
                  Delete, the active toggle and price history live on the
                  expanded card — a dense row is the wrong place for a
                  destructive control, and cramming five targets in here would
@@ -96,6 +97,19 @@
                 :product-id="product.product_id"
                 @click.stop
             />
+            <!-- FU-922: a custom product's photo, the one card-menu action a
+                 row couldn't reach. Custom only, as on the card: an ingested
+                 product's picture comes from its source. Hidden in bulk mode,
+                 where a tap means select. -->
+            <BaseButton
+                v-if="product.is_custom && !bulkMode"
+                variant="icon"
+                :icon="ICONS.photo_camera"
+                :aria-label="photoLabel"
+                @click.stop="emit('photo')"
+            >
+                <BaseTooltip>{{ photoLabel }}</BaseTooltip>
+            </BaseButton>
         </q-card-section>
     </q-card>
 </template>
@@ -109,6 +123,8 @@
      *  store's product page on click, same as the card's top half (OD-1).
      */
     import AddToListButton from 'src/components/AddToListButton.vue';
+    import BaseButton from 'src/components/BaseButton.vue';
+    import BaseTooltip from 'src/components/BaseTooltip.vue';
     import DiscountChip from 'src/components/chips/DiscountChip.vue';
     import ProductLinkButton from 'src/components/products/ProductLinkButton.vue';
     import StoreLogo from 'src/components/StoreLogo.vue';
@@ -116,6 +132,8 @@
     import type { Product } from 'src/models/product';
     import { NO_PRICE_YET, hasPrice } from 'src/helpers/offerLogic';
     import { useProductStoreLink } from 'src/composables/useProductStoreLink';
+    import { ICONS } from 'src/style/icons';
+    import { computed } from 'vue';
 
     const props = defineProps<{
         product: Product;
@@ -127,7 +145,13 @@
         (e: 'toggle-select'): void;
         (e: 'link'): void;
         (e: 'unlink'): void;
+        (e: 'photo'): void;
     }>();
+
+    // Same wording as the card's menu item.
+    const photoLabel = computed(
+        () => (props.product.has_image ? 'Change photo' : 'Add photo'),
+    );
 
     // The identity block is the store link; in bulk mode a tap anywhere selects.
     const { tag: linkTag, attrs: linkAttrs } = useProductStoreLink(

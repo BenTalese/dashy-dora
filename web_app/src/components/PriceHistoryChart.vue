@@ -11,10 +11,12 @@
             :height="height"
             :viewBox="`0 0 ${width} ${height}`"
             class="chart-svg"
-            preserveAspectRatio="none"
             role="img"
             :aria-label="ariaLabel"
         >
+            <!-- No preserveAspectRatio: the viewBox is the measured size, so the
+                 SVG is never scaled, and the pointer maths below relies on that
+                 (one CSS pixel is one chart unit). FU-705. -->
             <!-- The text alternative. An SVG can carry one; the ECharts canvas
                  this component replaced could not, which is what made §4.9's
                  "five charts with no accessible alternative" unfixable while it
@@ -46,6 +48,17 @@
                 >
                     {{ formatMoney(tick.value) }}
                 </text>
+                <!-- What the axis measures (FU-705). -->
+                <text
+                    v-if="axisUnitLabel"
+                    x="4"
+                    y="10"
+                    font-size="10"
+                    class="chart-axis-label"
+                    text-anchor="start"
+                >
+                    {{ axisUnitLabel }}
+                </text>
             </g>
 
             <!-- X axis date labels (first / mid / last) -->
@@ -63,8 +76,8 @@
                 </text>
             </g>
 
-            <!-- One group per series: its own line, an optional subordinate
-                 context line for the same subject, and an optional baseline. -->
+            <!-- One group per series: its own line and an optional subordinate
+                 context line for the same subject. -->
             <g v-for="(s, i) in renderableSeries" :key="s.key">
                 <!-- Context line — the same subject from a lesser source (store
                      offers under your own logged prices). Dashed + faint, and
@@ -105,26 +118,32 @@
                     :fill="seriesColour(s.colourSlot)"
                 />
 
-                <!-- Baseline reference line (F-3) — "usually $X". -->
-                <template v-if="s.baselineY !== null">
-                    <line
-                        :x1="padding.left"
-                        :x2="width - padding.right"
-                        :y1="s.baselineY"
-                        :y2="s.baselineY"
-                        class="chart-baseline"
-                        stroke-dasharray="4,3"
-                    />
-                    <text
-                        :x="width - padding.right"
-                        :y="s.baselineY - 4"
-                        font-size="10"
-                        class="chart-baseline-label"
-                        text-anchor="end"
-                    >
-                        {{ s.baselineLabel }}
-                    </text>
-                </template>
+            </g>
+
+            <!-- Baseline reference lines (F-3), "usually $X". Their own group,
+                 because placing the labels is a question about all of them at
+                 once (FU-705). Inline style, not attributes: the class's
+                 stroke would beat a presentation attribute. -->
+            <g v-for="b in placedBaselines" :key="`bl-${b.key}`" class="baseline">
+                <line
+                    :x1="padding.left"
+                    :x2="width - padding.right"
+                    :y1="b.y"
+                    :y2="b.y"
+                    class="chart-baseline"
+                    :stroke-dasharray="b.dash"
+                    :style="b.colour ? { stroke: b.colour } : undefined"
+                />
+                <text
+                    :x="width - padding.right"
+                    :y="b.labelY"
+                    font-size="10"
+                    class="chart-baseline-label"
+                    text-anchor="end"
+                    :style="b.colour ? { fill: b.colour } : undefined"
+                >
+                    {{ b.label }}
+                </text>
             </g>
 
             <!-- Hover crosshair -->
@@ -154,9 +173,21 @@
                 <span class="chart-legend__line chart-legend__line--dashed" />
                 {{ contextLabel }}
             </li>
-            <li v-for="s in baselineSeries" :key="`lb-${s.key}`">
-                <span class="chart-legend__line chart-legend__line--baseline" />
-                {{ s.baselineLabel }}
+            <li v-for="b in placedBaselines" :key="`lb-${b.key}`">
+                <!-- A real dashed line, so each entry carries its baseline's
+                     own dash as well as its colour. -->
+                <svg class="chart-legend__line" viewBox="0 0 14 3" aria-hidden="true">
+                    <line
+                        x1="0"
+                        x2="14"
+                        y1="1.5"
+                        y2="1.5"
+                        class="chart-legend__baseline"
+                        :stroke-dasharray="b.dash"
+                        :style="b.colour ? { stroke: b.colour } : undefined"
+                    />
+                </svg>
+                {{ b.label }}
             </li>
         </ul>
 
@@ -219,10 +250,11 @@
      * assistive tech, which is why §4.9's finding had no fix while ECharts
      * stood.
      *
-     * ## What it does not do
+     * ## FU-705
      *
-     * No touch interaction — the hover crosshair is mouse-only, which is
-     * **FU-705**, still open and deliberately not folded in here.
+     * Pointer events, so a finger reads it too; a y-axis unit label taken from
+     * the units the series state; and baselines that stay apart when there is
+     * more than one (own colour and dash each, labels spread).
      */
     import { computed, ref } from 'vue';
     import { ICONS } from 'src/style/icons';
@@ -256,7 +288,29 @@
     const emptyLine = computed(
         () => props.emptyLine ?? 'Nothing to chart yet.',
     );
-    const padding = { top: 12, right: 16, bottom: 22, left: 48 };
+    // The unit label sits above the top tick, so the plot drops to make room
+    // for it only when there is one.
+    const padding = computed(() => ({
+        top: axisUnitLabel.value ? 26 : 12, right: 16, bottom: 22, left: 48,
+    }));
+
+    // ── Y-axis unit (FU-705) ────────────────────────────────────────────
+    /** "per kg", "per pack", "each". */
+    function pricedPer(unit: string): string {
+        if (unit === 'ea') return 'each';
+        return `per ${unit}`;
+    }
+    /** What the y-axis measures, from the units the series state. One unit
+     *  names it; different units say so, because two scales are sharing one
+     *  axis and the reader should know; a series that states none means the
+     *  chart can't vouch for the axis, so it claims nothing. */
+    const axisUnitLabel = computed<string | null>(() => {
+        const series = plottable.value;
+        if (series.length === 0 || series.some((s) => !s.unit)) return null;
+        const units = [...new Set(series.map((s) => s.unit!))];
+        if (units.length === 1) return `Price ${pricedPer(units[0]!)}`;
+        return `Mixed units (${units.map(pricedPer).join(', ')})`;
+    });
 
     interface PlottedPoint { x: number; y: number; marked?: boolean }
     interface RenderableSeries {
@@ -324,17 +378,17 @@
 
     function projectX(timestamp: number): number {
         const tb = timeBounds.value;
-        if (!tb) return padding.left;
-        const innerW = width.value - padding.left - padding.right;
-        if (tb.max === tb.min) return padding.left + innerW / 2;
-        return padding.left + ((timestamp - tb.min) / (tb.max - tb.min)) * innerW;
+        if (!tb) return padding.value.left;
+        const innerW = width.value - padding.value.left - padding.value.right;
+        if (tb.max === tb.min) return padding.value.left + innerW / 2;
+        return padding.value.left + ((timestamp - tb.min) / (tb.max - tb.min)) * innerW;
     }
     function projectY(value: number): number {
         const vb = valueBounds.value;
-        if (!vb) return padding.top;
-        const innerH = height.value - padding.top - padding.bottom;
-        if (vb.max === vb.min) return padding.top + innerH / 2;
-        return padding.top + innerH - ((value - vb.min) / (vb.max - vb.min)) * innerH;
+        if (!vb) return padding.value.top;
+        const innerH = height.value - padding.value.top - padding.value.bottom;
+        if (vb.max === vb.min) return padding.value.top + innerH / 2;
+        return padding.value.top + innerH - ((value - vb.min) / (vb.max - vb.min)) * innerH;
     }
 
     /** Project one line's points, dropping any with an unparseable date. */
@@ -375,9 +429,53 @@
     const hasContext = computed(
         () => renderableSeries.value.some((s) => s.contextPath.length > 0),
     );
-    const baselineSeries = computed(
-        () => renderableSeries.value.filter((s) => s.baselineY !== null),
-    );
+    // ── Baselines (FU-705) ──────────────────────────────────────────────
+    // One baseline stays the muted guide it always was. Several (the product
+    // page, one per product with no offers) each take their series' colour and
+    // a dash of their own, so the shape tells them apart as well as the hue
+    // (D-001), and their labels are spread so none sits on another.
+    const BASELINE_DASHES = ['4,3', '8,3', '2,2', '8,3,2,3', '1,3', '6,2'];
+    const BASELINE_LABEL_GAP = 11;   // 10px labels, plus a pixel
+    interface PlacedBaseline {
+        key: string;
+        y: number;
+        labelY: number;
+        label: string;
+        /** Null keeps the muted guide style from the stylesheet. */
+        colour: string | null;
+        dash: string;
+    }
+    const placedBaselines = computed<PlacedBaseline[]>(() => {
+        const withBaseline = renderableSeries.value.filter((s) => s.baselineY !== null);
+        const many = withBaseline.length > 1;
+        const placed: PlacedBaseline[] = withBaseline.map((s) => ({
+            key: s.key,
+            y: s.baselineY!,
+            labelY: s.baselineY! - 4,
+            label: s.baselineLabel ?? '',
+            colour: many ? seriesColour(s.colourSlot) : null,
+            dash: many
+                ? BASELINE_DASHES[s.colourSlot % BASELINE_DASHES.length]!
+                : BASELINE_DASHES[0]!,
+        }));
+        // Each label wants to sit just above its line. Walk them top to bottom
+        // pushing each clear of the one above, then bottom to top pulling any
+        // that ran off the plot back up.
+        const top = padding.value.top + 8;
+        const bottom = height.value - padding.value.bottom - 2;
+        const byY = [...placed].sort((a, b) => a.y - b.y);
+        let above = -Infinity;
+        for (const b of byY) {
+            b.labelY = Math.max(b.labelY, above + BASELINE_LABEL_GAP, top);
+            above = b.labelY;
+        }
+        let below = Infinity;
+        for (const b of [...byY].reverse()) {
+            b.labelY = Math.min(b.labelY, below - BASELINE_LABEL_GAP, bottom);
+            below = b.labelY;
+        }
+        return placed;
+    });
 
     // ── Text alternative ────────────────────────────────────────────────
     /** One sentence per series: how many points, the range, and where it ended
@@ -442,8 +540,8 @@
         if (!tb) return;
         const bounds = hostRef.value.getBoundingClientRect();
         const localX = event.clientX - bounds.left;
-        const innerW = width.value - padding.left - padding.right;
-        const ratio = Math.max(0, Math.min(1, (localX - padding.left) / innerW));
+        const innerW = width.value - padding.value.left - padding.value.right;
+        const ratio = Math.max(0, Math.min(1, (localX - padding.value.left) / innerW));
         const targetTime = tb.min + ratio * (tb.max - tb.min);
 
         const bySeries: HoverState['bySeries'] = {};
@@ -480,13 +578,13 @@
         if (!hover.value) return 0;
         const half = 140;   // approximate tooltip width / 2
         const x = hover.value.x;
-        if (x < padding.left + half) return padding.left;
-        if (x > width.value - padding.right - half) {
-            return width.value - padding.right - half * 2;
+        if (x < padding.value.left + half) return padding.value.left;
+        if (x > width.value - padding.value.right - half) {
+            return width.value - padding.value.right - half * 2;
         }
         return x - half;
     });
-    const tooltipTop = computed(() => padding.top + 4);
+    const tooltipTop = computed(() => padding.value.top + 4);
 </script>
 
 <style scoped lang="scss">
@@ -532,13 +630,7 @@
         );
         color: var(--text-secondary);
     }
-    .chart-legend__line--baseline {
-        background: repeating-linear-gradient(
-            to right,
-            var(--text-muted) 0 4px,
-            transparent 4px 7px
-        );
-    }
+    .chart-legend__baseline { stroke: var(--text-muted); stroke-width: 2; }
     .chart-tooltip {
         position: absolute;
         background: var(--surface-component);

@@ -149,8 +149,10 @@
                     <span class="rn__factv">{{ headlineKcal }} kcal</span>
                 </div>
             </div>
-            <!-- Total and Per serving are derived, so they have no field
-                 here — there is nothing to type into them. -->
+            <!-- Total is derived, so it has no field here. Per serving is
+                 typed only in simple nutrition mode; in complex mode the
+                 server rolls it up from the ingredients, so there is nothing
+                 to type into it (FU-735). -->
             <div v-else class="rn__fields">
                 <q-input
                     v-model.number="form.servings"
@@ -191,6 +193,14 @@
                 >
                     <template #prepend><q-icon :name="ICONS.schedule" size="18px" /></template>
                 </BaseSelect>
+                <q-input
+                    v-if="kcalEditable"
+                    v-model.number="form.kcal"
+                    dense outlined type="number" min="0" label="kcal per serving"
+                    @update:model-value="markDirty"
+                >
+                    <template #prepend><q-icon :name="ICONS.local_fire_department" size="18px" /></template>
+                </q-input>
             </div>
         </div>
 
@@ -252,7 +262,9 @@
     const { cuisines, categories, cuisineOptions, categoryOptions } = storeToRefs(useRecipeVocabStore());
     // `time_of_day` reads the household's own meal-slot names.
     const { slotNamesOrDefault: timeOfDayOptions } = storeToRefs(useMealSlotStore());
-    const { isComplex } = useNutritionMode();
+    const { isComplex, nutritionEnabled } = useNutritionMode();
+    // Simple mode stores a typed figure; complex mode derives it (FU-735).
+    const kcalEditable = computed(() => nutritionEnabled.value && !isComplex.value);
 
     const onToggleHeaderEdit = () => toggleEditRegion(headerEditing);
 

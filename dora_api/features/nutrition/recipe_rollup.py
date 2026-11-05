@@ -126,6 +126,9 @@ class IngredientInput:
     # (see `get_recipes._nutrition_dto`), so paying to carry a label there
     # would buy nothing.
     display_name: str | None = None
+    # The RecipeIngredient row's id, so a gap can name the row its fix is
+    # applied to (FU-895). Detail path only, like `display_name`.
+    ingredient_id: object | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -156,6 +159,7 @@ def input_from_entity(recipe) -> RecipeNutritionInput:  # noqa: ANN001
                     ing.stock_item.name if ing.stock_item
                     else getattr(ing, "raw_text", None)
                 ),
+                ingredient_id = ing.id,
             )
             for ing in (recipe.ingredients or [])
         ],
@@ -175,6 +179,9 @@ class UncountedIngredient:
     name: str | None
     stock_item_id: object | None
     reason: str
+    # The ingredient row itself: `not_linked` / `no_quantity` / `no_conversion`
+    # are fixed on the row, not the stock item (FU-895).
+    ingredient_id: object | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -262,6 +269,7 @@ def _rollup_one(recipe: 'RecipeNutritionInput', food_ids_by_item: dict, foods: d
             name = ingredient.display_name or ingredient.stock_item_name,
             stock_item_id = ingredient.stock_item_id,
             reason = reason,
+            ingredient_id = ingredient.ingredient_id,
         ))
 
     for ingredient in required:

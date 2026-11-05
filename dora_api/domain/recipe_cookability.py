@@ -35,6 +35,18 @@ def _required(ingredients):
     ]
 
 
+def _level_reader(levels_by_item):
+    """How to read a stock item's level: off ``levels_by_item`` when the caller
+    resolved levels by FK (``resolve_levels_by_item``), else off the
+    ``stock_item.stock_level`` relationship. Every function here takes the same
+    optional map so the count, the tri-state and the name list can't disagree
+    about which items are missing (R-032 / FU-684).
+    """
+    if levels_by_item is None:
+        return lambda item: item.stock_level
+    return lambda item: levels_by_item.get(item.id)
+
+
 def unlinked_count_for(ingredients) -> int:
     """Number of *required* ingredients whose ``stock_item`` is None
     (unlinked). Optional rows are excluded — an unlinked optional
@@ -60,11 +72,7 @@ def missing_count_for(ingredients, levels_by_item=None) -> int:
     id (``resolve_levels_by_item``) pass it so the answer doesn't depend on
     whether the relationship happened to be hydrated (R-032).
     """
-    def level_of(item):
-        if levels_by_item is None:
-            return item.stock_level
-        return levels_by_item.get(item.id)
-
+    level_of = _level_reader(levels_by_item)
     return len({
         ingredient.stock_item.id
         for ingredient in _required(ingredients)
@@ -73,7 +81,7 @@ def missing_count_for(ingredients, levels_by_item=None) -> int:
     })
 
 
-def cookability_state(ingredients) -> bool | None:
+def cookability_state(ingredients, levels_by_item=None) -> bool | None:
     """Tri-state cookability: True / False / None.
 
     * ``None`` — at least one *required* ingredient is unlinked
@@ -84,13 +92,15 @@ def cookability_state(ingredients) -> bool | None:
       cookable.
     * ``False`` — every required ingredient links to a StockItem, and at
       least one is missing.
+
+    ``levels_by_item`` — see :func:`missing_count_for`.
     """
     if unlinked_count_for(ingredients) > 0:
         return None
-    return missing_count_for(ingredients) == 0
+    return missing_count_for(ingredients, levels_by_item) == 0
 
 
-def missing_stock_item_names_for(ingredients) -> list[str]:
+def missing_stock_item_names_for(ingredients, levels_by_item=None) -> list[str]:
     """Distinct names of the missing **required** stock items, alphabetised.
 
     Built off the already-loaded ingredient tree — never re-queries — so the
@@ -99,11 +109,15 @@ def missing_stock_item_names_for(ingredients) -> list[str]:
     ingredients are excluded (§1.9). Unlinked ingredients contribute nothing
     to this list — the caller reads ``cookability_state()`` to know when
     "missing" is meaningful.
+
+    ``levels_by_item`` — see :func:`missing_count_for`. Pass the same map the
+    count got, or the two can disagree on an un-hydrated item (FU-684).
     """
+    level_of = _level_reader(levels_by_item)
     seen: dict[str, None] = {}
     for ingredient in _required(ingredients):
         item = getattr(ingredient, "stock_item", None)
-        if item is None or not is_missing(item.stock_level):
+        if item is None or not is_missing(level_of(item)):
             continue
         seen.setdefault(item.name, None)
     return sorted(seen)

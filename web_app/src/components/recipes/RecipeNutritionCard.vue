@@ -173,18 +173,29 @@
         <template v-for="group in gapGroups" :key="group.reason">
             <div class="rnut__grouphead">{{ group.title }}</div>
             <ul class="rnut__gaps">
-                <li v-for="(row, i) in group.rows" :key="`${row.stock_item_id}-${i}`">
-                    <span class="rnut__gapname">{{ row.name ?? 'Unnamed ingredient' }}</span>
+                <li v-for="(entry, i) in group.rows" :key="`${entry.row.stock_item_id}-${i}`">
+                    <span class="rnut__gapname">{{ entry.row.name ?? 'Unnamed ingredient' }}</span>
                     <BaseButton
-                        v-if="group.canLink && row.stock_item_id"
+                        v-if="group.fix === 'food' && entry.row.stock_item_id"
                         variant="ghost"
                         dense
                         size="sm"
                         :icon="ICONS.search"
                         :label="group.actionLabel"
-                        :loading="linkingId === row.stock_item_id"
+                        :loading="linkingId === entry.row.stock_item_id"
                         :disable="linkingId !== null"
-                        @click="onFindFood(row)"
+                        @click="onFindFood(entry.row)"
+                    />
+                    <!-- FU-895 — the other three are fixed on the ingredient
+                         row, so this opens that row's editor on the page. -->
+                    <BaseButton
+                        v-else-if="group.fix === 'ingredient'"
+                        variant="ghost"
+                        dense
+                        size="sm"
+                        :icon="ICONS.edit"
+                        :label="group.actionLabel"
+                        @click="emit('edit-ingredient', entry.row)"
                     />
                 </li>
             </ul>
@@ -231,7 +242,12 @@
     /** Fired once a food has been linked to one of the gap rows, so the page
      *  can re-fetch the recipe — the rollup that produced everything on this
      *  card is the server's, and it has just changed (R-003). */
-    const emit = defineEmits<{ (e: 'linked'): void }>();
+    const emit = defineEmits<{
+        (e: 'linked'): void;
+        /** FU-895 — a gap fixed on the ingredient row rather than the stock
+         *  item; the row names its `recipe_ingredient_id`. */
+        (e: 'edit-ingredient', row: RecipeNutritionGapIngredient): void;
+    }>();
 
     const s = (count: number) => (count === 1 ? '' : 's');
 
@@ -273,34 +289,38 @@
     });
 
     // ── The gaps, named ─────────────────────────────────────────────────
-    /** Copy per gap reason, plus whether a food link is the fix. `canLink` is
-     *  the two reasons that live on the *stock item* — the other three are
-     *  fixed by editing the ingredient row, which is the page behind this
-     *  drawer, so offering a search here would be pointing at the wrong thing.
-     *  The ids themselves are the server's closed set. */
+    /** Copy per gap reason, plus where the fix lives. `food` is the two
+     *  reasons that live on the *stock item*, which this panel can write
+     *  itself; `ingredient` is the other three, fixed by editing the
+     *  ingredient row, so the button hands off to the page's row editor
+     *  (FU-895). The ids themselves are the server's closed set. */
     const GAP_GROUPS: Record<RecipeNutritionGap, {
-        title: string; canLink: boolean; actionLabel: string;
+        title: string; fix: 'food' | 'ingredient'; actionLabel: string;
     }> = {
         not_linked: {
             title: 'Not linked to a pantry item',
-            canLink: false,
-            actionLabel: '',
+            fix: 'ingredient',
+            actionLabel: 'Link to pantry',
         },
         no_food: {
             title: 'No food linked',
-            canLink: true,
+            fix: 'food',
             actionLabel: 'Find a food',
         },
         no_data: {
             title: 'Linked food carries no calorie figure',
-            canLink: true,
+            fix: 'food',
             actionLabel: 'Find another',
         },
-        no_quantity: { title: 'No amount given', canLink: false, actionLabel: '' },
+        no_quantity: {
+            title: 'No amount given',
+            fix: 'ingredient',
+            actionLabel: 'Add an amount',
+        },
         no_conversion: {
             title: "Amount can't be converted to a weight",
-            canLink: false,
-            actionLabel: '',
+            fix: 'ingredient',
+            actionLabel: 'Change the unit',
         },
     };
 
@@ -312,11 +332,12 @@
 
     const gapGroups = computed(() => {
         const rows = props.nutrition.uncounted_ingredients ?? [];
+        const entries = rows.map((row) => ({ row }));
         return GAP_ORDER
             .map((reason) => ({
                 reason,
                 ...GAP_GROUPS[reason],
-                rows: rows.filter((row) => row.reason === reason),
+                rows: entries.filter((entry) => entry.row.reason === reason),
             }))
             .filter((group) => group.rows.length > 0);
     });

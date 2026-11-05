@@ -54,7 +54,7 @@ from dora_api.features.recipes.recipe_step_image_access import (
 from dora_api.features.recipes.recipe_section_access import (
     get_section_count_for_recipes, get_sections_for_recipe,
 )
-from dora_api.features.stock_items._level_access import resolve_levels_by_item
+from dora_api.features.stock_items._level_access import resolve_levels_for_recipes
 from dora_api.features.stock_items.inference_overlay import (
     SURFACE_RECIPES, IngredientRow, recipe_hint, resolve_divergence,
 )
@@ -143,10 +143,17 @@ class RecipeIngredientDto:
     selected_product_id: UUID | None = None
 
     @classmethod
-    def from_entity(cls, ingredient: RecipeIngredient) -> 'RecipeIngredientDto':
+    def from_entity(cls, ingredient: RecipeIngredient, levels_by_item=None) -> 'RecipeIngredientDto':
         _Item = ingredient.stock_item
         _Loc = _Item.stock_location if _Item else None
-        _Level = _Item.stock_level if _Item else None
+        # FU-684 / R-032: prefer the FK-resolved level when the caller has one,
+        # so the row's is_missing agrees with the recipe's missing count.
+        if _Item is None:
+            _Level = None
+        elif levels_by_item is not None:
+            _Level = levels_by_item.get(_Item.id)
+        else:
+            _Level = _Item.stock_level
         return RecipeIngredientDto(
             recipe_ingredient_id = ingredient.id,
             stock_item_id = _Item.id if _Item else None,
@@ -333,6 +340,9 @@ class RecipeNutritionGapDto:
     name: str | None
     stock_item_id: str | None
     reason: str
+    # FU-895: the row a `not_linked` / `no_quantity` / `no_conversion` fix
+    # opens. Equals the ingredient DTO's `recipe_ingredient_id`.
+    recipe_ingredient_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -570,15 +580,24 @@ class RecipeDto:
     inference_stock_item_names: List[str] = field(default_factory=list)
 
     @classmethod
-    def from_entity(cls, recipe: Recipe, dietary_tag_ids: list[UUID] | None = None, unallocated_meals: int | None = None) -> 'RecipeDto':
+    def from_entity(cls, recipe: Recipe, dietary_tag_ids: list[UUID] | None = None, unallocated_meals: int | None = None, levels_by_item=None) -> 'RecipeDto':
+        """``levels_by_item`` — ``{stock_item_id: StockLevel | None}`` from
+        ``resolve_levels_for_recipes``. The handler always passes it, so the count,
+        the tri-state, the name list and each row's ``is_missing`` read one set
+        of levels and can't disagree when the identity map hands back an
+        instance with ``stock_level`` unset (FU-684, R-032). ``None`` falls back
+        to the relationship (unit-test stubs)."""
         _Available = recipe.available_meals or 0
-        _IngDtos = [RecipeIngredientDto.from_entity(i) for i in (recipe.ingredients or [])]
+        _IngDtos = [
+            RecipeIngredientDto.from_entity(i, levels_by_item)
+            for i in (recipe.ingredients or [])
+        ]
         # Distinct missing stock items via the shared cookability rule (R-003) —
         # an ingredient listed on multiple rows is still one shopping line.
-        _Missing = missing_count_for(recipe.ingredients)
+        _Missing = missing_count_for(recipe.ingredients, levels_by_item)
         # Tri-state cookability (Chunk 4): None fires when any required
         # ingredient is unlinked. Rule owned by ``cookability_state``.
-        _Cookable = cookability_state(recipe.ingredients)
+        _Cookable = cookability_state(recipe.ingredients, levels_by_item)
         _Unlinked = unlinked_count_for(recipe.ingredients)
         return RecipeDto(
             recipe_id = recipe.id,
@@ -611,7 +630,7 @@ class RecipeDto:
             ingredients = _IngDtos,
             missing_count = _Missing,
             cookable = _Cookable,
-            missing_stock_item_names = missing_stock_item_names_for(recipe.ingredients),
+            missing_stock_item_names = missing_stock_item_names_for(recipe.ingredients, levels_by_item),
             unlinked_ingredient_count = _Unlinked,
             # `image` is now a deferred column; accessing
             # `recipe.image` here would trigger N+1 lazy loads on the
@@ -848,13 +867,7 @@ def load_recipe_cookability(
         return {}
     else:
         recipes = query.all(EntityField(Recipe, "id").in_(list(recipe_ids)))
-    items = {
-        ing.stock_item.id: ing.stock_item
-        for r in recipes
-        for ing in (r.ingredients or [])
-        if ing.stock_item is not None
-    }
-    levels_by_item = resolve_levels_by_item(repository, list(items.values()))
+    levels_by_item = resolve_levels_for_recipes(repository, recipes)
     return {
         r.id: (
             missing_count_for(r.ingredients, levels_by_item),
@@ -875,6 +888,15 @@ class GetRecipesHandler:
         # Soonest at-risk expiry date per recipe (ISO), same lifecycle as the
         # counts above — populated only when the expiring filter is active.
         self._expiring_soonest: dict[UUID, str] = {}
+
+    def _to_dto_page(self, page: Page) -> Page:
+        """A page of Recipe entities -> a page of RecipeDtos, with levels
+        resolved once for the whole page rather than per row."""
+        levels_by_item = resolve_levels_for_recipes(self.repository, page.items)
+        return dataclasses.replace(page, items=[
+            RecipeDto.from_entity(r, levels_by_item=levels_by_item)
+            for r in page.items
+        ])
 
     def _base_query(self):
         return (
@@ -1197,6 +1219,7 @@ class GetRecipesHandler:
                     name=row.name,
                     stock_item_id=str(row.stock_item_id) if row.stock_item_id else None,
                     reason=row.reason,
+                    recipe_ingredient_id=str(row.ingredient_id) if row.ingredient_id else None,
                 )
                 for row in (rollup.uncounted_ingredients if include_gaps else [])
             ],
@@ -1504,9 +1527,9 @@ class GetRecipesHandler:
         query, empty_result = self._restrict_query(query, filters)
         if empty_result:
             return Page(items=[], total=0, page=options.page, limit=options.limit)
-        page = query.paginate(
-            options, RecipeDto.from_entity, field_map=_FIELD_MAP
-        )
+        page = self._to_dto_page(query.paginate(
+            options, lambda recipe: recipe, field_map=_FIELD_MAP
+        ))
         # Each step takes the page's DTOs and returns them with one more field
         # populated; they are independent and run in listed order. This was a
         # ten-deep nest of calls read inside-out — adding cost to it would have
@@ -1533,9 +1556,9 @@ class GetRecipesHandler:
         Same base query and the same two passes, so the cookbook and the
         planners can't disagree about a recipe; cost they each price
         themselves with `estimate_costs_for`."""
-        page = self._base_query().paginate(
-            QueryOptions(page=1, limit=limit), RecipeDto.from_entity, field_map=_FIELD_MAP,
-        )
+        page = self._to_dto_page(self._base_query().paginate(
+            QueryOptions(page=1, limit=limit), lambda recipe: recipe, field_map=_FIELD_MAP,
+        ))
         items = self._hydrate_unallocated(page.items)
         items = self._hydrate_nutrition(items)
         return items
@@ -1544,7 +1567,9 @@ class GetRecipesHandler:
         entity = self._base_query().by_id(recipe_id)
         if entity is None:
             return None
-        dto = RecipeDto.from_entity(entity)
+        dto = RecipeDto.from_entity(
+            entity, levels_by_item=resolve_levels_for_recipes(self.repository, [entity]),
+        )
         # Keyed by the loaded entity's id (a real UUID) so the lookup matches
         # the UUID-keyed dict `get_tag_ids_for_recipes` returns whatever type
         # the caller passed in.

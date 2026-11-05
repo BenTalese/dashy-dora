@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from typing import List
 from uuid import UUID
 
@@ -72,11 +72,13 @@ class Recipe(BaseEntity):
     # cookbook "Recently added" sort axis. Stamped by the create handlers
     # at write time.
     created_at: datetime
-    # Recipe-view feedback 2026-08-24 — when the recipe was last *edited*
-    # (a PATCH through update_recipe). Distinct from `last_made_on` (when it
-    # was cooked) and `created_at` (when it was added). NULL on a recipe that
-    # has never been edited since it was created; the version-information
-    # panel reads it alongside `created_at`.
+    # Recipe-view feedback 2026-08-24 — when the recipe was last *edited*.
+    # Distinct from `last_made_on` (when it was cooked) and `created_at` (when
+    # it was added). NULL on a recipe that has never been edited since it was
+    # created; the version-information panel reads it alongside `created_at`.
+    # Stamped by `mark_edited()`, which the persistence layer calls on every
+    # flush that changes the recipe's content (FU-730,
+    # `persistence/recipe_edit_stamp.py`) — not by individual handlers.
     updated_at: datetime | None = None
     # RD-29 — free-text personal notes about the recipe ("I halve the
     # chilli", "kids' favourite"). Distinct from `instructions` (the method):
@@ -109,5 +111,21 @@ class Recipe(BaseEntity):
         UPDATED_AT = "updated_at"
         NOTES = "notes"
 
+    def mark_edited(self, at: datetime | None = None) -> None:
+        """Record that what this recipe *is* changed (FU-730)."""
+        self.updated_at = at or datetime.now(UTC)
+
 
 ALLOWED_STEPS_MODES = ("structured", "freeform", "image")
+
+# Fields whose change records what *happened* to a recipe — cooked, its
+# meal pool moved, favourited, grouped with a new version — not what it *is*.
+# Changing only these never moves `updated_at`: the version panel would be
+# useless if "last updated" moved every time you cooked (FU-730).
+NON_EDIT_FIELDS = frozenset({
+    Recipe.Fields.AVAILABLE_MEALS,
+    Recipe.Fields.IS_FAVOURITE,
+    Recipe.Fields.LAST_MADE_ON,
+    Recipe.Fields.VERSION_GROUP_ID,
+    Recipe.Fields.UPDATED_AT,
+})

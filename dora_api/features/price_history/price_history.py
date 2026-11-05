@@ -159,7 +159,7 @@ def get_price_history():
             series.append({
                 "product_id": str(pid), "name": "(unknown)", "store": "",
                 "points": [], "current": None, "all_time_low": None,
-                "your_prices": None, "observation_points": [],
+                "your_prices": None, "observation_points": [], "observation_unit": None,
             })
             continue
         current = current_by_product.get(pid)
@@ -192,6 +192,9 @@ def get_price_history():
                 "sample_count": _Yp.sample_count,
                 "rough": _Yp.rough,
             },
+            # The unit the observation series is quoted in (FU-705: the
+            # chart's y-axis label), worked out with the points.
+            "observation_unit": _ObsUnit,
             # H2 — per-unit observation series ("date" matches the offer
             # points' key so the chart treats them uniformly).
             "observation_points": [

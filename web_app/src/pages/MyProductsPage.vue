@@ -399,6 +399,7 @@
                             @toggle-select="toggleSelect(product.product_id)"
                             @link="openLinkDialog(product)"
                             @unlink="onUnlinkSingle(product)"
+                            @photo="openPhoto(product)"
                         />
                     </div>
                 </template>

@@ -46,6 +46,14 @@ top-to-bottom.
 - [ ] Settings → Budget: typing 120.5 settles to 120.50 on blur and saves that.
 - [ ] Price history at 375px: tap a point, the reading stays; drag scrolls the page vertically.
 - [ ] Settings → Nutrition on an install imported before food groups: the 'Import again' line shows; it goes after a re-import.
+
+## Owner batch 5: open FUs I could do alone (2026-11-06)
+- [ ] Price history and the stock item's price sheet: the y-axis label reads 'Price per kg' / 'per pack' / 'each' as fits; with two products' usual lines on /price-history, the two dashed lines differ and their labels don't overlap, at 1440 and 375.
+- [ ] My products, list view: a custom product's camera button opens the photo dialog; it's hidden in bulk select.
+- [ ] Recipe edit (simple nutrition mode): 'kcal per serving' sits in the facts grid and saves; the Calories drawer is gone; in complex mode the field doesn't show.
+- [ ] Recipe nutrition card (complex mode) with an unlinked ingredient, one with no amount and one in an unweighable unit: each button opens that row's editor, scrolled into view.
+- [ ] Start a dataset import, leave Settings → Nutrition before it ends: once it finishes, the cookbook's calorie figures refresh without a reload.
+- [ ] Build my week with a budget and a batch-cook recipe: a swap, if any, lands in the same slots.
 - [ ] Cookbook: the Ingredients filter's sort toggle and the recipe method's step-style switch (both now the new segmented control).
 
 ## Touch sizes (2026-11-05) — origin FU-877

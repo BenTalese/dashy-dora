@@ -111,3 +111,58 @@ describe('PriceHistoryChart — drawing', () => {
         expect(chart.findAll('circle')).toHaveLength(0);
     });
 });
+
+describe('PriceHistoryChart: y-axis unit (FU-705)', () => {
+    const line = (key: string, unit?: string): PriceChartSeries => ({
+        key, name: key, colourSlot: 0,
+        points: [{ date: '2026-08-01', value: 3 }],
+        ...(unit ? { unit } : {}),
+    });
+    const unitLabel = (series: PriceChartSeries[]) =>
+        mountChart(series).findAll('text').map((t) => t.text())
+            .find((t) => t.startsWith('Price ') || t.startsWith('Mixed units'));
+
+    it('names the one unit every series shares', () => {
+        expect(unitLabel([line('a', 'kg'), line('b', 'kg')])).toBe('Price per kg');
+        expect(unitLabel([line('a', 'pack')])).toBe('Price per pack');
+        expect(unitLabel([line('a', 'ea')])).toBe('Price each');
+    });
+
+    it('says so when two scales share the axis', () => {
+        expect(unitLabel([line('a', 'pack'), line('b', 'kg')]))
+            .toBe('Mixed units (per pack, per kg)');
+    });
+
+    it('claims nothing when a series does not state its unit', () => {
+        expect(unitLabel([line('a', 'kg'), line('b')])).toBeUndefined();
+    });
+});
+
+describe('PriceHistoryChart: baselines (FU-705)', () => {
+    const withBaseline = (key: string, colourSlot: number, value: number): PriceChartSeries => ({
+        key, name: key, colourSlot,
+        points: [{ date: '2026-08-01', value: 3 }, { date: '2026-08-09', value: 6 }],
+        baseline: { value, label: `usually ${value}` },
+    });
+
+    it('keeps a lone baseline as the muted guide', () => {
+        const line = mountChart([OATS]).find('g.baseline line');
+        expect(line.attributes('style')).toBeUndefined();
+        expect(line.attributes('stroke-dasharray')).toBe('4,3');
+    });
+
+    it('gives several baselines a dash each and keeps their labels apart', () => {
+        // Three baselines within a few cents: drawn naively, the labels stack.
+        const chart = mountChart([
+            withBaseline('a', 0, 4.0), withBaseline('b', 1, 4.01), withBaseline('c', 2, 4.02),
+        ]);
+        const groups = chart.findAll('g.baseline');
+        const dashes = groups.map((g) => g.find('line').attributes('stroke-dasharray'));
+        expect(new Set(dashes).size).toBe(3);
+        expect(groups.every((g) => g.find('line').attributes('style')?.includes('stroke'))).toBe(true);
+        const ys = groups.map((g) => Number(g.find('text').attributes('y'))).sort((p, q) => p - q);
+        for (let i = 1; i < ys.length; i += 1) {
+            expect(ys[i]! - ys[i - 1]!).toBeGreaterThanOrEqual(11);
+        }
+    });
+});

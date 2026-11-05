@@ -41,6 +41,40 @@ next.
 
 ---
 
+## 2026-11-06 (evening): **Owner batch 5: the open FUs that needed no owner call (uncommitted)**
+
+**Owner:** "do the batch" of Dora-side FUs I could finish alone. Four fix agents on disjoint files, then a backend
+and a frontend diff reviewer; their findings fixed here.
+
+**Resolved -> archive (11):** FU-684 (one FK-resolved level map for cookability count/names/state/row is_missing,
+per page in GetRecipesHandler, assistant + confirm_actions), FU-907 (budget cap on real meals per pick; swaps keep the
+displaced cells), FU-730 (before_flush `persistence/recipe_edit_stamp.py`; favourite no longer moves "last updated"),
+FU-664 (tests/test_fresh_install_smoke.py), FU-799 (sweep: nothing to move; two R-068 carve-outs), FU-735 (kcal in the
+masthead grid; Calories drawer removed so there's one editor, R-003), FU-895 (gap buttons; gap DTO carries
+`recipe_ingredient_id` — I replaced the agent's client-side text/id matching helper with the server anchor), FU-771
+(`useNutritionImportWatch` module poll), FU-705 (y-axis unit label, multi-baseline styles, `observation_unit` on the
+product series — added server-side by me), FU-922 (photo button on ProductRow), FU-579 (checker runs the same vue-tsc +
+eslint that are clean; not opened in a fresh browser).
+**Progress, still open:** FU-960 — part (1) was already built (403 unless the install has one user); its note was wrong
+about "first account", corrected. Part (2) is the companion.
+
+**Reviewer findings fixed:** (BE) the stamp hook stamped a brand-new sectioned recipe (create flushes, then back-fills
+section ids) — now skips recipes inserted earlier in the transaction (session.info, cleared on commit/rollback),
+ignores an ingredient's `selected_product_id` side-effect write, and loads affected recipes in one SELECT; new e2e case.
+(FE) the import poll outlived sign-out (401 loop) and could overlap reads / sync twice — now a re-armed timeout with a
+generation counter, reset from `authStore.dropSessionState`.
+
+**Owner-visible behaviour changes to know about:** Calories drawer gone (kcal edited in the facts grid); favouriting
+no longer moves "last updated"; a budget swap takes the displaced recipe's exact slots.
+
+**Gates (final code):** pytest 2799 passed / 1 skipped / 1 xfailed; vue-tsc clean; eslint clean; vitest 943 passed. Nothing walked live; 6 DORA_VERIFY lines ("Owner batch 5"). **Close-gate:** R-003 (one kcal editor, one level map, server
+anchor for gaps), R-032 (levels by FK; note on expire_all), R-068 carve-outs named; no unexplained violations. ADR
+evaluation: "stamp derived audit columns in the save path, not per handler" is documented in the hook's docstring;
+not promoted to a rule (one entity so far).
+
+**Next up:** 14 open FUs: owner calls FU-857 (a), FU-671, FU-792 photos, FU-837; parked FU-694/667/636/657/363;
+companion FU-960(2)/924/891/887/886.
+
 ## 2026-11-06 (later still): **Leftovers sweep 3: pt2's unlogged FU work audited, gaps fixed, ledgers moved (uncommitted)**
 
 **Why:** commit 91e364a8 ("pt2") moved sweep 2's FUs to the archive, then built code for ~40 more open FUs and ran

@@ -103,6 +103,15 @@ def _parse_qty_unit(raw: str) -> tuple[float | None, str | None, str]:
 
 # ── Meta block: times + servings ──────────────────────────────────────
 
+# R-068 carve-out (FU-799): every value this module reads out of prose —
+# prep / cook / total minutes, servings, quantities and units, the step list —
+# is a *proposal*. `import-from-content` only returns a draft; it lands in the
+# recipe editor, where the user sees and corrects each field before
+# `POST /recipes` records it as a real column. Nothing here drives behaviour
+# on its own, which is the rule's stated non-goal ("the importer's first-pass
+# parse"). Step timers are deliberately not inferred here: a structured step's
+# `timer_minutes` is the cook's to declare (ADR-065).
+
 # Time-value primitives. ``(?![a-z])`` guards against matching "m" in
 # "medium" or "h" in "hot" — after the unit we require a non-letter
 # (digit, whitespace, EOL, punctuation all fine). Case-insensitive.

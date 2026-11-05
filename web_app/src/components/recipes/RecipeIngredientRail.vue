@@ -1,5 +1,5 @@
 <template>
-    <div class="rn__rail">
+    <div ref="railEl" class="rn__rail">
         <section aria-labelledby="rnIng">
             <!-- Owner feedback 2026-08-27 - the ingredient list is
                  a *list* until you press the pencil. It shipped
@@ -108,6 +108,7 @@
                         <li
                             v-for="(row, rowIndex) in group.rows"
                             :key="row.client_id"
+                            :data-ingredient-id="row.client_id"
                             class="rn__ing--target"
                             :class="{ 'rn__ing--lit': litIngredients.has(String(row.client_id)) }"
                             role="button"
@@ -316,7 +317,7 @@
      * row editor and every ingredient/section mutation; the form, the dirty
      * flag, the save and the highlight are the page's, via `useRecipeDetail`.
      */
-    import { computed, ref } from 'vue';
+    import { computed, nextTick, ref, watch } from 'vue';
 
     import AddToListButton from 'src/components/AddToListButton.vue';
     import BaseButton from 'src/components/BaseButton.vue';
@@ -334,6 +335,7 @@
         form, saveState, ingredientsEditing, toggleEditRegion, markDirty,
         selectedStepId, selectedIngredientId, clearHighlight,
         ingredientLabel, stockItemName, isIngredientMissing, expiringChipFor, substitutesForRow,
+        ingredientEditRequest,
     } = useRecipeDetail();
 
     /** Entering ingredient edit mode drops any read-mode highlight: the rows
@@ -524,6 +526,26 @@
         Object.assign(row, patch);
         markDirty();
     }
+
+    // ── Edit requests from elsewhere on the page (FU-895) ───────────────
+    // The nutrition panel names an ingredient it couldn't count; its button
+    // lands here. Flip the list into editing (the same state its pencil sets),
+    // bring the row into view so it's where you are when the editor closes,
+    // and open that row's editor.
+    const railEl = ref<HTMLElement | null>(null);
+    watch(ingredientEditRequest, async (req) => {
+        if (!req) return;
+        clearHighlight();
+        ingredientsEditing.value = true;
+        await nextTick();
+        const target = req.clientId
+            ? railEl.value?.querySelector(`[data-ingredient-id="${CSS.escape(req.clientId)}"]`)
+            : railEl.value;
+        target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        if (req.clientId && form.ingredients.some((i) => i.client_id === req.clientId)) {
+            openRowEditor(req.clientId);
+        }
+    });
 
     // ── Sections ────────────────────────────────────────────────────────
     /** `sequence` is what the server sorts on, so it is kept dense and

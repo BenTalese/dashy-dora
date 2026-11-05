@@ -1,6 +1,5 @@
 import logging
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from typing import List
 from uuid import UUID
 
@@ -11,6 +10,7 @@ from dora_api.domain.entities.cuisine import Cuisine
 from dora_api.domain.entities.recipe import (
     ALLOWED_DIFFICULTY_VALUES,
     ALLOWED_STEPS_MODES,
+    NON_EDIT_FIELDS,
     Recipe,
 )
 from dora_api.domain.entities.recipe_collection import RecipeCollection
@@ -410,10 +410,13 @@ class UpdateRecipeHandler:
                 return UpdateRecipeResponse(invalid_step_message=str(exc))
 
         # Recipe-view feedback 2026-08-24 — the edit stamp the version panel
-        # reads. Stamped on every PATCH that reaches here (i.e. one that
-        # passed validation), not on cook / favourite / meal-pool writes:
-        # those change what happened to the recipe, not what it *is*.
-        _Recipe.updated_at = datetime.now(UTC)
+        # reads. The flush hook (`persistence/recipe_edit_stamp.py`, FU-730)
+        # stamps any change to the recipe's own columns or ingredient rows;
+        # this explicit call covers the steps / sections / tags / tools /
+        # step images written above through Core statements the hook can't
+        # see. A favourite-only PATCH (the star toggle) is not an edit.
+        if _SetFields - NON_EDIT_FIELDS:
+            _Recipe.mark_edited()
 
         self.repository.save_changes()
         return UpdateRecipeResponse()

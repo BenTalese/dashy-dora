@@ -50,6 +50,7 @@ from dora_api.domain.stock_status import (LOW_STOCK_SEQUENCE,
                                           needs_restock)
 from dora_api.features.alerts.get_alerts import GetAlertsHandler
 from dora_api.features.shopping_lists._line_price import bought_lines, line_paid_unit_price
+from dora_api.features.stock_items._level_access import resolve_levels_for_recipes
 from dora_api.persistence.bool_operation import BoolOperation
 from dora_api.persistence.field import EntityField
 from dora_api.features.app_settings.access import get_or_create_app_setting
@@ -1154,7 +1155,7 @@ def _recipe_matches_keywords(recipe: Recipe, text: str) -> bool:
     return any(token in haystack for token in tokens)
 
 
-def _stock_coverage(recipe: Recipe) -> tuple[int, int, list[str]]:
+def _stock_coverage(recipe: Recipe, levels_by_item=None) -> tuple[int, int, list[str]]:
     """Return (in_stock_count, total_required_ingredients, missing_names).
 
     Cookbook revision §1.9 — **optional ingredients are excluded** so the
@@ -1166,14 +1167,24 @@ def _stock_coverage(recipe: Recipe) -> tuple[int, int, list[str]]:
     (This used to cite the dashboard's `cookable_count`; FU-826 removed that
     field for having no consumer. The shared cookability rule it was built on is
     unchanged — only the collection-wide sum went.)
+
+    ``levels_by_item`` — FK-resolved levels (``resolve_levels_for_recipes``), so the
+    in-stock count and the missing names read the same levels whether or not
+    the relationship was hydrated (FU-684, R-032).
     """
     # The missing rule and its names come from `domain/recipe_cookability`
     # (finalisation 11-R19); "in stock" is a required, linked ingredient that
     # isn't missing, so an unlinked one counts toward neither.
     required = [i for i in (recipe.ingredients or []) if not i.is_optional]
-    missing = missing_stock_item_names_for(required)
+    missing = missing_stock_item_names_for(required, levels_by_item)
+
+    def level_of(item):
+        if levels_by_item is None:
+            return item.stock_level
+        return levels_by_item.get(item.id)
+
     in_stock = sum(
-        1 for i in required if i.stock_item is not None and not is_missing(i.stock_item.stock_level)
+        1 for i in required if i.stock_item is not None and not is_missing(level_of(i.stock_item))
     )
     total = len(required)
     return in_stock, total, missing[:_MAX_MISSING]
@@ -1269,9 +1280,10 @@ def suggest_recipes(args: dict) -> list[dict]:
     # surface its tags without N round-trips.
     tag_map = get_tag_names_for_recipes([r.id for r in recipes]) if recipes else {}
 
+    levels_by_item = resolve_levels_for_recipes(repo, recipes)
     rows: list[dict] = []
     for recipe in recipes:
-        in_stock, total, missing = _stock_coverage(recipe)
+        in_stock, total, missing = _stock_coverage(recipe, levels_by_item)
         coverage = (in_stock / total) if total else 0.0
         rows.append({
             "name": recipe.name,
@@ -1773,7 +1785,9 @@ def recipe_detail(args: dict) -> list[dict]:
         }]
     recipe: Recipe = resolution.single
 
-    in_stock, total, missing = _stock_coverage(recipe)
+    in_stock, total, missing = _stock_coverage(
+        recipe, resolve_levels_for_recipes(repo, [recipe]),
+    )
 
     # Trim instructions preview — small models choke on long blobs and the
     # user can open the recipe page if they want the full thing.
@@ -2694,6 +2708,11 @@ def run_tool(name: str, args: dict) -> list[dict]:
     # FU-684). Each tool starts from expired state, so its includes populate.
     # The tools only read, so nothing unsaved is lost. (A data-only tool, like
     # app_help, can run with no app context at all.)
+    # R-032 note: this expire_all is safe ONLY while every tool in `_TOOLS` is
+    # read-only. A tool that writes would have its pending changes expired
+    # (lost) by the next tool's call in the same turn — if a writing tool is
+    # ever added, flush/commit it before returning, or drop this in favour of
+    # resolving levels by FK (`resolve_levels_by_item`) in the readers.
     from flask import has_app_context
     from dora_api.app import db
     if has_app_context():

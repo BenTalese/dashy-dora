@@ -17,6 +17,7 @@ import { NormalisedApiError, setUnauthorizedHandler } from 'src/services/api/axi
 import { clearAllListState } from 'src/composables/useListState';
 import { clearBuyVerdictCache } from 'src/composables/useBuyVerdict';
 import { usePantryBeliefs } from 'src/composables/usePantryBeliefs';
+import { resetNutritionImportWatch } from 'src/composables/useNutritionImportWatch';
 import { usePlannedDemand } from 'src/composables/usePlannedDemand';
 import { computed, readonly, ref } from 'vue';
 
@@ -193,6 +194,7 @@ export const useAuthStore = defineStore('auth', () => {
         // the verdicts and planned demand are this user's own facts.
         clearBuyVerdictCache();
         usePantryBeliefs().clear();
+        resetNutritionImportWatch();
         usePlannedDemand().clear();
     };
 

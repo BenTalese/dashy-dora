@@ -217,14 +217,16 @@
     // Nutrition is install-wide (owner call 2026-08-14) — this page replaces
     // the per-user Settings → Nutrition page, which mostly existed to tell you
     // to go ask an admin. Mode + complex-mode source config in one place.
-    import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+    import { computed, onMounted, ref, watch } from 'vue';
     import { useSettingsSave } from 'src/composables/useSettingsSave';
     import { formatNumber } from 'src/composables/useMoney';
     import type { UpdateAppSettingsCommand } from 'src/services/api/appSettingsApiService';
     import { useAppSettingsStore } from 'src/stores/appSettingsStore';
     import NutritionApiService, {
         type NutritionSourceStatus,
+        type NutritionSourcesResponse,
     } from 'src/services/api/nutritionApiService';
+    import { isImportBusy, useNutritionImportWatch } from 'src/composables/useNutritionImportWatch';
     import BaseButton from 'src/components/BaseButton.vue';
     import SettingsSection from 'src/components/settings/SettingsSection.vue';
     import SettingsRow from 'src/components/settings/SettingsRow.vue';
@@ -273,9 +275,7 @@
         datasetSources.value.some((s) => s.available),
     );
 
-    function isBusy(source: NutritionSourceStatus): boolean {
-        return ['downloading', 'parsing', 'saving'].includes(source.phase ?? '');
-    }
+    const isBusy = isImportBusy;
 
     /** Fraction 0–1 for the progress bar, or null when nothing honest can be
      *  computed and the bar should run indeterminate.
@@ -327,12 +327,15 @@
         }
     }
 
+    function applySources(res: NutritionSourcesResponse) {
+        mode.value = res.mode;
+        sources.value = res.sources;
+        anyAvailable.value = res.any_available;
+    }
+
     async function refreshSources() {
         try {
-            const res = await nutritionApi.getSourcesAsync();
-            mode.value = res.mode;
-            sources.value = res.sources;
-            anyAvailable.value = res.any_available;
+            applySources(await nutritionApi.getSourcesAsync());
         } catch (err) {
             notifyError('Could not read the nutrition sources.', err);
         } finally {
@@ -340,25 +343,11 @@
         }
     }
 
-    // Poll only while an import is actually running, so an idle admin page
-    // isn't hitting the server every couple of seconds.
-    let pollTimer: ReturnType<typeof setInterval> | null = null;
-    function stopPolling() {
-        if (pollTimer !== null) { clearInterval(pollTimer); pollTimer = null; }
-    }
-    function ensurePolling() {
-        if (pollTimer !== null) return;
-        pollTimer = setInterval(() => {
-            void refreshSources().then(() => {
-                if (!datasetSources.value.some(isBusy)) {
-                    stopPolling();
-                    // An import just finished: every recipe's rollup can move
-                    // (FU-771).
-                    void syncAfterNutritionChange();
-                }
-            });
-        }, 2500);
-    }
+    // The import poll lives in useNutritionImportWatch, not here, so an import
+    // that finishes after this page unmounts still refreshes the flags and the
+    // recipe list (FU-771). While mounted, mirror its answers into the rows.
+    const importWatch = useNutritionImportWatch();
+    watch(importWatch.latest, (res) => { if (res) applySources(res); });
 
     async function loadSettings() {
         try {
@@ -439,7 +428,7 @@
             const res = await nutritionApi.startDatasetImportAsync(source.id);
             sources.value = res.sources;
             anyAvailable.value = res.any_available;
-            ensurePolling();
+            importWatch.watchIfBusy(res);
         } catch (err) {
             notifyError(`Could not start the ${source.label} download.`, err);
         }
@@ -447,10 +436,12 @@
 
     onMounted(async () => {
         await Promise.all([refreshSources(), loadSettings()]);
-        if (datasetSources.value.some(isBusy)) ensurePolling();
+        importWatch.watchIfBusy({
+            mode: mode.value,
+            sources: sources.value,
+            any_available: anyAvailable.value,
+        });
     });
-
-    onBeforeUnmount(stopPolling);
 </script>
 
 <style scoped lang="scss">

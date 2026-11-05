@@ -372,6 +372,8 @@ export type RecipeNutritionGapIngredient = {
     name: string | null;
     stock_item_id: string | null;
     reason: RecipeNutritionGap;
+    /** The ingredient row the fix opens (FU-895); null off the detail path. */
+    recipe_ingredient_id: string | null;
 };
 
 /** PROPOSAL_RECIPE_IMAGE_STEPS — closed set of recipe step payload modes,

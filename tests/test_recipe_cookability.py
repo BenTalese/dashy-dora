@@ -258,3 +258,38 @@ def test__unlinked_plus_missing_still_reports_none():
     assert dto.missing_count == 1
     assert dto.missing_stock_item_names == ["tomato"]
     assert dto.unlinked_ingredient_count == 1
+
+
+# ── FU-684: one set of levels for count, tri-state, names and rows ───────────
+
+def test__levels_by_item_overrides_an_unhydrated_relationship_everywhere():
+    """FU-684 / R-032 — the identity map can hand back a stock item with
+    `stock_level` unset even when the query included it. With FK-resolved
+    levels passed in, the count, the tri-state, the name list and each row's
+    `is_missing` all read the map, so they can't disagree with each other."""
+    out_ing = _ingredient(None, name="tomato")   # relationship reads None ...
+    have_ing = _ingredient(None, name="salt")    # ... for both items
+    levels = {
+        out_ing.stock_item.id: _level(2),   # really out of stock
+        have_ing.stock_item.id: _level(0),  # really stocked
+    }
+    dto = RecipeDto.from_entity(_recipe(out_ing, have_ing), levels_by_item=levels)
+    assert dto.missing_count == 1
+    assert dto.missing_stock_item_names == ["tomato"]
+    assert dto.cookable is False
+    by_name = {i.stock_item_name: i for i in dto.ingredients}
+    assert by_name["tomato"].is_missing is True
+    assert by_name["salt"].is_missing is False
+
+
+def test__missing_names_take_the_same_levels_as_the_count():
+    from dora_api.domain.recipe_cookability import (
+        missing_count_for, missing_stock_item_names_for)
+    # The relationship says stocked; the FK-resolved level says out.
+    ing = _ingredient(0, name="milk")
+    levels = {ing.stock_item.id: _level(2)}
+    assert missing_count_for([ing], levels) == 1
+    assert missing_stock_item_names_for([ing], levels) == ["milk"]
+    # Without the map both fall back to the relationship, and still agree.
+    assert missing_count_for([ing]) == 0
+    assert missing_stock_item_names_for([ing]) == []

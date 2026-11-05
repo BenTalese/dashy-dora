@@ -12,6 +12,20 @@ semver — major bumps signal schema or breaking-config changes.
   listed.
 
 ### Changed
+- **Price charts name their unit (2026-11-06)** ("Price per kg", "per pack"),
+  and several "your usual" lines are told apart by colour and dash with their
+  labels kept apart.
+- **Nutrition gaps you can fix from the card:** an unlinked ingredient, one
+  with no amount or one in a unit Dora can't weigh each get a button that opens
+  that ingredient's editor.
+- **Calories per serving are edited in the recipe's facts grid** (simple
+  nutrition mode), not a separate drawer.
+- **Product photos can be set from the list view** on My products.
+- **"Last updated" on a recipe means its content changed:** any edit to the
+  recipe or its ingredients moves it, including linking ingredients in bulk;
+  favouriting, cooking and planning don't.
+- **Build my week's budget cap counts each recipe's real number of meals**, and
+  a cheaper swap takes the same days and slots.
 - **Price alerts and price history say "price", not "unit price" (2026-11-06).**
   A watch's threshold and the product chart's points were always the pack's
   shelf price; the API fields are now `threshold_price` and `price`.
@@ -56,6 +70,10 @@ semver — major bumps signal schema or breaking-config changes.
   fixed weight only for butter).
 
 ### Fixed
+- A nutrition dataset import that finishes after you leave the settings page
+  still refreshes the cookbook.
+- Recipe cookability, the missing-ingredient list and the assistant's stock
+  checks agree, whichever page loaded the pantry first.
 - Step numbers an author typed ("1.", "Step 2 —", "(3)") are no longer shown
   twice on the recipe page or in cook mode.
 - The planner's cooked count uses the shared stepper; planned demand refreshes

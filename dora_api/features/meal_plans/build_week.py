@@ -30,7 +30,7 @@ import random
 from collections import Counter
 from dataclasses import dataclass
 from datetime import date, timedelta
-from typing import List, Optional
+from typing import Dict, List, Optional, Set
 from uuid import UUID
 
 from flask import request as flask_request
@@ -264,6 +264,8 @@ def apply_budget_cap(
     budget_remaining: float,
     servings_per_meal: int = 1,
     meals_per_pick: int = 1,
+    meals_by_pick: Optional[Dict[UUID, int]] = None,
+    slots_by_pick: Optional[Dict[UUID, Set[str]]] = None,
 ) -> tuple[List[RecipeCandidate], set]:
     """Best-effort: while the selection's priced cost exceeds what's left of the
     budget, swap the dearest picked recipe for the cheapest cheaper alternative
@@ -274,10 +276,22 @@ def apply_budget_cap(
     The comparison is against **what the plan will cost**, not what the pots are
     worth: each pick is counted at the servings the week is being built for,
     multiplied by how many meals that one pick fills (a repeated day, or the
-    run of days a batch cook spans). `meals_per_pick` is uniform because it is
-    a property of the placement *shape*, which is decided before placement
-    runs; a final short batch chunk therefore rounds up. Best-effort is the
-    contract.
+    run of days a batch cook spans).
+
+    `meals_by_pick` (`{recipe_id: meals}`) is that count **per pick**, read off
+    the actual placement — `compute_auto_build` places first and caps second,
+    so a batch week's short last chunk is counted at its real length rather
+    than rounded up to the span (FU-907). A pick absent from the map fills no
+    cell and costs nothing. A swapped-in recipe takes over the cells of the
+    pick it replaces, so it inherits that pick's count. `meals_per_pick` is the
+    uniform fallback when no map is given. `slots_by_pick`
+    (`{recipe_id: {slot}}`) lets the swap prefer a replacement whose
+    `time_of_day` suits the cells it takes over, falling back to any cheaper
+    one — the same preference-then-fallback placement uses.
+
+    Positions are preserved and the input list is not mutated: a swap replaces
+    the pick at the same index, so a caller can zip input against output to
+    see what replaced what.
 
     Owner call 2026-09-12: the basis stays the **full value of the meals**
     rather than only what you'd have to buy — what changed is that the review
@@ -285,39 +299,64 @@ def apply_budget_cap(
     a number with an unstated meaning.
     """
 
-    def cost(c: RecipeCandidate) -> Optional[float]:
+    selected = list(selected)
+    # Meals and slots per *position* — a swap keeps the position, so the
+    # replacement inherits the cells of the pick it displaced (FU-907).
+    meals_at = [
+        meals_per_pick if meals_by_pick is None else meals_by_pick.get(c.recipe_id, 0)
+        for c in selected
+    ]
+    slots_at = [
+        None if slots_by_pick is None else slots_by_pick.get(c.recipe_id, set())
+        for c in selected
+    ]
+
+    def entry_cost(c: RecipeCandidate) -> Optional[float]:
         # Per entry, rounded the way `_entry_cost` prices the response, so a
         # week the cap passes can't come back a few cents over (FU-976).
-        per_entry = _entry_cost(c, servings_per_meal)
-        if per_entry is None:
-            return None
-        return per_entry * meals_per_pick
+        return _entry_cost(c, servings_per_meal)
 
-    def total(items: List[RecipeCandidate]) -> float:
-        return sum((cost(x) or 0.0) for x in items)
+    def pick_cost(i: int) -> float:
+        per_entry = entry_cost(selected[i])
+        return 0.0 if per_entry is None else per_entry * meals_at[i]
+
+    def total() -> float:
+        return sum(pick_cost(i) for i in range(len(selected)))
+
+    def suits(c: RecipeCandidate, slots: Optional[Set[str]]) -> bool:
+        return not slots or not c.time_of_day or c.time_of_day in slots
 
     swapped: set = set()
-    # Cheapest-first pool of priced alternatives not already selected.
+    # Cheapest-first pool of priced alternatives not already selected. Every
+    # cell is planned at the same servings, so per-entry order is the order
+    # that matters for any one position.
     cheap_pool = sorted(
-        (c for c in pool if cost(c) is not None),
-        key=lambda c: cost(c),  # type: ignore[arg-type]
+        (c for c in pool if entry_cost(c) is not None),
+        key=lambda c: entry_cost(c),  # type: ignore[arg-type]
     )
     guard = 0
-    while total(selected) > budget_remaining and guard < len(selected):
+    while total() > budget_remaining and guard < len(selected):
         guard += 1
-        priced = [c for c in selected if cost(c) is not None]
+        priced = [i for i in range(len(selected)) if pick_cost(i) > 0]
         if not priced:
             break
-        dearest = max(priced, key=lambda c: cost(c))  # type: ignore[arg-type]
+        # The dearest *pick* — whose cells cost the most together — is the swap
+        # that saves the most.
+        at = max(priced, key=pick_cost)
+        dearest_entry = entry_cost(selected[at])
         selected_ids = {s.recipe_id for s in selected}
+        cheaper = [
+            c for c in cheap_pool
+            if c.recipe_id not in selected_ids
+            and entry_cost(c) < dearest_entry  # type: ignore[operator]
+        ]
         replacement = next(
-            (c for c in cheap_pool
-             if c.recipe_id not in selected_ids and cost(c) < cost(dearest)),  # type: ignore[operator]
-            None,
+            (c for c in cheaper if suits(c, slots_at[at])),
+            cheaper[0] if cheaper else None,
         )
         if replacement is None:
             break
-        selected[selected.index(dearest)] = replacement
+        selected[at] = replacement
         cheap_pool.remove(replacement)
         swapped.add(replacement.recipe_id)
     return selected, swapped
@@ -555,27 +594,6 @@ def compute_auto_build(
 
     selected = select_recipes(candidates, emphasis, count, excluded, rng)
 
-    swapped: set = set()
-    money_on = money_features_enabled(repository)
-    budget = household_budget(repository)
-    # Measured against the period the built days start in, not today's.
-    remaining = period_headroom(min(days) if days else today, repository)
-    if request.budget_cap and remaining is not None:
-        selected_ids = {c.recipe_id for c in selected}
-        pool = [c for c in candidates if c.recipe_id not in selected_ids and c.recipe_id not in excluded]
-        # How many meals one pick fills: every selected day when the line-up is
-        # repeated, the batch span when a batch household cooks once for a run,
-        # one otherwise.
-        if request.repeat_same_day:
-            meals_per_pick = max(len(days), 1)
-        else:
-            meals_per_pick = span
-        selected, swapped = apply_budget_cap(
-            selected, pool, remaining,
-            servings_per_meal=request.default_servings,
-            meals_per_pick=meals_per_pick,
-        )
-
     # Which recipe lands on which day is otherwise selection rank order, so the
     # best pick always took the earliest day and a reshuffle left the week
     # looking untouched even when the set had changed. Shuffling only the
@@ -593,6 +611,42 @@ def compute_auto_build(
             (c, day, slot, None)
             for (c, day, slot) in place_entries(selected, days, allowed_slots, request.repeat_same_day)
         ]
+
+    swapped: set = set()
+    money_on = money_features_enabled(repository)
+    budget = household_budget(repository)
+    # Measured against the period the built days start in, not today's.
+    remaining = period_headroom(min(days) if days else today, repository)
+    if request.budget_cap and remaining is not None:
+        selected_ids = {c.recipe_id for c in selected}
+        pool = [c for c in candidates if c.recipe_id not in selected_ids and c.recipe_id not in excluded]
+        # FU-907 — the cap runs AFTER placement so each pick is counted at the
+        # meals it actually fills (a repeated day's line-up, a batch run, a
+        # batch week's short last chunk), not one uniform guess for the build.
+        meals_by_pick = Counter(c.recipe_id for (c, _day, _slot, _key) in placements)
+        slots_by_pick: Dict[UUID, Set[str]] = {}
+        for (c, _day, slot, _key) in placements:
+            slots_by_pick.setdefault(c.recipe_id, set()).add(slot)
+        capped, swapped = apply_budget_cap(
+            selected, pool, remaining,
+            servings_per_meal=request.default_servings,
+            meals_by_pick=meals_by_pick,
+            slots_by_pick=slots_by_pick,
+        )
+        # A swapped-in recipe takes over the cells of the pick it replaced —
+        # same day, slot and cook run — so the count it was capped on is the
+        # count it lands with.
+        replaced = {
+            old.recipe_id: new
+            for old, new in zip(selected, capped)
+            if old.recipe_id != new.recipe_id
+        }
+        if replaced:
+            placements = [
+                (replaced.get(c.recipe_id, c), day, slot, cook_key)
+                for (c, day, slot, cook_key) in placements
+            ]
+        selected = capped
     entries = [
         ProposedEntry(
             recipe_id=c.recipe_id,

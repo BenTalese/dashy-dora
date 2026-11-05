@@ -232,6 +232,61 @@ def test__budget_cap__counts_the_plan_not_the_pot():
     assert "cheap" in {c.name for c in selected}
 
 
+def test__budget_cap__counts_each_pick_at_its_real_meal_count():
+    """FU-907 — a batch week whose last run is short. Seven days at a 3-day
+    span is runs of 3, 3 and 1; the uniform `meals_per_pick=3` counted the
+    1-day run as 3 and swapped a week that was under budget. One serving each:
+    $5×3 + $5×3 + $10×1 = $40, inside $41."""
+    run_a = _cand("run_a", cost=10.0)   # $5 a serving
+    run_b = _cand("run_b", cost=10.0)
+    short = _cand("short", cost=20.0)   # $10 a serving, one day only
+    cheap = _cand("cheap", cost=2.0)
+    meals = {run_a.recipe_id: 3, run_b.recipe_id: 3, short.recipe_id: 1}
+    selected, swapped = apply_budget_cap(
+        [run_a, run_b, short], [cheap], budget_remaining=41.0,
+        servings_per_meal=1, meals_by_pick=meals,
+    )
+    assert [c.name for c in selected] == ["run_a", "run_b", "short"]
+    assert swapped == set()
+
+    # The old uniform guess: short counted as 3 meals ($60 total) -> a swap.
+    _, swapped = apply_budget_cap(
+        [run_a, run_b, short], [cheap], budget_remaining=41.0,
+        servings_per_meal=1, meals_per_pick=3,
+    )
+    assert swapped == {cheap.recipe_id}
+
+
+def test__budget_cap__swaps_the_pick_whose_cells_cost_most_and_keeps_its_position():
+    # Per entry `short` is dearest ($10), but it fills one meal; `run` fills
+    # three at $5 = $15, so swapping `run` saves more.
+    run = _cand("run", cost=10.0)
+    short = _cand("short", cost=20.0)
+    cheap = _cand("cheap", cost=2.0)
+    picks = [run, short]
+    selected, swapped = apply_budget_cap(
+        picks, [cheap], budget_remaining=14.0, servings_per_meal=1,
+        meals_by_pick={run.recipe_id: 3, short.recipe_id: 1},
+    )
+    assert [c.name for c in selected] == ["cheap", "short"]
+    assert swapped == {cheap.recipe_id}
+    # The caller's list is untouched, so it can zip old against new.
+    assert [c.name for c in picks] == ["run", "short"]
+
+
+def test__budget_cap__prefers_a_replacement_that_suits_the_slot():
+    dinner = _cand("dinner", cost=10.0, time_of_day="Dinner")
+    cheap_breakfast = _cand("cereal", cost=1.0, time_of_day="Breakfast")
+    cheap_dinner = _cand("pasta", cost=3.0, time_of_day="Dinner")
+    selected, _ = apply_budget_cap(
+        [dinner], [cheap_breakfast, cheap_dinner], budget_remaining=2.0,
+        servings_per_meal=2,
+        meals_by_pick={dinner.recipe_id: 1},
+        slots_by_pick={dinner.recipe_id: {"Dinner"}},
+    )
+    assert [c.name for c in selected] == ["pasta"]
+
+
 def test__budget_cap__no_cheaper_alternative__unchanged():
     dear = _cand("dear", cost=10.0)
     selected, swapped = apply_budget_cap([dear], [], budget_remaining=1.0)

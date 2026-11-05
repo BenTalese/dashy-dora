@@ -143,5 +143,10 @@ from dora_api.persistence.table_mappings import \
 
 configure_mappings(db)
 
+from dora_api.persistence.recipe_edit_stamp import \
+    register_recipe_edit_stamp  # noqa: E402
+
+register_recipe_edit_stamp()
+
 migrate = Migrate()
 migrate.init_app(app, db, str(Path(__file__).parent / 'persistence' / 'migrations'))

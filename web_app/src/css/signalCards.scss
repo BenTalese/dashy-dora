@@ -49,7 +49,7 @@
 }
 .dora-signal-card__meta {
     font-size: var(--font-size-xs);
-    margin-top: 2px;
+    margin-top: var(--space-1);   /* was 2px, off the scale (D-017, FU-922) */
 }
 /* A reason's sub-line, indented under its icon (badge popover + card). */
 .dora-buy-verdict__detail {

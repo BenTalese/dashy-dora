@@ -52,6 +52,13 @@ from dora_api.infrastructure.ports import Repository
 _LOGGER = logging.getLogger(__name__)
 
 # The " (vN)" suffix new-version appends to a recipe name.
+# R-068 carve-out (FU-799): the version number is read back out of sibling
+# names, not stored. It only proposes the *name* of the new copy (which the user
+# can rename; the group itself is the structured `version_group_id`), it is
+# bounded to the "(vN)" suffix this handler writes, and nothing else reads it —
+# so a missed or renamed suffix costs a less tidy default name, never a wrong
+# fact. A `version_number` column would be the fix if anything ever ranks or
+# labels versions by it.
 _VERSION_SUFFIX = re.compile(r" \(v(\d+)\)$")
 
 

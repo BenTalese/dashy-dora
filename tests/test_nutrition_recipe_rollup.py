@@ -67,6 +67,7 @@ class _Ingredient:
         self.quantity = quantity
         self.unit = unit
         self.is_optional = is_optional
+        self.id = uuid4()
 
 
 class _Recipe:
@@ -333,6 +334,10 @@ def test__rollup__EveryFailureKind__NamesTheIngredientBehindIt():
     # Only the linked row carries an anchor to fix it on.
     assert result.uncounted_ingredients[0].stock_item_id is None
     assert result.uncounted_ingredients[1].stock_item_id is not None
+    # Every gap names its own row, the anchor for an on-the-row fix (FU-895).
+    assert [row.ingredient_id for row in result.uncounted_ingredients] == [
+        ing.id for ing in recipe.ingredients[1:]
+    ]
 
 
 def test__rollup__NothingCountable__ReportsNullsRatherThanZero():

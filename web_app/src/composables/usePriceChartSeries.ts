@@ -57,6 +57,16 @@ export interface PriceChartSeries {
     contextPoints?: PriceChartPoint[];
     /** Dashed reference line + its own label ("usually $4.20/kg"). */
     baseline?: { value: number; label: string } | null;
+    /** What one value on the primary line is the price of: `'pack'` for a
+     *  shelf price, or the measure ("kg", "L", "ea") of a per-unit price. It
+     *  labels the y-axis (FU-705). Left out when the payload doesn't say, and
+     *  then the chart claims no unit rather than guess one. */
+    unit?: string;
+}
+
+/** The unit field, only when there is one to state. */
+function unitOf(unit: string | null | undefined): { unit?: string } {
+    return unit ? { unit } : {};
 }
 
 /** "usually $4.20/kg" — the baseline's label, formatted once, here. */
@@ -96,18 +106,24 @@ export function productSeriesToChart(
         }
 
         const showOwnData = offersAsContext || offers.length === 0;
+        const ownLeads = showOwnData && observations.length > 0;
         const baseline = s.your_prices?.baseline;
         return {
             key: s.product_id,
             name: s.name,
             colourSlot,
-            points: showOwnData && observations.length > 0 ? observations : offers,
+            points: ownLeads ? observations : offers,
             ...(offersAsContext && observations.length > 0 && offers.length > 0
                 ? { contextPoints: offers }
                 : {}),
             baseline: showOwnData && baseline != null
                 ? { value: baseline, label: baselineLabel(baseline, s.your_prices?.baseline_unit) }
                 : null,
+            // Offers are pack prices (FU-911). Your own prices are per unit,
+            // in the unit the server quotes the observation series in.
+            ...(ownLeads
+                ? unitOf(s.observation_unit ?? s.your_prices?.baseline_unit)
+                : offers.length > 0 ? { unit: 'pack' } : {}),
         };
     });
 }
@@ -143,6 +159,8 @@ export function stockItemHistoryToChart(
                 label: baselineLabel(history.baseline, history.baseline_unit),
             }
             : null,
+        // Every point arrives scaled to `display_unit` (both sources).
+        ...unitOf(history.display_unit ?? history.baseline_unit),
     }];
 }
 

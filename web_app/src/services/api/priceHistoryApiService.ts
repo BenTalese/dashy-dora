@@ -42,6 +42,8 @@ export interface PriceHistorySeries {
      *  product has no offer points (H2 fallback) on the per-product page, or
      *  always when `offersAsContext` (the bottom-sheet union view). */
     observation_points?: PriceObservationPoint[];
+    /** The unit `observation_points` are quoted in (FU-705). */
+    observation_unit?: string | null;
     /** FU-227 chunk 6 (F-3) — baseline + above-usual signal for the chart's
      *  reference line. Null when below MIN_SAMPLES / no observations. */
     your_prices?: SeriesYourPrices | null;

@@ -59,4 +59,20 @@ def resolve_levels_by_item(
     }
 
 
-__all__ = ["resolve_levels_by_item"]
+def resolve_levels_for_recipes(
+    repository: SqlAlchemyRepository, recipes,
+) -> dict[UUID, StockLevel | None]:
+    """`resolve_levels_by_item` over every stock item these recipes'
+    ingredients link to — the map `domain/recipe_cookability` takes as
+    `levels_by_item` (FU-684). Needs `INGREDIENTS -> STOCK_ITEM` loaded; the
+    level itself is read by FK, so it needn't be."""
+    items = {
+        ingredient.stock_item.id: ingredient.stock_item
+        for recipe in recipes
+        for ingredient in (recipe.ingredients or [])
+        if ingredient.stock_item is not None
+    }
+    return resolve_levels_by_item(repository, list(items.values()))
+
+
+__all__ = ["resolve_levels_by_item", "resolve_levels_for_recipes"]

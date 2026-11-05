@@ -393,6 +393,17 @@ function createRecipeDetail() {
                 ?? i.stock_item_name,
         ));
 
+    // ── Jump to an ingredient's editor (FU-895) ─────────────────────────
+    // A block outside the rail (the nutrition panel's gap list) can ask for a
+    // row to be edited; the rail owns the row editor, so it watches this and
+    // does the opening. `clientId` null means "just open the list for
+    // editing" — the anchor couldn't be found. `seq` makes a repeat request
+    // for the same row still fire.
+    const ingredientEditRequest = ref<{ clientId: string | null; seq: number } | null>(null);
+    function requestIngredientEdit(clientId: string | null) {
+        ingredientEditRequest.value = { clientId, seq: (ingredientEditRequest.value?.seq ?? 0) + 1 };
+    }
+
     // ── Step ↔ ingredient highlight ─────────────────────────────────────
     function clearHighlight() {
         selectedStepId.value = null;
@@ -480,6 +491,8 @@ function createRecipeDetail() {
         clearHighlight,
         onSelectStep,
         onNewVersion,
+        ingredientEditRequest,
+        requestIngredientEdit,
     };
 }
 

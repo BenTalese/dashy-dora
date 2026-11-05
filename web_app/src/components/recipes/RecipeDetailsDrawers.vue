@@ -69,35 +69,14 @@
                 <RecipeNutritionCard
                     :nutrition="recipe.nutrition"
                     @linked="loadRecipe"
+                    @edit-ingredient="onEditGapIngredient"
                 />
             </div>
         </q-expansion-item>
 
-        <q-expansion-item
-            v-if="!isComplex && nutritionEnabled"
-            v-model="detailOpen.kcal"
-            dense-toggle
-        >
-            <template #header>
-                <q-item-section>
-                    <h2 class="rn__sectitle">Calories</h2>
-                </q-item-section>
-                <q-item-section side>
-                    <span class="rn__seccount">
-                        {{ form.kcal ? `${form.kcal} kcal per serving` : 'Not set' }}
-                    </span>
-                </q-item-section>
-            </template>
-            <div class="rn__disc">
-                <q-input
-                    v-model.number="form.kcal"
-                    dense outlined type="number" min="0"
-                    label="kcal per serving"
-                    style="max-width: 220px"
-                    @update:model-value="markDirty"
-                />
-            </div>
-        </q-expansion-item>
+        <!-- The simple-mode "Calories" drawer went to the masthead's edit
+             face (FU-735): per-serving kcal is a masthead fact, so it is
+             typed where the other facts are, not in a second place. -->
 
         <!-- Version information. Renders even for a singleton, because
              created/updated are facts about every recipe. -->
@@ -211,11 +190,14 @@
     import { useNutritionMode } from 'src/composables/useNutritionMode';
     import { useRecipeDetail } from 'src/composables/useRecipeDetail';
     import { useRecipeVocabStore } from 'src/stores/recipeVocabStore';
+    import type { RecipeNutritionGapIngredient } from 'src/models/recipe';
 
     const router = useRouter();
-    const { recipe, form, markDirty, loadRecipe, newVersionLoading, onNewVersion } = useRecipeDetail();
+    const {
+        recipe, form, markDirty, loadRecipe, newVersionLoading, onNewVersion, requestIngredientEdit,
+    } = useRecipeDetail();
     const { dietaryTagOptions } = storeToRefs(useRecipeVocabStore());
-    const { nutritionEnabled, isComplex } = useNutritionMode();
+    const { isComplex } = useNutritionMode();
 
     // ── Captions for the collapsed Details rows ─────────────────────────
     // `extraCaption` and `versionsCaption` went with the captions they fed
@@ -225,8 +207,17 @@
     // `nutritionCaption` went with the caption it fed (owner, 2026-09-08) — see
     // the panel's header comment.
     const detailOpen = reactive({
-        extra: false, nutrition: false, kcal: false, versions: false,
+        extra: false, nutrition: false, versions: false,
     });
+
+    /** FU-895 — a nutrition gap fixed on the ingredient row: the server
+     *  names the row (an existing row's client id is its recipe_ingredient_id),
+     *  so hand it to the rail's editor. A row edited away since the rollup
+     *  just opens the list. */
+    function onEditGapIngredient(gap: RecipeNutritionGapIngredient) {
+        const row = form.ingredients.find((r) => r.client_id === gap.recipe_ingredient_id);
+        requestIngredientEdit(row?.client_id ?? null);
+    }
 
     const versionSiblings = computed(() => recipe.value?.version_siblings ?? []);
 

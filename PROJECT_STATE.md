@@ -18,11 +18,11 @@ Status key: ✅ done-clean · ➗ done-with-carve-outs · 🟡 active/in-progres
 
 ## Where we are right now
 
-**Dora 1.0.0 is deployed to Altair (Dora and the companion), and you want every FU resolved before launch. That's nearly done: 25 FUs are open, down from 108 on 11-05.** Owner batches 2 to 4 and three leftovers sweeps (11-05/06) closed about 80. Batch 2 brought DR-13 history grouping, loose vs boxed prices kept apart, the release nudge, Reports cards you can hide and reorder, savings against your usual price, and Firefox voice through server speech recognition. The sweeps added correctable logged prices, "Not stored anywhere" locations, one `MoneyInput` and one list-row look, the nightly alert-dismissal prune, the NUL-byte guard and the route-map boot check. On 11-06: FYI alerts went info blue, and the recipe page scrolls again with the pointer over a pane.
+**Dora 1.0.0 is deployed to Altair (Dora and the companion), and you want every FU resolved before launch. That's nearly done: 14 FUs are open, down from 108 on 11-05.** Owner batch 5 (11-06 evening) closed the 11 Dora-side FUs that needed no call from you: one level map for cookability, a truthful "last updated", fixable nutrition gaps, chart unit labels, the import-finish poll, product photos from the list view and a fresh-install smoke test. Owner batches 2 to 4 and three leftovers sweeps (11-05/06) closed about 80. Batch 2 brought DR-13 history grouping, loose vs boxed prices kept apart, the release nudge, Reports cards you can hide and reorder, savings against your usual price, and Firefox voice through server speech recognition. The sweeps added correctable logged prices, "Not stored anywhere" locations, one `MoneyInput` and one list-row look, the nightly alert-dismissal prune, the NUL-byte guard and the route-map boot check. On 11-06: FYI alerts went info blue, and the recipe page scrolls again with the pointer over a pane.
 
-**Commits:** 11-05 and sweep 2 are in `0ee01976` / `91e364a8`. Sweep 3's fixes, the alert colour and the scroll fix are **uncommitted**. **Tests:** pytest 2789 passed, vitest 935, vue-tsc and eslint clean. Single Alembic head `c6f9d3b8e4a1`. Nothing from sweeps 2 and 3 has been walked live yet. Those checks are in `DORA_VERIFY.md`.
+**Commits:** 11-05 and sweeps 2/3 are in `0ee01976` / `91e364a8` / `c08a811f`. Batch 5, the alert colour and the scroll fix are **uncommitted**. **Tests (sweep 3):** pytest 2789 passed, vitest 935, vue-tsc and eslint clean; batch 5's final gate run is in its worklog entry. Single Alembic head `c6f9d3b8e4a1`. Nothing from sweeps 2 and 3 or batch 5 has been walked live yet. Those checks are in `DORA_VERIFY.md`.
 
-**What's left:** three small calls for you (FU-857, FU-671, FU-792) and one dev-overlay check (FU-579). Everything else is companion debt, later work, or opportunistic.
+**What's left:** four small calls for you (FU-857, FU-671, FU-792, FU-837). Everything else is companion debt or parked for later.
 
 ---
 
@@ -31,8 +31,8 @@ Status key: ✅ done-clean · ➗ done-with-carve-outs · 🟡 active/in-progres
 | Phase | Scope | Status | Remaining |
 |---|---|---|---|
 | **0 — Foundations & truth** | Theming, filters, modals, loading, text, renames (P8-01), Wave-B bugs, config/opt-ins | ✅ | Colour picks, the token sweeps (the recipe page's last literals 11-06) and warning ink are done. Only one call is left: tinted or solid semantic chips (FU-671). |
-| **1 — Close the loop** | Shopping lists, cook mode, stock, cookbook, meal planner, suggestions, costing, stocktake | ✅ | Nothing unbuilt. Left: a handful of opportunistic FUs (see workstreams) and the sweep 2/3 verify lines. |
-| **2 — Ingestion API + companion** | `/api/ingest` seam, standalone companion, Merchant→Store | ➗ | Products program complete. `/onboarding/finish` is first-user-gated (FU-960 (1)). Open: FU-960 (2) contract notes, plus companion debts FU-886/887/891/924 for the next companion release. |
+| **1 — Close the loop** | Shopping lists, cook mode, stock, cookbook, meal planner, suggestions, costing, stocktake | ✅ | Nothing unbuilt. Left: FU-837 (your call), parked FU-667/694, and the sweep 2/3 + batch 5 verify lines. |
+| **2 — Ingestion API + companion** | `/api/ingest` seam, standalone companion, Merchant→Store | ➗ | Products program complete. `/onboarding/finish` refuses unless the install has one user (FU-960 (1), built). Open: FU-960 (2) contract notes, plus companion debts FU-886/887/891/924 for the next companion release. |
 | **3 — Champion** | Zero-Input Pantry, buy/wait oracles, barcode-add, Dora Score, culinary memory, native app | ➗ | P8-01..P8-10 built. Android cleartext built; iOS is won't-do. No open FUs of its own. |
 | **4 — Open-source release** *(was Commercialize)* | README/showcase, release process, support channel, ops/CI | 🟡 1.0.0 deployed | Support goes to the public repo, donation links are live (PayPal + Sponsors), and the CI workflows are back but Actions is off until you switch it on. Open: FU-363 (QA doc, polish pass, UI consistency as launch gates) and FU-792 (showcase image-mode recipe). |
 
@@ -42,27 +42,27 @@ Status key: ✅ done-clean · ➗ done-with-carve-outs · 🟡 active/in-progres
 
 | Workstream | Status | Where it's at | Governing doc |
 |---|---|---|---|
-| **Finalisation sweep** | ✅ | Stages 1–2 (10-23 to 10-27), QA rounds 1–3 and the FU-971 walks are done, and every owner decision is answered and built (11-01 to 11-04). 11-05/06: owner batches 2–4 plus leftovers sweeps 1–3 closed about 80 FUs. Sweep 3 audited pt2's unlogged work FU by FU and moved 35 to the archive. 25 open, all small, later or companion. | [FINALISATION_REVIEW](docs/05_investigations/FINALISATION_REVIEW.md) · [COVERAGE](docs/01_charter/FINALISATION_COVERAGE.md) |
-| **Meal planner** | ➗ | Every write (remove, cook days, separate, toggles) now goes through the one mutation queue. A cook batch straddling today keeps its link. Planned demand refreshes after any plan edit or swap. The rail row shares the list-row chrome. `day_cost`/`day_nutrition` dropped. Open: FU-907 (budget cap assumes uniform meals-per-pick). | [PROPOSAL_MEAL_PLANS](docs/04_proposals/PROPOSAL_MEAL_PLANS.md) · R-086 |
+| **Finalisation sweep** | ✅ | Stages 1–2 (10-23 to 10-27), QA rounds 1–3 and the FU-971 walks are done, and every owner decision is answered and built (11-01 to 11-04). 11-05/06: owner batches 2–5 plus leftovers sweeps 1–3 closed about 90 FUs. Sweep 3 audited pt2's unlogged work and moved 35 to the archive; batch 5 closed 11 more. 14 open: four owner calls, the rest parked or companion. | [FINALISATION_REVIEW](docs/05_investigations/FINALISATION_REVIEW.md) · [COVERAGE](docs/01_charter/FINALISATION_COVERAGE.md) |
+| **Meal planner** | ✅ | Every write (remove, cook days, separate, toggles) now goes through the one mutation queue. A cook batch straddling today keeps its link. Planned demand refreshes after any plan edit or swap. The rail row shares the list-row chrome. Build my week's budget cap counts each recipe's real meals, and a swap takes the same slots. No open FUs. | [PROPOSAL_MEAL_PLANS](docs/04_proposals/PROPOSAL_MEAL_PLANS.md) · R-086 |
 | **Settings & admin IA** | ✅ | Three nav groups, env-only config, one path→icon map. Backup & restore split into components, with a claimed staged upload so a double-click can't restore twice. Settings → Locations shows "Not stored anywhere". (?) help sits beside more headings. No open FUs. | `CHANGELOG [Unreleased]` · R-081 |
 | **Feature flags & opt-ins** | ✅ | `scanning_enabled` hides only. The ingest flag is enforced. The stocktake switch now gates its dashboard and help copy. No open FUs. | `ENGINEERING_STANDARDS` R-081 |
 | **Cook mode / Sous Chef** | ✅ | Timers persist and the page is split. Step numbers an author typed are no longer shown twice. Open: FU-857 (a), your call on whether to strip the ordinal from stored text on save or only on display. | `RecipeCookMode.vue` |
 | **Theming & design tokens** | ✅ | Colour picks, warning ink, a scrollbar that follows the theme, the full-page shell sweep, and the recipe stylesheet on tokens. 11-06: FYI-severity alerts alias info blue. Open: FU-671 (tinted vs solid semantic chips, your call). | [board](https://claude.ai/artifact/39cAkaYr2TXUpEgxeAum25) |
 | **Zero-Input Pantry / inference** | ✅ | Covers recipes, lists and the planner, each behind its own off-by-default opt-in. Planned demand refreshes after any plan edit. Shopping-list demand was skipped by you. No open FUs. | [PROPOSAL](docs/04_proposals/PROPOSAL_ZERO_INPUT_PANTRY.md) |
 | **Products-as-overlay** | ✅ | Phases 0–E code-complete. The Phase-F tail is superseded by the products program. Single Alembic head, now `c6f9d3b8e4a1`. | [RUNBOOK](docs/04_proposals/PRODUCTS_OVERLAY_RUNBOOK.md) |
-| **Products program (Dora + companion)** | ✅ complete | All eight batches closed. Preferred buys coexist with products. Loose and boxed prices are kept apart (R-105). Open: FU-922 (a product photo can only be set from the cards view). | [PLAN](docs/04_proposals/IMPL_PLAN_PRODUCTS_PROGRAM.md) |
-| **Prices surface** | ➗ | `/price-history` and My Products stay. A logged price can be edited or removed, with a date. Watches and the chart say "price", not "unit price". The chart answers a tap on a phone, and each product keeps its colour. Open: FU-705 (axis unit label, baseline styling). | [ASSESSMENT](docs/05_investigations/PRICES_SURFACE_UX_ASSESSMENT.md) |
+| **Products program (Dora + companion)** | ✅ complete | All eight batches closed. Preferred buys coexist with products. Loose and boxed prices are kept apart (R-105). Product photos can be set from the list view too. No open FUs. | [PLAN](docs/04_proposals/IMPL_PLAN_PRODUCTS_PROGRAM.md) |
+| **Prices surface** | ✅ | `/price-history` and My Products stay. A logged price can be edited or removed, with a date. Watches and the chart say "price", not "unit price". The chart answers a tap on a phone, keeps each product's colour, names its unit and tells several "usual" lines apart. No open FUs. | [ASSESSMENT](docs/05_investigations/PRICES_SURFACE_UX_ASSESSMENT.md) |
 | **Email & notifications** | ✅ | Admins hear about new releases. The deals mail rule is the per-user opt-in. Dismissed alerts are pruned nightly. FYI alerts are blue. No open FUs. | `CHANGELOG [Unreleased]` |
-| **Recipes & cookbook** | ➗ | Costing, units and the shelf denominator have one source each. Recipe photos load with your sign-in. Existing structured recipes get their tool list rebuilt (migration `c6f9d3b8e4a1`). Fried potatoes no longer count as vegetables. Open: FU-895, FU-735, FU-730, FU-771 (import-finish invalidation off-page), FU-799, FU-667 (client-side filtering at scale), FU-657/636 (nutrition data sources). | `recipe_cost.py` · [INVESTIGATION](docs/05_investigations/RECIPE_PRICE_UNIT_MISMATCH.md) |
+| **Recipes & cookbook** | ➗ | Costing, units and the shelf denominator have one source each. Recipe photos load with your sign-in. Existing structured recipes get their tool list rebuilt (migration `c6f9d3b8e4a1`). Fried potatoes no longer count as vegetables. Batch 5: nutrition gaps open the ingredient's editor, kcal is edited in the facts grid, "last updated" moves only on content edits, the import-finish poll runs off-page. Open (parked): FU-667 (client-side filtering at scale), FU-657/636 (nutrition data sources). | `recipe_cost.py` · [INVESTIGATION](docs/05_investigations/RECIPE_PRICE_UNIT_MISMATCH.md) |
 | **Shopping lists (v4)** | ✅ | Built end to end. Bulk add and level changes go in one request. A list started from a plan or recipe names what it left off. Price each uses `MoneyInput`. No open FUs. | [SHOPPING_LIST_UX_V2](docs/04_proposals/SHOPPING_LIST_UX_V2.md) · R-090 |
 | **Dashboard** | ➗ | Nine cards with per-card errors. The Cards menu hides and reorders them. Restock radar skips items already on a list. Open: FU-837 (a short card stretches to its row-mate). | [IMPL_PLAN_DASHBOARD_REBUILD](docs/04_proposals/IMPL_PLAN_DASHBOARD_REBUILD.md) |
 | **Reports** | ✅ | Money-gated. Cards can be hidden, widened and reordered. Savings are measured against your usual price. The colour ramp and no-store hatch are fixed. No open FUs. | [REVIEW](docs/05_investigations/REPORTS_PAGE_REVIEW.md) |
 | **Shared component anatomy** | ✅ | One segmented control (named), `BaseSelect` everywhere, `MoneyInput` everywhere, `CountBadge`, one list-row chrome, one count tile. Open: FU-694 (route transitions, deliberately deferred). | `BaseSegmented.vue` |
 | **Touch affordances / tap targets** | ✅ | 44px on touch, including tabs, nav, chip selects and segmented controls (R-085). No open FUs. There's one phone check in `DORA_VERIFY.md`. | `BaseButton.vue` · `css/app.scss` |
-| **Assistant / voice / offline** | ➗ | AI reads Help and runs on current Claude models. Firefox voice works through faster-whisper (Docker). The assistant asks before converting "sticks". Open: FU-684 (a few `stock_level` readers in `confirm_actions` and cookability still trust `.include()`). | `useOfflineQueue.ts` |
+| **Assistant / voice / offline** | ✅ | AI reads Help and runs on current Claude models. Firefox voice works through faster-whisper (Docker). The assistant asks before converting "sticks". Every `stock_level` reader now uses one FK-resolved level map. No open FUs. | `useOfflineQueue.ts` |
 | **Design remediation (DR)** | ✅ | DR-1..15 done or done-with-carve-outs. DR-16 skipped by you. | [DESIGN_REMEDIATION_PLAN](docs/04_proposals/DESIGN_REMEDIATION_PLAN.md) |
-| **Build & deploy** | ✅ deployed | 1.0.0 is on Altair with the companion, and migrations run on boot. Boot now refuses an empty router. Open: FU-664 (handler/entity signature drift), FU-579 (confirm the `quasar dev` overlay is gone). | `README.md` |
-| **Verify tooling** | ✅ | Scratch backend + Playwright drives are the default. `DORA_VERIFY.md` holds the unwalked Leftovers sweep 2/3, Finish-off, Touch, Firefox voice and CI sections. | `DORA_VERIFY_TRIAGE.md` |
+| **Build & deploy** | ✅ deployed | 1.0.0 is on Altair with the companion, and migrations run on boot. Boot now refuses an empty router. A fresh-install smoke test guards handler/entity drift. No open FUs. | `README.md` |
+| **Verify tooling** | ✅ | Scratch backend + Playwright drives are the default. `DORA_VERIFY.md` holds the unwalked Leftovers sweep 2/3, batch 5, Finish-off, Touch, Firefox voice and CI sections. | `DORA_VERIFY_TRIAGE.md` |
 | **Postgres portability & migrations** | ✅ | The whole chain runs on an empty Postgres (R-102). NUL bytes are refused with a 400 before any handler. Single head `c6f9d3b8e4a1`. No open FUs. | `ENGINEERING_STANDARDS` R-102 |
 | **Security** | ✅ | The 10-30 hardening is in (R-104). Sign-ups are closed by default. Recipe names are trimmed before the uniqueness check, and the DB index is won't-do. No open FUs. | `CHANGELOG [Unreleased]` |
 | **Regional formats & rendered documents** | ✅ | Print views, CSVs, emails, server dates and list names follow the household region. No open FUs. | `locale_format.py` |
@@ -72,20 +72,20 @@ Status key: ✅ done-clean · ➗ done-with-carve-outs · 🟡 active/in-progres
 
 ## ⚠️ Needs your attention now
 
-**Total open backlog: 25 items in `DORA_FOLLOWUPS.md`.** None blocks the release. The list below is what needs you now.
+**Total open backlog: 14 items in `DORA_FOLLOWUPS.md`.** None blocks the release. The list below is what needs you now.
 
-1. 🟢 **Commit** the uncommitted 11-06 work (sweep 3 fixes, FYI alert blue, recipe scroll fix).
+1. 🟢 **Commit** the uncommitted 11-06 work (owner batch 5, FYI alert blue, recipe scroll fix).
 2. 🟢 **Deploy** to Altair. Several migrations run on boot (head `c6f9d3b8e4a1`), and the image now installs faster-whisper.
-3. 🟢 **After deploy, walk `DORA_VERIFY.md`:** Leftovers sweep 2 and 3, Finish-off sweep, Touch sizes, Voice from Firefox.
-4. 🟢 **CI:** switch Actions on when you want it, then check the first run on main is green and a Release dry run builds.
-5. 🔴 **FU-857 (a):** should the step-ordinal strip also clean the stored text on save, or stay display-only?
-6. 🔴 **FU-671:** should semantic chips be tinted or solid? It's the last chip-contrast question.
-7. 🔴 **FU-792:** the showcase needs an image-mode recipe, which needs real food photos. It's a content call.
-8. 🟡 **FU-579:** run `quasar dev` in a fresh browser and confirm the checker overlay is gone, then close it.
-9. 🟡 **FU-657:** the next time Open Food Facts lookup is switched on, check the micronutrient scale factors against a real response.
-10. 🟡 **Next buildable by me:** FU-771 (import-finish invalidation off-page), FU-684 (the last `stock_level` readers), FU-705 (chart polish).
+3. 🟢 **After deploy, walk `DORA_VERIFY.md`:** Leftovers sweep 2 and 3, batch 5, Finish-off sweep, Touch sizes, Voice from Firefox.
+4. 🟢 **Batch 5 changes you'll notice:** the Calories drawer is gone (edit kcal in the recipe's facts grid); favouriting no longer moves "last updated"; a budget swap in Build my week takes the displaced recipe's exact slots.
+5. 🟢 **CI:** switch Actions on when you want it, then check the first run on main is green and a Release dry run builds.
+6. 🔴 **FU-857 (a):** should the step-ordinal strip also clean the stored text on save, or stay display-only?
+7. 🔴 **FU-671:** should semantic chips be tinted or solid? It's the last chip-contrast question.
+8. 🔴 **FU-792:** the showcase needs an image-mode recipe, which needs real food photos. It's a content call.
+9. 🔴 **FU-837:** a short dashboard card stretches to its tall row-mate. Keep it, or let cards size to content?
+10. 🟡 **FU-657:** the next time Open Food Facts lookup is switched on, check the micronutrient scale factors against a real response.
 11. 🟡 **Next companion release:** FU-960 (2), FU-886, FU-887, FU-891, FU-924.
-12. ⚪ **Later / opportunistic:** FU-837, FU-667, FU-694, FU-907, FU-895, FU-922, FU-735, FU-730, FU-799, FU-664, FU-636. FU-363 holds the Phase-4 launch gates.
+12. ⚪ **Later / parked:** FU-667, FU-694, FU-636. FU-363 holds the Phase-4 launch gates.
 
 ---
 
@@ -93,7 +93,7 @@ Status key: ✅ done-clean · ➗ done-with-carve-outs · 🟡 active/in-progres
 
 - **`DORA_WORKLOG.md`** — per-session handoff narrative (what ran, decisions, what's next).
 - **`CHANGELOG.md`** — product/code changes that shipped.
-- **`DORA_FOLLOWUPS.md`** — the full open backlog (25 items on 2026-11-06) (this dashboard shows only the top).
+- **`DORA_FOLLOWUPS.md`** — the full open backlog (14 items on 2026-11-06) (this dashboard shows only the top).
 - **`DORA_VERIFY.md`** — your browser-verify checklist (walk + delete as you confirm).
 - **The full per-doc register is below** — every planning doc's verified state.
 - **Charter / how & why:** `docs/01_charter/` (vision, standards, master plan).
