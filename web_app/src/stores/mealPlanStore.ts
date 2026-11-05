@@ -8,6 +8,7 @@ import MealPlanApiService, {
 } from 'src/services/api/mealPlanApiService';
 import type { Ref } from 'vue';
 import { ref } from 'vue';
+import { usePlannedDemand } from 'src/composables/usePlannedDemand';
 
 const api = new MealPlanApiService();
 
@@ -20,18 +21,23 @@ export const useMealPlanStore = defineStore('mealPlan', () => {
         mealPlans.value = await api.getAllPagesAsync();
     };
 
+    // Planned demand is derived from the plan, so every plan write drops it,
+    // whichever surface made the write (FU-851).
     const createMealPlanAsync = async (command: CreateMealPlanCommand) => {
         await api.createAsync(command);
+        usePlannedDemand().invalidate();
         await getMealPlansAsync();
     };
 
     const updateMealPlanAsync = async (command: UpdateMealPlanCommand) => {
         await api.updateAsync(command);
+        usePlannedDemand().invalidate();
         await getMealPlansAsync();
     };
 
     const deleteMealPlanAsync = async (id: string) => {
         await api.deleteAsync(id);
+        usePlannedDemand().invalidate();
         mealPlans.value = mealPlans.value.filter((p) => p.meal_plan_id !== id);
     };
 

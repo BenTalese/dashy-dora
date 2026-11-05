@@ -588,6 +588,12 @@ def seed_dense_data(qa_fixtures: bool = False, money_on: bool = True):
         (parmesan.id, ricotta.id, None, (20, "g", 40, "g")),
         (mince.id, chicken.id, None, None),
         (yoghurt.id, ricotta.id, "In the bake, not on the granola", None),
+        # FU-793: missing ingredients with swaps, so the recipe row's other two
+        # missing-chip states have a fixture. Pecorino (out) has Parmesan
+        # (low, so on hand): "Swap ready". Tasty Cheese (out) has only
+        # Pecorino, also out: "Missing · 1 swap".
+        (pecorino.id, parmesan.id, "Milder, use a little more", None),
+        (tasty_cheese.id, pecorino.id, None, None),
     ]
     _seen: set[tuple] = set()
     _rows: list[dict] = []
@@ -1669,9 +1675,9 @@ def seed_dense_data(qa_fixtures: bool = False, money_on: bool = True):
     price_alert_table = db.metadata.tables["PriceAlert"]
     db.session.execute(price_alert_table.insert(), [
         {"id": uuid4(), "user_id": owner.id, "product_id": coffee_farmers.id,
-         "threshold_unit_price": 30.00, "created_at": now - timedelta(days=25)},
+         "threshold_price": 30.00, "created_at": now - timedelta(days=25)},
         {"id": uuid4(), "user_id": owner.id, "product_id": pasta_barilla.id,
-         "threshold_unit_price": 2.00, "created_at": now - timedelta(days=30)},
+         "threshold_price": 2.00, "created_at": now - timedelta(days=30)},
     ])
     repo.save_changes()
 

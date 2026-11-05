@@ -2686,7 +2686,19 @@ def _bounded_days(value: Any, default: int) -> int:
 def run_tool(name: str, args: dict) -> list[dict]:
     """Execute a read-only tool. Raises KeyError for unknown names."""
     _LOGGER.info("Assistant tool '%s' args=%s", name, args)
-    return _TOOLS[name](args or {})
+    tool = _TOOLS[name]
+    # One chat turn runs several tools in one session. An item an earlier tool
+    # loaded without its level stays in the identity map, and a later tool's
+    # `.include(STOCK_LEVEL)` hands back that instance with the noload
+    # relationship still unset: "no level" read as out of stock (R-032;
+    # FU-684). Each tool starts from expired state, so its includes populate.
+    # The tools only read, so nothing unsaved is lost. (A data-only tool, like
+    # app_help, can run with no app context at all.)
+    from flask import has_app_context
+    from dora_api.app import db
+    if has_app_context():
+        db.session.expire_all()
+    return tool(args or {})
 
 
 def nav_for(name: str) -> dict[str, str] | None:

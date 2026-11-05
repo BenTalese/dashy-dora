@@ -1,5 +1,11 @@
 <template>
-    <div ref="hostRef" class="chart-host" @mousemove="onMove" @mouseleave="onLeave">
+    <div
+        ref="hostRef"
+        class="chart-host"
+        @pointerdown="onMove"
+        @pointermove="onMove"
+        @pointerleave="onLeave"
+    >
         <svg
             :width="width"
             :height="height"
@@ -67,7 +73,7 @@
                     v-if="s.contextPath"
                     :points="s.contextPath"
                     fill="none"
-                    :stroke="seriesColour(i)"
+                    :stroke="seriesColour(s.colourSlot)"
                     stroke-width="1.4"
                     stroke-dasharray="5,3"
                     opacity="0.5"
@@ -78,7 +84,7 @@
                     :cx="point.x"
                     :cy="point.y"
                     r="3"
-                    :fill="seriesColour(i)"
+                    :fill="seriesColour(s.colourSlot)"
                     opacity="0.5"
                 />
 
@@ -87,7 +93,7 @@
                     v-if="s.path"
                     :points="s.path"
                     fill="none"
-                    :stroke="seriesColour(i)"
+                    :stroke="seriesColour(s.colourSlot)"
                     stroke-width="2"
                 />
                 <circle
@@ -96,7 +102,7 @@
                     :cx="point.x"
                     :cy="point.y"
                     :r="point.marked ? 3.4 : 2.6"
-                    :fill="seriesColour(i)"
+                    :fill="seriesColour(s.colourSlot)"
                 />
 
                 <!-- Baseline reference line (F-3) — "usually $X". -->
@@ -141,7 +147,7 @@
              colours. -->
         <ul v-if="legend && renderableSeries.length > 0" class="chart-legend">
             <li v-for="(s, i) in renderableSeries" :key="`lg-${s.key}`">
-                <span class="chart-legend__line" :style="{ background: seriesColour(i) }" />
+                <span class="chart-legend__line" :style="{ background: seriesColour(s.colourSlot) }" />
                 {{ s.name }}
             </li>
             <li v-if="hasContext">
@@ -166,7 +172,7 @@
                 :key="`t-${s.key}`"
                 class="chart-tooltip-row"
             >
-                <span class="chart-tooltip-swatch" :style="{ background: seriesColour(i) }" />
+                <span class="chart-tooltip-swatch" :style="{ background: seriesColour(s.colourSlot) }" />
                 <span class="chart-tooltip-name">{{ s.name }}</span>
                 <span class="chart-tooltip-price">
                     {{ hover.bySeries[s.key]?.value !== undefined
@@ -256,6 +262,7 @@
     interface RenderableSeries {
         key: string;
         name: string;
+        colourSlot: number;
         path: string;
         dots: PlottedPoint[];
         contextPath: string;
@@ -354,6 +361,7 @@
             return {
                 key: s.key,
                 name: s.name,
+                colourSlot: s.colourSlot,
                 path: toPath(own),
                 dots: own,
                 contextPath: toPath(context),
@@ -425,7 +433,10 @@
     const hostRef = ref<HTMLElement | null>(null);
     const hover = ref<HoverState | null>(null);
 
-    function onMove(event: MouseEvent) {
+    // Pointer events, so a finger reads the chart too (FU-705): a tap or a
+    // sideways drag moves the crosshair, and vertical drags still scroll the
+    // page (`touch-action: pan-y` below).
+    function onMove(event: PointerEvent) {
         if (!hostRef.value) return;
         const tb = timeBounds.value;
         if (!tb) return;
@@ -458,7 +469,11 @@
             bySeries,
         };
     }
-    function onLeave() { hover.value = null; }
+    // A finger lifting fires pointerleave at once; the reading stays until the
+    // next tap so it can actually be read. A mouse leaving clears it.
+    function onLeave(event: PointerEvent) {
+        if (event.pointerType === 'mouse') hover.value = null;
+    }
 
     // Position the tooltip so it never falls off the chart edges.
     const tooltipLeft = computed(() => {
@@ -475,7 +490,7 @@
 </script>
 
 <style scoped lang="scss">
-    .chart-host { position: relative; }
+    .chart-host { position: relative; touch-action: pan-y; }
     .chart-svg { display: block; }
     .chart-gridline { stroke: var(--divider); }
     .chart-axis-label { fill: var(--text-muted); }

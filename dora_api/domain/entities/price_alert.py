@@ -12,11 +12,11 @@ class PriceAlert(BaseEntity):
     alert's episode key), so the row carries no fired-at state."""
     user_id: UUID
     product_id: UUID
-    threshold_unit_price: float
+    threshold_price: float
     created_at: datetime
 
     class Fields(BaseEntity.Fields):
         USER_ID = "user_id"
         PRODUCT_ID = "product_id"
-        THRESHOLD_UNIT_PRICE = "threshold_unit_price"
+        THRESHOLD_PRICE = "threshold_price"
         CREATED_AT = "created_at"

@@ -128,7 +128,7 @@
     /* Owner 2026-09-12 — *"the text/elements in the middle area of the page
        feel too tiny compared with other areas of the app. Compare with stock
        overview."* They were: the meal name was inherited body at ~0.875rem
-       inside a 28px chip, where the stock row gives its name 1.05rem in 64px.
+       inside a 28px chip, where the stock row gives its name the md size in 64px.
        The chip is the thing you actually read on this page, so it now sits on
        the app's own scale — name at `--font-size-md`, a 36px floor, and the
        three status glyphs at 22px. */

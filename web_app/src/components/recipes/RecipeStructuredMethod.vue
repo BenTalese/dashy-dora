@@ -610,17 +610,17 @@
     .rsm__sub {
         display: grid;
         grid-template-columns: var(--rsm-sub-num) 1fr;
-        gap: var(--space-3, 12px);
+        gap: var(--space-3);
         align-items: start;
-        padding: var(--space-2, 8px);
-        border-radius: var(--radius-md, 6px);
+        padding: var(--space-2);
+        border-radius: var(--radius-md);
     }
     /* Editing rows carry fields, so they need breathing room the read rows
        don't — and a ground of their own, so it's obvious which block is live. */
     .rsm__step--editing {
         background: var(--surface-component);
         border: 1px solid var(--border-default);
-        padding: var(--space-3, 12px);
+        padding: var(--space-3);
     }
 
     /* A sub-step is the same thing one level in, so it is the same bullet
@@ -633,7 +633,7 @@
         background: transparent;
         border: 1.5px solid var(--border-strong);
         color: var(--text-secondary);
-        font-size: 0.75rem;
+        font-size: var(--font-size-xs);
     }
     .rsm__num--grab { cursor: grab; }
     .rsm__num--grab:active { cursor: grabbing; }
@@ -645,11 +645,11 @@
         appearance: none; background: none; border: 0;
         font: inherit; color: inherit; text-align: left;
         display: block; width: 100%;
-        padding: var(--space-1, 4px) var(--space-2, 8px);
-        margin-left: calc(-1 * var(--space-2, 8px));
-        border-radius: var(--radius-sm, 4px);
+        padding: var(--space-1) var(--space-2);
+        margin-left: calc(-1 * var(--space-2));
+        border-radius: var(--radius-sm);
         cursor: pointer;
-        transition: background var(--motion-fast, 100ms) ease;
+        transition: background var(--motion-fast) ease;
     }
     .rsm__pick:hover { background: var(--overlay-hover); }
     .rsm__pick:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
@@ -665,11 +665,11 @@
 
     .rsm__hint {
         display: block;
-        font-size: 0.8125rem;
+        font-size: var(--font-size-sm);
         color: var(--text-muted);
-        margin-top: var(--space-1, 4px);
+        margin-top: var(--space-1);
     }
-    .rsm__hintfield { margin-top: var(--space-2, 8px); }
+    .rsm__hintfield { margin-top: var(--space-2); }
 
     /* A declared timer, on the reading face. A tinted pill rather than more
        muted caption text: it is a fact about the step you act on, not a note
@@ -677,25 +677,25 @@
     .rsm__timer {
         display: inline-flex;
         align-items: center;
-        gap: var(--space-1, 4px);
-        margin-top: var(--space-2, 8px);
-        padding: 2px var(--space-2, 8px);
+        gap: var(--space-1);
+        margin-top: var(--space-2);
+        padding: 2px var(--space-2);
         border-radius: var(--radius-pill);
         border: 1px solid color-mix(in srgb, var(--brand-primary) 35%, transparent);
         background: color-mix(in srgb, var(--brand-primary) 12%, transparent);
         color: var(--text-primary);
-        font-size: 0.8125rem;
+        font-size: var(--font-size-sm);
         font-variant-numeric: tabular-nums;
     }
     .rsm__timerfield {
-        margin-top: var(--space-2, 8px);
+        margin-top: var(--space-2);
         max-width: 12rem;
     }
 
     .rsm__acts {
-        display: flex; align-items: center; gap: var(--space-1, 4px);
-        margin-top: var(--space-2, 8px);
-        padding-top: var(--space-1, 4px);
+        display: flex; align-items: center; gap: var(--space-1);
+        margin-top: var(--space-2);
+        padding-top: var(--space-1);
         border-top: 1px solid var(--divider);
     }
 
@@ -704,18 +704,18 @@
        content column begins at `num + gap`; the numeral's centre is at
        `num / 2`; a 2px border wants its left edge 1px before that. */
     .rsm__substeps {
-        margin: var(--space-3, 12px) 0 0;
+        margin: var(--space-3) 0 0;
         margin-left: calc((var(--dora-step-num) / 2) - var(--dora-step-num) - var(--dora-step-gap) - 1px);
-        padding-left: calc(var(--dora-step-num) - (var(--dora-step-num) / 2) + var(--dora-step-gap) + var(--space-3, 12px));
+        padding-left: calc(var(--dora-step-num) - (var(--dora-step-num) / 2) + var(--dora-step-gap) + var(--space-3));
         border-left: 2px solid var(--border-default);
         display: flex; flex-direction: column;
-        gap: var(--space-2, 8px);
+        gap: var(--space-2);
     }
-    .rsm__sub { padding: var(--space-1, 4px) var(--space-2, 8px); }
-    .rsm__sub .rsm__text { font-size: 0.9375rem; line-height: 1.55; }
-    .rsm__addsub { margin-top: var(--space-2, 8px); }
-    .rsm__add { margin-top: var(--space-3, 12px); width: 100%; }
-    .rsm__empty { color: var(--text-muted); font-size: 0.875rem; margin: 0; }
+    .rsm__sub { padding: var(--space-1) var(--space-2); }
+    .rsm__sub .rsm__text { font-size: var(--font-size-md); line-height: 1.55; }
+    .rsm__addsub { margin-top: var(--space-2); }
+    .rsm__add { margin-top: var(--space-3); width: 100%; }
+    .rsm__empty { color: var(--text-muted); font-size: var(--font-size-sm); margin: 0; }
 
     /* A grip you can't aim at with a thumb is noise; ↑/↓ are the phone's
        reorder affordance, as on every other list in the app. */

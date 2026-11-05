@@ -15,31 +15,32 @@
 .rn__masthead {
     display: grid;
     grid-template-columns: 220px 1fr;
-    gap: var(--space-5, 20px);
+    gap: var(--space-5);
     align-items: start;
 }
 
 /* The rail and the method each follow a long recipe down the page, and each
-   pane scrolls inside itself rather than the page (owner ask). */
+   pane scrolls inside itself rather than the page (owner ask). No
+   `overscroll-behavior: contain`: it also traps the wheel when a pane is
+   short or already at its end, so the page wouldn't scroll under the cursor. */
 .rn__pane {
     max-height: calc(100vh - 220px);
     overflow-y: auto;
-    overscroll-behavior: contain;
 }
 .rn__sechead {
-    display: flex; align-items: center; gap: var(--space-3, 12px);
-    padding-bottom: var(--space-2, 8px);
-    margin-bottom: var(--space-3, 12px);
+    display: flex; align-items: center; gap: var(--space-3);
+    padding-bottom: var(--space-2);
+    margin-bottom: var(--space-3);
     border-bottom: 1px solid var(--border-default);
 }
 .rn__sectitle {
-    font-size: 0.9375rem; font-weight: 700;
+    font-size: var(--font-size-md); font-weight: 700;
     letter-spacing: 0.08em; text-transform: uppercase;
     color: var(--text-secondary);
     margin: 0;
 }
 .rn__seccount {
-    font-size: 0.8125rem; color: var(--text-muted);
+    font-size: var(--font-size-sm); color: var(--text-muted);
     font-variant-numeric: tabular-nums;
 }
 /* The heading row owns the section's controls now (owner feedback
@@ -50,11 +51,11 @@
 
 /* The small-caps key over a value — a status-strip cell, a version fact. */
 .rn__cellk {
-    font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.07em;
+    font-size: var(--font-size-xs); font-weight: 700; letter-spacing: 0.07em;
     text-transform: uppercase; color: var(--text-muted);
 }
 
-.rn__chip { margin-left: var(--space-1, 4px); }
+.rn__chip { margin-left: var(--space-1); }
 
 /* ── Phone ────────────────────────────────────────────────────────────── */
 @media (max-width: 1023px) {

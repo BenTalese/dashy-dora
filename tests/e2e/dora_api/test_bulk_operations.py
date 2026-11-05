@@ -257,7 +257,7 @@ def test__bulk_add_lines__counts_added_and_already_on_list(api):
     ids = [_make_item()["stock_item_id"] for _ in range(3)]
 
     first = requests.post(f"{LISTS}/{list_id}/lines/bulk-add", json={
-        "stock_item_ids": ids,
+        "lines": [{"stock_item_id": i} for i in ids],
     })
     assert first.status_code == 200, first.text
     assert first.json() == {"added": 3, "already_on_list": 0, "failed_ids": []}
@@ -265,7 +265,7 @@ def test__bulk_add_lines__counts_added_and_already_on_list(api):
     # Re-adding the same set must de-dupe rather than double the lines —
     # this is `AddLineHandler`'s rule, reached through the bulk path.
     second = requests.post(f"{LISTS}/{list_id}/lines/bulk-add", json={
-        "stock_item_ids": ids,
+        "lines": [{"stock_item_id": i} for i in ids],
     })
     assert second.status_code == 200, second.text
     assert second.json()["already_on_list"] == 3
@@ -275,10 +275,23 @@ def test__bulk_add_lines__counts_added_and_already_on_list(api):
     assert len([l for l in detail["lines"] if l["stock_item_id"] in ids]) == 3
 
 
+def test__bulk_add_lines__carries_each_lines_quantity(api):
+    # FU-714: the bulk route takes the single-add shape, so the multi-item
+    # adds that pass quantities or picks can use it.
+    list_id = _make_draft()
+    sid = _make_item()["stock_item_id"]
+    resp = requests.post(f"{LISTS}/{list_id}/lines/bulk-add", json={
+        "lines": [{"stock_item_id": sid, "quantity": 3}],
+    })
+    assert resp.status_code == 200, resp.text
+    line = next(l for l in requests.get(f"{LISTS}/{list_id}").json()["lines"] if l["stock_item_id"] == sid)
+    assert line["quantity"] == 3
+
+
 def test__bulk_add_lines__unknown_list_is_404(api):
     sid = _make_item()["stock_item_id"]
     resp = requests.post(f"{LISTS}/{uuid4()}/lines/bulk-add", json={
-        "stock_item_ids": [sid],
+        "lines": [{"stock_item_id": sid}],
     })
     assert resp.status_code == 404, resp.text
 
@@ -289,7 +302,7 @@ def test__bulk_remove_by_stock_item__removes_only_what_is_on_the_list(api):
     never_added = _make_item()["stock_item_id"]
 
     requests.post(f"{LISTS}/{list_id}/lines/bulk-add", json={
-        "stock_item_ids": on_list,
+        "lines": [{"stock_item_id": i} for i in on_list],
     })
 
     resp = requests.post(

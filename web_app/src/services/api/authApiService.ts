@@ -131,9 +131,11 @@ export default class AuthApiService {
      *  real email (Forgot password?, Resend verification) should hide. */
     getCapabilitiesAsync = async (): Promise<{
         emailSenderConfigured: boolean; demoMode: boolean; registrationEnabled: boolean;
+        minPasswordLength: number;
     }> => {
         const result = await this.httpClient.get<{
             email_sender_configured: boolean; demo_mode?: boolean; registration_enabled?: boolean;
+            min_password_length: number;
         }>(
             '/auth/capabilities',
         );
@@ -144,6 +146,7 @@ export default class AuthApiService {
             demoMode: result.demo_mode ?? false,
             // SEC-3 — self-serve sign-up is an admin switch, off by default.
             registrationEnabled: result.registration_enabled ?? false,
+            minPasswordLength: result.min_password_length,
         };
     };
 

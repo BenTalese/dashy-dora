@@ -87,6 +87,10 @@ _IRREVERSIBLE_ALLOWLIST: dict[str, str] = {
         "SQLite's stored blobs are identical either way), so there is no schema "
         "to go back to."
     ),
+    "c6f9d3b8e4a1": (
+        "data migration re-deriving structured recipes' tools from their steps "
+        "(FU-744); the hand-typed sets it replaced aren't recoverable."
+    ),
 }
 
 

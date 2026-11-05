@@ -13,7 +13,7 @@ from uuid import uuid4
 
 import requests
 
-from dora_api.app import app
+from dora_api.app import app, db
 from dora_api.domain.entities.nutrition_food import (
     NUTRITION_SOURCE_USDA_SR_LEGACY, NutritionFood,
 )
@@ -377,3 +377,28 @@ def test__replace_dataset__PortionsSurviveTheRepositoryIdReassignment(api):
 
 
 #endregion
+
+
+def test__sources__DatasetImportedBeforeCategories__AsksForAReimport(api):
+    # FU-750 / FU-645: no categorised row at all means the import predates the
+    # food groups and extra nutrients; one categorised row means it doesn't.
+    def sr_legacy() -> dict:
+        return next(s for s in requests.get(SOURCES).json()["sources"] if s["id"] == "usda_sr_legacy")
+
+    with app.app_context():
+        repo = SqlAlchemyRepository()
+        repo.add(NutritionFood(id=uuid4(), source="usda_sr_legacy", imported_at=datetime.now(timezone.utc), source_ref=f"old-{uuid4().hex[:8]}",
+                                     name="Old row", kcal_per_100g=100.0))
+        repo.save_changes()
+        already_categorised = db.session.execute(
+            db.text("SELECT COUNT(*) FROM \"NutritionFood\" WHERE source = 'usda_sr_legacy' AND food_category IS NOT NULL")
+        ).scalar()
+    if not already_categorised:
+        assert sr_legacy()["needs_reimport"] is True
+
+    with app.app_context():
+        repo = SqlAlchemyRepository()
+        repo.add(NutritionFood(id=uuid4(), source="usda_sr_legacy", imported_at=datetime.now(timezone.utc), source_ref=f"new-{uuid4().hex[:8]}",
+                                     name="New row", kcal_per_100g=100.0, food_category="Vegetables and Vegetable Products"))
+        repo.save_changes()
+    assert sr_legacy()["needs_reimport"] is False

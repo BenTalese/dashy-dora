@@ -80,7 +80,7 @@ def test__price_alerts__money_off__every_route_is_403(api):
     requests.patch(APP_SETTINGS, json={"money_enabled": False})
     products = requests.get("http://localhost:5170/api/products").json()["items"]
     create = requests.post(f"{BASE}/alerts", json={
-        "product_id": products[0]["product_id"], "threshold_unit_price": 1.23,
+        "product_id": products[0]["product_id"], "threshold_price": 1.23,
     })
     assert create.status_code == 403, create.text
     assert requests.get(f"{BASE}/alerts").status_code == 403
@@ -94,7 +94,7 @@ def test__price_alerts__crud_round_trip(api, money_on):
 
     # Create
     create = requests.post(f"{BASE}/alerts", json={
-        "product_id": product_id, "threshold_unit_price": 1.23,
+        "product_id": product_id, "threshold_price": 1.23,
     })
     assert create.status_code == 200, create.text
     alert_id = create.json()["price_alert_id"]
@@ -114,7 +114,7 @@ def test__price_alerts__crud_round_trip(api, money_on):
 
 def test__price_alerts__create_for_unknown_product__is_404(api, money_on):
     response = requests.post(f"{BASE}/alerts", json={
-        "product_id": str(uuid.uuid4()), "threshold_unit_price": 5.0,
+        "product_id": str(uuid.uuid4()), "threshold_price": 5.0,
     })
     assert response.status_code == 404
 
@@ -123,7 +123,7 @@ def test__price_alerts__zero_threshold__is_422(api):
     products = requests.get("http://localhost:5170/api/products").json()["items"]
     assert products, "the seed ships products"
     response = requests.post(f"{BASE}/alerts", json={
-        "product_id": products[0]["product_id"], "threshold_unit_price": 0,
+        "product_id": products[0]["product_id"], "threshold_price": 0,
     })
     # Pydantic gt=0 → 400/422 via the middleware.
     assert response.status_code in (400, 422)

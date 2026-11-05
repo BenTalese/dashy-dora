@@ -15,7 +15,7 @@ from dora_api.features.app_settings.access import get_or_create_app_setting
 from dora_api.features.routers import AUTH_ROUTER
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.api_response import ok
-from dora_api.infrastructure.auth_helpers import can_mail_links
+from dora_api.infrastructure.auth_helpers import MIN_PASSWORD_LENGTH, can_mail_links
 from dora_api.infrastructure.configuration_manager import DORA_CONFIG
 from dora_api.infrastructure.email_sender import email_sender_configured
 
@@ -35,4 +35,7 @@ def get_auth_capabilities():
         "registration_enabled": bool(
             get_or_create_app_setting(SqlAlchemyRepository()).registration_enabled
         ),
+        # FU-656: the length rule, so a form can hint it before the save
+        # without restating the number (validate_password stays the authority).
+        "min_password_length": MIN_PASSWORD_LENGTH,
     })

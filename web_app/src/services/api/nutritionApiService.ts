@@ -14,6 +14,9 @@ export interface NutritionSourceStatus {
      *  from a stored flag. */
     available: boolean;
     food_count: number;
+    /** Dataset sources only: imported before food categories and the extra
+     *  nutrients, so a re-import fills them (FU-750 / FU-645). */
+    needs_reimport?: boolean;
     /** Dataset sources only — transient import progress. */
     phase?: 'idle' | 'downloading' | 'parsing' | 'saving' | 'done' | 'error';
     error?: string | null;
@@ -136,6 +139,10 @@ export default class NutritionApiService {
     /** Every stock item with no nutrition food, each with its best local
      *  match. Suggestions are local-catalogue only — this runs across the whole
      *  pantry, and a live source would mean hundreds of round-trips. */
+    /** The settings badge's number, without the matcher's suggestions (FU-858). */
+    getUnmatchedItemCountAsync = async (): Promise<number> =>
+        (await this.httpClient.get<{ count: number }>('/nutrition/unmatched-items/count')).count;
+
     getUnmatchedItemsAsync = async (
         includeIgnored = false,
     ): Promise<UnmatchedItemsResponse> =>

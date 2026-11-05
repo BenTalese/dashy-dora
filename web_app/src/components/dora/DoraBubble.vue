@@ -403,8 +403,8 @@
         height: 100dvh;
         /* DR-7 (FU-578 #6) — respect the mobile safe area so the launcher
            doesn't tuck under a home indicator / rounded corner. */
-        padding-right: max(18px, env(safe-area-inset-right, 0px));
-        padding-bottom: max(18px, env(safe-area-inset-bottom, 0px));
+        padding-right: max(var(--dora-launcher-inset), env(safe-area-inset-right, 0px));
+        padding-bottom: max(var(--dora-launcher-inset), env(safe-area-inset-bottom, 0px));
         z-index: 3000;
         display: flex;
         flex-direction: column;

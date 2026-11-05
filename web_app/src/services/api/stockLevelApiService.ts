@@ -1,6 +1,6 @@
 import type { StockLevel } from 'src/models/stockLevel';
 import AxiosHttpClient from './axiosHttpClient';
-import type { Page } from './queryStringBuilder';
+import { fetchAllPages, type Page } from './queryStringBuilder';
 
 export default class StockLevelApiService {
     private httpClient: AxiosHttpClient;
@@ -9,6 +9,15 @@ export default class StockLevelApiService {
         this.httpClient = new AxiosHttpClient();
     }
 
-    getAllAsync = async (): Promise<Page<StockLevel>> =>
-        await this.httpClient.get<Page<StockLevel>>('/stock-levels');
+    getAllAsync = async (
+        pagination: { page: number; limit: number } = { page: 1, limit: 50 },
+    ): Promise<Page<StockLevel>> =>
+        await this.httpClient.get<Page<StockLevel>>(
+            `/stock-levels?page=${pagination.page}&limit=${pagination.limit}`,
+        );
+
+    /** Every level, not the first page (FU-668: the only paged endpoint a
+     *  store hydrated from page one). */
+    getAllPagesAsync = async (): Promise<StockLevel[]> =>
+        await fetchAllPages((page, limit) => this.getAllAsync({ page, limit }));
 }

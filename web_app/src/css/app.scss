@@ -63,7 +63,7 @@ body {
 // than over her. Only the mascot's corner is affected; other positions are
 // untouched. (Toasts are teleported to <body>, so this must be a global rule.)
 .q-notifications__list--bottom-right {
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 112px);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + var(--bottom-chrome-offset));
 }
 
 // B7 / D-002 — the `info` toast kind (registered in `boot/notifyTypeRegistration`).
@@ -245,4 +245,27 @@ body .q-dialog__inner--bottom > div {
    so it takes the text shade; fills (`.bg-primary`) keep --brand-primary. */
 .text-primary {
     color: var(--primary-ink) !important;
+}
+
+
+// The list row's chrome: a bordered flat surface with an accent-tinted hover
+// and no lift (2026-06-18: a translateY lift clipped the first row under the
+// sticky chrome). Shared by the stock row, the cookbook's compact row and the
+// planner's recipe rail (FU-791 / FU-802; it had become three private copies).
+// Each row keeps its own layout, height and gap.
+.dora-list-row {
+    position: relative;
+    border: 1px solid var(--border-default);
+    border-radius: 8px;
+    background: var(--surface-component);
+    overflow: hidden;
+    transition:
+        box-shadow var(--motion-fast) var(--motion-ease),
+        background-color var(--motion-fast) var(--motion-ease),
+        border-color var(--motion-fast) var(--motion-ease);
+}
+.dora-list-row:hover {
+    background: color-mix(in srgb, var(--brand-accent) 4%, var(--surface-component));
+    border-color: color-mix(in srgb, var(--brand-accent) 38%, transparent);
+    box-shadow: 0 1px 6px color-mix(in srgb, var(--text-primary) 8%, transparent);
 }

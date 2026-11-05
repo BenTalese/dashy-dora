@@ -18,6 +18,7 @@
         <span v-if="label" class="num-stepper__label">{{ label }}</span>
         <BaseButton
             variant="icon"
+            class="num-stepper__step"
             :dense="variant === 'inline'"
             :icon="ICONS.remove"
             :disable="atMin"
@@ -37,16 +38,17 @@
             :min="min"
             :max="max"
             :value="modelValue"
-            :aria-label="label ?? 'Value'"
+            :aria-label="valueLabel ?? label ?? 'Value'"
             @click.stop
             @focus="selectAll"
-            @keydown.enter.prevent="commit"
+            @keydown.enter.prevent="blurInput"
             @keydown.esc.prevent="cancel"
             @blur="commit"
         >
         <span v-else class="num-stepper__value" aria-live="polite">{{ modelValue }}</span>
         <BaseButton
             variant="icon"
+            class="num-stepper__step"
             :dense="variant === 'inline'"
             :icon="ICONS.add"
             :disable="atMax"
@@ -80,6 +82,9 @@
             /** Render the value as a typeable tile rather than a readout
              *  (owner 2026-09-12). Enter/blur commits, Esc reverts. */
             editable?: boolean | undefined;
+            /** The tile's accessible name when no visible `label` is wanted
+             *  (the planner rail's cooked count, FU-909). */
+            valueLabel?: string | undefined;
         }>(),
         { min: 0, variant: 'inline', editable: false },
     );
@@ -95,6 +100,12 @@
         let next = Math.max(props.min, current + delta);
         if (props.max !== undefined) next = Math.min(props.max, next);
         emit('update:modelValue', next);
+    }
+
+    // Enter only blurs; the blur is the one commit. Committing on both sent a
+    // delta-shaped caller (the rail's pool) the change twice (FU-909).
+    function blurInput(event: Event) {
+        (event.target as HTMLInputElement).blur();
     }
 
     function selectAll(event: FocusEvent) {

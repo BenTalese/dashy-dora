@@ -10,6 +10,805 @@ resolutions go at the **top**.
 
 ---
 
+## [RESOLVED] FU-981 — Small leftovers from the 2026-11-04 sweep
+- **Raised:** 2026-11-04
+- **Type:** leftover
+- **What:** (1) `AdminSystemNutritionSettings.vue` ~185/201: two `q-toggle`s still pass `:disable="saving"` (D-019; the segmented controls on that page were fixed). (2) `DoraChat`: a refused `/act` (finished list) re-enables Add, so the refusal can be retried pointlessly. (3) `serve_spa.py` injects the same-origin meta with `html.replace("<head>", …)`, which silently does nothing if a build emits `<head` with attributes; and the index now has no ETag, so `no-cache` re-downloads it each time. (4) Restock radar hides items on *any* non-done list, so a forgotten draft hides them indefinitely (owner's call was "hide them"; revisit if it bites). (5) Restore can now run twice for one `upload_id` on a double click, since the staged file survives until commit; the skip-duplicate modes make it mostly harmless. (6) `test_data_router.py::test__backup__assistant_providers__round_trip_without_keys` passes in the full suite but fails when run alone: it relies on an earlier test setting `DORA_SECRET_ENCRYPTION_KEY`. (7) `useStockOverviewExport.spec.ts:47` has an unused `flush` (test files aren't linted, FU-756). (8) `ENGINEERING_STANDARDS.md` still cites `email_enabled` as live context in two historical passages. From the frontend review: (9) `adoptHealthProbe` waits for the probe's 4 s timeout before the fallback `/health` request, so a slow server delays policy loading (fire both in parallel). (10) `useChunkedUpload`'s dispose aborts a staged id the server may still be reading if you leave the restore page mid-restore (harmless on POSIX; the Windows desktop unlink fails, best-effort). (11) the same-origin `backendUrl` assumes the API at the domain root, wrong behind a path-prefix proxy. (12) `cookSections.scss` `.cook-section__head` targets QExpansionItem internals without `:deep()` (dead since before the split). (13) after the splits, an in-progress preferred-buy rename, the plan face's add-back/suggestion spinners and the receipt zoom reset on a tab or face switch.
+- **Why deferred:** each is small and outside the item it was found under.
+- **Recommended resolution:** opportunistic.
+- **Progress (2026-11-05):** done: (1) the two `:disable="saving"` dropped (and the now-unread `saving` ref); (2) a refused `/act` (4xx, e.g. a finished list's 422) keeps the Add card closed, only a network error or 5xx re-enables it; (3) the meta is injected after `<head` with or without attributes, and the index carries an ETag so revalidation answers 304; (6) the key fixture is a shared `secret_encryption_key` in the e2e conftest and the backup test asks for it; (7) unused `flush` removed; (12) `:deep(.cook-section__head)`. Closed without change: (8) both mentions are ADR context recording what was true then; (9) firing both requests in parallel would undo FU-974's one-request boot, and an unreachable server is what the 4 s wait is for. Remaining: (4), (5), (10), (11), (13).
+- **State note (2026-11-05):** closed. (5) restore claims its staged upload by an atomic rename to `<id>.restoring` before reading it, so a second (double-clicked) restore gets 404 upload-missing; released back to `<id>.bin` when the restore doesn't commit (retry still works), deleted when it does; test. (10) fixed by the same claim: an abort's unlink of `<id>.bin` can't touch the file a restore is reading. (13) the in-progress preferred-buy rename lives in the stock-item context and the plan face's add-back/suggestion in-flight state in the shopping-list context, so a tab/face switch keeps them; the receipt zoom is a modal, which blocks a face switch, so nothing to keep. Closed without change: (4) owner's call was "hide them" (2026-11-04); (11) a path-prefixed deploy can't load the SPA at all (Quasar builds with publicPath '/'), so the API URL alone isn't the gap; Dora is deployed at a host root or subdomain.
+
+## [RESOLVED] FU-959 — PWA / session leftovers from the QA sweep: no push unsubscribe on logout, no background update check, NetworkFirst 5 s fallback, query lost on session expiry
+- **Raised:** 2026-10-29 (autonomous QA sweep, round 2)
+- **Type:** finding
+- **What:** (1) `usePushSubscription`: logout neither unsubscribes the browser nor deletes the server row, so on a shared
+  device the next user keeps receiving the previous user's push alerts. (2) `usePwaLifecycle`: nothing calls
+  `registration.update()`, so an installed PWA resumed from the background with no navigation never learns of a new
+  worker; `updateDismissed` never resets, so a second update in one session is hidden. (3) `quasar.config.ts` runtime
+  caching: NetworkFirst with `networkTimeoutSeconds: 5` answers a slow GET from cache, so on a slow self-host box a
+  refetch after a write can show the pre-write data. (4) `authStore.handleSessionExpired` redirects via
+  `currentHashPath()`, which strips the query, so `/stock?location_id=…` comes back as `/stock`.
+- **Why deferred:** each is a design-level call (push ownership per user; update cadence; cache timeout vs. offline
+  read-only) rather than an obvious bug; (4) is small but touches the auth redirect contract.
+- **Recommended resolution:** (1) with the next auth/notifications unit — it is a privacy issue on shared devices;
+  (2)–(4) opportunistic.
+- **Progress (2026-11-05):** (1) sign-out drops this browser's push subscription, server row first, best-effort (`dropPushSubscriptionAsync`). (4) the session-expiry redirect keeps the query. (2) and (3) remain.
+- **State note (2026-11-05):** closed. (2) on each return to the foreground (at most hourly) the app asks its service worker registration to update, and a new controller resets the banner's dismissal so a second release in one session shows again. (3) already done by 17-D2: the API's NetworkFirst has no network timeout, cache only on network failure. (1)/(4) done 11-05.
+
+## [RESOLVED] FU-953 — Planner leftovers from the QA sweep: only add/adjust are queued; the stepper isn't disabled while a save is pending
+- **Raised:** 2026-10-29 (autonomous QA sweep; R-101)
+- **Type:** leftover
+- **What:** `useMealPlanner.queuePlanMutation` serialises `addEntry` and `adjustEntryServings` only; `removeEntry`, cook-day
+  edits, fresh/link toggles and the template apply still rebuild the entry list directly and can still clash with a queued
+  step. `MealPlanEntryMenu`'s stepper resyncs on open but is not disabled while a save is in flight (a busy prop would
+  have to travel through four components). Also still open on the shopping list page: a failed tick calls `load()` (a
+  skeleton flash, R-084) rather than the quiet refresh.
+- **Why deferred:** each is a small, separate change beyond the obvious-bug fixes the sweep was for.
+- **Recommended resolution:** opportunistic, next planner or shopping-list unit.
+- **State note (2026-11-05):** closed. remove, change-cook-days, separate and fresh/pool toggles now run on the same planner mutation queue as add/adjust, each re-reading its entry from the plan when it runs (adjust-to-zero calls the un-queued removeEntryNow inside its own step). A failed run-face tick undoes its optimistic flip and re-reads quietly; a failed plan-face reorder re-reads quietly (no skeleton, R-084). The stepper busy prop is no longer needed: with every write serialised, each tap lands in order, and the menu resyncs on open. Template apply stays a server-side whole-week write, not an entry-list rebuild.
+
+## [RESOLVED] FU-951 — Put a (?) HelpHint beside the headings the help drafts named
+- **Raised:** 2026-10-29 (help redesign; the drafts' "Chip:" rows in `HELP_CONTENT.md`)
+- **Type:** follow-up (D-015)
+- **What:** Only six surfaces carry a `HelpHint` today (Substitutes, QR label, Barcodes, the two runners, Assistant
+  settings). The drafts name ~20 more headings that should open their guide: recipe page (Add and edit, Ingredients,
+  Method, Versions, Meals prepared, Estimated cost, Nutrition), planner rail, cook mode header, backup / import / API access
+  headers, About → Install as an app, the Region page, the stock-locations header. `HelpHint topic="<title>"` resolves via
+  the landing's deep-link (`resolveDeepLink`), so each is one line; the spec's `DEEP_LINKED_TITLES` list grows with them.
+- **Why deferred:** a placement pass across ~15 files that wants a look at each header's density (phones especially).
+- **Recommended resolution:** opportunistic, surface by surface; or one short unit once the owner has walked the new Help.
+- **State note (2026-11-05):** closed. SettingsPageHeader and SettingsSection take a `help` prop that puts the (?) beside the title; placed on Backup & restore, Import, API access, Region & locale, Stock locations and About → Install as an app; HelpHints beside the recipe page's Ingredients, Method, Nutrition and Version information headings (the drawer ones stop the click so they don't toggle), the planner's Recipes rail head, Build my week's setup line, the cook mode header and the shopping list's status pill. All 14 titles pinned in helpContent.spec. Left out on purpose: the masthead pencil, Meals prepared stepper and Estimated cost cell, which sit in the masthead's dense fact grid where a fourth glyph per row crowds a phone; their guides are one hop from the Ingredients/Method chips.
+
+## [RESOLVED] FU-950 — Stock-item detail leftovers from the finalisation review: BuyVerdictCard's own disclosure, bulk deal quality
+- **Raised:** 2026-10-27 (finalisation 06-R21, 06-R13; Stage 2 close-gate)
+- **Type:** leftover (R-001 / efficiency)
+- **What:** (1) **06-R21:** `BuyVerdictCard` hand-rolls the summary-button + caret disclosure that `CollapsibleCard` owns
+  for the two cards above it. The finding was conditional on `CollapsibleCard` exposing a trailing-actions slot — it has
+  `header` / `collapsed` / default only, so the card needs that slot first, then hosts on it with its action button in the
+  header. (2) **06-R13:** `get_buy_verdict._items_with_fake_markdown` calls `get_deal_quality` per linked product (each
+  loading the product with both offer collections plus the household's paid prices); on the bulk path
+  (`get_list_buy_verdicts`) that is one deep walk per product on the list. Add `gather_deal_quality_for_products(ids)` in
+  `deal_quality.py` (one products+offers include, one lines fetch) and call it here.
+- **Why deferred:** (1) is an M-blast component change on a signed-off card; (2) is an M-blast query reshaping in a module
+  chunk 10 owns.
+- **Recommended resolution:** (1) next time `CollapsibleCard` or the stock-item page is open; (2) when a list with many
+  linked products makes the buy-verdict page slow, or with FU-947's `product_id` mapping change.
+- **State note (2026-11-05):** closed. (1) CollapsibleCard has an `actions` slot between the lead and the caret; BuyVerdictCard is now a CollapsibleCard (header-toggles, action in the slot), its hand-rolled summary button, caret and their styles gone. (2) deal_quality.gather_deal_quality_for_products loads products+offers, links and paid prices in three queries; get_deal_quality delegates to it and _items_with_fake_markdown calls it once for the whole list.
+
+## [RESOLVED] FU-948 — Backup / import leftovers from the finalisation review: inspect dedupe, the two page splits
+- **Raised:** 2026-10-27 (finalisation 18-R10, 18-R18, 18-R19; noticed while landing 18-R7)
+- **Type:** leftover (R-001 / R-003)
+- **What:** (1) **18-R10:** `inspect_backup._inspect_streamed` and `_inspect_inline` duplicate ~50 lines of envelope
+  validation + sampling + duplicate flagging, and `RestoreBackupHandler.handle` validates the envelope a third time; one
+  `_summarise(meta, rows_for(section))` + `restore_shared.validate_envelope(doc) -> DataError | None`. (2) **18-R18:**
+  `AdminDataBackupRestore.vue` (≈1,100 lines) is four surfaces — `BackupLibraryList`, `BackupCreateDialog`,
+  `BackupRestorePanel`, `RestoreReportDialog`; the page keeps the service calls and the library-settings section.
+  (3) **18-R19:** `AdminDataImport.vue`'s result dialog (virtual list + chips + error CSV) is a self-contained
+  `ImportResultDialog.vue`. `SettingsFileDrop.vue` (251 lines, the chunk's one unread file) gets its read with (2).
+- **Why deferred:** (1) is a refactor with three inspect tests as the only guard; (2)/(3) are M-blast splits that want a
+  manual walk of the page afterwards, and the 18-R7 rewire wanted its own verify first.
+- **Recommended resolution:** (1) opportunistic, next time `inspect_backup.py` is open; (2)/(3) chunk 20's componentisation
+  pass or the next time either page is touched.
+- **State note (2026-11-05):** closed. (1) inspect's streamed and inline paths share one `_summarise(meta, rows_for)`; the schema-version check is one `backup.schema_version_error` read by inspect and restore. (2) AdminDataBackupRestore (1,197 lines) is now the page (library calls + library settings, 353 lines) over BackupLibraryList, BackupCreateDialog, BackupRestorePanel and RestoreReportDialog (components/settings/backup/), with shared display helpers in helpers/backupSections.ts. (3) ImportResultDialog.vue holds the import's result list, chips and error CSV; SpreadsheetImportResult type in dataApiService. SettingsFileDrop read: found FU-576's cause (below).
+
+## [RESOLVED] FU-947 — Reports / budget leftovers from the finalisation review: offer `product_id`, savings `lists[]`, the four-card shape
+- **Raised:** 2026-10-27 (finalisation 12-R16, 12-R19, 12-D1; noticed while landing 12-R10)
+- **Type:** leftover + decision
+- **What:** (1) **12-R16 / E1:** `ProductOffer` / `ProductHistoricOffer` map their FK as `_product_id`, so 18 feature
+  sites read the private attribute (`budget.py` offer lookup among them); expose a public mapped `product_id` and retire
+  the reads. (2) **12-R19 / E2:** `savings-captured.lists[]` has no SPA reader (`SpendCard` uses the two totals); drop it or
+  consume it when FU-831 reshapes savings. (3) **12-D1 / E4:** the Reports section of the owner feedback is empty; owner
+  confirms the four-card Reports page is in the "90% happy". (4) `spend-year-over-year` still anchors its two windows on
+  the UTC instant `now - N days` rather than household midnight (`_ranges.range_start`); small, but it is the one spend
+  window left off the 12-R3 rule.
+- **Why deferred:** (1) is a cross-cutting mapping change (chunk 20's sweep); (2) waits on FU-831; (3) is an owner call;
+  (4) was outside the 12-R3 finding's listed sites.
+- **Recommended resolution:** (1) chunk 20; (2) with FU-831; (3) owner, now; (4) opportunistic, next time `spend.py` is
+  open.
+- **Progress (2026-11-01):** (3) answered: owner confirms Reports as it stands is in the 90%.
+- **Progress (2026-11-04):** (3) owner confirmed the four-card Reports shape. (2) `savings-captured.lists[]` dropped. (1) remains, opportunistic.
+- **State note (2026-11-05):** closed. (4) spend-year-over-year's two windows start at household midnight via _ranges.range_start, like the other spend windows. (1) won't-do: every entity maps its FK columns as `_<name>_id` (`_store_id`, `_stock_location_id`, ...) and features read them that way; a public `product_id` on the two offer tables alone would be the one-off exception R-019 rules out. (2)/(3) closed 11-04.
+
+## [RESOLVED] FU-937 — `day_cost` and `day_nutrition` on the meal-plan DTO have no client reader
+- **Raised:** 2026-10-24 (finalisation 02-R19)
+- **Type:** finding (R-089 / dead fields)
+- **What:** deleting the planner's unused `dayCost` lookup left `MealPlanDto.day_cost` with no SPA reader; `day_nutrition`
+  lost its reader on 2026-09-13 (kept then as "a surface that wants a day's calories can read it"). Both are summed per
+  request in `get_meal_plans.py` and pinned by `test_meal_plan_cost.py` / `test_meal_plan_nutrition.py`.
+- **Why deferred:** dropping server DTO fields with live tests is its own change; the nutrition one was kept on purpose.
+- **Recommended resolution:** opportunistic, with the next meal-plan DTO pass: drop both (and their tests) or name the
+  surface that will read them.
+- **State note (2026-11-05):** dropped MealPlanDto.day_cost and day_nutrition (DTOs, builders, SPA types); tests now pin the per-entry figures and the week total, which are what the planner reads.
+
+## [RESOLVED] FU-935 — Lean recipe-candidate loader for the week builder, rail suggestions, swap and lighter endpoints
+- **Raised:** 2026-10-24 (finalisation 02-R29)
+- **Type:** follow-up (performance)
+- **What:** `build_week`, `week_suggestions`, `swap_suggestions` and `lighter-alternatives` each run the whole
+  `GetRecipesHandler` pipeline (tags, expiring, images, pool, nutrition, inference, cost) to read about ten fields; the
+  swap path also runs the six-hydration `GetMealPlansHandler.handle_by_id` for entries. 02-R14 put the first two behind one
+  `recipes/all_recipes.load_all_recipe_dtos`, which is the seam. Exact change in CHUNK_02 §C5 (02-R29):
+  `recipes/candidates.load_recipe_candidates(repository)`.
+- **Why deferred:** medium blast radius across four endpoints with their own suites.
+- **Recommended resolution:** later, after the remaining Stage-2 S items; one endpoint at a time.
+- **State note (2026-11-05):** closed. GetRecipesHandler.handle_candidates runs the same base query with only the two passes the planners' rankers read (plan counts/staleness and nutrition); load_all_recipe_dtos (build my week, rail suggestions, budget swaps, lighter swaps) uses it instead of the full ten-pass list pipeline. Planner/recipe suites green (589).
+
+## [RESOLVED] FU-932 — Stock-item peek: swapping to another item discards an unsaved name / notes draft
+- **Raised:** 2026-10-24 (finalisation Stage 2 unit 14, 06-R16)
+- **Type:** finding
+- **What:** the stock-item page now keeps an unsaved name / notes edit across a reload of the *same* item. When the stock
+  overview's peek panel swaps to a different item, the `stockItemId` prop changes under the page and the draft is replaced
+  without the "Discard unsaved changes?" prompt (`useUnsavedChangesGuard` only guards route changes).
+- **Why deferred:** the prompt has to run before the parent changes `peekId`, so it needs a hook in `StockOverview.vue`
+  (ask the embedded page, or lift `isDirty`), not a change inside the item page.
+- **Recommended resolution:** opportunistic — next time the peek panel is touched.
+- **State note (2026-11-05):** useUnsavedChangesGuard returns confirmLeave; StockItemDetailPage exposes it; StockOverview.setPeek awaits it before swapping/closing the peek.
+
+## [RESOLVED] FU-931 — Recipe images still bind bare API URLs into `<img>` (R-045)
+- **Raised:** 2026-10-24 (finalisation Stage 2 unit 13, 10-R35 / 10-R45)
+- **Type:** finding
+- **What:** store logos, avatars and product thumbs now fetch through `composables/useAuthedImage.ts`. Recipe images
+  (`recipeApiService.recipeImageUrl` / `recipeStepImageUrl`: `MealPlanRichCard`, `useRecipeDisplay`, `RecipeDetailPage`,
+  `RecipeCookModeImageView`, `useRecipeEditor`) still bind `${resolveBaseURL()}/…/image` into `<img>` / `q-img`:
+  unauthenticated by construction, broken on a split `app.`/`api.` host and in the Capacitor shell. (Stock items no longer
+  have an image route, so recipes are the whole remainder.)
+- **Why deferred:** several surfaces, and the service worker's `dora-stock-images` runtime cache keys on those URLs, so the
+  swap needs the cache story decided (the object URL path bypasses it).
+- **Recommended resolution:** later during the finalisation sweeps (chunks 1/5/6 image items), before a split-host deploy.
+- **State note (2026-11-05):** closed. Recipe photos (cookbook card, masthead, planner rich card) and step photos (read view, editor, cook mode incl. zoom) load through useAuthedImage; recipeApiService builds API paths (recipeImagePath / recipeStepImagePath) instead of base-prefixed URLs; RecipeStepPhoto renders a fresh pick's data URL or fetches a saved one (EditableStepImage lost its preview_url); useAuthedImage takes an onError so cook mode keeps its 'couldn't be loaded' state. Cache story: the authed GETs fall under the existing `dora-api` NetworkFirst rule, which sign-out already evicts; the dead `/stock-items/<id>/image` CacheFirst rule went.
+
+## [RESOLVED] FU-926 — `normalise_unit` idempotence property failed once, passed on rerun
+- **Raised:** 2026-10-17 (full pytest during the owner batch; nothing unit-related changed)
+- **Type:** finding
+- **What:** `tests/test_domain_properties.py::test__normalise_unit__property__idempotent`
+  failed in the full run and passed 26/26 when the file was rerun. Hypothesis
+  found an input once and didn't replay it (cache disabled with
+  `-p no:cacheprovider`), so the falsifying example wasn't captured.
+- **Why deferred:** not reproducible on demand; unrelated to the batch.
+- **Recommended resolution:** opportunistic: run the property with
+  `--hypothesis-seed` sweeps or `max_examples` raised and pin any example found.
+- **State note (2026-11-05):** closed. The property file loads a no-deadline Hypothesis profile (pure functions; the 200ms per-example clock only tripped under a loaded full suite), and lower_price_never_ranks_worse builds both prices below `was` instead of filtering with assume (it discarded ~5/6 of inputs, near filter_too_much). FU-926: no counterexample exists — brute-forced every code point alone and beside '°', space and a letter, plus 200k random strings; normalise_unit is idempotent.
+
+## [RESOLVED] FU-920 — `MealPlanRailCount` is now the app's general count circle under a planner name
+- **Raised:** 2026-10-15 (owner batch, shopping lists: "a circle with a number in it consistent with elsewhere")
+- **Type:** leftover
+- **What:** the run face's "Collected" header reuses `MealPlanRailCount`, the
+  count circle the planner rail introduced. It is now used outside the planner,
+  so the name misleads (R-001: a shared component is named for what it is).
+  Rename to `CountBadge` (or similar) and move it out of the `MealPlan*` family.
+- **Why deferred:** a rename across seven call sites is unrelated churn in a
+  feedback batch.
+- **Recommended resolution:** opportunistic.
+- **State note (2026-11-05):** MealPlanRailCount renamed CountBadge (git mv; class .count-badge), three importers updated.
+
+## [RESOLVED] FU-900 — `stick` is still 113 g outside the two recipe calculators
+- **Raised:** 2026-09-09 (cookbook + recipe-view feedback batch)
+- **Type:** finding
+- **Narrowed 2026-09-09:** originally "the rollup treats one symptom". Both
+  recipe calculators are now guarded off one shared record
+  (`units.FOOD_SPECIFIC_MASS_UNITS`): nutrition takes the food's own portion
+  row or reports `no_conversion`, costing refuses unless the ingredient names
+  an owning food. What remains is everything else.
+- **What:** `units.UNIT_TABLE` still defines `stick` as **113 g of butter**, a
+  US supermarket fact standing in a table of universal conversions, and the
+  other callers of `units.convert` take it at face value — `your_prices.py`
+  (product sizes) and the assistant's `convert` tool. The assistant answering
+  "2 sticks in grams → 226 g" is arguably fine for butter and misleading for
+  anything else; a product whose size is recorded in sticks would be
+  mis-normalised.
+- **Why deferred:** the honest fix is that `stick` isn't a unit, it is a
+  packaging convention for one product, and removing it from the table changes
+  a US household's butter conversions. The guard is now available
+  (`units.food_specific_mass_applies`) — the remaining work is deciding whether
+  the assistant should refuse an ambiguous unit rather than answering for
+  butter.
+- **Recommended resolution:** opportunistic, or when anything else touches
+  `dora_api/domain/units.py`'s mass block.
+- **State note (2026-11-05):** the assistant's convert_measurement applies food_specific_mass_applies to both units, so '2 sticks' converts to 226 g only for butter/margarine and otherwise asks which food (test). The other two convert callers can't meet it: recipe costing and nutrition were already guarded, and price sizes come from the price picker, which doesn't offer stick, or from product sizes in g/ml/ea. UNIT_TABLE keeps stick (a US household's butter conversions are right).
+
+## [RESOLVED] FU-898 — `savings-captured` and the swap-suggestions call lost their dashboard callers
+- **Raised:** 2026-09-08 (dashboard feedback batch)
+- **Type:** leftover (R-057 contract inventory)
+- **What:** the owner cut the money card down to the budget, which removed the
+  dashboard's only calls to `reportsApi.getSavingsCapturedAsync` and to the
+  `mealPlanApi.getTodayAsync` + `getAllAsync` + `getSwapSuggestionsAsync` trio
+  that fed FU-451's swaps bullet. **Neither is orphaned** — `/reports` still
+  reads savings-captured, and the planner still reads swap suggestions — so
+  this is an inventory note, not a deletion candidate. Logged because R-057 is
+  explicit that a replaced surface's contracts get checked rather than assumed,
+  and because `/reports` is now savings-captured's *only* consumer, which
+  changes who owns its shape (relevant to [[FU-831]], which is going to rename
+  that DTO field).
+- **Recommended resolution:** opportunistic — fold into [[FU-831]], which is
+  already the unit that touches this handler.
+- **State note (2026-11-05):** closed (inventory note). FU-831 (resolved 11-05) was the unit it pointed at; savings-captured and the swap call keep their /reports and planner consumers.
+
+## [RESOLVED] FU-888 — `GET /api/nutrition/lookup` 500s on a NUL byte in `q` — Postgres only
+- **Raised:** 2026-09-06 (products program, batch C2 — found by running the full suite on Postgres)
+- **Type:** finding
+- **What:** `tests/e2e/dora_api/test_api_fuzz.py::test__garbage_query_params_on_every_get_route__never_500s`
+  fails **only under `DORA_TEST_DB=postgres`**, on one route:
+  `GET /api/nutrition/lookup?…&q=%00%27%22&…` → 500. The fuzz case sends a
+  literal NUL (`\x00`) in `q`. `search_foods` (`features/nutrition/lookup.py:145`)
+  passes the raw text into `_search_local`'s LIKE query; **Postgres rejects NUL
+  bytes in text values while SQLite accepts them**, so the same input is a 500
+  on one backend and a clean 200 on the other. Note `limit` is a red herring —
+  `search_foods` ignores every param except `q`.
+- **Why it matters:** Postgres is the standard datastore target (RECONCILED
+  §7 Decision 5), and the fuzz test exists precisely to assert no GET route
+  500s on garbage. It is currently only telling the truth on SQLite.
+- **Why deferred:** unrelated to the batch that found it (C2 touched shopping
+  lists, not nutrition); fixing it means deciding where to strip/reject NULs —
+  ideally once, centrally, for all query params rather than per-route.
+- **Recommended resolution:** opportunistic — next time the nutrition surface
+  or the request-validation layer is touched. Same divergence family as the
+  dialect bugs found on 2026-07-14 (raw-`text()` UUID binds, over-length
+  `alert_key`); a central sanitiser would close the class rather than the
+  instance. Cross-ref [[FU-405]] (a Postgres CI matrix would have caught this).
+- **State note (2026-11-05):** middleware.reject_nul_bytes refuses NUL in path/query/JSON body with a 400 before any handler; fuzz case split + pin test.
+
+## [RESOLVED] FU-871 — Six retired dashboard card ids are still sitting in every user's saved layout
+- **Raised:** 2026-09-04 (dashboard feedback batch)
+- **Type:** follow-up (data hygiene, low urgency)
+- **What:** `User.dashboard_layout` stores `{order, hidden}` as JSON. The cull
+  retired `attention`, `draft_shop`, `suggestions`, `spend_trend`,
+  `pantry_value`, `reconcile_pending` and renamed `cookable` → `next_to_cook`,
+  `primary_list` → `shopping_lists`. Nothing rewrites the stored JSON: it is
+  filtered to known ids on read (`parseLayout`), so behaviour is correct, but the
+  dead ids persist in the row until the user next reorders something.
+- **Why deferred:** harmless — `parseLayout` is the guard, and
+  `dashboardCards.spec.ts` pins the retired ids as absent so one can't be
+  resurrected for a different card and inherit somebody's hidden flag. A
+  migration to scrub them is cosmetic.
+- **Recommended resolution:** opportunistic — fold into the next migration that
+  touches `User`, or never.
+- **State note (2026-11-05):** closed won't-do. parseLayout filters stored ids to the known set, and dashboardCards.spec pins the retired ids as absent so none can be reused; rewriting every user's JSON to drop dead ids changes nothing a user sees.
+
+## [RESOLVED] FU-868 — Two dashboard cards were never seen with their feature gate OFF
+- **Raised:** 2026-09-04 (dashboard feedback batch — browser walk)
+- **Type:** finding (verification gap)
+- **What:** the 09-04 walk ran on the dense seed, which has **both** money and
+  products **on**. So: the Shopping-lists card's money-off body (counts only, no
+  dollars) and the Price-drops card's products-off disappearance from both the
+  grid and the Cards menu were reasoned about but not observed. The registry
+  spec asserts the *gates*; it can't assert the rendered result.
+- **Why deferred:** needs a second backend on a money-off / products-off seed,
+  which is a whole verify pairing rather than a step in this one.
+- **Recommended resolution:** when a money-off verify run next happens — the
+  corresponding eyes-on steps are in `DORA_VERIFY.md` under Dashboard.
+- **State note (2026-11-05):** closed as pure verify items. Each is "look at it" with no fix pending, and its checks already sit in DORA_VERIFY.md (Dashboard money-off lines; "Accent ink + Dora's voice" burger sizes; the recipe phone walk's facts-strip line), which is where the ledger rule puts them.
+
+## [RESOLVED] FU-865 — Quasar palette vars are set on `<body>`, so the `html` scrollbar rule never gets the theme
+- **Raised:** 2026-09-03 (owner misc batch — found while fixing FU-709)
+- **Type:** finding
+- **What:** `css/app.scss` styles the browser scrollbar with
+  `html { scrollbar-color: var(--q-secondary) var(--q-page) }`, but Quasar's
+  `setCssVar` writes to **`document.body`** by default, which is where
+  `themeService.syncQuasarPaletteFromCssVars` puts the whole palette. A custom
+  property set on `body` does not inherit *upwards*, so the `html` rule resolves
+  against Quasar's own `:root` defaults and the scrollbar is the same colour in
+  every theme. Confirmed live during the FU-709 walk: reading
+  `--q-dark-page` off `document.documentElement` returned Quasar's `#14171a` in
+  all themes while `document.body`'s background painted the synced value.
+- **Why deferred:** out of scope for the batch that found it, and the fix has two
+  candidate shapes worth one moment's thought rather than a reflex: either point
+  the rule at the semantic tokens it should have used in the first place
+  (`html { scrollbar-color: var(--brand-secondary) var(--surface-page) }` —
+  those *are* on `:root`, and R-002 prefers them anyway), or move the rule to
+  `body`. The first is better and is probably a two-line change.
+- **Recommended resolution:** opportunistic — next time anything touches
+  `app.scss` or the theming layer. Cheap, cosmetic, low risk.
+- **State note (2026-11-05):** html scrollbar-color reads --brand-secondary / --surface-page (on :root) instead of Quasar's --q-* (written to <body>, never inherited up), so the scrollbar follows the theme.
+
+## [RESOLVED] FU-808 — `space` and `u` are advertised in the shortcut cheatsheet on faces where they do nothing
+- **Raised:** 2026-09-01 (v4 chunk 4 — cutover audit)
+- **Type:** finding
+- **What:** `useShortcut` registers all five shopping-list shortcuts
+  unconditionally (`ShoppingListDetail.vue:2112`), but `tickFocusedLine` and
+  `untickLastTicked` both guard on `detail.status !== 'shopping'` and return
+  immediately. The gate is **correct** — v3 deliberately removed draft ticking,
+  and it was verified live that a draft cannot be ticked by keyboard. The problem
+  is only that the `?` cheatsheet promises *"space — tick / untick the focused
+  line"* on the plan and receipt faces, where pressing it does nothing at all.
+- **Why deferred:** it is an honesty defect, not a functional one, and the fix
+  touches how `useShortcut` scopes registrations (register conditionally, or let
+  a shortcut declare an `enabled` predicate the cheatsheet reads) — a shared-
+  composable change that shouldn't be made inside a shopping-list audit.
+- **Recommended resolution:** opportunistic — next time `useShortcut` /
+  `ShortcutsCheatsheet` is open. Cheap alternative if that never happens: gate
+  the two registrations on the run face.
+- **State note (2026-11-05):** ShortcutDef.enabled?() — an off shortcut is neither dispatched (findMatch, sequence prefix) nor listed in the ? cheatsheet; the shopping list's space/u are enabled only while the list is being shopped. Spec added.
+
+## [RESOLVED] FU-800 — the burger glyph wants an eyes-on pass at 12–14px
+- **Raised:** 2026-09-01 (Dora-voice icon unification)
+- **Type:** follow-up
+- **What:** every "Dora thinks…" / "Dora suggests…" surface now draws
+  `ICONS.dora_voice` (`mdi-hamburger`, the mascot). Verified rendering live at
+  22px in the attention-rules dialog. The small sizes (12px on the meal-plan
+  rail chip and the shopping-list note, 14px in chat and the plan row, 16px in
+  the stock row) were not seen at paint — the browser pane doesn't composite.
+- **Why deferred:** it's an aesthetic call only the owner can make, and it needs
+  a real browser. The risk to look for is a 12px burger reading as a hamburger
+  *menu*; `mdi-menu` is three bars and the two never appear together, so this is
+  a legibility question rather than a correctness one.
+- **Recommended resolution:** now-ish — walk the DORA_VERIFY "Dora's voice"
+  checklist. If the small sizes are mushy, the fallback is a size floor
+  (14px) on this glyph rather than a different icon.
+- **State note (2026-11-05):** closed as pure verify items. Each is "look at it" with no fix pending, and its checks already sit in DORA_VERIFY.md (Dashboard money-off lines; "Accent ink + Dora's voice" burger sizes; the recipe phone walk's facts-strip line), which is where the ledger rule puts them.
+
+## [RESOLVED] FU-781 — A hypothesis property test fails intermittently, full-suite only
+- **Raised:** 2026-08-28 (shopping-list batch 3 — seen in a close-gate suite run)
+- **Type:** finding
+- **What:** `tests/test_domain_properties.py::test__discount_percent__property__
+  lower_price_never_ranks_worse` failed once in a full `pytest tests/` run, then
+  passed on every re-run in isolation (7 explicit `--hypothesis-seed` values, 6
+  plain re-runs). The file is unmodified since commit `22a11bc4` and nothing in
+  this session touches `discount_percent`.
+- **Two candidate causes, neither confirmed** (the traceback wasn't captured
+  before the re-run, which is the mistake to avoid next time):
+  1. **`filter_too_much` health check.** The property is
+     `assume(now_a < was and now_b < was)` over three independent price floats,
+     so ~⅚ of generated inputs are discarded. Reproducing the same shape
+     standalone trips `FailedHealthCheck: 8 inputs generated, 50 filtered out`
+     — so the test is genuinely near that threshold and whether it crosses
+     depends on the seed. `pytest-randomly` reseeds every run, which is exactly
+     how a seed-sensitive test becomes an intermittent one.
+  2. **`DeadlineExceeded`.** Hypothesis's default 200ms-per-example deadline is
+     easy to blow under a loaded full-suite run and impossible to hit alone.
+  Both fit "passes alone, fails in the suite"; they want different fixes
+  (restructure the strategy to generate `was` then two prices below it, vs
+  `deadline=None`).
+- **The maths looks sound**, for what it's worth: `discount_percent` is
+  `round((was - now) / was * 100)` with a `now >= was → None` guard, and `round`
+  is monotone, so the property itself should hold. This reads as a test-harness
+  flake, not a domain bug — but that is a static read, not proof.
+- **Recommended resolution:** opportunistic — **capture the traceback next time
+  the full suite goes red** rather than re-running immediately. Cheap to fix
+  once the cause is known; noisy to leave, because a suite that fails at random
+  trains everyone to re-run instead of read.
+- **State note (2026-11-05):** closed. The property file loads a no-deadline Hypothesis profile (pure functions; the 200ms per-example clock only tripped under a loaded full suite), and lower_price_never_ranks_worse builds both prices below `was` instead of filtering with assume (it discarded ~5/6 of inputs, near filter_too_much). FU-926: no counterexample exists — brute-forced every code point alone and beside '°', space and a letter, plus 200k random strings; normalise_unit is idempotent.
+
+## [RESOLVED] FU-778 — A Quasar portal timer fires after teardown in the vitest run
+- **Raised:** 2026-08-28 (seen while re-running the suite for the toast change)
+- **Type:** finding
+- **What:** `npx vitest run` reports **`Errors 1 error`** alongside its 562 passes:
+  `ReferenceError: document is not defined` from `quasar.client.js` →
+  `showPortal` → `removeFocusWaitFlag`, originating in
+  `test/unit/addToListButton.spec.ts`. A QDialog's portal timeout fires after the
+  jsdom environment has been torn down. Vitest's own message is the reason this
+  is worth logging: *"This might cause false positive tests."*
+- **Confirmed pre-existing:** the full suite was re-run with that session's
+  `notifyTypeRegistration.ts` + `app.scss` changes stashed and the error appeared
+  **identically** — so it is not a regression from the toast work. It also does
+  not reproduce when that spec runs alone, only in the full run.
+- **Why deferred:** unrelated to the batch that found it, and it fails nothing today.
+- **Recommended resolution:** **opportunistic** — next time `AddToListButton` or
+  its spec is touched. Likely fixed by awaiting the dialog's close (or a
+  `vi.useFakeTimers()` drain) before the test ends.
+- **State note (2026-11-05):** doesn't reproduce: two full vitest runs (2026-11-05) end with no 'Errors' line and no teardown 'document is not defined' from the portal timer.
+
+## [RESOLVED] FU-772 — The rating pill's tint has had no dark-theme pass
+- **Raised:** 2026-08-28 (cookbook rating + kcal batch)
+- **Type:** finding
+- **What:** `RecipeRatingChip`'s score pill paints `--brand-primary-soft` behind
+  `--text-primary`, with the star glyph on `--brand-primary`. Light themes define
+  that token as a pale opaque tint, but **every dark theme defines it as a
+  translucent wash of the theme's own accent** (`hsla(...)` — see
+  `themes.scss`), so the pill's effective contrast in dark mode depends on what
+  it happens to sit on. Reasoned to be safe (D-002) and not measured: the chip
+  only paints in complex nutrition mode, which no verify instance can reach.
+- **Why deferred:** unreachable without an imported food catalogue; the same
+  wall that has kept the whole rating surface unverified since 2026-08-27.
+- **Recommended resolution:** with the `DORA_VERIFY` → "Cookbook: the 2026-08-28
+  rating + kcal batch" walk, on a dark theme. Cites **D-002**.
+- **State note (2026-11-05):** measured from the theme tokens (pill = brand-primary-soft wash composited over page/component/elevated surfaces): the score text clears 4.8:1 (Blueberry Dark) to 9.0:1 in every dark theme; the star glyph fell to 2.8:1 on Pesto Dark (D-002 3:1 graphic tier). The glyph now takes --text-primary, which clears every dark theme.
+
+## [RESOLVED] FU-770 — `RecipeCard` and `RecipeRow` still carry the kcal chip twice (FU-747's other half)
+- **Raised:** 2026-08-28 (cookbook rating + kcal batch)
+- **Type:** finding
+- **What:** FU-747 called for one `RecipeSignalChips` covering both the rating and
+  the kcal block. Half of it landed — the rating is now wholly inside
+  `RecipeRatingChip`, and this batch removed the duplicated rating wrapper and the
+  `--part { opacity: .55 }` rule from both hosts. The **kcal** figure is still
+  written out in both files, and they have now deliberately *diverged*: the card
+  renders a `q-chip` beside Difficulty, the row renders plain text on its meta
+  line. Same data, same asterisk rule, two renderings.
+- **Why deferred:** they diverged because the owner asked them to — a shared
+  component would need a `variant` prop, which is worth doing only if a third
+  caller appears. The duplication that actually bites (the asterisk rule and the
+  tooltip copy) is two lines.
+- **Recommended resolution:** opportunistic, and only if a third surface needs a
+  kcal figure. Supersedes the kcal half of **FU-747**; cites **R-001**.
+- **State note (2026-11-05):** closed won't-do. The card's chip and the row's meta-line kcal diverged at the owner's ask; a shared component would only earn its keep at a third surface, and none has appeared.
+
+## [RESOLVED] FU-757 — "New shopping list → start from a meal plan" still drops unlinked ingredients silently
+- **Raised:** 2026-08-27 (meal-plan add-to-list unification)
+- **Type:** finding
+- **What:** `NewListDialog.vue`'s `startFrom: 'meal_plan'` branch calls
+  `mealPlanApi.getIngredientsAsync` and now reads `.items` off the new envelope,
+  but ignores the `unlinked` field beside it. So a plan whose recipes carry
+  unmatched ingredients seeds a list that quietly omits them — exactly the gap
+  FU-505 opened and the one the shared picker just closed on the planner and the
+  recipe page. Same file's `recipe` branch has the same shape.
+- **Why deferred:** R-007 — the ask was the meal-plan/recipe add-to-list flow;
+  the new-list dialog is a third surface with its own composed form and its own
+  "pre-seeded / skipped" counters, so folding the report in properly is its own
+  small piece of work rather than a line in this diff.
+- **Recommended resolution:** opportunistic — next time that dialog is open for
+  any reason. Cites **R-057**; the data is already on the wire, so it's a
+  rendering job, not an API change.
+- **State note (2026-11-05):** NewListDialog counts free-text ingredients on the recipe + meal-plan branches and names them in the toast caption ("N ingredients aren't linked to your pantry, so they were left off.").
+
+## [RESOLVED] FU-753 — `PRICE_PICKER_CANONICAL_UNITS` is not narrowed by measurement system
+- **Raised:** 2026-08-27 (owner feedback batch — units config)
+- **Type:** finding
+- **What:** `units.PRICE_PICKER_CANONICAL_UNITS` is a fixed server-side whitelist
+  (`ml`/`L`/`g`/`kg`/`oz`/`lb`/`ea`/`dozen`/`pack`) that predates the measurement
+  system and mixes metric and imperial mass in one list. The **client** picker in
+  `PriceEntry.vue` now filters it by the install's system, so the UI is right; the
+  server-side constant it derives from is not, and anything else reading that
+  constant directly still sees both systems.
+- **Why deferred:** the constant's only consumer is `supported_price_units()`,
+  which feeds the same picker, so narrowing it server-side would be a second filter
+  in front of the one that already works — and it is the sort of duplicate authority
+  R-003 exists to prevent. The right fix is probably to derive the whitelist from
+  `units_for_system` rather than to filter it twice.
+- **Recommended resolution:** later, when price-entry is next touched.
+- **State note (2026-11-05):** closed, by design. PRICE_PICKER_CANONICAL_UNITS has one reader, supported_price_units(), which only feeds scripts/dump_units.py's build-time units_table.ts. That table is compiled before any install has a measurement system, so it has to be the union; PriceEntry narrows it at runtime with useMeasurementSystem().offeredUnits (from units_for_system via /health). There is one filter, not two.
+
+## [RESOLVED] FU-746 — The AU/NZ Health Star Rating nudge has no automated cover
+- **Raised:** 2026-08-27 (Health Star Rating build)
+- **Type:** finding.
+- **What:** `isAustralasian` in `AdminSystemRegionSettings.vue` decides whether
+  "Match this device" offers the rating. It reads the IANA timezone *and* the
+  BCP-47 region — the timezone half was added after finding this machine
+  reports `en-GB` with `Australia/Sydney`, which the language-only version would
+  have silently ignored forever. It was verified live, once, on one device.
+- **Why deferred:** the function is private to the SFC, so pinning it means
+  extracting it — worth doing, but it is a lookup with no state, and the verify
+  stance says automate stable contracts, not everything.
+- **Recommended resolution:** opportunistic — lift `isAustralasian` into a
+  plain `.ts` helper and give it a table test (`en-GB`+`Australia/Sydney` → true,
+  `en-AU`+`UTC` → true, `en-GB`+`Europe/London` → false, `Pacific/Fiji` → false).
+- **State note (2026-11-05):** localRatingScheme / isAustralasian moved to helpers/localRatingScheme.ts (the Region page imports it) and pinned by localRatingScheme.spec (en-GB+Australia/Sydney, en-AU+UTC, mi-NZ, Pacific/Auckland true; Europe/London, Pacific/Fiji false; Nutri-Score adopters vs Warsaw).
+
+## [RESOLVED] FU-742 — The recipe facts strip got longer when it gained icons
+- **Raised:** 2026-08-26 (recipe-view feedback batch)
+- **Type:** finding.
+- **What:** every fact in the masthead (Serves · Prep · Cook · Total · Difficulty
+  · When) now carries a glyph, which adds ~18px each. Measured live at 375px: the
+  strip has 72px of overflow inside its own `overflow-x: auto` container. The page
+  itself doesn't scroll sideways (0px) and the sideways strip is the design, so
+  nothing is broken — but before the icons it very likely fitted, and the last
+  fact now needs a swipe.
+- **Why deferred:** the owner asked for the icons explicitly, and hiding the
+  labels on narrow screens to buy the space back would trade a swipe for an
+  unlabelled glyph. Wants an eye on it before anything changes.
+- **Recommended resolution:** with the `DORA_VERIFY` phone walk of the 2026-08-26
+  batch — if it reads badly, the levers are dropping `Total` (it's derived from
+  the two beside it) or shrinking the icon.
+- **State note (2026-11-05):** closed as pure verify items. Each is "look at it" with no fix pending, and its checks already sit in DORA_VERIFY.md (Dashboard money-off lines; "Accent ink + Dora's voice" burger sizes; the recipe phone walk's facts-strip line), which is where the ledger rule puts them.
+
+## [RESOLVED] FU-741 — `is_favourite` on a new recipe version resets deliberately; nothing says so in the UI
+- **Raised:** 2026-08-26 (recipe-view feedback batch)
+- **Type:** finding.
+- **What:** while auditing "new version doesn't copy all fields properly" (the
+  real cause was sections — fixed), three fields were confirmed to be *deliberately*
+  not copied: `is_favourite` (reset to false), `last_made_on` (null) and
+  `available_meals` (0). Each is defensible — they're facts about a recipe's history
+  in the household, not about the recipe — and each is commented in
+  `new_recipe_version.py`. But the toast only says "Both versions are equal peers",
+  so a user who favourited the original and then makes a v2 sees it silently
+  un-favourited and may well read that as the same copy bug.
+- **Why deferred:** it's a copy/UX question, not a defect, and the batch's ask was
+  the actual missing data.
+- **Recommended resolution:** opportunistic — either say it in the toast caption or
+  decide `is_favourite` should in fact carry (the other two clearly shouldn't).
+- **State note (2026-11-05):** the new-version toast says "The new one isn't a favourite yet." when the source was a favourite; pool and last-cooked stay uncopied as before (facts about the household's history, commented in new_recipe_version.py).
+
+## [RESOLVED] FU-734 — Recipe-page masthead selects have no accessible name
+- **Raised:** 2026-08-23 (recipe-view feedback batch)
+- **Type:** finding.
+- **What:** in the masthead's edit face the five `BaseSelect`s (collection,
+  cuisine, category, difficulty, when) read as bare `generic` in the
+  accessibility tree — Quasar renders the label as a `div`, not a `<label for>`,
+  so nothing associates it. The `q-input`s beside them are fine. This is a
+  `BaseSelect`-wide trait, not specific to this page (the same shows on every
+  surface that uses it), which is why it isn't fixed inline here.
+- **Why deferred:** fixing it properly means giving `BaseSelect` an
+  `aria-labelledby` wired to its own label id, app-wide — a shared-component
+  change with ~72 call sites' worth of blast radius, not a recipe-page edit.
+- **Recommended resolution:** now-ish, as its own small unit — it is a
+  one-component fix with a broad win, and A6/axe coverage would catch it.
+- **State note (2026-11-05):** Quasar 2.18's QSelect already names its combobox from `label` (aria-label on role=combobox), so every labelled BaseSelect, the masthead's five included, has a name. The 15 that had no label (their name drawn beside them in a SettingsRow, an inline-edit row or the wizard) now pass aria-label, which QSelect lets override; BaseSelect warns in dev when a use has neither.
+
+## [RESOLVED] FU-732 — Sub-cent unit prices still read "$0.00 / g" everywhere except the recipe cost modal
+- **Raised:** 2026-08-24 (recipe-view feedback batch).
+- **Type:** finding.
+- **What:** `formatMoney` formats to the currency's minor unit, so a price of
+  $0.003/g renders as **$0.00 / g** — a real price that reads as free. The new
+  recipe cost modal fixes it locally (`unitPriceLabel` in
+  `RecipeCostDialog.vue` re-quotes g→kg and ml→L when the figure is under 5c),
+  but that is one call site's patch, not a shared rule. Anywhere else that
+  prints a per-unit price off a fine-grained unit has the same bug — the
+  shopping-list line price rows and the stock-item price surfaces are the
+  likely ones; not surveyed.
+- **Why deferred:** the reported surface was the recipe page, and the fix that
+  belongs in `useMoney` (a `formatUnitPrice(amount, unit)` that owns the
+  rescale, R-003) is a cross-surface change with its own verify.
+- **Recommended resolution:** when money formatting is next touched — promote
+  `unitPriceLabel` into `useMoney` and point every per-unit price at it.
+- **State note (2026-11-05):** already resolved by the 2026-09-13 shelf-denominator batch: server-rendered per-unit prices (YourPrices, offers sidecar, chart axis, reports) are quoted per 100g/100ml/kg/each by units.display_denominator_for, and the two client-side quotes (PriceEntry preview, RecipeCostDialog) go through helpers/unitPriceDisplay (requoteUnitPrice); no per-gram render remains (the list rows' estimated_unit_price is per pack/each).
+
+## [RESOLVED] FU-731 — `q-popup-edit` on a phone: the keyboard-over-the-field problem is only fixed for free-text instructions
+- **Raised:** 2026-08-24 (recipe-view feedback batch).
+- **Type:** finding.
+- **What:** the owner reported that editing free-text instructions on a phone
+  opened the keyboard over the input with nothing to scroll. That path now goes
+  through a maximised dialog (`RecipeMethodEditorDialog`) and is fixed. The
+  same `q-popup-edit` pattern used to drive the recipe **title**, the eyebrow
+  selects, the six **facts**, a structured **step's text** and an ingredient's
+  **quantity** — and there is nothing about the reported failure that is
+  specific to the instructions field. It may simply not bite on the short ones
+  (a popup anchored to a short field near the top of the page has room), which
+  is exactly what the owner described.
+- **Narrowed by the 2026-08-24 merge (R-055 port).** The masthead popups and the
+  ingredient-quantity popup are gone — the masthead flips as a block and the row
+  opens its own editor. **Two** popups remain on this page: a structured step's
+  text and a section's name. This FU now covers only those two.
+- **Why deferred:** it needs a real device to know which of them actually
+  misbehave; converting all of them to dialogs unprompted would undo the
+  inline-editing feel the page was built around.
+- **Recommended resolution:** when the phone walk in `DORA_VERIFY.md` (recipe
+  section, 2026-08-24) runs — fix only the ones that reproduce.
+- **State note (2026-11-05):** closed as a pure verify item: the two remaining popups (structured step text, section name) are checked by the DORA_VERIFY recipe-view line 'The two remaining inline q-popup-edits on a phone'; fix only what reproduces there.
+
+## [RESOLVED] FU-720 — nothing verifies the deployed route map; a deploy can delete a feature silently
+- **Raised:** 2026-08-23 (FU-717 post-mortem)
+- **Type:** finding.
+- **What:** FU-717 was an rsync exclude (`--exclude='data'`, unanchored) deleting
+  `dora_api/features/data/` from the server on every deploy. The app then booted
+  **completely clean** — no warning, no error, healthcheck green — and served
+  `"Endpoint was not found."` for all 15 endpoints that had silently vanished.
+  There is no boot-time or post-deploy check that the route map is what the
+  build intended, so a whole feature can disappear and the only signal is a user
+  hitting a page weeks later.
+- **Why deferred:** wants a decision on shape before building. Options, cheapest
+  first: (a) log the registered route count per blueprint at boot, so
+  `DATA_ROUTER: 0 routes` is visible in `docker compose logs`; (b) a boot
+  assertion that every `*_ROUTER` in `features/routers.py` has ≥1 rule — a
+  blueprint with none is always a packaging bug, never intentional; (c) a
+  post-deploy smoke script that curls one known endpoint per blueprint. (b) is
+  the strongest per line of code and would have failed this deploy loudly at
+  startup. Pairs naturally with **FU-719** (same file, same class of silent
+  discovery failure) and belongs with the ops/CI work in FU-405.
+- **Recommended resolution:** opportunistic, or now alongside FU-719 — the two
+  are one small hardening pass over `startup.py` / `infrastructure/utils.py`.
+- **2026-10-23 (finalisation Stage 1):** cheapest shape (log the registered route count per blueprint at boot) rides along with 19-R19's `register_jobs`/router wiring tidy — FINALISATION_REVIEW 19-D5.
+- **2026-10-27 (finalisation 19-R19 / unit 29):** the cheapest shape landed — `register_routers` logs "Registered N router(s), M route(s)" and `jobs.register_jobs` logs the job table at boot; a lost feature directory now shows as a lower count. The post-deploy *assertion* (a pinned expected count or route-map hash) is still open.
+- **State note (2026-11-05):** register_routers refuses to boot when any *_ROUTER has no routes (names them), so FU-717's lost-directory deploy fails loudly at startup; the per-boot route count log stays.
+
+## [RESOLVED] FU-712 — `expiryIndicator` tooltips now format dates; check the two recipe pages don't drift
+- **Raised:** 2026-08-22 (expiry-menu work)
+- **Type:** leftover.
+- **What:** `expiryIndicatorFor` was echoing the raw ISO date into its tooltip
+  (a D-006 violation) and now routes through `formatDate`. The recipe page builds
+  the *same* two phrases ("Expired {when}" / "Expires {when}") by hand rather than
+  calling the helper — which is how the ISO leak survived in the first place.
+- **Why deferred:** out of scope; the page was mid-redesign with two live copies
+  and folding them in would have collided.
+- **Recommended resolution:** **now-ish — the blocker cleared.** [[FU-688]]
+  resolved 2026-08-26 and there is only one recipe page again
+  (`web_app/src/pages/RecipeDetailPage.vue`, formerly `RecipeDetailNext.vue`).
+  Point the survivor at `expiryIndicatorFor` — search it for "Expires ".
+- **State note (2026-11-05):** already done. The merged recipe page no longer builds "Expired {when}" / "Expires {when}" by hand (no such strings remain); dates there go through the shared helpers.
+
+## [RESOLVED] FU-711 — "open / in-use" wording is now split across surfaces
+- **Raised:** 2026-08-21 (stock-item detail feedback batch)
+- **Type:** finding.
+- **What:** the detail page's row is now labelled **Opened** (owner-picked), but
+  `StockItemRow.vue` still says "Mark as open / in-use" (aria-label + tooltip) and
+  `components/help/AttentionRulesDialog.vue` still explains "the open / in-use toggle".
+  Same control, two names.
+- **Why deferred:** the feedback was scoped to the detail page; renaming the row's
+  aria-label + the help copy touches the attention-rules explainer, which has its own
+  wording review.
+- **Recommended resolution:** opportunistic — next time either surface is touched, or
+  as part of a copy sweep. One word, three call sites.
+- **State note (2026-11-05):** one name, "Opened": the stock row's toggle reads "Mark as opened" (aria-label + tooltip), the overview filter chip "Opened", and the attention-rules explainer "the Opened toggle".
+
+## [RESOLVED] FU-704 — `PriceEntry` is desktop-shaped, and all its help is hover-only
+- **Raised:** 2026-08-21 (prices-surface UX investigation)
+- **Type:** finding
+- **What:** The log-a-price form is the one screen used standing in a supermarket
+  aisle on a phone, and it has no responsive treatment: **Price / Size / Unit
+  three-across** in a bare `row q-gutter-sm` with no `col-12 col-sm-*`
+  (`PriceEntry.vue:36`) — ~105px per field at 375px. `type="number"` with no
+  `inputmode="decimal"`, so wrong keypad plus spinner arrows eating width. And
+  every explanation is a `q-tooltip`, i.e. **hover-only and invisible on touch** —
+  including the pack-count help (the most confusing field) and the two
+  `help_outline` tooltips that *define* "usually" / "above usual", so the
+  trust-critical copy is desktop-only. Also: the store select vanishes entirely
+  when no stores exist (`v-if="storeOptions.length > 0"`) with no "add a store"
+  path, silently removing the dimension that makes "where is this cheapest"
+  answerable.
+- **Why deferred:** out of scope of the read-only investigation; wants a single
+  pass over the form rather than piecemeal edits.
+- **Recommended resolution:** now — independent of FU-703; the form survives
+  whichever way that decision goes.
+- **State note (2026-11-05):** size + pack count use inputmode decimal/numeric; no-stores case says where to add stores instead of silently dropping the field; the hover-only help it named is gone since the 2026-08 rework (no tooltips left in the form). One PriceEntryValue type replaces five inline copies.
+
+## [RESOLVED] FU-706 — Logged prices can be deleted but never edited, and delete has no confirm
+- **Raised:** 2026-08-21 (prices-surface UX investigation)
+- **Type:** finding
+- **What:** `deleteObservation` (`StockItemDetailPage.vue:1829`) fires straight
+  through — no confirm, no undo — and there is **no edit path at all**. A
+  fat-fingered `1250` for `12.50` poisons the median it feeds and can only be
+  fixed by delete + retype. There is also no date field anywhere in
+  `PriceEntry`: `observed_at` is server-set, so a receipt from yesterday cannot
+  be entered. And the raw observation list under the widget is untitled,
+  uncapped and ungrouped (no store/dimension grouping, no "show more") — it will
+  run to hundreds of rows mid-Overview-tab for a frequently-logged item, in
+  contrast to the History tab which does honest truncation.
+- **Why deferred:** read-only investigation; edit needs a PATCH endpoint that
+  does not exist yet.
+- **Recommended resolution:** now-ish — the no-edit path is a data-quality hole in
+  the dataset the whole feature exists to build.
+- **State note (2026-11-05):** PUT /stock-items/<id>/price-observations/<obs> replaces a logged price (shared PriceObservationRequest; omitted date keeps the original); DTO carries store_id; detail page has Edit (PriceEntry in edit mode, "Save") and a confirm before Remove; Recent prices capped at 5 with "Show all N"; PriceEntry has a Date field so a receipt from yesterday can be entered (sent as that day's midday UTC). Tests: put corrects in place; put across items 404.
+
+## [RESOLVED] FU-692 — `ICONS.restaurant` means four different things
+- **Raised:** 2026-08-20 (cookbook feedback batch 3 — icon crossover item).
+- **Type:** finding.
+- **What:** the owner's report was "inconsistent and crossover icons between
+  filters and recipe cards", naming difficulty and cook-time/time-of-day. Those
+  three are fixed. Auditing them turned up a fourth, wider one that was **not**
+  in scope: `ICONS.restaurant` (fork-and-knife) currently stands for *a meal*
+  (meal-plan chips/cards, the `no_planned_meals` alert, the dashboard,
+  `UpcomingTimeline`, onboarding, Help), *the admin Cooking settings page*,
+  *the About page*. Servings was a fifth meaning until this session moved it to
+  `ICONS.people`. **The recipe-tools crossover resolved itself** on 2026-08-26:
+  it lived in the old recipe page's chip row, which [[FU-688]] deleted; the
+  surviving page doesn't glyph its Tools panel at all.
+- **Why deferred:** it spans meal plans, dashboard, alerts, settings, help and
+  onboarding — six surfaces the owner hasn't reviewed — and the fix is a
+  glossary decision ("what is the one thing fork-and-knife means?") before it's
+  an edit. Doing it as a side effect of a cookbook fix is how you get a diff
+  nobody can review.
+- **Fix shape:** pin `restaurant` = "a meal / an occasion of eating" (its
+  dominant use), then repoint the outliers: tools → `blender`, the admin
+  Cooking page and About row → something that isn't a plate.
+- **Recommended resolution:** opportunistic, or as part of the next icon/design
+  pass — worth doing before the icon set gets a sixth meaning.
+- **State note (2026-11-05):** restaurant (fork-and-knife) now means only a meal: meal plans, the no-planned-meals alert, meal swaps, the builder's review step. The admin Cooking page (nav + header) and About's 'what you can cook tonight' row take chef_hat (the act of cooking); the Kitchen-features nav group takes kitchen. icons.ts says so beside the entry.
+
+## [RESOLVED] FU-680 — the ingredient-unit reconciliation has no density bridge
+- **Raised:** 2026-08-19 (recipe view feedback batch)
+- **Type:** follow-up
+- **What:** recipe costing now converts an ingredient's quantity into the unit its
+  price is per, and leaves the ingredient **unpriced** when the two can't bridge.
+  `units.convert` *can* cross mass↔volume when given an ingredient name that's in
+  `INGREDIENT_DENSITY_G_PER_ML`, but `recipe_cost._line_cost` doesn't pass one — so
+  "200 ml of milk" against a price per kg reads as unpriceable even though the
+  density table knows the answer.
+- **Why deferred:** the reported bug was a wildly *wrong* number; an honest gap is
+  the correct floor and shipping it doesn't depend on this. Passing a name also needs
+  a decision about which name (the stock item's, which is user-typed, vs the linked
+  product's) and how loudly to flag a density-derived estimate.
+- **Fix shape:** pass `ingredient=<stock item name lowercased>` into `units.convert`
+  from `_line_cost`, and mark the resulting `CostLine` so the breakdown can show the
+  estimate is density-derived.
+- **Recommended resolution:** when the cost card next comes up, or if the owner
+  reports "it says it can't price something it obviously can".
+- **State note (2026-11-05):** resolved by FU-874 (2026-09-09): _price_line passes the stock item's name to units.convert, so a mass-vs-volume pair the density table knows is priced, and a measured portion row (resolve_grams) is preferred over the modelled density. Not flagged per line: the whole breakdown is already titled and worded as an estimate, so a per-line 'density-derived' mark would add a second, finer hedge nobody asked for.
+
+## [RESOLVED] FU-672 — settings page-header icon is declared twice per page (nav + page)
+- **Raised:** 2026-08-18 (settings heading-icon sweep)
+- **Type:** finding
+- **What:** every settings page's heading icon is now set on the page itself
+  (`SettingsPageHeader :icon` / `TaxonomyManagerPage :icon`) while the *same*
+  icon is declared independently in `SettingsShell.vue`'s nav definitions. They
+  agree today (verified live across all 31 pages) but only by hand — an
+  R-003-shaped duplication, the same "one source for the IA" argument that made
+  both navs read one `navGroups`.
+- **Why deferred:** the structural fix is a shared route→icon map both the nav
+  and the pages read, which touches all 31 page components; out of scope for a
+  polish pass that was asked to add the missing icons.
+- **Recommended resolution:** opportunistic — fold into the next settings-IA
+  change that touches `SettingsShell.vue` nav definitions anyway.
+- **State note (2026-11-05):** config/settingsPageIcons.ts is the one path->icon map; the sidebar (SettingsNavGroup), the phone nav (SettingsMobileNav) and SettingsPageHeader read it (the header by route path, with an explicit :icon only for a heading that isn't a page's own). Nav entries, 36 page headers, TaxonomyManagerPage and VocabListEditor no longer declare an icon.
+
+## [RESOLVED] FU-655 — Deactivation only bites on `/auth/me` and the admin gate, not on every authenticated route
+- **Raised:** 2026-08-17 (admin-settings rework).
+- **Type:** finding.
+- **What:** switching a user off is enforced in exactly three places — `login` refuses to
+  mint a session, `get_me` clears an existing cookie on the next probe, and
+  `auth/admin_gate.require_admin` re-checks before any admin action. A deactivated user
+  holding a live cookie who never hits `/auth/me` could still call ordinary
+  (non-admin) API routes until the SPA's next `/me`. In practice the SPA probes `/me`
+  on boot and on refocus, so the window is short and the surfaces reachable in it are
+  household-shared data the person already had — but "short" isn't "closed".
+- **Why deferred:** there is no shared authenticated-route resolver to hang the check
+  on — that's exactly the ~13-way hand-rolled `session['user_id']` → `User` dance in
+  **FU-654**. Adding a 14th copy of the check to each feature is the wrong fix; the
+  right one is a single `current_user()` that refuses inactive users, which lands with
+  FU-654's sweep.
+- **Recommended resolution:** with FU-654 — the check is two lines once the resolver
+  exists.
+- **State note (2026-11-05):** already closed by SEC-4 (resolve_session_user on every protected route; test__deactivated_user__CookieRejectedOnEveryRoute). No change.
+
+## [RESOLVED] FU-652 — Sweep the remaining `secondary` colour uses against D-020
+- **Raised:** 2026-08-16 (stock-overview dark-mode colour fix).
+- **Type:** follow-up.
+- **What:** D-020 (new) says an indicator painted in `secondary` must read
+  `--brand-secondary-strong`, not the surface-grade token. This unit converted the three
+  Stock-Overview marks (row stripe, filter chips, footer count). Not swept: the
+  `color="secondary"` icons in `RecipeDetailPage.vue:643`, `RecipeCookMode.vue:314`,
+  `AdminSystemRegionSettings.vue:40,104`, and `DoraChat.vue:617`'s
+  `background: var(--q-secondary)` scrollbar thumb. Each needs a look at whether it's a
+  mark-on-page (convert) or genuinely surface-ish (leave).
+- **Why deferred:** scope — the owner reported two specific surfaces; converting the
+  rest unasked is exactly the drive-by the standards warn against.
+- **Recommended resolution:** opportunistic — next time one of those files is open.
+- **State note (2026-11-05):** closed. Marks against the page take --brand-secondary-strong via a new .dora-text-secondary-mark (ProductCard's "Custom" outline chip, AttentionRulesDialog's essential flag) and DoraChat's scroll thumb; the cook-mode swap chip is a fill, so it stays surface-grade (comment says why). The RecipeDetailPage / RecipeCookMode / Region icons the FU named no longer paint secondary.
+
+## [RESOLVED] FU-633 — Stock locations has no "not stored anywhere" row (items with no location are invisible)
+- **Raised:** 2026-08-14 (stock-locations settings redesign).
+- **Type:** deferred job.
+- **What:** Deleting a location unassigns its items ("the items themselves stay in your
+  stock"), and items can be created without a location — but no surface counts or lists
+  them, so they silently fall out of the location view entirely. The redesign's mockup
+  had a "Not stored anywhere — N items → Review" row at the foot of the zone list; it
+  was cut from the build for want of the data.
+- **Why deferred:** needs a server-side count (R-003 — the client must not sum stock items
+  to derive it). `GET /locations` returns a bare `List[LocationNodeDto]`, so adding
+  `unassigned_item_count` means either an envelope (breaking the picker + StockOverview,
+  which both consume the bare list) or a separate small endpoint. Out of scope for a
+  layout redesign — R-007.
+- **Recommended resolution:** opportunistic — next time the locations API is touched.
+  Note `get_location_tree.py:62` already says "None = unassigned, surfaced separately in
+  the UI", which was never true.
+- **State note (2026-11-05):** GET /locations/unassigned-count (test); Settings → Locations shows a 'Not stored anywhere · N items · Review' row; the stock filter leads with 'Not stored anywhere' (value 'none', NO_LOCATION_FILTER), bulk move reads a separate real-locations list; spec covers both.
+
+## [RESOLVED] FU-627 — Per-user deals-email opt-in ignores the install-wide `deals_email` admin flag
+- **Raised:** 2026-08-13 (Notifications settings feedback, item 2).
+- **Type:** finding.
+- **What:** The deals-email section (NotificationsSettings) + the admin users-page column are now gated on `products` (data-presence) and SMTP, per owner feedback. But neither honours the separate install-wide `deals_email_enabled` AppSetting flag (admin toggle in Settings → System → Features, surfaced as `features.deals_email`). So with products present + SMTP configured but the admin master switch **off**, users can still toggle a deals-email subscription that the feature won't act on. Pre-existing (the section never gated on it); products-gating was what the feedback asked for.
+- **Why deferred:** owner's item 2 specified `products` as the gate, not the master flag; adding a second gate is a scope-adjacent correctness call better made deliberately. Decide whether `deals_email` install-flag should also hide the section (likely yes) or whether `products` presence is intended to subsume it.
+- **Recommended resolution:** opportunistic — when next touching deals-email. Fold `features.deals_email` into the `v-if` alongside `productsEnabled` if kept as a real master switch.
+- **State note (2026-11-05):** moot. The install-wide `deals_email_enabled` AppSetting was removed 2026-10-15 (app_setting.py note; health sends no `deals_email`), so the per-user opt-in gated on products + SMTP is the whole rule.
+
+## [RESOLVED] FU-576 — uploads.spec.ts L79 pin fails under the system-Chrome e2e channel
+- **Raised:** 2026-07-17 (verify-campaign Batch 2, running the e2e suite)
+- **Type:** finding
+- **What:** `e2e/uploads.spec.ts:46` ("Remove clears the picked file without reopening
+  the picker", FU-545 L79 pin) fails when the suite runs under `DORA_E2E_CHANNEL=chrome`:
+  clicking **Remove file** emits one `filechooser` event (`pickerOpened` = 1, expected 0).
+  The two functional assertions in the same test PASS — the idle "choose a spreadsheet"
+  prompt returns and the picked filename is cleared — so the Remove UX itself works; only
+  the picker-reopen instrumentation trips. Reproduces in isolation; **not** caused by the
+  stocktake work this session (that spec is green). Suspected browser-channel difference in
+  how `filechooser` fires on the hidden `<input type=file>` — the campaign's green baseline
+  ran the bundled Chromium, which isn't installed on this box (`npx playwright install`
+  couldn't fetch it, hence the `chrome` fallback).
+- **Why deferred:** out of scope for the stocktake slice; needs a bundled-Chromium run to
+  confirm channel-only vs a real Remove-handler regression, and possibly a channel-tolerant
+  assertion.
+- **Recommended resolution:** when a bundled-Chromium (or CI) e2e run is available — re-run
+  `uploads.spec.ts`; if green there, harden the L79 assertion against the Chrome channel
+  (or pin the channel for the pin). Only treat as a product bug if it also fails on Chromium.
+- **State note (2026-11-05):** real bug, fixed. SettingsFileDrop's Remove button sits inside the <label>; the click swaps the button out of the DOM and Chrome then runs the label's activation and opens the file picker. Reproduced with a two-case Playwright page (without preventDefault: 1 filechooser; with: 0). onClear now calls preventDefault. The uploads.spec.ts pin itself went with the 2026-07-20 feature-spec deletion.
+
+## [RESOLVED] FU-575 — Stock-item / recipe name uniqueness is application-level only (concurrent-create race) + recipe name not whitespace-normalised
+- **Raised:** 2026-07-17 (Codex review of stock-item create — P3, + a parallel spotted while fixing P1/P2).
+- **Type:** finding (low priority).
+- **What:**
+  1. **P3 — no DB unique constraint on `StockItem.name`.** `CreateStockItemHandler` checks for an existing (case-insensitive) name before insert (`create_stock_item.py:~90`), but the column has no unique constraint, so two tabs/devices can both pass the check and insert the same name (a soft duplicate — not corruption). Same shape on `Recipe.name`.
+  2. **Recipe name whitespace parallel** — the P2 fix added a `strip` `field_validator` to `Create/UpdateStockItemRequest`; `create_recipe.py` / `update_recipe.py` use `Field(min_length=1, max_length=255)` **without** it, so recipes still accept `" Foo "` / `"   "`. Same class, different surface (R-code-style consistency).
+- **Why deferred:** the race is vanishingly unlikely + low-harm on a single-household self-host app (Codex itself rated it low). A real fix means a **unique constraint + migration + a case-insensitivity decision** (a plain unique index is case-sensitive on Postgres; case-insensitive uniqueness needs a functional index / `citext`, which differs SQLite↔Postgres — R-005/R-006 care). Disproportionate right now.
+- **Recommended resolution:** opportunistic. (a) The recipe-name strip is a trivial 4-line `field_validator` mirror of the stock-item fix — do it next time recipes are touched. (b) The unique-constraint/race is a data-model call — bundle with the FU-045 Postgres/migration work or whenever concurrent-write hardening is on the table; decide case-insensitive-uniqueness semantics then.
+- **State note (2026-11-05):** (2) recipe create/update strip name before length check (test). (1) DB unique index won't-do: case-insensitive expression index would fail the deploy migration on any existing case-variant duplicate in a live DB (R-095 forbids dropping/renaming data to make it pass), and the race is two tabs creating the same name in the same instant on a one-household install; the app-level check stays the authority.
+
+
 ## [RESOLVED] FU-608 — Owner checklist: stand up the open-source + donation infrastructure, then swap the in-app placeholders
 - **Raised:** 2026-07-31 (donation / open-source pivot — [[FU-562]]/[[FU-567]] resolved; part of the reframed [[FU-406]] release readiness).
 - **Type:** deferred job (owner/external actions + a one-pass placeholder swap).

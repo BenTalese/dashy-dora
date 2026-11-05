@@ -147,18 +147,18 @@
     .cmg__body {
         display: flex;
         flex-direction: column;
-        gap: var(--space-4, 16px);
+        gap: var(--space-4);
     }
 
     .cmg__note {
         color: var(--text-secondary);
-        font-size: 0.875rem;
+        font-size: var(--font-size-sm);
     }
 
     .cmg__lead {
-        margin: 0 0 var(--space-2, 8px);
+        margin: 0 0 var(--space-2);
         color: var(--text-primary);
-        font-size: 0.9375rem;
+        font-size: var(--font-size-md);
     }
 
     /* A vertical list of names, not a bulleted paragraph: no markers, one
@@ -176,24 +176,24 @@
     }
 
     .cmg__names > li {
-        padding: var(--space-2, 8px) var(--space-3, 12px);
-        border-radius: var(--radius-sm, 4px);
+        padding: var(--space-2) var(--space-3);
+        border-radius: var(--radius-sm);
         background: var(--surface-sunken);
         color: var(--text-primary);
-        font-size: 0.875rem;
+        font-size: var(--font-size-sm);
         font-weight: 600;
     }
 
     .cmg__subs {
         display: flex;
         align-items: flex-start;
-        gap: var(--space-2, 8px);
+        gap: var(--space-2);
         /* The body is a flex column with its own gap now — the old margin
            would stack on top of it. */
-        padding: var(--space-2, 8px) var(--space-3, 12px);
-        border-radius: var(--radius-md, 6px);
+        padding: var(--space-2) var(--space-3);
+        border-radius: var(--radius-md);
         background: var(--semantic-positive-soft);
         color: var(--text-primary);
-        font-size: 0.875rem;
+        font-size: var(--font-size-sm);
     }
 </style>

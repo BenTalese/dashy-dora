@@ -526,7 +526,7 @@
         left: 50%;
         transform: translateX(-50%);
         padding: 6px 14px;
-        background: rgba(76, 175, 80, 0.92);
+        background: color-mix(in srgb, var(--semantic-positive) 92%, transparent);
         color: var(--text-inverse);
         border-radius: 999px;
         font-size: 13px;
@@ -536,8 +536,10 @@
         max-width: 90vw;
     }
     /* FU-378 — action-result banner colours mirror the good/bad flash. */
-    .scan-banner--ok { background: rgba(76, 175, 80, 0.92); }
-    .scan-banner--bad { background: rgba(239, 83, 80, 0.94); }
+    /* The theme's semantic colours, not fixed greens and reds (R-002; the
+       FU-798 sweep found these). */
+    .scan-banner--ok { background: color-mix(in srgb, var(--semantic-positive) 92%, transparent); }
+    .scan-banner--bad { background: color-mix(in srgb, var(--semantic-negative) 94%, transparent); }
     /* FU-378 — caller-owned control zone (current-action switcher). Centred
        above the manual-entry box. */
     .scan-controls {

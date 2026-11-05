@@ -41,6 +41,22 @@ next.
 
 ---
 
+## 2026-11-06 (later): **Low-severity alert colour now info blue (uncommitted)**
+
+**Done:** owner: alert colours too similar on Settings > Notifications. `--severity-medium` (hsl 30) and `--severity-low`
+(hsl 38) were near-identical oranges. `--severity-low` (FYI tier, only consumer `colorFor` in `models/alert.ts`) now
+aliases `--semantic-info`, so it follows each theme's info blue. Style guide's ordinal-severity note updated.
+
+**Gates:** token-only; not walked live. **Close-gate:** R-002 (token, not palette class) / R-003 (one source via alias). No new rule.
+
+## 2026-11-06: **Recipe page wheel-scroll trapped over ingredients/method (uncommitted)**
+
+**Done:** owner reported the page wouldn't scroll with the cursor over the method or ingredients. Cause: the shared
+`.rn__pane` in `web_app/src/css/recipeDetail.scss` had `overscroll-behavior: contain`, which blocks scroll chaining
+even when the pane has nothing to scroll. Removed it; panes still scroll internally, then hand off to the page.
+
+**Gates:** CSS-only; not walked live (browser pane can't render routed pages). **Close-gate:** no rule touched. No new rule.
+
 ## 2026-11-05 (later): **Donation links live: PayPal + GitHub Sponsors, FU-608 resolved (uncommitted)**
 
 **Done:** owner sent the PayPal donate link and set up GitHub Sponsors (`BenTalese`); Buy Me a Coffee dropped (owner

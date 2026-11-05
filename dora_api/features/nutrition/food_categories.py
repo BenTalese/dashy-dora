@@ -56,6 +56,27 @@ def normalise_category(description: Optional[str]) -> Optional[str]:
     return cleaned or None
 
 
+# FU-749: USDA files fried potato products under Vegetables (36 SR Legacy rows:
+# french fries, crisps, hash browns, tempura), but a fried, fat-laden product
+# is not the vegetable both schemes reward. Matched as whole words in the food's
+# name, so "fried" excludes "Potatoes, french fried" and not "Fried rice"
+# (which isn't in a qualifying category anyway).
+_FRIED_PRODUCT_WORDS: frozenset[str] = frozenset({
+    "fried", "fries", "chips", "crisps", "tempura", "hash",
+})
+
+
+def counts_as_produce(category: Optional[str], food_name: Optional[str], *, nutri_score: bool = False) -> bool:
+    """Whether a food counts toward the recipe's fruit/veg numerator: its
+    category qualifies under the scheme (`is_fvnl_category` for HSR,
+    `is_fvl_category` for Nutri-Score) and it isn't a fried product."""
+    in_category = is_fvl_category(category) if nutri_score else is_fvnl_category(category)
+    if not in_category:
+        return False
+    words = set("".join(c if c.isalnum() else " " for c in (food_name or "").lower()).split())
+    return not (words & _FRIED_PRODUCT_WORDS)
+
+
 def is_fvnl_category(description: Optional[str]) -> bool:
     """Whether a food in this category counts toward the HSR fvnl percentage.
 

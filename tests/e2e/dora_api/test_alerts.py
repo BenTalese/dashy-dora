@@ -592,7 +592,7 @@ def test__alerts__price_watch_fires_at_or_below_the_threshold(api):
 
         # Above the current price: fires.
         assert requests.post(f"{BASE}/price-history/alerts", json={
-            "product_id": pid, "threshold_unit_price": price + 1,
+            "product_id": pid, "threshold_price": price + 1,
         }).status_code == 200
         alert = _find_kind(_alerts(), "price_drop", target_id=pid)
         assert alert is not None
@@ -607,10 +607,46 @@ def test__alerts__price_watch_fires_at_or_below_the_threshold(api):
         # Re-setting the watch replaces it (one per product): below the price,
         # nothing fires.
         assert requests.post(f"{BASE}/price-history/alerts", json={
-            "product_id": pid, "threshold_unit_price": max(price - 1, 0.01),
+            "product_id": pid, "threshold_price": max(price - 1, 0.01),
         }).status_code == 200
         watches = requests.get(f"{BASE}/price-history/alerts").json()["items"]
         assert sum(1 for w in watches if w["product_id"] == pid) == 1
         assert _find_kind(_alerts(), "price_drop", target_id=pid) is None
     finally:
         requests.patch(APP_SETTINGS, json={"money_enabled": False})
+
+
+def test__alert_interactions__prune_drops_finished_episodes_only(api):
+    """FU-916: a dismissal whose episode ended goes once it is older than the
+    longest discard window; one whose alert is still raised stays."""
+    from datetime import datetime, timezone
+    from sqlalchemy import update
+    from dora_api.app import app, db
+    from dora_api.features.alerts.prune_alert_interactions import (
+        KEEP_DAYS, prune_finished_interactions)
+    from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
+
+    ended = f"alert-prune-ended-{uuid.uuid4().hex[:8]}"
+    live = f"alert-prune-live-{uuid.uuid4().hex[:8]}"
+    _create_expired_item(ended)
+    _create_expired_item(live)
+    ended_key = _find(_alerts()["items"], ended)["alert_id"]
+    live_key = _find(_alerts()["items"], live)["alert_id"]
+    for key in (ended_key, live_key):
+        assert requests.post(f"{BASE}/alerts/{key}/dismiss").status_code == 204
+
+    # End the first episode: a new expiry date is a new key.
+    items = requests.get(f"{BASE}/stock-items?limit=500").json()["items"]
+    item_id = next(i["stock_item_id"] for i in items if i["name"] == ended)
+    earlier = (date.fromisoformat(_yesterday()) - timedelta(days=1)).isoformat()
+    assert requests.patch(f"{BASE}/stock-items/{item_id}", json={"expiry_date": earlier}).status_code in (200, 204)
+
+    with app.app_context():
+        table = db.metadata.tables["AlertInteraction"]
+        old = datetime.now(timezone.utc) - timedelta(days=KEEP_DAYS + 1)
+        db.session.execute(update(table).where(table.c.alert_key.in_([ended_key, live_key])).values(created_at=old))
+        db.session.commit()
+        prune_finished_interactions(SqlAlchemyRepository(), datetime.now(timezone.utc))
+        left = {r.alert_key for r in db.session.execute(
+            table.select().where(table.c.alert_key.in_([ended_key, live_key]))).all()}
+    assert left == {live_key}

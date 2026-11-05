@@ -281,7 +281,7 @@ function createStockItemDetail(idSource: () => string) {
             try {
                 const { series } = await priceSeriesApi.seriesAsync(batch, '90d');
                 for (const s of series) {
-                    map.set(s.product_id, s.points.map((pt) => pt.unit_price ?? 0).filter((n) => n > 0));
+                    map.set(s.product_id, s.points.map((pt) => pt.price ?? 0).filter((n) => n > 0));
                 }
             } catch {
                 // Sparklines just render empty if history can't be loaded.

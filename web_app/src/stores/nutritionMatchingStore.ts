@@ -16,11 +16,11 @@ export const useNutritionMatchingStore = defineStore('nutritionMatching', () => 
     let hydrated = false;
     let inflight: Promise<void> | null = null;
 
+    // Set-aside items aren't outstanding work, so the server's count leaves
+    // them out, as the list does.
     const refreshAsync = (): Promise<void> =>
-        // `false` — set-aside items are not outstanding work, so they must not
-        // inflate the badge.
-        nutritionApiService.getUnmatchedItemsAsync(false).then((dto) => {
-            count.value = dto.items.length;
+        nutritionApiService.getUnmatchedItemCountAsync().then((n) => {
+            count.value = n;
             hydrated = true;
         });
 

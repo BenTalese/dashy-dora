@@ -225,3 +225,12 @@ def test__cookbook_filter__soonest_date_is_absent_without_the_filter(api):
     row = next(r for r in unfiltered if r["recipe_id"] == recipe["recipe_id"])
     assert row["expiring_soonest_date"] is None, row
     assert row["expiring_ingredient_count"] == 0, row
+
+
+def test__uses_expiring__resolves_to_the_server_horizon(api):
+    # FU-669: the cookbook filter names no number; the server's horizon decides.
+    import requests as _r
+    base = "http://localhost:5170/api/recipes"
+    by_flag = {r["recipe_id"] for r in _r.get(f"{base}?uses_expiring=true&limit=500").json()["items"]}
+    by_days = {r["recipe_id"] for r in _r.get(f"{base}?expiring_within_days=14&limit=500").json()["items"]}
+    assert by_flag == by_days

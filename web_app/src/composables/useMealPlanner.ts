@@ -338,10 +338,20 @@ export function useMealPlanner() {
      */
     function dissolveOrphanCookKeys(
         entries: MealPlanEntryCommand[],
+        plan: MealPlan | undefined,
     ): MealPlanEntryCommand[] {
         const size = new Map<string, number>();
         for (const cmd of entries) {
             if (cmd.cook_key) size.set(cmd.cook_key, (size.get(cmd.cook_key) ?? 0) + 1);
+        }
+        // A batch straddling today keeps its past days server-side, which the
+        // payload never carries (FU-595). Counted here, so its last forward day
+        // stays a leftover of that cook rather than turning into a plain meal
+        // (FU-863); the server validates it against the same preserved days.
+        for (const e of plan?.entries ?? []) {
+            if (e.cook_batch_id && !isForwardEditable(e)) {
+                size.set(e.cook_batch_id, (size.get(e.cook_batch_id) ?? 0) + 1);
+            }
         }
         return entries.map((cmd) => {
             if (!cmd.cook_key || (size.get(cmd.cook_key) ?? 0) >= 2) return cmd;
@@ -370,14 +380,15 @@ export function useMealPlanner() {
         planId: string,
         entries: MealPlanEntryCommand[],
     ): Promise<boolean> {
-        const revision = mealPlans.value.find((p) => p.meal_plan_id === planId)?.revision;
+        const plan = mealPlans.value.find((p) => p.meal_plan_id === planId);
+        const revision = plan?.revision;
         // The planner's edits are explicit, so set the clear flag when an
         // action empties the future-entries list. The backend treats an
         // unflagged [] as a probable bug and refuses.
         try {
             await mealPlanStore.updateMealPlanAsync({
                 meal_plan_id: planId,
-                entries: dissolveOrphanCookKeys(entries),
+                entries: dissolveOrphanCookKeys(entries, plan),
                 ...(entries.length === 0 ? { confirm_clear_entries: true } : {}),
                 ...(revision ? { expected_revision: revision } : {}),
             });

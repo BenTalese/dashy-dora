@@ -178,6 +178,13 @@
 
     /* ────────────────────────────── Overlays ─────────────────────── */
     --overlay-scrim: hsla(168, 30%, 10%, 0.55);
+    /* D-009 placement budget for the bottom-right corner, where the Dora
+       launcher docks (FU-784). `--dora-launcher-inset` is its gap from the
+       edge; `--bottom-chrome-offset` is the height the corner reserves, which
+       the toast column stacks above. A page that adds fixed bottom chrome
+       there sits above this offset too, rather than patching a third number. */
+    --dora-launcher-inset: 18px;
+    --bottom-chrome-offset: 112px;
     --overlay-dim: hsla(168, 30%, 10%, 0.18);
     --overlay-hover: hsla(168, 30%, 10%, 0.04);
     --overlay-active: hsla(168, 30%, 10%, 0.08);
@@ -236,7 +243,10 @@
     --severity-critical: light-dark(hsl(1 77% 55%),  hsl(1 78% 68%));       /* was red-6 */
     --severity-high:     light-dark(hsl(14 91% 54%), hsl(14 85% 68%));      /* was deep-orange-6 */
     --severity-medium:   light-dark(hsl(30 100% 48%), hsl(30 95% 62%));     /* was orange-7 */
-    --severity-low:      light-dark(hsl(38 100% 50%), hsl(38 95% 62%));     /* was amber-7 */
+    /* Low is the FYI tier (nudges, not problems). It was amber, 8 degrees off
+       medium's orange, so the two read as one colour side by side; it takes
+       the info blue instead, which also says "for your information". */
+    --severity-low:      var(--semantic-info);
 
     /* "Attention" tone — deeper than severity-low so it doesn't read as
        an alert. Used by grabby-not-critical affordances: the AddToList

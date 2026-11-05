@@ -15,8 +15,8 @@ export const useUnlinkedIngredientsStore = defineStore('unlinkedIngredients', ()
     let inflight: Promise<void> | null = null;
 
     const refreshAsync = (): Promise<void> =>
-        recipeApiService.getUnlinkedIngredientsAsync().then((dto) => {
-            count.value = dto.unlinked.length;
+        recipeApiService.getUnlinkedIngredientCountAsync().then((n) => {
+            count.value = n;
             hydrated = true;
         });
 

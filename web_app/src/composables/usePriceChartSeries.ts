@@ -48,6 +48,11 @@ export interface PriceChartPoint {
 export interface PriceChartSeries {
     key: string;
     name: string;
+    /** The series' place in the caller's own list, which picks its colour
+     *  (`seriesColour`). Stamped here rather than read from the chart's loop
+     *  index: the chart drops series with no points, and the page's chips and
+     *  cards must not shift onto a neighbour's colour when it does (FU-846). */
+    colourSlot: number;
     points: PriceChartPoint[];
     contextPoints?: PriceChartPoint[];
     /** Dashed reference line + its own label ("usually $4.20/kg"). */
@@ -78,11 +83,11 @@ export function productSeriesToChart(
     options: { offersAsContext?: boolean } = {},
 ): PriceChartSeries[] {
     const offersAsContext = options.offersAsContext ?? false;
-    return series.map((s) => {
+    return series.map((s, colourSlot) => {
         const offers: PriceChartPoint[] = [];
         for (const p of s.points) {
-            if (p.date === null || p.unit_price === null) continue;
-            offers.push({ date: p.date, value: p.unit_price, marked: p.on_deal });
+            if (p.date === null || p.price === null) continue;
+            offers.push({ date: p.date, value: p.price, marked: p.on_deal });
         }
         const observations: PriceChartPoint[] = [];
         for (const p of s.observation_points ?? []) {
@@ -95,6 +100,7 @@ export function productSeriesToChart(
         return {
             key: s.product_id,
             name: s.name,
+            colourSlot,
             points: showOwnData && observations.length > 0 ? observations : offers,
             ...(offersAsContext && observations.length > 0 && offers.length > 0
                 ? { contextPoints: offers }
@@ -128,6 +134,7 @@ export function stockItemHistoryToChart(
     return [{
         key: history.stock_item_id,
         name: history.name,
+        colourSlot: 0,
         points: own,
         ...(offers.length > 0 ? { contextPoints: offers } : {}),
         baseline: history.baseline != null

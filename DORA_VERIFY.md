@@ -22,9 +22,21 @@ top-to-bottom.
 
 ---
 
+## Leftovers sweep 2 (2026-11-05)
+- [ ] Stock item, Recent prices: Edit a price (change amount, date, pack count), Remove asks first, Show all appears past 5.
+- [ ] Log a price at 375px: the Date field fits the pack-count/store row; the no-stores hint links to Settings.
+- [ ] Stock overview peek: type a name change, click another row, the discard prompt appears.
+- [ ] Settings → Locations: 'Not stored anywhere' row shows with an unplaced item; Review opens the stock list filtered to it.
+- [ ] Stock item: the buy verdict card's caret lines up with the Dora-thinks card's above it; the cart/skip action sits just left of the caret and doesn't toggle the card.
+- [ ] Settings → Backup & restore after the split: library list, New backup dialog (sensitive banner), restore from a file (inspect tree, restore, report dialog) and library settings all behave as before; Remove on a picked file doesn't reopen the picker.
+- [ ] The new (?) chips at 375px: planner rail head, cook mode header, shopping list status row and the recipe headings don't wrap or crowd.
+- [ ] Recipe photos after FU-931: cookbook cards, recipe hero, planner rich cards, step photos (read view, editor, cook mode + zoom) all render; a broken step photo still says it couldn't be loaded.
+
 ## Finish-off sweep: not reached by the agents' drives (2026-11-04)
 - [ ] Shopping list with a budget set: the trim-to-budget banner and preview still work after the page split.
 - [ ] Recipe page: Change and Remove photo on a recipe that has one.
+- [ ] Recipe page (desktop): wheel over ingredients or method scrolls the page once that pane is short or at its end.
+- [ ] Settings > Notifications and the bell: FYI kinds show blue circles, clearly apart from the orange and red ones, in light and dark.
 - [ ] Cookbook: the Ingredients filter's sort toggle and the recipe method's step-style switch (both now the new segmented control).
 
 ## Touch sizes (2026-11-05) — origin FU-877

@@ -127,7 +127,11 @@ class UpdateStockItemHandler:
     def __init__(self, repository: Repository) -> None:
         self.repository = repository
 
-    def handle(self, request: UpdateStockItemRequest, stock_item_id: UUID) -> UpdateStockItemResponse:
+    def handle(
+        self, request: UpdateStockItemRequest, stock_item_id: UUID, *, commit: bool = True,
+    ) -> UpdateStockItemResponse:
+        """`commit=False` leaves the commit to a caller applying many updates as
+        one unit (bulk set-level, FU-713); every rule here still runs per item."""
         # `.include(STOCK_LEVEL)` is load-bearing (FU-533): `stock_level` is a
         # lazy="noload" relationship, so a plain `by_id()` load left
         # `_PreviousLevel` below always None. That silently (a) appended a
@@ -321,7 +325,8 @@ class UpdateStockItemHandler:
         ):
             _AutoAddResult = self._try_auto_add(_StockItem)
 
-        self.repository.save_changes()
+        if commit:
+            self.repository.save_changes()
         if _AutoAddResult is not None:
             line_id, list_id = _AutoAddResult
             return UpdateStockItemResponse(

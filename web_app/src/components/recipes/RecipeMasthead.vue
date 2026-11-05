@@ -321,19 +321,19 @@
     .rn__photo {
         width: 100%;
         aspect-ratio: 1 / 1;
-        border-radius: var(--radius-lg, 10px);
+        border-radius: var(--radius-lg);
         overflow: hidden;
         border: 1px solid var(--border-default);
     }
     .rn__photoimg { width: 100%; height: 100%; object-fit: cover; display: block; }
     .rn__photoplaceholder {
         display: flex; flex-direction: column; align-items: center; justify-content: center;
-        gap: var(--space-2, 8px);
+        gap: var(--space-2);
         width: 100%; height: 100%;
         color: var(--text-muted);
-        font-size: 0.875rem;
+        font-size: var(--font-size-sm);
     }
-    .rn__photoacts { display: flex; flex-direction: column; gap: var(--space-2, 8px); }
+    .rn__photoacts { display: flex; flex-direction: column; gap: var(--space-2); }
     /* The empty state is the tile itself now, not a separate <button>, so this
        only has to tint the well — `.rn__photoplaceholder` centres the content. */
     .rn__photo--empty { background: var(--surface-sunken); }
@@ -347,10 +347,10 @@
     .rn__fields {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-        gap: var(--space-3, 12px);
-        margin-top: var(--space-3, 12px);
+        gap: var(--space-3);
+        margin-top: var(--space-3);
     }
-    .rn__backrow { display: flex; align-items: center; gap: var(--space-2, 8px); }
+    .rn__backrow { display: flex; align-items: center; gap: var(--space-2); }
     .rn__title {
         font-size: 2rem;
         font-weight: 600;
@@ -372,22 +372,22 @@
         /* Wider than the old dot-separated gap — the glyphs are doing the
            separating now, so the space between facts has to read as bigger
            than the space inside one. */
-        gap: var(--space-2, 8px) var(--space-4, 16px);
-        margin-top: var(--space-2, 8px);
+        gap: var(--space-2) var(--space-4);
+        margin-top: var(--space-2);
         color: var(--text-secondary);
-        font-size: 0.875rem;
+        font-size: var(--font-size-sm);
     }
-    .rn__brow { display: inline-flex; align-items: center; gap: var(--space-1, 4px); }
+    .rn__brow { display: inline-flex; align-items: center; gap: var(--space-1); }
 
     .rn__facts {
         display: flex; flex-wrap: wrap;
-        gap: var(--space-2, 8px) var(--space-6, 24px);
-        margin-top: var(--space-4, 16px);
+        gap: var(--space-2) var(--space-6);
+        margin-top: var(--space-4);
     }
     .rn__fact { display: flex; flex-direction: column; gap: 2px; min-width: 60px; flex: 0 0 auto; }
     .rn__factk {
-        display: inline-flex; align-items: center; gap: var(--space-1, 4px);
-        font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.07em;
+        display: inline-flex; align-items: center; gap: var(--space-1);
+        font-size: var(--font-size-xs); font-weight: 700; letter-spacing: 0.07em;
         text-transform: uppercase; color: var(--text-muted);
     }
     /* The letter-spacing above is set for capitals; on the glyph it just

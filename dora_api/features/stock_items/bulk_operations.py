@@ -25,8 +25,8 @@ writing the levels itself. A level change is not a column write: it stamps
 history row, may record a `ConsumptionEvent`, and may fire the auto-add
 hook. Reimplementing that here would be a second copy of a rule that
 already has an owner (R-003), and the copies would drift the first time
-either side changed. One commit per item is the price; the caller still
-only pays for one round-trip.
+either side changed. Each item's update runs with `commit=False` and the set
+commits once (FU-713), so it is one round-trip and one transaction.
 """
 import logging
 from dataclasses import dataclass, field
@@ -161,6 +161,7 @@ class BulkSetLevelHandler:
             response = inner.handle(
                 UpdateStockItemRequest(stock_level_id=request.stock_level_id),
                 stock_item_id,
+                commit=False,
             )
             # A bad level id is the same answer for every item in the set,
             # so fail the whole request rather than reporting it 40 times.
@@ -170,6 +171,7 @@ class BulkSetLevelHandler:
                 failed.append(stock_item_id)
                 continue
             updated += 1
+        self.repository.save_changes()
         return BulkSetLevelResponse(updated_count=updated, failed_ids=failed)
 
 

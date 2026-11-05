@@ -49,7 +49,7 @@ def _item(*, level=STOCKED, essential=False, expiry=None) -> _Item:
 
 def _attention(item, *, window=DEFAULT_WINDOW, disabled=frozenset()):
     return attention_for(
-        item, today=TODAY, window_days=window, disabled_kinds=disabled,
+        item, item.stock_level, today=TODAY, window_days=window, disabled_kinds=disabled,
     )
 
 
@@ -156,7 +156,8 @@ def test__resolve_attention_map__keys_every_item_including_the_quiet_ones():
     quiet = _item()
     loud = _item(expiry=TODAY - timedelta(days=1))
     result = resolve_attention_map(
-        [quiet, loud], today=TODAY, window_days=DEFAULT_WINDOW,
+        [quiet, loud], {i.id: i.stock_level for i in (quiet, loud)},
+        today=TODAY, window_days=DEFAULT_WINDOW,
     )
     assert set(result) == {quiet.id, loud.id}
     assert result[quiet.id].needs_attention is False

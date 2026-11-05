@@ -99,7 +99,7 @@
         box-shadow: none;
     }
     .dora-auth-btn--ghost:hover {
-        background: rgba(0, 106, 128, 0.06);
+        background: color-mix(in srgb, var(--auth-shell-accent) 6%, transparent);
     }
 
     @media (prefers-reduced-motion: reduce) {

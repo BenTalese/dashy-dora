@@ -46,10 +46,12 @@ export function useShoppingListActions() {
         let already = 0;
         let failure: string | null = null;
         try {
+            // One request for the set (FU-714); it used to loop addLineAsync.
+            const result = await api.bulkAddLinesAsync(listId, items);
+            added = result.added;
+            already = result.already_on_list;
+            if (result.failed_ids.length > 0) failure = `${result.failed_ids.length} couldn't be added`;
             for (const item of items) {
-                const result = await api.addLineAsync(listId, item);
-                if (result.already_on_list) already++;
-                else added++;
                 if (item.stock_item_id) invalidateBuyVerdict(item.stock_item_id);
             }
         } catch (err) {

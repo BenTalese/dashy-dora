@@ -180,27 +180,27 @@
         padding: 0;
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
-        gap: var(--space-4, 16px);
+        gap: var(--space-4);
     }
-    .rsie__cell { display: flex; flex-direction: column; gap: var(--space-1, 4px); }
+    .rsie__cell { display: flex; flex-direction: column; gap: var(--space-1); }
     .rsie__tile {
         width: 100%;
         aspect-ratio: 1 / 1;
         border: 1px solid var(--border-default);
-        border-radius: var(--radius-lg, 10px);
+        border-radius: var(--radius-lg);
         overflow: hidden;
         background: var(--surface-sunken);
     }
     .rsie__img { width: 100%; height: 100%; object-fit: cover; display: block; }
     .rsie__acts {
-        display: flex; align-items: center; gap: var(--space-1, 4px);
+        display: flex; align-items: center; gap: var(--space-1);
         justify-content: center;
     }
     .rsie__num {
-        font-size: 0.8125rem; font-weight: 700;
+        font-size: var(--font-size-sm); font-weight: 700;
         font-variant-numeric: tabular-nums;
         color: var(--text-muted);
         margin-right: auto;
-        padding-left: var(--space-1, 4px);
+        padding-left: var(--space-1);
     }
 </style>

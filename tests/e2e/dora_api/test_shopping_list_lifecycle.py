@@ -108,7 +108,7 @@ def test__bulk_add__OnDoneList__IsRefusedForTheWholeList(api):
     item_id = _new_stock_item()
 
     resp = requests.post(
-        f"{SHOPPING_LISTS}/{list_id}/lines/bulk-add", json={"stock_item_ids": [item_id]},
+        f"{SHOPPING_LISTS}/{list_id}/lines/bulk-add", json={"lines": [{"stock_item_id": item_id}]},
     )
 
     # A finished list is a list-level answer (like a missing one), not a

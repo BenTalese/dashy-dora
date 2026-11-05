@@ -53,8 +53,10 @@ _LOGGER = logging.getLogger(__name__)
 # lines. Neither rule wants a second copy (R-003).
 
 class BulkAddLinesRequest(BaseModel):
+    """Each line in the single-add shape (FU-714), so a multi-item add with
+    quantities, picked products or preferred buys is one request too."""
     model_config = ConfigDict(extra="forbid")
-    stock_item_ids: List[UUID] = Field(min_length=1, max_length=500)
+    lines: List[AddLineRequest] = Field(min_length=1, max_length=500)
 
 
 @dataclass(slots=True)
@@ -73,10 +75,8 @@ class BulkAddLinesHandler:
     def handle(self, request: BulkAddLinesRequest, shopping_list_id: UUID) -> BulkAddLinesResponse:
         inner = AddLineHandler(self.repository)
         response = BulkAddLinesResponse()
-        for stock_item_id in request.stock_item_ids:
-            result = inner.handle(
-                AddLineRequest(stock_item_id=stock_item_id), shopping_list_id, commit=False,
-            )
+        for line in request.lines:
+            result = inner.handle(line, shopping_list_id, commit=False)
             # A missing list is the same answer for the whole set — bail
             # rather than reporting it once per item.
             if result.list_not_found:
@@ -89,7 +89,7 @@ class BulkAddLinesHandler:
             elif result.line_id is not None:
                 response.added += 1
             else:
-                response.failed_ids.append(stock_item_id)
+                response.failed_ids.append(line.stock_item_id or line.product_id)
         self.repository.save_changes()
         return response
 
@@ -106,7 +106,7 @@ def bulk_add_lines(shopping_list_id: UUID):
     _LOGGER.info(
         f"Bulk-add on list {shopping_list_id}: added {_Response.added}, "
         f"already-on {_Response.already_on_list}, "
-        f"failed {len(_Response.failed_ids)} of {len(_Request.stock_item_ids)}"
+        f"failed {len(_Response.failed_ids)} of {len(_Request.lines)}"
     )
     return ok({
         "added": _Response.added,

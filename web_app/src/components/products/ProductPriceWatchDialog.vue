@@ -80,7 +80,7 @@
         () => props.modelValue,
         (open) => {
             if (!open) return;
-            threshold.value = props.watch?.threshold_unit_price ?? null;
+            threshold.value = props.watch?.threshold_price ?? null;
         },
     );
 

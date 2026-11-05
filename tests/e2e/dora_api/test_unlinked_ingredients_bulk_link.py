@@ -138,3 +138,10 @@ def test__bulk_link__raw_text_normalising_to_empty__bad_request(api):
         "stock_item_id": stocked["stock_item_id"],
     })
     assert resp.status_code == 400, resp.text
+
+
+def test__unlinked_ingredient_count__matches_the_list(api):
+    # FU-858: the settings badge reads the count, not the list.
+    listed = len(requests.get(f"{BASE}/recipes/unlinked-ingredients").json()["unlinked"])
+    assert requests.get(f"{BASE}/recipes/unlinked-ingredients/count").json() == {"count": listed}
+    assert requests.get(f"{BASE}/nutrition/unmatched-items/count").status_code == 200

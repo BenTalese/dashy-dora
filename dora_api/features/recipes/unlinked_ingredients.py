@@ -203,6 +203,13 @@ def get_unlinked_ingredients():
     return ok(dto)
 
 
+@RECIPE_ROUTER.route("unlinked-ingredients/count", methods=["GET"])
+def get_unlinked_ingredient_count():
+    """The settings badge's number (FU-858): the groups the bulk-linker would
+    list, without shipping them."""
+    return ok({"count": len(GetUnlinkedIngredientsHandler(SqlAlchemyRepository()).handle().unlinked)})
+
+
 @RECIPE_ROUTER.route("unlinked-ingredients/bulk-link", methods=["POST"])
 @has_request_body(BulkLinkRequest)
 def bulk_link_unlinked_ingredients():

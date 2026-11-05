@@ -20,7 +20,7 @@
         v-touch-hold:600.mouse="onLongPress"
         bordered
         flat
-        class="stock-row cursor-pointer"
+        class="stock-row dora-list-row cursor-pointer"
         :class="rowClasses"
         @click="emit('click', item.stock_item_id)"
     >
@@ -706,24 +706,8 @@
            the rows go flush. Owning the gap on the row itself keeps the
            spacing consistent in both the ListTransition and virtual paths. */
         margin-bottom: var(--space-2);
-        position: relative;
-        border-radius: 8px;
-        overflow: hidden; /* clip the essential stripe to the rounded border */
-        transition:
-            box-shadow var(--motion-fast) var(--motion-ease),
-            background-color var(--motion-fast) var(--motion-ease),
-            border-color var(--motion-fast) var(--motion-ease);
-        border: 1px solid var(--border-default, color-mix(in srgb, var(--text-primary) 12%, transparent));
-    }
-    /* Feedback 2026-06-18: the prior `translateY(-1px)` lift clipped the
-       first row's outline under the page's sticky chrome and looked janky
-       at the edges. Swap for a no-translation hover treatment: surface
-       brightens + accent-tinted shadow + 1px border accent. Reads as a
-       polished card hover without the layout jitter. */
-    .stock-row:hover {
-        background: color-mix(in srgb, var(--brand-accent) 4%, var(--surface-component));
-        border-color: color-mix(in srgb, var(--brand-accent) 38%, transparent);
-        box-shadow: 0 1px 6px color-mix(in srgb, var(--text-primary) 8%, transparent);
+        /* Border, radius, surface, hover: `.dora-list-row` (app.scss). Its
+           overflow: hidden is what clips the essential stripe. */
     }
     .stock-row__body {
         padding: 6px 12px;

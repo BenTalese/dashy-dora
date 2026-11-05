@@ -36,6 +36,6 @@
 </script>
 
 <style scoped>
-    .ric { margin-bottom: var(--space-4, 16px); }
-    .ric__heading { margin-bottom: var(--space-1, 4px); }
+    .ric { margin-bottom: var(--space-4); }
+    .ric__heading { margin-bottom: var(--space-1); }
 </style>

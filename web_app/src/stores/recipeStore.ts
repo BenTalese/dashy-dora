@@ -9,6 +9,7 @@ import type {
 } from 'src/services/api/recipeCollectionApiService';
 import RecipeCollectionApiService from 'src/services/api/recipeCollectionApiService';
 import type { Ref } from 'vue';
+import { usePlannedDemand } from 'src/composables/usePlannedDemand';
 import { computed, readonly, ref } from 'vue';
 
 const recipeApiService = new RecipeApiService();
@@ -74,7 +75,13 @@ export const useRecipeStore = defineStore('recipe', () => {
      *  food to a stock item, walk to the cookbook, and the cards rendered the
      *  payload fetched before the edit — no rating, no kcal, and the
      *  thresholds filtering on figures that were no longer true. */
-    const invalidateRecipes = (): void => { recipesStale.value = true; };
+    // Every caller that drops the recipe list has just changed a pool, a cook
+    // or the stock a recipe reads; planned demand nets the pool against the
+    // plan, so it goes stale with it (FU-851).
+    const invalidateRecipes = (): void => {
+        recipesStale.value = true;
+        usePlannedDemand().invalidate();
+    };
 
     /** R-016 — lazy hydration for the collections list (independent fetch). */
     const ensureCollectionsLoadedAsync = (): Promise<void> => {
@@ -124,6 +131,7 @@ export const useRecipeStore = defineStore('recipe', () => {
 
     const adjustMealsAsync = async (recipeId: string, delta: number) => {
         const { available_meals } = await recipeApiService.adjustMealsAsync(recipeId, delta);
+        usePlannedDemand().invalidate();
         const idx = recipes.value.findIndex((r) => r.recipe_id === recipeId);
         if (idx >= 0) {
             recipes.value[idx] = { ...recipes.value[idx]!, available_meals };

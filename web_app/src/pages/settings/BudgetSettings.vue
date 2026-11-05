@@ -16,14 +16,8 @@
         <SettingsSection v-else>
             <template #title>Grocery budget</template>
             <SettingsRow label="Amount">
-                <q-input
-                    v-model.number="budgetAmountDraft"
-                    type="number"
-                    step="1"
-                    min="0"
-                    :prefix="currencySymbol"
-                    outlined
-                    dense
+                <MoneyInput
+                    v-model="budgetAmountDraft"
                     placeholder="Off"
                     style="max-width: 160px"
                     @blur="onBudgetAmountBlur"
@@ -44,9 +38,9 @@
 </template>
 
 <script lang="ts" setup>
+    import MoneyInput from 'src/components/MoneyInput.vue';
     import type { BudgetPeriod } from 'src/models/auth';
     import { useMoneyEnabled } from 'src/composables/useMoneyEnabled';
-    import { useMoney } from 'src/composables/useMoney';
     import { computed, ref, watch } from 'vue';
     import { useSettingsSave } from 'src/composables/useSettingsSave';
     import { useBudgetSettings } from 'src/composables/useBudgetSettings';
@@ -57,7 +51,6 @@
     import BaseSegmented, { type BaseSegmentedOption } from 'src/components/BaseSegmented.vue';
 
     // budget input prefix follows the install currency symbol.
-    const { currencySymbol } = useMoney();
     // Money is a single install-wide concern now — no per-user layer.
     const { moneyEnabled: moneyInstallEnabled } = useMoneyEnabled();
 

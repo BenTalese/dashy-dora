@@ -155,7 +155,7 @@
                         </q-card-section>
                         <q-card-section v-if="s.current" class="q-pt-none">
                             <div class="text-h6">
-                                {{ s.current.unit_price != null ? formatMoney(s.current.unit_price) : '–' }}
+                                {{ s.current.price != null ? formatMoney(s.current.price) : '–' }}
                                 <!-- PH-5/PH-6 — was a `size="sm"` chip reading
                                      "-12%", which is both the smallest and the
                                      only differently-worded spelling of the
@@ -165,7 +165,7 @@
                             </div>
                             <div v-if="s.all_time_low" class="text-caption dora-text-muted-7">
                                 All-time low:
-                                <strong>{{ formatMoney(s.all_time_low.unit_price) }}</strong>
+                                <strong>{{ formatMoney(s.all_time_low.price) }}</strong>
                                 <span v-if="aboveLowPct(s) !== null">
                                     · currently {{ aboveLowPct(s) }}% above
                                     <InfoTip label="What above the all-time low means">
@@ -241,7 +241,7 @@
                             <q-item-label caption>
                                 <StoreLogo :name="a.store_name" :height="16" :width="24" inline />{{ a.store_name }} ·
                                 notify below
-                                <strong>{{ formatMoney(a.threshold_unit_price) }}</strong>
+                                <strong>{{ formatMoney(a.threshold_price) }}</strong>
                             </q-item-label>
                         </q-item-section>
                         <q-item-section side>
@@ -278,7 +278,7 @@
 
 <script lang="ts" setup>
     import YourPriceVerdict from 'src/components/dora/YourPriceVerdict.vue';
-    import { createFrameResizeObserver, type FrameResizeObserver } from 'src/composables/frameResizeObserver';
+    import { useMeasuredWidth } from 'src/composables/useMeasuredWidth';
     import BaseTooltip from 'src/components/BaseTooltip.vue';
     import InfoTip from 'src/components/help/InfoTip.vue';
     import { ICONS } from 'src/style/icons';
@@ -291,7 +291,7 @@
     import DiscountChip from 'src/components/chips/DiscountChip.vue';
     import { formatMoney } from 'src/composables/useMoney';
     import { useQuasar } from 'quasar';
-    import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+    import { computed, onMounted, ref, watch } from 'vue';
     import { useRoute } from 'vue-router';
     import BaseDialog from 'src/components/BaseDialog.vue';
     import PriceHistoryChart from 'src/components/PriceHistoryChart.vue';
@@ -349,16 +349,8 @@
     // the card edge at every viewport size. Was hard-coded to 720, which
     // left a gap on wide screens and overflowed on narrow ones.
     const chartCardRef = ref<{ $el?: HTMLElement } | null>(null);
-    const chartWidth = ref(720);
-    let chartResizeObserver: FrameResizeObserver | null = null;
-
-    function measureChart(): void {
-        const el = chartCardRef.value?.$el;
-        if (!el) return;
-        // Account for q-card-section padding (q-pa-sm ≈ 8px each side).
-        const next = Math.max(280, Math.floor(el.clientWidth) - 16);
-        if (next !== chartWidth.value) chartWidth.value = next;
-    }
+    // q-card-section padding (q-pa-sm, 8px a side) is inset from the box.
+    const chartWidth = useMeasuredWidth(() => chartCardRef.value?.$el, { initial: 720, min: 280, inset: 16 });
 
     const filteredCandidates = computed(() => {
         const needle = filter.value.trim().toLowerCase();
@@ -398,9 +390,9 @@
     }
 
     function aboveLowPct(s: PriceHistorySeries): number | null {
-        if (!s.current?.unit_price || !s.all_time_low?.unit_price) return null;
-        if (s.all_time_low.unit_price === 0) return null;
-        const pct = ((s.current.unit_price - s.all_time_low.unit_price) / s.all_time_low.unit_price) * 100;
+        if (!s.current?.price || !s.all_time_low?.price) return null;
+        if (s.all_time_low.price === 0) return null;
+        const pct = ((s.current.price - s.all_time_low.price) / s.all_time_low.price) * 100;
         return Math.max(0, Math.round(pct));
     }
 
@@ -473,20 +465,8 @@
             selectedIds.value = [preselect];
         }
         void refreshAlerts();
-        // Wait one tick so the q-card has mounted before measuring.
-        await Promise.resolve();
-        measureChart();
-        const el = chartCardRef.value?.$el;
-        if (el && typeof ResizeObserver !== 'undefined') {
-            chartResizeObserver = createFrameResizeObserver(measureChart);
-            chartResizeObserver.observe(el);
-        }
     });
 
-    onBeforeUnmount(() => {
-        chartResizeObserver?.disconnect();
-        chartResizeObserver = null;
-    });
 </script>
 
 <style scoped>

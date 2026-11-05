@@ -16,9 +16,9 @@ export const useStockLevelStore = defineStore('stockLevel', () => {
 
     const getStockLevelsAsync = (): Promise<void> =>
         stockLevelApiService
-            .getAllAsync()
-            .then((page) => {
-                stockLevels.value = [...page.items].sort((sl1, sl2) => sl1.sequence - sl2.sequence);
+            .getAllPagesAsync()
+            .then((items) => {
+                stockLevels.value = [...items].sort((sl1, sl2) => sl1.sequence - sl2.sequence);
                 hydrated = true;
             });
 

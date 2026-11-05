@@ -11,6 +11,51 @@ semver — major bumps signal schema or breaking-config changes.
   README and the issue chooser link to them too. Buy Me a Coffee is no longer
   listed.
 
+### Changed
+- **Logged prices can be corrected (2026-11-05).** A stock item's recent prices
+  have Edit (amount, size, store, pack count and the date seen) and Remove asks
+  first; the list shows five with "Show all". Logging a price takes a date, so
+  yesterday's receipt goes in on yesterday.
+- **Items with no location are findable (2026-11-05).** Settings → Locations
+  shows "Not stored anywhere" with a count and Review; the stock list's
+  Location filter has the same option.
+- **Starting a list from a meal plan or recipe says what it left off** when an
+  ingredient isn't linked to the pantry.
+- **Recipe and step photos load with your sign-in**, so they show on a split
+  app/api host and in the Android app.
+- **The installed app checks for a new version when you come back to it**, at
+  most hourly.
+- **Help (?) beside more headings:** recipe Ingredients, Method, Nutrition and
+  Versions; the planner's recipe rail and Build my week; cook mode; the shopping
+  list status; Backup, Import, API access, Region, Stock locations and Install.
+- **"Opened" everywhere** for the open toggle and its filter.
+- **The keyboard cheatsheet only lists shortcuts that work on the current
+  screen.**
+- **A new recipe version tells you it isn't a favourite yet** when the original
+  was.
+- **The assistant asks which food before converting sticks** (a stick is a
+  fixed weight only for butter).
+
+### Fixed
+- FYI alerts (shopping day, no planned meals, meals to reconcile) are blue
+  instead of amber, so they no longer look like the orange alerts that need you.
+- On a recipe page, the mouse wheel scrolls the page again while hovering the
+  ingredients or method, once that pane is short or already at its end.
+- Switching items in the stock overview's side panel asks before dropping an
+  unsaved name or notes edit.
+- A double-clicked restore can't run twice from one upload.
+- Removing a picked file no longer reopens the file picker in Chrome.
+- Planner edits (remove, change cook days, separate, cooked-fresh) are saved one
+  after another like adds and serving changes, so quick taps don't overwrite
+  each other; a failed shopping-list tick undoes itself without flashing the
+  page.
+- Year-over-year spend starts both windows at household midnight.
+- A request carrying a NUL character is refused with a 400 instead of failing
+  on Postgres.
+- The scrollbar follows the theme; the health-star glyph is readable on Pesto
+  Dark; a few secondary-coloured marks use the indicator tone.
+- Every dropdown has an accessible name.
+
 ### Security
 - **Signing out stops this device's push alerts (2026-11-05).** On a shared
   device the next person to sign in used to keep getting the previous user's

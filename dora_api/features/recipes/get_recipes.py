@@ -958,12 +958,9 @@ class GetRecipesHandler:
             # expiring within the horizon. Same predicate the rescue feed
             # uses (R-003); count cached on the handler so the hydration
             # step below doesn't recompute it.
-            # R-003 carve-out: the horizon arrives as a request param, and the
-            # cookbook client passes its own copy of `EXPIRING_HORIZON_DAYS`
-            # rather than being told it — so the constant does currently live
-            # in two languages. The per-ingredient chips read the server
-            # constant, so the two agree today; making that structural needs
-            # an explicit param change and is tracked as FU-669.
+            # The cookbook asks with `uses_expiring=true`, resolved to
+            # `EXPIRING_HORIZON_DAYS` in the query parser (FU-669), so the
+            # filter and the per-ingredient chips read one constant.
             _, expiring_counts, expiring_soonest = count_expiring_ingredients_per_recipe(
                 self.repository, filters.expiring_within_days,
             )
@@ -1684,6 +1681,12 @@ def _parse_recipe_filters(args) -> RecipeFilters:
                 expiring_within_days = parsed_e
         except ValueError:
             expiring_within_days = None
+
+    # FU-669: `uses_expiring=true` is the cookbook's filter, at the server's
+    # own horizon, so the number lives in one language. An explicit
+    # `expiring_within_days` stays for callers that ask for a window.
+    if expiring_within_days is None and _parse_bool(args.get("uses_expiring")):
+        expiring_within_days = EXPIRING_HORIZON_DAYS
 
     return RecipeFilters(
         tags_include=collect("tags_include"),

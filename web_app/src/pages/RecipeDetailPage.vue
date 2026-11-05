@@ -324,6 +324,7 @@
 </template>
 
 <script lang="ts" setup>
+    import { stripLeadingOrdinal } from 'src/helpers/stepOrdinal';
     import HelpHint from 'src/components/help/HelpHint.vue';
     import BaseTooltip from 'src/components/BaseTooltip.vue';
     /**
@@ -470,26 +471,13 @@
     }
 
     // ── Method ──────────────────────────────────────────────────────────
-    /* A leading ordinal the author typed themselves — "1. ", "2) ", "3: ".
-     * Free text is where people number their own steps, and the read face now
-     * draws a numeral in a circle beside each line (owner 2026-09-03), so left
-     * alone every step reads "(1) 1. Render the pancetta" — which is what
-     * driving the seed's Carbonara showed the moment the circles went in
-     * (R-075: measure it, don't assume).
-     * Deliberately narrow: the digits must be followed by real punctuation and
-     * a space, so an ingredient-ish line like "2 eggs, beaten" keeps its 2. */
-    const LEADING_ORDINAL = /^\d{1,3}\s*[.):]\s+/;
-
+    // The author's own "1. " is dropped beside the drawn numeral
+    // (helpers/stepOrdinal; the 2026-09-03 Carbonara walk, R-075).
     const freeformLines = computed(() => (form.instructions ?? '')
         .split('\n')
         .map((l) => l.trim())
         .filter((l) => l.length > 0)
-        .map((l) => {
-            const stripped = l.replace(LEADING_ORDINAL, '');
-            // Never strip a line down to nothing — a lone "1." is all the
-            // content that line has, odd as it is.
-            return stripped.length > 0 ? stripped : l;
-        }));
+        .map(stripLeadingOrdinal));
 
     /** The other direction of the rail's highlight: steps lit by the
      *  currently selected ingredient. Structured-only, because it's the only
@@ -679,9 +667,9 @@
 
     /* ── Actions ──────────────────────────────────────────────────────── */
     .rn__actions {
-        display: flex; align-items: center; gap: var(--space-2, 8px);
-        margin-top: var(--space-5, 20px);
-        padding-top: var(--space-4, 16px);
+        display: flex; align-items: center; gap: var(--space-2);
+        margin-top: var(--space-5);
+        padding-top: var(--space-4);
         border-top: 1px solid var(--divider);
         flex-wrap: wrap;
     }
@@ -691,8 +679,8 @@
     .rn__body {
         display: grid;
         grid-template-columns: minmax(280px, 34%) 1fr;
-        gap: var(--space-8, 32px);
-        margin-top: var(--space-6, 24px);
+        gap: var(--space-8);
+        margin-top: var(--space-6);
         align-items: start;
     }
     /* D-011 — a grid item's default `min-width: auto` lets it be sized by its
@@ -711,7 +699,7 @@
     /* The free-text read face is `.dora-steps*` now (owner 2026-09-03) — its
        measure and spacing come from `css/recipeSteps.scss` with the structured
        method's, so the old `.rn__free` rule has nothing left to say. */
-    .rn__empty { color: var(--text-muted); font-size: 0.875rem; }
+    .rn__empty { color: var(--text-muted); font-size: var(--font-size-sm); }
 
     /* Tools, for the two modes that have no steps to derive them from. Inside
        the method, because that is what a tool belongs to — not a
@@ -719,14 +707,14 @@
        2026-08-27). */
     .rn__tools {
         display: flex; align-items: center; flex-wrap: wrap;
-        gap: var(--space-2, 8px);
-        margin-top: var(--space-6, 24px);
-        padding-top: var(--space-3, 12px);
+        gap: var(--space-2);
+        margin-top: var(--space-6);
+        padding-top: var(--space-3);
         border-top: 1px solid var(--divider);
     }
     .rn__toolk {
-        display: inline-flex; align-items: center; gap: var(--space-1, 4px);
-        font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.07em;
+        display: inline-flex; align-items: center; gap: var(--space-1);
+        font-size: var(--font-size-xs); font-weight: 700; letter-spacing: 0.07em;
         text-transform: uppercase; color: var(--text-muted);
         flex: none;
     }
@@ -734,15 +722,15 @@
     .rn__tools .q-select { flex: 1 1 240px; min-width: 0; }
 
     .rn__savebar {
-        position: fixed; bottom: var(--space-5, 20px); left: 50%;
+        position: fixed; bottom: var(--space-5); left: 50%;
         transform: translateX(-50%); z-index: 6000;
-        display: flex; align-items: center; gap: var(--space-2, 8px);
-        padding: var(--space-2, 8px) var(--space-4, 16px);
-        border-radius: var(--radius-pill, 999px);
+        display: flex; align-items: center; gap: var(--space-2);
+        padding: var(--space-2) var(--space-4);
+        border-radius: var(--radius-pill);
         background: var(--surface-elevated);
         border: 1px solid var(--border-default);
         box-shadow: 0 2px 10px var(--overlay-dim);
-        font-size: 0.875rem;
+        font-size: var(--font-size-sm);
         color: var(--text-secondary);
     }
     .rn__savebar--error { border-color: var(--semantic-negative); color: var(--semantic-negative); }
@@ -750,15 +738,15 @@
     /* The standing "there is unsaved work" statement. Sits above the transient
        savebar's slot so the two never occupy the same space. */
     .rn__dirty {
-        position: fixed; bottom: var(--space-5, 20px); left: 50%;
+        position: fixed; bottom: var(--space-5); left: 50%;
         transform: translateX(-50%); z-index: 6000;
-        display: flex; align-items: center; gap: var(--space-2, 8px);
-        padding: var(--space-2, 8px) var(--space-4, 16px);
-        border-radius: var(--radius-pill, 999px);
+        display: flex; align-items: center; gap: var(--space-2);
+        padding: var(--space-2) var(--space-4);
+        border-radius: var(--radius-pill);
         background: var(--surface-elevated);
         border: 1px solid var(--semantic-warning);
         box-shadow: 0 2px 10px var(--overlay-dim);
-        font-size: 0.875rem;
+        font-size: var(--font-size-sm);
         font-weight: 600;
         color: var(--text-secondary);
     }
@@ -771,7 +759,7 @@
            the same < 1024px breakpoint (`$q.screen.lt.md`). */
         .rn__modes { order: 3; flex: 1 1 100%; }
 
-        .rn__body { grid-template-columns: 1fr; gap: var(--space-6, 24px); }
+        .rn__body { grid-template-columns: 1fr; gap: var(--space-6); }
         /* Actions scroll sideways rather than stacking three deep (D-011:
            wide content scrolls inside its own container, never the page). */
         .rn__actions {

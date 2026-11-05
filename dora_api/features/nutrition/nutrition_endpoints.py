@@ -26,7 +26,7 @@ from dora_api.features.nutrition.sources import (
     local_catalogue_size, nutrition_mode, source_statuses,
 )
 from dora_api.features.nutrition.suggestions import (
-    ignored_item_count, ignored_items, unmatched_items,
+    ignored_item_count, ignored_items, unmatched_item_count, unmatched_items,
 )
 from dora_api.domain.entities.stock_item import StockItem
 from dora_api.persistence.field import EntityField
@@ -37,7 +37,7 @@ from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.domain.entities.nutrition_food import (
-    NUTRITION_DATASET_SOURCES, NUTRITION_SOURCE_LABELS,
+    NUTRITION_DATASET_SOURCES, NUTRITION_SOURCE_LABELS, NutritionFood,
 )
 from dora_api.domain.entities.app_setting import NUTRITION_MODE_COMPLEX
 
@@ -70,6 +70,22 @@ class ResolveFoodRequest(BaseModel):
     source_ref: str = Field(min_length=1, max_length=64)
 
 
+def _imported_before_categories(repository, source_id: str, food_count: int) -> bool:
+    """FU-750 / FU-645: a dataset imported before the food categories (and
+    the extra nutrients) came in has every row's `food_category` blank, which
+    scores every recipe 0 fruit-and-veg points and leaves sugars, fibre and the
+    vitamins empty. The values live in the archive, not the database, so the
+    fix is a re-import; this tells the admin page to say so. An import since
+    categorises at least one row."""
+    if food_count == 0:
+        return False
+    categorised = repository.get(NutritionFood).count(
+        EntityField(NutritionFood, NutritionFood.Fields.SOURCE).eq(source_id)
+        & EntityField(NutritionFood, NutritionFood.Fields.FOOD_CATEGORY).is_not_null()
+    )
+    return categorised == 0
+
+
 def _source_payload():
     repository = SqlAlchemyRepository()
     setting = get_or_create_app_setting(repository)
@@ -99,6 +115,7 @@ def _source_payload():
                 "rows_done": state.rows_done,
                 "foods": state.foods,
                 "portions": state.portions,
+                "needs_reimport": _imported_before_categories(repository, status.id, status.food_count),
             })
         sources.append(entry)
 
@@ -229,6 +246,16 @@ def get_unmatched_items():
         # broken feature.
         "catalogue_size": local_catalogue_size(_Repository),
     })
+
+
+@NUTRITION_ROUTER.route("/unmatched-items/count", methods=["GET"])
+def get_unmatched_item_count():
+    """The settings badge's number, without running the matcher (FU-858).
+    Zero outside complex mode, like the list."""
+    _Repository = SqlAlchemyRepository()
+    if nutrition_mode(get_or_create_app_setting(_Repository)) != NUTRITION_MODE_COMPLEX:
+        return ok({"count": 0})
+    return ok({"count": unmatched_item_count(_Repository)})
 
 
 @NUTRITION_ROUTER.route("/suggestions/accept-all", methods=["POST"])

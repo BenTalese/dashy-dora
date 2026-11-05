@@ -89,6 +89,13 @@
                         <div class="dataset-row__status dora-text-muted">
                             {{ statusLine(source) }}
                         </div>
+                        <div
+                            v-if="source.needs_reimport && !isBusy(source)"
+                            class="dataset-row__status text-warning"
+                        >
+                            Imported before food groups, sugars, fibre and the vitamins were
+                            kept. Import again to add them; ratings read low until then.
+                        </div>
                         <!-- B10 — an SR Legacy import runs for minutes, and a
                              bare spinner over that span reads as "wedged". The
                              bar is determinate only while the server can name
@@ -206,13 +213,13 @@
 </template>
 
 <script lang="ts" setup>
+    import { useNutritionSettingsSync } from 'src/composables/useNutritionSettingsSync';
     // Nutrition is install-wide (owner call 2026-08-14) — this page replaces
     // the per-user Settings → Nutrition page, which mostly existed to tell you
     // to go ask an admin. Mode + complex-mode source config in one place.
     import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
     import { useSettingsSave } from 'src/composables/useSettingsSave';
     import { formatNumber } from 'src/composables/useMoney';
-    import { useFeatureFlags } from 'src/composables/useFeatureFlags';
     import type { UpdateAppSettingsCommand } from 'src/services/api/appSettingsApiService';
     import { useAppSettingsStore } from 'src/stores/appSettingsStore';
     import NutritionApiService, {
@@ -224,15 +231,13 @@
     import type { RatingScheme } from 'src/composables/useNutritionRating';
     import SettingsPageHeader from 'src/components/settings/SettingsPageHeader.vue';
     import BaseSegmented, { type BaseSegmentedOption } from 'src/components/BaseSegmented.vue';
-    import { useRecipeStore } from 'src/stores/recipeStore';
 
     type NutritionMode = 'off' | 'simple' | 'complex';
 
     const nutritionApi = new NutritionApiService();
     const appSettingsStore = useAppSettingsStore();
     const { update, notifyError } = useSettingsSave();
-    const { refresh: refreshFlags } = useFeatureFlags();
-    const recipeStore = useRecipeStore();
+    const { syncAfterNutritionChange } = useNutritionSettingsSync();
 
     // Short enough for a segmented control; the provenance line under it
     // carries the detail that would not fit here.
@@ -345,7 +350,12 @@
         if (pollTimer !== null) return;
         pollTimer = setInterval(() => {
             void refreshSources().then(() => {
-                if (!datasetSources.value.some(isBusy)) stopPolling();
+                if (!datasetSources.value.some(isBusy)) {
+                    stopPolling();
+                    // An import just finished: every recipe's rollup can move
+                    // (FU-771).
+                    void syncAfterNutritionChange();
+                }
             });
         }, 2500);
     }
@@ -370,16 +380,8 @@
     async function patch(message: string, body: UpdateAppSettingsCommand): Promise<boolean> {
         const saved = await update(message, () => appSettingsStore.saveAsync(body));
         if (saved === null) return false;
-        // The mode drives /api/health gates all over the app; refresh the
-        // cached flag map so other surfaces don't run on a stale answer.
-        await refreshFlags();
-        // Refreshing the flags is only half of it. The rating and the whole
-        // complex-mode rollup are *server-computed per request* — the DTO
-        // carries no rating at all while the scheme is 'none' — so a recipe
-        // list fetched before this write stays ratingless even once the flag
-        // says the chip should render. That read as "health stars don't
-        // appear until I refresh the page" (owner 2026-09-09).
-        recipeStore.invalidateRecipes();
+        // Flags and the recipe list together; see useNutritionSettingsSync.
+        await syncAfterNutritionChange();
         return true;
     }
 

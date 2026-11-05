@@ -46,8 +46,8 @@ describe('productSeriesToChart', () => {
     it('draws offers as the series on the product page', () => {
         const [s] = productSeriesToChart([productSeries({
             points: [
-                { date: '2026-08-01', unit_price: 3, list_price: 3, on_deal: false },
-                { date: '2026-08-08', unit_price: 2.5, list_price: 3, on_deal: true },
+                { date: '2026-08-01', price: 3, list_price: 3, on_deal: false },
+                { date: '2026-08-08', price: 2.5, list_price: 3, on_deal: true },
             ],
         })]);
         expect(s!.points).toEqual([
@@ -75,7 +75,7 @@ describe('productSeriesToChart', () => {
         // is a different measurement, so pinning it under one would compare two
         // unlike things on one axis.
         const [s] = productSeriesToChart([productSeries({
-            points: [{ date: '2026-08-01', unit_price: 3, list_price: 3, on_deal: false }],
+            points: [{ date: '2026-08-01', price: 3, list_price: 3, on_deal: false }],
             observation_points: [{ date: '2026-08-02', unit_price: 4.2, store_name: null }],
             your_prices: {
                 baseline: 4, baseline_unit: 'kg', current: 4.2,
@@ -88,7 +88,7 @@ describe('productSeriesToChart', () => {
 
     it('inverts the priority in the union view: your prices lead, offers become context', () => {
         const [s] = productSeriesToChart([productSeries({
-            points: [{ date: '2026-08-01', unit_price: 3, list_price: 3, on_deal: true }],
+            points: [{ date: '2026-08-01', price: 3, list_price: 3, on_deal: true }],
             observation_points: [{ date: '2026-08-02', unit_price: 4.2, store_name: null }],
             your_prices: {
                 baseline: 4, baseline_unit: 'kg', current: 4.2,
@@ -103,8 +103,8 @@ describe('productSeriesToChart', () => {
     it('drops points the server could not price or date', () => {
         const [s] = productSeriesToChart([productSeries({
             points: [
-                { date: null, unit_price: 3, list_price: 3, on_deal: false },
-                { date: '2026-08-08', unit_price: null, list_price: 3, on_deal: false },
+                { date: null, price: 3, list_price: 3, on_deal: false },
+                { date: '2026-08-08', price: null, list_price: 3, on_deal: false },
             ],
         })]);
         expect(s!.points).toEqual([]);

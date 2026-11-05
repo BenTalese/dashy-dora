@@ -335,11 +335,12 @@
     import { useAppSettingDrafts } from 'src/composables/useAppSettingDrafts';
     import UserAvatar from 'src/components/UserAvatar.vue';
     import { useAuthStore } from 'src/stores/authStore';
-    import { passwordLongEnough } from 'src/models/password';
+    import { usePasswordPolicy } from 'src/composables/usePasswordPolicy';
     import { computed, onMounted, reactive, ref } from 'vue';
     import { describeApiError } from 'src/services/errorHandling/apiErrorHandler';
     import { useConfirm } from 'src/composables/useConfirm';
 
+    const { longEnough: passwordLongEnough } = usePasswordPolicy();
     const {
         draft: signUps, ready: signUpsReady, save: saveSignUps,
     } = useAppSettingDrafts({ registration_enabled: false });

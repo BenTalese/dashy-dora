@@ -1,7 +1,7 @@
 """N8 — Price History Explorer backend.
 
   GET    /api/price-history?product_ids=<csv>&range=30d|90d|1y|all
-  POST   /api/price-history/alerts          — body {product_id, threshold_unit_price}
+  POST   /api/price-history/alerts          — body {product_id, threshold_price}
   GET    /api/price-history/alerts          — list current user's alerts
   DELETE /api/price-history/alerts/<id>     — remove
 
@@ -121,9 +121,9 @@ def get_price_history():
         if price is None:
             continue
         prev = atl_by_product.get(pid)
-        if prev is None or price < prev["unit_price"]:
+        if prev is None or price < prev["price"]:
             atl_by_product[pid] = {
-                "unit_price": float(price),
+                "price": float(price),
                 "date": (row["offered_on"].isoformat() if row["offered_on"] else None),
             }
 
@@ -135,7 +135,8 @@ def get_price_history():
             continue
         points_by_product[pid].append({
             "date": row["offered_on"].isoformat() if row["offered_on"] else None,
-            "unit_price": float(row["price_now"]) if row["price_now"] is not None else None,
+            # The shelf price of the pack (FU-911: was named unit_price).
+            "price": float(row["price_now"]) if row["price_now"] is not None else None,
             "list_price": float(row["price_was"]) if row["price_was"] is not None else None,
             "on_deal": (
                 row["price_now"] is not None
@@ -174,7 +175,7 @@ def get_price_history():
             "points": points_by_product.get(pid, []),
             "current": (
                 {
-                    "unit_price": float(current["price_now"]) if current and current.get("price_now") is not None else None,
+                    "price": float(current["price_now"]) if current and current.get("price_now") is not None else None,
                     "list_price": float(current["price_was"]) if current and current.get("price_was") is not None else None,
                     "deal_pct": deal_pct,
                 }
@@ -228,7 +229,7 @@ def _watches_refused():
 class CreatePriceAlertRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     product_id: UUID
-    threshold_unit_price: float = Field(gt=0)
+    threshold_price: float = Field(gt=0)
 
 
 @PRICE_HISTORY_ROUTER.route("/alerts", methods=["POST"])
@@ -257,17 +258,17 @@ def create_price_alert():
         row = PriceAlert(
             user_id=user_id,
             product_id=body.product_id,
-            threshold_unit_price=float(body.threshold_unit_price),
+            threshold_price=float(body.threshold_price),
             created_at=datetime.now(timezone.utc),
         )
         repo.add(row)
     else:
-        row.threshold_unit_price = float(body.threshold_unit_price)
+        row.threshold_price = float(body.threshold_price)
     repo.save_changes()
     return ok({
         "price_alert_id": str(row.id),
         "product_id": str(body.product_id),
-        "threshold_unit_price": float(body.threshold_unit_price),
+        "threshold_price": float(body.threshold_price),
         "created_at": row.created_at.isoformat(),
     })
 
@@ -288,7 +289,7 @@ def list_price_alerts():
     rows = db.session.execute(
         select(
             alert_table.c.id, alert_table.c.product_id,
-            alert_table.c.threshold_unit_price, alert_table.c.created_at,
+            alert_table.c.threshold_price, alert_table.c.created_at,
             product_table.c.name.label("product_name"),
             store_table.c.name.label("store_name"),
         )
@@ -306,7 +307,7 @@ def list_price_alerts():
                 "product_id": str(r["product_id"]),
                 "product_name": r["product_name"],
                 "store_name": r["store_name"],
-                "threshold_unit_price": float(r["threshold_unit_price"]),
+                "threshold_price": float(r["threshold_price"]),
                 "created_at": r["created_at"].isoformat() if r["created_at"] else None,
             }
             for r in rows

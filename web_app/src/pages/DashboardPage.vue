@@ -362,6 +362,7 @@
 </template>
 
 <script lang="ts" setup>
+    import { whenGateOpens } from 'src/composables/whenGateOpens';
     import { ICONS } from 'src/style/icons';
     // FU-820 — dates come from the shared date authority (D-006/R-003); the
     // page's own copies parsed `YYYY-MM-DD` as UTC midnight.
@@ -1019,27 +1020,11 @@
         ]);
     }
 
-    // FU-586: the money/products cards gate on the once-per-document
-    // `/api/health` flags probe (and, for money, on `currentUser`'s per-user
-    // opt-in). On a cold load — a hard reload or a PWA cold start — those
-    // usually haven't resolved when the dashboard mounts, so the gated loaders
-    // above early-return and, with nothing re-running them when the flags land,
-    // the money/deal card bodies stay blank until the user navigates away and
-    // back. Re-fire just the gated loaders when a gate transitions on. On a warm
-    // navigation the gate is already true at mount, `loadAll` fetches normally,
-    // and these never fire.
-    watch(moneyEnabled, (on) => {
-        if (!on) return;
-        void loadBudget();
-        // The score's budget component is gated server-side on the same flag
-        // (R-058), so a gate that lands late leaves Kitchen health scoring four
-        // signals where it should score five.
-        void refreshDoraScore();
-    });
-    watch(productsEnabled, (on) => {
-        if (!on) return;
-        void loadPriceDrops();
-    });
+    // Cold-load gates (see whenGateOpens). Money also gates the per-user
+    // opt-in, and the score's budget component is gated server-side on the
+    // same flag (R-058), so it re-scores too.
+    whenGateOpens(() => moneyEnabled.value, () => Promise.all([loadBudget(), refreshDoraScore()]));
+    whenGateOpens(() => productsEnabled.value, loadPriceDrops);
 
     onMounted(loadAll);
 </script>

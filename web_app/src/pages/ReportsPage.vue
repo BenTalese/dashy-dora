@@ -128,6 +128,7 @@
 </template>
 
 <script lang="ts" setup>
+    import { whenGateOpens } from 'src/composables/whenGateOpens';
     import BaseTooltip from 'src/components/BaseTooltip.vue';
     /**
      * `/reports` — four questions, one card each.
@@ -480,9 +481,7 @@
         price_changes: loadItemMovers,
     };
     for (const def of REPORT_CARD_DEFS) {
-        watch(() => cardRendered(def.id), (on) => {
-            if (on) void CARD_LOADERS[def.id]();
-        });
+        whenGateOpens(() => cardRendered(def.id), CARD_LOADERS[def.id]);
     }
 
     onMounted(() => {

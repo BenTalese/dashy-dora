@@ -60,6 +60,7 @@ from typing import Iterable
 from uuid import UUID
 
 from dora_api.domain.entities.stock_item import StockItem
+from dora_api.domain.entities.stock_level import StockLevel
 from dora_api.domain.stock_status import is_low_stock, is_out_of_stock
 from dora_api.features.alerts.alert_kinds import (SEVERITY_BY_KIND,
                                                   SEVERITY_ORDER)
@@ -82,12 +83,16 @@ def is_expiring_soon(item: StockItem, today: date, window_days: int) -> bool:
     return 0 <= days_remaining <= window_days
 
 
-def is_essential_low(item: StockItem) -> bool:
+def is_essential_low(item: StockItem, level: StockLevel | None) -> bool:
     """Essential and either low or out. One kind, deliberately: the user
-    flagged it, so both bands mean the same thing — go and restock."""
-    if not item.is_essential or item.stock_level is None:
+    flagged it, so both bands mean the same thing — go and restock.
+
+    The level is passed in, resolved by FK (`_level_access`), never read off
+    `item.stock_level`: that relationship is noload and can come back unset
+    even after an `.include()` (R-032; FU-684)."""
+    if not item.is_essential or level is None:
         return False
-    return is_low_stock(item.stock_level) or is_out_of_stock(item.stock_level)
+    return is_low_stock(level) or is_out_of_stock(level)
 
 
 # Urgency ranks — see the module docstring. `essential_low` splits in two
@@ -114,7 +119,7 @@ class Attention:
 _NONE = Attention(needs_attention=False, severity=None, kinds=(), rank=RANK_NONE)
 
 
-def _rank_for(item: StockItem, kinds: list[str]) -> int:
+def _rank_for(level: StockLevel | None, kinds: list[str]) -> int:
     """The worst (lowest) rank among the kinds that actually fired."""
     ranks: list[int] = []
     for kind in kinds:
@@ -125,7 +130,7 @@ def _rank_for(item: StockItem, kinds: list[str]) -> int:
         elif kind == KIND_ESSENTIAL_LOW:
             ranks.append(
                 RANK_ESSENTIAL_OUT
-                if is_out_of_stock(item.stock_level)
+                if is_out_of_stock(level)
                 else RANK_ESSENTIAL_LOW
             )
     return min(ranks) if ranks else RANK_NONE
@@ -133,6 +138,7 @@ def _rank_for(item: StockItem, kinds: list[str]) -> int:
 
 def attention_for(
     item: StockItem,
+    level: StockLevel | None,
     *,
     today: date,
     window_days: int,
@@ -146,7 +152,7 @@ def attention_for(
         # points on one axis, and emitting both would double-count the item in
         # any per-kind tally.
         kinds.append(KIND_EXPIRING_SOON)
-    if is_essential_low(item):
+    if is_essential_low(item, level):
         kinds.append(KIND_ESSENTIAL_LOW)
 
     kinds = [k for k in kinds if k not in disabled_kinds]
@@ -158,12 +164,13 @@ def attention_for(
         needs_attention=True,
         severity=SEVERITY_BY_KIND[worst],
         kinds=tuple(kinds),
-        rank=_rank_for(item, kinds),
+        rank=_rank_for(level, kinds),
     )
 
 
 def resolve_attention_map(
     items: Iterable[StockItem],
+    levels_by_item: dict[UUID, StockLevel | None],
     *,
     today: date,
     window_days: int,
@@ -173,7 +180,7 @@ def resolve_attention_map(
     `resolve_overdue_map` so the two bulk resolvers read alike."""
     return {
         item.id: attention_for(
-            item, today=today, window_days=window_days,
+            item, levels_by_item.get(item.id), today=today, window_days=window_days,
             disabled_kinds=disabled_kinds,
         )
         for item in items

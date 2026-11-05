@@ -211,12 +211,12 @@
     .rcost__summary {
         display: flex;
         flex-direction: column;
-        gap: var(--space-3, 12px);
+        gap: var(--space-3);
     }
     .rcost__totals {
         display: flex;
         flex-wrap: wrap;
-        gap: var(--space-6, 24px);
+        gap: var(--space-6);
     }
     .rcost__total { display: flex; flex-direction: column; gap: 2px; }
     .rcost__k {
@@ -232,17 +232,17 @@
         font-variant-numeric: tabular-nums;
     }
 
-    .rcost__coverage { display: flex; align-items: center; gap: var(--space-3, 12px); }
+    .rcost__coverage { display: flex; align-items: center; gap: var(--space-3); }
     .rcost__bar {
         flex: 1;
         height: 6px;
-        border-radius: var(--radius-pill, 999px);
+        border-radius: var(--radius-pill);
         background: var(--surface-sunken);
         overflow: hidden;
     }
     .rcost__barfill { height: 100%; background: var(--brand-primary); }
     .rcost__cov {
-        font-size: 0.8125rem;
+        font-size: var(--font-size-sm);
         color: var(--text-muted);
         white-space: nowrap;
     }
@@ -256,11 +256,11 @@
         color: var(--text-muted);
     }
     .rcost__list { list-style: none; margin: 0; padding: 0; }
-    .rcost__list > li { padding: var(--space-2, 8px) 0; }
+    .rcost__list > li { padding: var(--space-2) 0; }
     .rcost__row {
         display: flex;
         align-items: baseline;
-        gap: var(--space-3, 12px);
+        gap: var(--space-3);
     }
     .rcost__name { flex: 1; min-width: 0; }
     .rcost__amount { font-weight: 700; font-variant-numeric: tabular-nums; }
@@ -270,15 +270,15 @@
         min-width: 3.25rem;
         text-align: right;
         font-variant-numeric: tabular-nums;
-        font-size: 0.8125rem;
+        font-size: var(--font-size-sm);
         color: var(--text-muted);
     }
     .rcost__share {
         height: 4px;
-        border-radius: var(--radius-pill, 999px);
+        border-radius: var(--radius-pill);
         background: var(--surface-sunken);
         overflow: hidden;
-        margin-top: var(--space-1, 4px);
+        margin-top: var(--space-1);
     }
     /* A line that rounds to 0% still gets a visible sliver rather than an
        empty track — but the printed number stays honest about the rounding.
@@ -297,14 +297,14 @@
     }
     .rcost__meta {
         display: flex;
-        gap: var(--space-3, 12px);
+        gap: var(--space-3);
         margin-top: 2px;
-        font-size: 0.75rem;
+        font-size: var(--font-size-xs);
         color: var(--text-muted);
     }
 
     .rcost__grouphead {
-        margin-top: var(--space-4, 16px);
+        margin-top: var(--space-4);
         font-size: var(--font-size-xs);
         font-weight: 700;
         letter-spacing: 0.06em;
@@ -313,18 +313,18 @@
     }
     .rcost__groupnames {
         list-style: none;
-        margin: var(--space-2, 8px) 0 0;
+        margin: var(--space-2) 0 0;
         padding: 0;
         display: flex;
         flex-direction: column;
         gap: 2px;
     }
     .rcost__groupnames > li {
-        padding: var(--space-2, 8px) var(--space-3, 12px);
-        border-radius: var(--radius-sm, 4px);
+        padding: var(--space-2) var(--space-3);
+        border-radius: var(--radius-sm);
         background: var(--surface-sunken);
-        font-size: 0.875rem;
+        font-size: var(--font-size-sm);
         color: var(--text-primary);
     }
-    .rcost__empty { color: var(--text-muted); font-size: 0.875rem; margin: 0; }
+    .rcost__empty { color: var(--text-muted); font-size: var(--font-size-sm); margin: 0; }
 </style>

@@ -391,7 +391,7 @@ def configure_mappings(db: SQLAlchemy):
         Column("id", UUIDType, primary_key=True),
         Column("user_id", UUIDType, ForeignKey("User.id", ondelete="CASCADE"), nullable=False),
         Column("product_id", UUIDType, ForeignKey("Product.id", ondelete="CASCADE"), nullable=False),
-        Column("threshold_unit_price", Float, nullable=False),
+        Column("threshold_price", Float, nullable=False),
         Column("created_at", DateTime(timezone=True), nullable=False),
     )
 

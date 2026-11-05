@@ -50,6 +50,8 @@ from dora_api.domain.entities.stock_location import (
 from dora_api.domain.entities.store import Store
 from dora_api.domain.entities.user import User
 from dora_api.infrastructure.auth_helpers import hash_password
+from dora_api.features.recipes.recipe_step_access import (
+    StepWrite, replace_steps_for_recipe)
 from dora_api.persistence.seed_builders import SeedBuilders
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 
@@ -474,8 +476,38 @@ def seed_showcase_data():
     aglio.available_meals = 4
     stir_fry.available_meals = 2
     fried_rice.available_meals = 2
+    # The demo shows cook mode's structured face too (FU-792), not only free
+    # text: steps, linked ingredients, tools and a timer. Steps are written
+    # after the save, once the recipe and its ingredients have ids (R-064).
+    aglio.steps_mode = "structured"
 
     repo.save_changes()
+
+    _ing_table = db.metadata.tables["RecipeIngredient"]
+    _aglio_ings = {
+        row.stock_item_id: row.id for row in db.session.execute(
+            _ing_table.select().where(_ing_table.c.recipe_id == aglio.id)
+        )
+    }
+    replace_steps_for_recipe(aglio.id, [
+        StepWrite(client_id="a1", parent_client_id=None, sequence=0,
+                  text="Boil a large pot of well-salted water and cook the spaghetti "
+                       "until just al dente.",
+                  hint="Save a mug of the pasta water before you drain it.",
+                  ingredient_ids=[_aglio_ings[pasta.id]],
+                  tool_ids=[tools["Large pot"].id], section_id=None, timer_minutes=9),
+        StepWrite(client_id="a2", parent_client_id=None, sequence=1,
+                  text="Meanwhile, warm the olive oil and sliced garlic over a low "
+                       "heat until fragrant and only just golden.",
+                  hint="Pull it off the heat the moment it colours; burnt garlic is bitter.",
+                  ingredient_ids=[_aglio_ings[olive_oil.id], _aglio_ings[garlic.id]],
+                  tool_ids=[tools["Frypan"].id], section_id=None, timer_minutes=3),
+        StepWrite(client_id="a3", parent_client_id=None, sequence=2,
+                  text="Toss the drained pasta through the garlic oil with a splash of "
+                       "the pasta water until glossy, and serve.",
+                  hint=None, ingredient_ids=[_aglio_ings[pasta.id]],
+                  tool_ids=[], section_id=None, timer_minutes=None),
+    ])
 
     # ---------------- HISTORY-TAB EVENTS ---------------- #
     _cook_history = [

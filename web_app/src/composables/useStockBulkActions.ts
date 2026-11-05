@@ -106,7 +106,7 @@ export function useStockBulkActions(deps: StockBulkActionsDeps) {
             let added = 1;
             let already = 0;
             if (rest.length > 0) {
-                const result = await shoppingListApi.bulkAddLinesAsync(listId, rest);
+                const result = await shoppingListApi.bulkAddLinesAsync(listId, rest.map((id) => ({ stock_item_id: id })));
                 added += result.added;
                 already += result.already_on_list;
             }
@@ -326,7 +326,7 @@ export function useStockBulkActions(deps: StockBulkActionsDeps) {
         try {
             const ids = [...bulkSelection.value];
             const { added, already_on_list } =
-                await shoppingListApi.bulkAddLinesAsync(listId, ids);
+                await shoppingListApi.bulkAddLinesAsync(listId, ids.map((id) => ({ stock_item_id: id })));
             await shoppingListStore.refreshAsync();
             ids.forEach((id) => invalidateBuyVerdict(id));
             $q.notify({

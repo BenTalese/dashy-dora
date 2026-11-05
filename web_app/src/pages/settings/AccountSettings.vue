@@ -128,7 +128,7 @@
                         autocomplete="new-password"
                         :error="newPassword.length > 0 && !passwordLongEnough(newPassword)"
                         :error-message="newPassword.length > 0 && !passwordLongEnough(newPassword)
-                            ? PASSWORD_HINT : ''"
+                            ? passwordHint : ''"
                     />
                     <q-input
                         v-model="confirmPassword"
@@ -180,8 +180,9 @@
     import PresetAvatarPicker from 'src/components/PresetAvatarPicker.vue';
     import type { ProcessedImage } from 'src/services/files/imageService';
     import { useUnsavedChangesGuard } from 'src/composables/useUnsavedChangesGuard';
-    import { PASSWORD_HINT, passwordLongEnough } from 'src/models/password';
+    import { usePasswordPolicy } from 'src/composables/usePasswordPolicy';
 
+    const { hint: passwordHint, longEnough: passwordLongEnough } = usePasswordPolicy();
     const authStore = useAuthStore();
     const { currentUser } = storeToRefs(authStore);
 

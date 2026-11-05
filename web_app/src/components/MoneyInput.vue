@@ -39,8 +39,7 @@
      *  D-006 (one formatting authority): the symbol comes from `useMoney`, the
      *  install-wide money policy, never a hardcoded "$".
      *
-     *  Not yet adopted by `ShoppingListPlanRow`, the dashboard budget or the
-     *  Money settings, which still hand-roll their price fields.
+     *  Every money field uses it (FU-890: Budget was the last hand-rolled one).
      */
     import { useMoney } from 'src/composables/useMoney';
 

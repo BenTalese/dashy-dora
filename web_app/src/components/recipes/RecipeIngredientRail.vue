@@ -573,26 +573,26 @@
 
     /* The rail follows the method down a long recipe (owner ask); the pane
        inside it scrolls on its own (`.rn__pane`, shared). */
-    .rn__rail { position: sticky; top: var(--space-4, 16px); }
+    .rn__rail { position: sticky; top: var(--space-4); }
 
     /* A section is a container, so it is drawn as one (owner feedback
        2026-08-24). The unsectioned group deliberately gets no card: a box
        around "the rest of the ingredients" is a box around nothing. */
-    .rn__group { margin-bottom: var(--space-3, 12px); }
+    .rn__group { margin-bottom: var(--space-3); }
     .rn__group--card {
         border: 1px solid var(--border-default);
-        border-radius: var(--radius-lg, 10px);
+        border-radius: var(--radius-lg);
         background: var(--surface-component);
-        padding: var(--space-2, 8px);
+        padding: var(--space-2);
     }
     .rn__grouphead {
-        display: flex; align-items: center; gap: var(--space-2, 8px);
-        padding: var(--space-1, 4px) var(--space-1, 4px) var(--space-2, 8px);
+        display: flex; align-items: center; gap: var(--space-2);
+        padding: var(--space-1) var(--space-1) var(--space-2);
         border-bottom: 1px solid var(--divider);
-        margin-bottom: var(--space-1, 4px);
+        margin-bottom: var(--space-1);
     }
     .rn__groupname {
-        font-size: 0.8125rem; font-weight: 700; letter-spacing: 0.06em;
+        font-size: var(--font-size-sm); font-weight: 700; letter-spacing: 0.06em;
         text-transform: uppercase; color: var(--primary-ink);
         min-width: 0;
         margin: 0;
@@ -602,15 +602,15 @@
     .rn__groupfield { flex: 1 1 auto; min-width: 0; }
     .rn__groupcount {
         margin-left: auto;
-        font-size: 0.8125rem; color: var(--text-muted);
+        font-size: var(--font-size-sm); color: var(--text-muted);
         font-variant-numeric: tabular-nums;
     }
-    .rn__addsec { margin-top: var(--space-2, 8px); }
+    .rn__addsec { margin-top: var(--space-2); }
     .rn__ing { list-style: none; margin: 0; padding: 0; }
     .rn__ing li {
         display: grid;
         grid-template-columns: auto 1fr auto auto;
-        gap: var(--space-3, 12px);
+        gap: var(--space-3);
         /* Centred, not baseline-aligned. A 36px round icon button has no text
            baseline worth aligning to, so `baseline` pinned it to the *first*
            line of the name column: on a row whose name wrapped, the cart ended
@@ -618,9 +618,9 @@
            second row rather than part of this one (owner, 2026-08-31). It also
            made the button jump vertically between its two icon glyphs. */
         align-items: center;
-        padding: var(--space-2, 8px);
+        padding: var(--space-2);
         border-bottom: 1px solid var(--divider);
-        border-radius: var(--radius-sm, 4px);
+        border-radius: var(--radius-sm);
     }
     .rn__ing li:hover { background: var(--overlay-hover); }
     /* The whole row is the edit target, so it carries the affordance — the
@@ -639,9 +639,9 @@
         white-space: nowrap; min-width: 58px;
     }
     .rn__ingname { min-width: 0; }
-    .rn__ingnote { display: block; font-size: 0.8125rem; color: var(--text-muted); }
+    .rn__ingnote { display: block; font-size: var(--font-size-sm); color: var(--text-muted); }
     /* The pantry item under a chosen name: same line, quieter. */
-    .rn__ingitem { margin-left: var(--space-1, 4px); font-size: 0.8125rem; color: var(--text-muted); }
+    .rn__ingitem { margin-left: var(--space-1); font-size: var(--font-size-sm); color: var(--text-muted); }
     /* The row's one severity signal is `RecipeMissingIngredientChip`, which
        owns its own weight; the wrapper here only spaces it off the name and
        stops the row's click handler from reaching it. */
@@ -653,8 +653,8 @@
     .rn__ingstate {
         display: flex; align-items: center; flex-wrap: wrap;
         justify-content: flex-end;
-        gap: var(--space-1, 4px);
-        margin-right: var(--space-2, 8px);
+        gap: var(--space-1);
+        margin-right: var(--space-2);
     }
     .rn__chip--unlinked { background: var(--surface-sunken); color: var(--text-muted); }
     /* No hover-reveal any more. In read mode the only thing in here is the
@@ -662,16 +662,16 @@
        mode everything in here is the point of the mode. Hiding either behind
        a gesture a thumb doesn't have was the old compromise (2026-08-27). */
     .rn__ingact {
-        display: flex; align-items: center; gap: var(--space-1, 4px);
-        border-radius: var(--radius-sm, 4px);
+        display: flex; align-items: center; gap: var(--space-1);
+        border-radius: var(--radius-sm);
     }
-    .rn__add { margin-top: var(--space-3, 12px); width: 100%; }
+    .rn__add { margin-top: var(--space-3); width: 100%; }
 
     .rn__ingsecempty {
         color: var(--text-muted);
-        font-size: 0.8125rem;
+        font-size: var(--font-size-sm);
         margin: 0;
-        padding: var(--space-2, 8px);
+        padding: var(--space-2);
     }
 
     /* ── Phone ────────────────────────────────────────────────────────── */

@@ -43,7 +43,10 @@ from dora_api.features.app_settings.clock import household_today
 from dora_api.features.budget.budget import household_budget, period_headroom
 from dora_api.features.meal_slots.slot_validation import ordered_slot_names
 from dora_api.features.recipes.all_recipes import load_all_recipe_dtos
-from dora_api.features.recipes.get_recipes import count_expiring_ingredients_per_recipe
+# The use-up-stock emphasis reads the cookbook's own "uses expiring" horizon,
+# one constant (R-003; FU-669).
+from dora_api.features.recipes.get_recipes import (EXPIRING_HORIZON_DAYS,
+                                                   count_expiring_ingredients_per_recipe)
 from dora_api.features.recipes.recipe_cost import estimate_costs_for
 from dora_api.features.routers import MEAL_PLAN_ROUTER
 from dora_api.infrastructure.api_response import bad_request, ok
@@ -55,9 +58,6 @@ from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 _LOGGER = logging.getLogger(__name__)
 
 WEEK_LENGTH_DAYS = 7
-# "expiring soon" horizon for the use-up-stock emphasis — matches the cookbook
-# "Uses expiring ingredients" filter (get_recipes / rescue feed, R-003).
-EXPIRING_HORIZON_DAYS = 14
 # Hard ceiling so a bad client can't ask us to place 500 meals. The builder is
 # a *week* tool, so the real bound is `days` (≤ 7, validated) × the household
 # slot vocabulary (server-resolved, so a client can't inflate it); this is the

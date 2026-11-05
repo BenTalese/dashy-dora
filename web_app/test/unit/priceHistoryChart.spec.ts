@@ -22,7 +22,7 @@ const global = {
 };
 
 const OATS: PriceChartSeries = {
-    key: 'si1',
+    key: 'si1', colourSlot: 0,
     name: 'Rolled Oats',
     points: [
         { date: '2026-08-01', value: 3.4 },
@@ -51,7 +51,7 @@ describe('PriceHistoryChart — text alternative', () => {
     });
 
     it('says so when there is nothing to draw', () => {
-        const chart = mountChart([{ key: 'x', name: 'Nothing', points: [] }]);
+        const chart = mountChart([{ key: 'x', name: 'Nothing', colourSlot: 0, points: [] }]);
         expect(chart.find('svg').attributes('aria-label')).toBe('Price chart, no data.');
         expect(chart.find('polyline').exists()).toBe(false);
     });
@@ -71,7 +71,7 @@ describe('PriceHistoryChart — legend', () => {
 
     it('leaves out the context entry when no series has one', () => {
         const items = mountChart(
-            [{ key: 'a', name: 'Oats', points: [{ date: '2026-08-01', value: 3 }] }],
+            [{ key: 'a', name: 'Oats', colourSlot: 0, points: [{ date: '2026-08-01', value: 3 }] }],
             { legend: true },
         ).findAll('.chart-legend li').map((li) => li.text());
         expect(items).toEqual(['Oats']);
@@ -93,7 +93,7 @@ describe('PriceHistoryChart — drawing', () => {
 
     it('emphasises a marked point, so a deal reads differently from a reading', () => {
         const chart = mountChart([{
-            key: 'a',
+            key: 'a', colourSlot: 0,
             name: 'Oats',
             points: [
                 { date: '2026-08-01', value: 3 },
@@ -106,7 +106,7 @@ describe('PriceHistoryChart — drawing', () => {
 
     it('ignores a series whose points have unparseable dates rather than drawing at x=0', () => {
         const chart = mountChart([{
-            key: 'a', name: 'Oats', points: [{ date: 'not-a-date', value: 3 }],
+            key: 'a', name: 'Oats', colourSlot: 0, points: [{ date: 'not-a-date', value: 3 }],
         }]);
         expect(chart.findAll('circle')).toHaveLength(0);
     });

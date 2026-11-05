@@ -2,9 +2,11 @@ import AxiosHttpClient from './axiosHttpClient';
 
 export type PriceRange = '30d' | '90d' | '1y' | 'all';
 
+/** An offer point: `price` is the shelf price of the pack, not a price per
+ *  measure (FU-911). */
 export interface PriceHistoryPoint {
     date: string | null;
-    unit_price: number | null;
+    price: number | null;
     list_price: number | null;
     on_deal: boolean;
 }
@@ -44,11 +46,11 @@ export interface PriceHistorySeries {
      *  reference line. Null when below MIN_SAMPLES / no observations. */
     your_prices?: SeriesYourPrices | null;
     current: {
-        unit_price: number | null;
+        price: number | null;
         list_price: number | null;
         deal_pct: number | null;
     } | null;
-    all_time_low: { unit_price: number; date: string | null } | null;
+    all_time_low: { price: number; date: string | null } | null;
 }
 
 // per-stock-item unioned series for the "Full history"
@@ -80,7 +82,7 @@ export interface PriceAlert {
     product_id: string;
     product_name: string;
     store_name: string;
-    threshold_unit_price: number;
+    threshold_price: number;
     created_at: string | null;
 }
 
@@ -97,14 +99,14 @@ export default class PriceHistoryApiService {
     };
 
     createAlertAsync = async (
-        productId: string, thresholdUnitPrice: number,
+        productId: string, thresholdPrice: number,
     ): Promise<{ price_alert_id: string }> =>
         await this.http.post<
             { price_alert_id: string },
-            { product_id: string; threshold_unit_price: number }
+            { product_id: string; threshold_price: number }
         >('/price-history/alerts', {
             product_id: productId,
-            threshold_unit_price: thresholdUnitPrice,
+            threshold_price: thresholdPrice,
         });
 
     listAlertsAsync = async (): Promise<{ items: PriceAlert[] }> =>

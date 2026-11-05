@@ -23,6 +23,7 @@ from apscheduler.triggers.base import BaseTrigger
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
+from dora_api.features.alerts.prune_alert_interactions import prune_alert_interactions
 from dora_api.features.alerts.send_alerts_push import send_alerts_push
 from dora_api.features.alerts.send_daily_brief import send_daily_brief
 from dora_api.features.audit.prune_audit_events import prune_audit_events
@@ -44,12 +45,15 @@ class Job:
 
 
 # Minutes are staggered on purpose: :00 audit prune (03:00), :30 snooze prune
-# (03:30), :30 alerts push, :45 daily brief, :15 deals email.
+# (03:30), :45 alert-interaction prune (03:45), :30 alerts push, :45 daily
+# brief, :15 deals email.
 JOBS: tuple[Job, ...] = (
     Job("audit_retention", prune_audit_events, CronTrigger(hour=3, minute=0),
         "nightly audit-log retention sweep, clear of the household-evening sends"),
     Job("suggestions_snooze_cleanup", prune_expired_snoozes, CronTrigger(hour=3, minute=30),
         "daily prune of elapsed suggestion snoozes (off the read path, FU-513)"),
+    Job("alert_interactions_cleanup", prune_alert_interactions, CronTrigger(hour=3, minute=45),
+        "daily prune of snooze/dismiss rows for alert episodes that have ended (FU-916)"),
     Job("alerts_push", send_alerts_push, CronTrigger(minute=30),
         "hourly alerts web-push; self-gates without VAPID"),
     Job("daily_brief", send_daily_brief, CronTrigger(minute=45),

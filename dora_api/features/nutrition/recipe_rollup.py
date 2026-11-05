@@ -36,10 +36,7 @@ from typing import Iterable, List
 from dora_api.domain import health_star_rating as hsr
 from dora_api.domain import nutri_score as ns
 from dora_api.domain.entities.nutrition_food import NutritionFood
-from dora_api.features.nutrition.food_categories import (
-    is_fvl_category,
-    is_fvnl_category,
-)
+from dora_api.features.nutrition.food_categories import counts_as_produce
 from dora_api.features.nutrition.household_measures import (
     food_ids_by_stock_item,
     portions_by_food,
@@ -301,11 +298,11 @@ def _rollup_one(recipe: 'RecipeNutritionInput', food_ids_by_item: dict, foods: d
         # (see `food_categories.py`) — never off the user's StockGroup, which
         # is their filing system and none of this feature's business.
         category = getattr(food, "food_category", None)
-        if is_fvnl_category(category):
+        if counts_as_produce(category, food.name):
             fvnl_grams += grams
         # Narrower than fvnl on purpose: nuts and seeds are excluded from the
         # Nutri-Score numerator but stay in `total_grams` below.
-        if is_fvl_category(category):
+        if counts_as_produce(category, food.name, nutri_score=True):
             fvl_grams += grams
         hundreds = grams / 100.0
         for key, attr in _SUMMED_NUTRIENTS:

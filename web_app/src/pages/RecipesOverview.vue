@@ -345,7 +345,6 @@
         dietaryTagsInclude, dietaryTagsExclude, toolsInclude, toolsExclude,
         activeFilterCount, hasAnyFilter, clearFilters,
     } = useCookbookFilters();
-    const EXPIRING_FILTER_HORIZON_DAYS = 14;
     /** Per-recipe at-risk facts from the filter fetch: how many ingredients
      *  are at risk, and when the soonest of them goes off. Both are server-
      *  derived; the client only orders and colours by them. */
@@ -740,9 +739,7 @@
         }
         expiringFetchInFlight.value = true;
         try {
-            const items = await recipeApi.getAllPagesAsync({
-                expiring_within_days: EXPIRING_FILTER_HORIZON_DAYS,
-            });
+            const items = await recipeApi.getAllPagesAsync({ uses_expiring: true });
             const next = new Map<string, ExpiringFacts>();
             for (const r of items) {
                 next.set(r.recipe_id, {

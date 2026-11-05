@@ -90,7 +90,9 @@ semantic whose fill is too light to be ink; see Warning ink above).
 
 ### Ordinal severity (when rank matters, not just meaning)
 `--severity-critical` > `--severity-high` > `--severity-medium` >
-`--severity-low`; `--severity-attention` for grabby-not-alarming. Alert-kind
+`--severity-low`; `--severity-attention` for grabby-not-alarming. `--severity-low`
+is the FYI tier and aliases `--semantic-info` (blue), so it never reads as a
+shade of medium's orange. Alert-kind
 categorical accents (`--alert-kind-*`), lifecycle accents (`--lifecycle-*`), and
 the 6-hue chart palette (`--chart-1..6`) are the only sources for those
 surfaces — never Quasar numbered palette classes (`red-6`, `amber-9`), which

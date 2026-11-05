@@ -361,7 +361,7 @@
                                 :product="product"
                                 :bulk-mode="bulkMode"
                                 :selected="selectedIds.has(product.product_id)"
-                                :watch-threshold="watchByProduct.get(product.product_id)?.threshold_unit_price ?? null"
+                                :watch-threshold="watchByProduct.get(product.product_id)?.threshold_price ?? null"
                                 @watch-price="openWatch(product)"
                                 @toggle-select="toggleSelect(product.product_id)"
                                 @open-stock-item="goToStockItem"

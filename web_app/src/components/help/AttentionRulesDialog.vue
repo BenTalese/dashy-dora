@@ -131,7 +131,7 @@
                         </q-item-label>
                     </q-item-section>
                 </q-item>
-                <q-item>
+                <q-item v-if="stocktakeOn">
                     <q-item-section avatar>
                         <q-icon :name="ICONS.fact_check" color="warning" size="22px" />
                     </q-item-section>
@@ -209,8 +209,12 @@
     import { attentionBand } from 'src/composables/useStockFilters';
     import { useStockLevelStore } from 'src/stores/stockLevelStore';
     import { ICONS } from 'src/style/icons';
+    import { useFeatureFlags } from 'src/composables/useFeatureFlags';
 
     defineProps<{ modelValue: boolean }>();
+    // With the install's stocktake switch off there is no stocktake to be due
+    // for, so its row goes (FU-700).
+    const { stocktake: stocktakeOn } = useFeatureFlags();
     const emit = defineEmits<{ (e: 'update:modelValue', value: boolean): void }>();
 
     // The legend renders the household's REAL level rows (renames included),

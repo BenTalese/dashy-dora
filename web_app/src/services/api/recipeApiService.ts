@@ -177,6 +177,9 @@ export type RecipeFilterArgs = {
      *  in-stock ingredient expiring within the horizon, and populate
      *  `expiring_ingredient_count` on the returned recipes. */
     expiring_within_days?: number;
+    /** The cookbook's "uses expiring" filter at the server's own horizon
+     *  (FU-669), so the client carries no number. */
+    uses_expiring?: boolean;
     /** Standard pagination. Omitted = the server's defaults (page 1,
      *  limit 50) — which silently truncates any cookbook past 50
      *  recipes, so list surfaces page with `getAllPagesAsync` instead. */
@@ -266,6 +269,10 @@ export default class RecipeApiService {
      *  normalised raw_text (server-owned normalisation — see
      *  `normalise_raw_text` in the backend), sorted by count desc /
      *  text asc. */
+    /** The settings badge's number (FU-858). */
+    getUnlinkedIngredientCountAsync = async (): Promise<number> =>
+        (await this.httpClient.get<{ count: number }>('/recipes/unlinked-ingredients/count')).count;
+
     getUnlinkedIngredientsAsync = async (): Promise<UnlinkedIngredients> =>
         await this.httpClient.get<UnlinkedIngredients>('/recipes/unlinked-ingredients');
 
@@ -326,6 +333,9 @@ function encodeFilterQueryString(filters?: RecipeFilterArgs): string {
     }
     if (filters.expiring_within_days !== undefined) {
         params.append('expiring_within_days', String(filters.expiring_within_days));
+    }
+    if (filters.uses_expiring) {
+        params.append('uses_expiring', 'true');
     }
     if (filters.page !== undefined) {
         params.append('page', String(filters.page));

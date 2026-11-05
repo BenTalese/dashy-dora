@@ -2,7 +2,7 @@
     <!-- One password input for the whole app (finalisation 15-R8 / 13-R12):
          the reveal toggle and the minimum-length rule used to be written
          four times, two of them with the length hard-coded. The rule reads
-         `models/password.ts`, the one TS mirror of the server's minimum. -->
+         `usePasswordPolicy`, which reads the server's minimum. -->
     <q-input
         v-bind="$attrs"
         :model-value="modelValue"
@@ -31,11 +31,12 @@
 
 <script setup lang="ts">
     import { ICONS } from 'src/style/icons';
-    import { PASSWORD_HINT, passwordLongEnough } from 'src/models/password';
+    import { usePasswordPolicy } from 'src/composables/usePasswordPolicy';
     import { computed, ref, useSlots } from 'vue';
 
     defineOptions({ inheritAttrs: false });
 
+    const { hint: passwordHint, longEnough } = usePasswordPolicy();
     const props = withDefaults(
         defineProps<{
             modelValue: string;
@@ -54,7 +55,7 @@
     const autocomplete = computed(() => props.autocomplete ?? (props.kind === 'new' ? 'new-password' : 'current-password'));
     const rules = computed(() => [
         (v: string) => !!v || 'Password is required',
-        ...(props.kind === 'new' ? [(v: string) => passwordLongEnough(v) || PASSWORD_HINT] : []),
+        ...(props.kind === 'new' ? [(v: string) => longEnough(v) || passwordHint.value] : []),
         ...props.extraRules,
     ]);
 </script>

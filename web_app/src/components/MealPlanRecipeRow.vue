@@ -20,7 +20,7 @@
          authority for the meta figures both cookbook views use, so the rail
          cannot drift from them (R-003). This component decides layout only. -->
     <div
-        class="mp-row dora-press"
+        class="mp-row dora-list-row dora-press"
         :class="{
             'mp-row--targeting': mode === 'targeting',
             'mp-row--suggesting': mode === 'suggesting',
@@ -88,56 +88,24 @@
             @click.stop
             @keydown.stop
         >
-            <BaseButton
-                variant="icon"
-                size="sm"
-                class="mp-row__step"
-                :icon="ICONS.remove"
-                :disable="recipe.available_meals <= 0"
-                aria-label="One fewer cooked"
-                @click="emit('poolAdjust', recipe.recipe_id, -1)"
-            >
-                <BaseTooltip>One fewer cooked</BaseTooltip>
-            </BaseButton>
-            <!-- Owner feedback 2026-09-03 - *"meal pool count input seems to
-                 be unclickable, possibly because the row is already clickable
-                 and that is interfering? Or is it intentionally designed this
-                 way?"* Neither: the click landed (the cluster stops propagation
-                 to the row), it just had nothing to do on a mouse - arming the
-                 steppers is a touch-only affordance, and on hover they are
-                 already there. A number you can click and cannot change is a
-                 broken control, so it is a real input now: type a count and
-                 Enter/blur commits it, which is also the quick way to record a
-                 batch of six without six taps. -->
-            <input
-                class="mp-row__tile"
-                type="number"
-                inputmode="numeric"
-                min="0"
-                :value="recipe.available_meals"
-                :aria-label="`Cooked meals ready to eat - ${recipe.name}`"
-                @focus="onTileFocus"
-                @keydown.enter.prevent="blurTile"
-                @keydown.esc.prevent="cancelTile"
-                @blur="commitTile"
-            >
-            <BaseButton
-                variant="icon"
-                size="sm"
-                class="mp-row__step"
-                :icon="ICONS.add"
-                aria-label="One more cooked"
-                @click="emit('poolAdjust', recipe.recipe_id, 1)"
-            >
-                <BaseTooltip>One more cooked</BaseTooltip>
-            </BaseButton>
+            <!-- The shared count control (FU-909); the rail hides its ± until
+                 the row is hovered or the tile is focused (styles below). -->
+            <NumberStepper
+                editable
+                :model-value="recipe.available_meals"
+                :min="0"
+                :value-label="`Cooked meals ready to eat - ${recipe.name}`"
+                decrement-label="One fewer cooked"
+                increment-label="One more cooked"
+                @focusin="poolArmed = true"
+                @update:model-value="onPoolSet"
+            />
         </div>
     </div>
 </template>
 
 <script setup lang="ts">
-    import BaseTooltip from 'src/components/BaseTooltip.vue';
-    import BaseButton from 'src/components/BaseButton.vue';
+    import NumberStepper from 'src/components/NumberStepper.vue';
     import type { Recipe } from 'src/models/recipe';
     import { ICONS } from 'src/style/icons';
     import { computed, ref } from 'vue';
@@ -181,30 +149,11 @@
     // shape for the ± buttons and for concurrent edits; typing an absolute
     // count is expressed against it rather than by adding a second endpoint
     // that could disagree with the first (R-003).
-    function onTileFocus(event: FocusEvent) {
-        poolArmed.value = true;
-        (event.target as HTMLInputElement | null)?.select();
-    }
-    // Enter only blurs; the blur is the one commit. `poolAdjust` is a delta,
-    // so committing on Enter AND on the blur that follows sent it twice.
-    function blurTile(event: Event) {
-        (event.target as HTMLInputElement).blur();
-    }
-    function commitTile(event: Event) {
-        const input = event.target as HTMLInputElement;
-        const next = Math.max(0, Math.floor(Number(input.value)));
-        if (!Number.isFinite(next) || next === props.recipe.available_meals) {
-            // Re-assert the truth: a blur after typing something unusable
-            // would otherwise leave the field showing it.
-            input.value = String(props.recipe.available_meals);
-            return;
-        }
-        emit('poolAdjust', props.recipe.recipe_id, next - props.recipe.available_meals);
-    }
-    function cancelTile(event: Event) {
-        const input = event.target as HTMLInputElement;
-        input.value = String(props.recipe.available_meals);
-        input.blur();
+    // The ± buttons and a typed count both arrive as the new total; the API
+    // takes the difference.
+    function onPoolSet(next: number) {
+        const delta = next - props.recipe.available_meals;
+        if (delta !== 0) emit('poolAdjust', props.recipe.recipe_id, delta);
     }
 
     const ariaLabel = computed(() => {
@@ -216,34 +165,19 @@
 </script>
 
 <style scoped>
-    /* R-001 carve-out: the brief (§4.5) asks for this row's chrome — bordered
-       flat surface, accent-tinted hover, no lift — to be promoted to a SHARED
-       class rather than a third private copy, since the look originated on
-       `StockItemRow` and was already copied once to `RecipeRow`. That
-       extraction is not done here: it would mean re-skinning both of those
-       rows in a unit whose scope is the meal-planner rail, which is the kind
-       of adjacent-surface edit R-007 exists to stop. The duplication is real
-       and is logged as a follow-up; this block is the third copy until then. */
+    /* Border, radius, surface, hover: `.dora-list-row` (app.scss), shared
+       with the stock row and the cookbook row (FU-791 / FU-802). */
     .mp-row {
         display: flex;
         align-items: center;
         gap: var(--space-2);
         width: 100%;
         padding: var(--space-2);
-        border: 1px solid var(--border-default);
-        border-radius: var(--radius-sm);
-        background: var(--surface-component);
         cursor: pointer;
         text-align: left;
-        transition: background var(--motion-fast) var(--motion-ease),
-            border-color var(--motion-fast) var(--motion-ease);
     }
     .mp-row + .mp-row {
         margin-top: var(--space-1);
-    }
-    .mp-row:hover {
-        background: color-mix(in srgb, var(--brand-primary) 6%, var(--surface-component));
-        border-color: color-mix(in srgb, var(--brand-primary) 35%, var(--border-default));
     }
     /* D-016 / A6 — a real focus ring. `RecipeRow` is a q-card with a click
        handler and no focus state, so it misses this today; the brief is
@@ -258,10 +192,7 @@
         min-width: 0;
     }
 
-    /* FU-693 — `.recipe-row__name` is `1.05rem`, off the D-003 scale, kept only
-       for parity with `StockItemRow`. A rail row would have been the THIRD site.
-       Resolved as the brief recommended: use the token. A 280px rail is not
-       where a 0.05rem parity is legible, and the scale is the rule. */
+    /* On the D-003 scale, like the stock and cookbook row names (FU-693). */
     .mp-row__name {
         font-size: var(--font-size-md);
         font-weight: 500;
@@ -307,62 +238,34 @@
        where it showed. `visibility` carries the hiding instead; nothing in
        Quasar's disabled styling touches it, and it keeps the button's box in
        the layout so revealing it still cannot reflow the row. */
-    .mp-row__step {
+    .mp-row__pool :deep(.num-stepper__step) {
         visibility: hidden;
         opacity: 0;
         transition: opacity var(--motion-fast) var(--motion-ease);
     }
     @media (hover: hover) {
-        .mp-row:hover .mp-row__step,
-        .mp-row:focus-within .mp-row__step {
+        .mp-row:hover .mp-row__pool :deep(.num-stepper__step),
+        .mp-row:focus-within .mp-row__pool :deep(.num-stepper__step) {
             visibility: visible;
             opacity: 1;
         }
     }
     /* Touch has no hover, so the tile arms the row instead. */
-    .mp-row__pool--armed .mp-row__step {
+    .mp-row__pool--armed :deep(.num-stepper__step) {
         visibility: visible;
         opacity: 1;
     }
     @media (hover: none) {
-        .mp-row__step {
+        .mp-row__pool :deep(.num-stepper__step) {
             visibility: visible;
             opacity: 1;
         }
     }
-    /* F42 — "the number is a bit hidden, could be better displayed… make the
-       number bigger maybe". It was a caption line reading "N free"; it is the
-       row's one numeric figure, now wearing the shopping list's tile. */
-    .mp-row__tile {
+    /* F42 — the row's one numeric figure wears the count tile; the rail's
+       is a size smaller than the menu's (34 x 30). */
+    .mp-row__pool :deep(.num-stepper__input) {
         width: 34px;
         height: 30px;
-        flex: none;
-        border: 1px solid transparent;
-        border-radius: var(--radius-md);
-        background: var(--surface-sunken);
-        color: var(--text-primary);
-        font: inherit;
-        font-weight: 700;
-        font-variant-numeric: tabular-nums;
-        text-align: center;
-        cursor: text;
-        padding: 0;
-        /* The browser's number spinners would not fit a 30px tile and would
-           duplicate the ± buttons beside it. */
-        appearance: textfield;
-        -moz-appearance: textfield;
-    }
-    .mp-row__tile::-webkit-outer-spin-button,
-    .mp-row__tile::-webkit-inner-spin-button {
-        appearance: none;
-        margin: 0;
-    }
-    .mp-row__tile:hover {
-        border-color: var(--border-strong);
-    }
-    .mp-row__tile:focus-visible {
-        outline: 2px solid var(--brand-primary);
-        outline-offset: 2px;
     }
     /* D-004 — 30px is a "dense control in desktop-only chrome" size, and this
        row is NOT desktop-only: `MealPlanPickerSheet` renders the same component
@@ -370,18 +273,18 @@
        finger is doing the tapping. The shopping list's own tile is 44px for
        exactly this reason. */
     @media (hover: none) {
-        .mp-row__tile {
+        .mp-row__pool :deep(.num-stepper__input) {
             width: 48px;
             height: 44px;
         }
-        .mp-row__step :deep(.q-btn) {
+        .mp-row__pool :deep(.num-stepper__step) {
             min-width: 44px;
             min-height: 44px;
         }
     }
 
     @media (prefers-reduced-motion: reduce) {
-        .mp-row__step {
+        .mp-row__pool :deep(.num-stepper__step) {
             transition: none;
         }
     }

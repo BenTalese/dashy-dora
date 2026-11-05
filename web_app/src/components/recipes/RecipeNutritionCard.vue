@@ -459,22 +459,22 @@
         display: flex;
         align-items: baseline;
         flex-wrap: wrap;
-        gap: var(--space-2, 8px);
+        gap: var(--space-2);
     }
-    .rnut__figure { display: flex; align-items: baseline; gap: var(--space-1, 4px); }
+    .rnut__figure { display: flex; align-items: baseline; gap: var(--space-1); }
     .rnut__kcal {
         font-size: 1.75rem;
         font-weight: 700;
         line-height: 1.1;
         font-variant-numeric: tabular-nums;
     }
-    .rnut__unit { color: var(--text-muted); font-size: 0.875rem; }
-    .rnut__figure--empty { color: var(--text-muted); font-size: 0.875rem; }
+    .rnut__unit { color: var(--text-muted); font-size: var(--font-size-sm); }
+    .rnut__figure--empty { color: var(--text-muted); font-size: var(--font-size-sm); }
     /* The basis is a qualifier on the figure, not a heading — it sits on the
        number it describes so the two can't be read apart. */
     .rnut__basis {
         padding: 2px 8px;
-        border-radius: var(--radius-pill, 999px);
+        border-radius: var(--radius-pill);
         background: var(--surface-sunken);
         color: var(--text-secondary);
         font-size: var(--font-size-xs);
@@ -488,9 +488,9 @@
     .rnut__grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(5.5rem, 1fr));
-        gap: var(--space-2, 8px) var(--space-3, 12px);
-        margin: var(--space-3, 12px) 0 0;
-        padding: var(--space-3, 12px) 0 0;
+        gap: var(--space-2) var(--space-3);
+        margin: var(--space-3) 0 0;
+        padding: var(--space-3) 0 0;
         border-top: 1px solid var(--divider);
     }
     .rnut__cell { min-width: 0; }
@@ -509,7 +509,7 @@
     }
     .rnut__vu {
         margin-left: 2px;
-        font-size: 0.75rem;
+        font-size: var(--font-size-xs);
         font-weight: 400;
         color: var(--text-muted);
     }
@@ -517,27 +517,27 @@
     .rnut__coverage {
         display: flex;
         align-items: center;
-        gap: var(--space-3, 12px);
-        margin-top: var(--space-3, 12px);
-        padding-top: var(--space-3, 12px);
+        gap: var(--space-3);
+        margin-top: var(--space-3);
+        padding-top: var(--space-3);
         border-top: 1px solid var(--divider);
     }
     .rnut__bar {
         flex: 1;
         height: 6px;
-        border-radius: var(--radius-pill, 999px);
+        border-radius: var(--radius-pill);
         background: var(--surface-sunken);
         overflow: hidden;
     }
     .rnut__barfill { height: 100%; background: var(--brand-primary); }
     .rnut__cov {
-        font-size: 0.8125rem;
+        font-size: var(--font-size-sm);
         color: var(--text-muted);
         white-space: nowrap;
     }
 
     .rnut__grouphead {
-        margin-top: var(--space-3, 12px);
+        margin-top: var(--space-3);
         font-size: var(--font-size-xs);
         font-weight: 700;
         letter-spacing: 0.06em;
@@ -546,7 +546,7 @@
     }
     .rnut__gaps {
         list-style: none;
-        margin: var(--space-1, 4px) 0 0;
+        margin: var(--space-1) 0 0;
         padding: 0;
         display: flex;
         flex-direction: column;
@@ -555,11 +555,11 @@
     .rnut__gaps > li {
         display: flex;
         align-items: center;
-        gap: var(--space-2, 8px);
-        padding: var(--space-1, 4px) var(--space-3, 12px);
-        border-radius: var(--radius-sm, 4px);
+        gap: var(--space-2);
+        padding: var(--space-1) var(--space-3);
+        border-radius: var(--radius-sm);
         background: var(--surface-sunken);
-        font-size: 0.875rem;
+        font-size: var(--font-size-sm);
         color: var(--text-primary);
         min-height: 36px;
     }
@@ -571,21 +571,21 @@
     }
 
     .dora-hsr {
-        margin-top: var(--space-3, 12px);
-        padding-top: var(--space-3, 12px);
+        margin-top: var(--space-3);
+        padding-top: var(--space-3);
         border-top: 1px solid var(--divider);
     }
     .dora-hsr__row {
         display: flex;
         align-items: center;
-        gap: var(--space-2, 8px);
+        gap: var(--space-2);
         flex-wrap: wrap;
     }
-    .dora-hsr__working { margin-top: var(--space-2, 8px); }
+    .dora-hsr__working { margin-top: var(--space-2); }
     .dora-hsr__ledger {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(5.5rem, 1fr));
-        gap: var(--space-1, 4px) var(--space-3, 12px);
+        gap: var(--space-1) var(--space-3);
     }
     .dora-hsr__cell {
         display: flex;
@@ -598,7 +598,7 @@
         font-variant-numeric: tabular-nums;
     }
     .dora-hsr__note {
-        margin: var(--space-2, 8px) 0 0;
+        margin: var(--space-2) 0 0;
         color: var(--text-muted);
         max-width: 62ch;
     }

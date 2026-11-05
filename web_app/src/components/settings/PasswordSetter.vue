@@ -12,8 +12,8 @@
             kind="new"
             :autofocus="autofocus"
             :error="!!error || tooShort"
-            :error-message="error || (tooShort ? PASSWORD_HINT : '')"
-            :hint="error || tooShort ? '' : PASSWORD_HINT"
+            :error-message="error || (tooShort ? passwordHint : '')"
+            :hint="error || tooShort ? '' : passwordHint"
             lazy-rules
             @update:model-value="onInput"
         />
@@ -43,7 +43,7 @@
      * can decide what to send without reaching back in here.
      */
     import PasswordField from 'src/components/PasswordField.vue';
-    import { PASSWORD_HINT, MIN_PASSWORD_LENGTH } from 'src/models/password';
+    import { usePasswordPolicy } from 'src/composables/usePasswordPolicy';
     import { computed } from 'vue';
 
     const props = withDefaults(
@@ -72,9 +72,9 @@
 
     // Only nag once they've started typing — an empty field on a freshly
     // opened dialog isn't an error, it's the starting state.
+    const { hint: passwordHint, longEnough } = usePasswordPolicy();
     const tooShort = computed(
-        () => props.modelValue.length > 0
-            && props.modelValue.length < MIN_PASSWORD_LENGTH,
+        () => props.modelValue.length > 0 && !longEnough(props.modelValue),
     );
 
     function onInput(value: string | number | null) {

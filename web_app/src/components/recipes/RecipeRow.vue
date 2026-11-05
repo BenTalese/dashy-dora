@@ -16,7 +16,7 @@
     <q-card
         bordered
         flat
-        class="recipe-row cursor-pointer"
+        class="recipe-row dora-list-row cursor-pointer"
         @click="emit('open', recipe.recipe_id)"
     >
         <q-card-section class="row items-center no-wrap recipe-row__body">
@@ -192,20 +192,9 @@
 <style scoped>
     /* Chrome deliberately matches `StockItemRow` — the two compact lists
        should read as the same control in two places. */
+    /* Border, radius, surface, hover: `.dora-list-row` (app.scss). */
     .recipe-row {
-        margin-bottom: 8px;
-        border-radius: 8px;
-        overflow: hidden;
-        transition:
-            box-shadow var(--motion-fast) var(--motion-ease),
-            background-color var(--motion-fast) var(--motion-ease),
-            border-color var(--motion-fast) var(--motion-ease);
-        border: 1px solid var(--border-default, color-mix(in srgb, var(--text-primary) 12%, transparent));
-    }
-    .recipe-row:hover {
-        background: color-mix(in srgb, var(--q-accent) 4%, var(--surface-component));
-        border-color: color-mix(in srgb, var(--q-accent) 38%, transparent);
-        box-shadow: 0 1px 6px color-mix(in srgb, var(--text-primary) 8%, transparent);
+        margin-bottom: var(--space-2);
     }
     .recipe-row__body {
         padding: 6px 12px;
@@ -224,16 +213,11 @@
        missing font-size, which left the recipe name a step smaller than the
        stock one on the same-shaped row.
 
-       D-003 carve-out: `1.05rem` is a raw size, and the rule says use the
-       `--font-size-*` ratios. It is deliberately raw here because the request
-       was *parity with the stock row*, and that row is 1.05rem — a value with
-       no token (md = 1, lg = 1.125). Tokenising one of the pair would break
-       the parity this line exists to create, and tokenising both changes the
-       Stock Overview type the owner signed off on last week. Logged as FU-693
-       to move the pair together. */
+       The stock row's name moved onto `--font-size-md`; this follows it, so
+       the pair stays matched and on the D-003 scale (FU-693). */
     .recipe-row__name {
         font-weight: 600;
-        font-size: 1.05rem;
+        font-size: var(--font-size-md);
         line-height: 1.25;
         max-width: 100%;
         overflow: hidden;

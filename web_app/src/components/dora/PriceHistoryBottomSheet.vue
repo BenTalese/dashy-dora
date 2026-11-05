@@ -58,8 +58,8 @@
 </template>
 
 <script lang="ts" setup>
-    import { createFrameResizeObserver, type FrameResizeObserver } from 'src/composables/frameResizeObserver';
-    import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+    import { useMeasuredWidth } from 'src/composables/useMeasuredWidth';
+    import { computed, ref, watch } from 'vue';
     import AppSpinner from 'src/components/AppSpinner.vue';
     import BaseDialog from 'src/components/BaseDialog.vue';
     import PriceHistoryChart from 'src/components/PriceHistoryChart.vue';
@@ -95,15 +95,8 @@
 
     // ── Responsive chart width (mirrors PriceHistoryPage) ───────────────────
     const bodyRef = ref<{ $el?: HTMLElement } | null>(null);
-    const chartWidth = ref(720);
-    let resizeObserver: FrameResizeObserver | null = null;
-
-    function measure(): void {
-        const el = bodyRef.value?.$el;
-        if (!el) return;
-        const next = Math.max(280, Math.floor(el.clientWidth) - 32);
-        if (next !== chartWidth.value) chartWidth.value = next;
-    }
+    // The section's padding (16px a side) is inset from the measured box.
+    const chartWidth = useMeasuredWidth(() => bodyRef.value?.$el, { initial: 720, min: 280, inset: 32 });
 
     // R-101 — each open (and each close) bumps this, so a slow response for
     // the item the sheet was showing before can't paint into the one open now.
@@ -122,13 +115,6 @@
         } finally {
             if (req === loadSeq) loading.value = false;
         }
-        await nextTick();
-        measure();
-        const el = bodyRef.value?.$el;
-        if (el && typeof ResizeObserver !== 'undefined' && !resizeObserver) {
-            resizeObserver = createFrameResizeObserver(measure);
-            resizeObserver.observe(el);
-        }
     }
 
     // Lazy-fetch each time the sheet opens (prices may have changed since the
@@ -137,16 +123,8 @@
         () => props.modelValue,
         (open) => {
             if (open && props.stockItemId) void load();
-            if (!open) {
-                loadSeq += 1;
-                resizeObserver?.disconnect();
-                resizeObserver = null;
-            }
+            if (!open) loadSeq += 1;
         },
     );
 
-    onBeforeUnmount(() => {
-        resizeObserver?.disconnect();
-        resizeObserver = null;
-    });
 </script>

@@ -139,8 +139,8 @@
      * Everything numeric is server-derived — per-unit prices, the deltas, the
      * ranking and the coverage counts (R-003/R-041). This file formats.
      */
-    import { createFrameResizeObserver, type FrameResizeObserver } from 'src/composables/frameResizeObserver';
-    import { computed, onBeforeUnmount, ref, watch } from 'vue';
+    import { useMeasuredWidth } from 'src/composables/useMeasuredWidth';
+    import { computed, ref, watch } from 'vue';
     import { ICONS } from 'src/style/icons';
     import { rangeWindowWords } from 'src/helpers/reportRangeWords';
     import AppSkeleton from 'src/components/AppSkeleton.vue';
@@ -252,30 +252,9 @@
     // old answer must not linger under the new one.
     watch(() => props.range, closeChart);
 
-    // The SVG chart is sized in px, so the card measures its own content box —
-    // the same pattern `/price-history`, the bottom sheet and Price trends use.
+    // The SVG chart is sized in px; the card measures its own content box.
     const chartHostRef = ref<HTMLElement | null>(null);
-    const chartWidth = ref(560);
-    let observer: FrameResizeObserver | null = null;
-
-    function measure(): void {
-        const el = chartHostRef.value;
-        if (!el) return;
-        const next = Math.max(260, Math.floor(el.clientWidth));
-        if (next !== chartWidth.value) chartWidth.value = next;
-    }
-    watch(chartHostRef, (el) => {
-        observer?.disconnect();
-        observer = null;
-        if (!el || typeof ResizeObserver === 'undefined') return;
-        measure();
-        observer = createFrameResizeObserver(measure);
-        observer.observe(el);
-    });
-    onBeforeUnmount(() => {
-        observer?.disconnect();
-        observer = null;
-    });
+    const chartWidth = useMeasuredWidth(() => chartHostRef.value, { initial: 560, min: 260 });
 </script>
 
 <style scoped lang="scss">

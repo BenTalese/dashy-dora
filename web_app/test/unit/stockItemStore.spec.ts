@@ -27,7 +27,7 @@ const m = vi.hoisted(() => ({
 
 vi.mock('src/services/api/stockLevelApiService', () => ({
     default: class {
-        getAllAsync = m.getLevelsAsync;
+        getAllPagesAsync = m.getLevelsAsync;
     },
 }));
 
@@ -78,7 +78,7 @@ beforeEach(() => {
     m.updateAsync.mockResolvedValue({});
     m.deleteAsync.mockResolvedValue(undefined);
     m.slRefreshAsync.mockResolvedValue(undefined);
-    m.getLevelsAsync.mockResolvedValue({ items: [], total: 0, page: 1, limit: 50 });
+    m.getLevelsAsync.mockResolvedValue([]);
 });
 
 async function seedStore(items: StockItem[]) {
@@ -192,13 +192,10 @@ describe('stockItemStore — updateStockLevelAsync (optimistic + rollback)', () 
     });
 
     it('moves the derived status fields with the level, and restores them on failure', async () => {
-        m.getLevelsAsync.mockResolvedValueOnce({
-            items: [
-                { stock_level_id: 'LVL-good', name: 'Good', sequence: 0 },
-                { stock_level_id: 'LVL-out', name: 'Out', sequence: 2 },
-            ],
-            total: 2, page: 1, limit: 50,
-        });
+        m.getLevelsAsync.mockResolvedValueOnce([
+            { stock_level_id: 'LVL-good', name: 'Good', sequence: 0 },
+            { stock_level_id: 'LVL-out', name: 'Out', sequence: 2 },
+        ]);
         await useStockLevelStore().getStockLevelsAsync();
         const store = await seedStore([{
             ...item('SI-1', 'Apple', 'LVL-good'),

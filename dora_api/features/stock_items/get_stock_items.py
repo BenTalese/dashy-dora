@@ -15,6 +15,7 @@ from dora_api.domain.stock_status import (effective_expiring_soon_window,
                                           is_low_stock, is_out_of_stock,
                                           needs_restock)
 from dora_api.features.app_settings.clock import household_today
+from dora_api.features.stock_items._level_access import resolve_levels_by_item
 from dora_api.features.stock_items.stock_attention import (RANK_NONE,
                                                           is_expired,
                                                           is_expiring_soon,
@@ -140,6 +141,7 @@ class GetStockItemsHandler:
         by_id = {e.id: e for e in entities}
         attention = resolve_attention_map(
             entities,
+            resolve_levels_by_item(self.repository, entities),
             today=today,
             window_days=window,
             disabled_kinds=self._disabled_kinds(),

@@ -58,6 +58,7 @@ from dora_api.features.alerts.alert_kinds import (SEVERITY_HIGH, SEVERITY_LOW,
                                                   is_actionable)
 from dora_api.features.app_settings.clock import household_locale, household_today
 from dora_api.features.products.product_links import linked_stock_items
+from dora_api.features.stock_items._level_access import resolve_levels_by_item
 from dora_api.features.stock_items.stock_attention import (is_essential_low,
                                                            is_expired,
                                                            is_expiring_soon)
@@ -173,121 +174,10 @@ class GetAlertsHandler:
         # it, and callers that already carry a tick time (the push job) pass
         # theirs through so one run evaluates at one instant. Default
         # preserves the wall-clock behaviour.
-        items: List[StockItem] = (
-            self.repository.get(StockItem)
-            .include(StockItem.Fields.STOCK_LEVEL)
-            .all()
-        )
         # R-021 — calendar boundaries evaluate in the household timezone.
         today = household_today(self.repository)
         now = now or datetime.now(timezone.utc)
-
-        # Household-wide threshold (C-9.2): the expiring-soon window resolves
-        # from AppSetting, falling back to the seeded default — one source
-        # (R-003), never a second literal 7 here.
-        window = effective_expiring_soon_window(get_or_create_app_setting(self.repository))
-
-        # Build the raw alert set (conditions, no counting yet — counts are
-        # derived after the per-user interaction + preference overlay).
-        raw: List[AlertDto] = []
-
-        # The *conditions* live in `stock_attention.py` — this loop owns only
-        # the copy. Emitting from the same predicates the stock rows read is
-        # what makes "one attention rule" true rather than aspirational (R-003);
-        # the previous arrangement restated the thresholds here and drifted (B1).
-        for item in items:
-            # ── Expiry ─────────────────────────────────────────────────
-            if item.expiry_date is not None:
-                days_remaining = (item.expiry_date - today).days
-                expiry_iso = item.expiry_date.isoformat()
-                if is_expired(item, today):
-                    raw.append(AlertDto(
-                        alert_id = stock_alert_key(item.id, f"expired:{expiry_iso}"),
-                        kind = "expired",
-                        severity = SEVERITY_HIGH,
-                        stock_item_id = item.id,
-                        stock_item_name = item.name,
-                        message = f"{item.name} has expired",
-                        detail = f"Expired {abs(days_remaining)} {pluralize(days_remaining, 'day')} ago.",
-                        related_date = expiry_iso,
-                        started_on = expiry_iso,
-                    ))
-                elif is_expiring_soon(item, today, window):
-                    raw.append(AlertDto(
-                        alert_id = stock_alert_key(item.id, f"expiring_soon:{expiry_iso}"),
-                        kind = "expiring_soon",
-                        severity = SEVERITY_MEDIUM,
-                        stock_item_id = item.id,
-                        stock_item_name = item.name,
-                        message = f"{item.name} expires soon",
-                        detail = (
-                            "Expires today."
-                            if days_remaining == 0
-                            else f"Expires in {days_remaining} {pluralize(days_remaining, 'day')}."
-                        ),
-                        related_date = expiry_iso,
-                        started_on = (item.expiry_date - timedelta(days=window)).isoformat(),
-                    ))
-
-            # ── Stock level ────────────────────────────────────────────
-            # ONLY essentials. Step-0 Q1 cut `out_of_stock` and `low_stock`:
-            # a non-essential running low is exactly the case the user said he
-            # doesn't want to hear about, and the row's own level band already
-            # says it. Non-essential + out still *dims and sinks* the row
-            # (D-8) — that's a treatment read off the level, not an alert.
-            if is_essential_low(item):
-                # The episode is the level change that made it low or out, so
-                # a restock and a later run-out is a new alert.
-                level_since = (
-                    item.stock_level_last_updated.date().isoformat()
-                    if item.stock_level_last_updated is not None else today.isoformat()
-                )
-                if is_out_of_stock(item.stock_level):
-                    raw.append(AlertDto(
-                        alert_id = stock_alert_key(item.id, f"essential_out:{level_since}"),
-                        kind = "essential_low",
-                        severity = SEVERITY_HIGH,
-                        stock_item_id = item.id,
-                        stock_item_name = item.name,
-                        message = f"Essential {item.name} is out of stock",
-                        # DR-4 (FU-578 #17): action-neutral — the bell offers
-                        # both "Mark restocked" (per row) and "Add to list"
-                        # (footer), so the copy shouldn't prescribe one.
-                        detail = "Out of stock and essential.",
-                        related_date = None,
-                        started_on = level_since,
-                    ))
-                else:
-                    raw.append(AlertDto(
-                        alert_id = stock_alert_key(item.id, f"essential_low:{level_since}"),
-                        kind = "essential_low",
-                        severity = SEVERITY_HIGH,
-                        stock_item_id = item.id,
-                        stock_item_name = item.name,
-                        message = f"Essential {item.name} is low",
-                        detail = "Essential and running low.",
-                        related_date = None,
-                        started_on = level_since,
-                    ))
-
-        # ── Stocktake overdue: deliberately NOT an alert ───────────────
-        # Step-0 Q1 cut it. The stocktake runner owns this signal end to end —
-        # it has its own queue, its own overdue resolver and its own toolbar
-        # button. Mirroring it into the bell was one condition shouting from
-        # two places, which is the pattern this plan exists to remove. If the
-        # runner needs to be more discoverable, make the runner louder; don't
-        # re-add a kind here.
-
-        # ── Forward-looking nudges (C-9.4) ─────────────────────────────
-        # Not per-item, so they sit outside the loop. R-021 — `today` is
-        # the household-tz boundary built once at the top of `handle()`.
-        raw.extend(self._no_planned_meals_alerts(today))
-        raw.extend(self._shopping_day_alerts(today))
-        # ── FU-317 Chunk 4 — meal-plan reconcile overdue ───────────────
-        raw.extend(self._meal_reconcile_overdue_alerts(today))
-        # ── Price watches (per user) ───────────────────────────────────
-        if user_id is not None:
-            raw.extend(self._price_drop_alerts(user_id))
+        raw = self.raw_alerts(user_id, today)
 
         # ── Per-user overlay (C-9.1 interactions + C-9.2 preferences) ───
         # One bounded fetch each of this user's interactions + preferences,
@@ -370,6 +260,124 @@ class GetAlertsHandler:
             actionable_count=actionable,
             snoozed_count=len(snoozed),
         )
+
+    def raw_alerts(self, user_id: UUID | None, today: date) -> List[AlertDto]:
+        """Every alert the current state raises for this user, before their
+        snoozes, dismissals and preferences are applied. Also what the nightly
+        interaction prune reads to tell a live key from a finished one
+        (FU-916)."""
+        items: List[StockItem] = self.repository.get(StockItem).all()
+        # By FK, not the noload relationship (R-032; FU-684).
+        levels_by_item = resolve_levels_by_item(self.repository, items)
+
+        # Household-wide threshold (C-9.2): the expiring-soon window resolves
+        # from AppSetting, falling back to the seeded default — one source
+        # (R-003), never a second literal 7 here.
+        window = effective_expiring_soon_window(get_or_create_app_setting(self.repository))
+
+        # Build the raw alert set (conditions, no counting yet — counts are
+        # derived after the per-user interaction + preference overlay).
+        raw: List[AlertDto] = []
+
+        # The *conditions* live in `stock_attention.py` — this loop owns only
+        # the copy. Emitting from the same predicates the stock rows read is
+        # what makes "one attention rule" true rather than aspirational (R-003);
+        # the previous arrangement restated the thresholds here and drifted (B1).
+        for item in items:
+            # ── Expiry ─────────────────────────────────────────────────
+            if item.expiry_date is not None:
+                days_remaining = (item.expiry_date - today).days
+                expiry_iso = item.expiry_date.isoformat()
+                if is_expired(item, today):
+                    raw.append(AlertDto(
+                        alert_id = stock_alert_key(item.id, f"expired:{expiry_iso}"),
+                        kind = "expired",
+                        severity = SEVERITY_HIGH,
+                        stock_item_id = item.id,
+                        stock_item_name = item.name,
+                        message = f"{item.name} has expired",
+                        detail = f"Expired {abs(days_remaining)} {pluralize(days_remaining, 'day')} ago.",
+                        related_date = expiry_iso,
+                        started_on = expiry_iso,
+                    ))
+                elif is_expiring_soon(item, today, window):
+                    raw.append(AlertDto(
+                        alert_id = stock_alert_key(item.id, f"expiring_soon:{expiry_iso}"),
+                        kind = "expiring_soon",
+                        severity = SEVERITY_MEDIUM,
+                        stock_item_id = item.id,
+                        stock_item_name = item.name,
+                        message = f"{item.name} expires soon",
+                        detail = (
+                            "Expires today."
+                            if days_remaining == 0
+                            else f"Expires in {days_remaining} {pluralize(days_remaining, 'day')}."
+                        ),
+                        related_date = expiry_iso,
+                        started_on = (item.expiry_date - timedelta(days=window)).isoformat(),
+                    ))
+
+            # ── Stock level ────────────────────────────────────────────
+            # ONLY essentials. Step-0 Q1 cut `out_of_stock` and `low_stock`:
+            # a non-essential running low is exactly the case the user said he
+            # doesn't want to hear about, and the row's own level band already
+            # says it. Non-essential + out still *dims and sinks* the row
+            # (D-8) — that's a treatment read off the level, not an alert.
+            level = levels_by_item.get(item.id)
+            if is_essential_low(item, level):
+                # The episode is the level change that made it low or out, so
+                # a restock and a later run-out is a new alert.
+                level_since = (
+                    item.stock_level_last_updated.date().isoformat()
+                    if item.stock_level_last_updated is not None else today.isoformat()
+                )
+                if is_out_of_stock(level):
+                    raw.append(AlertDto(
+                        alert_id = stock_alert_key(item.id, f"essential_out:{level_since}"),
+                        kind = "essential_low",
+                        severity = SEVERITY_HIGH,
+                        stock_item_id = item.id,
+                        stock_item_name = item.name,
+                        message = f"Essential {item.name} is out of stock",
+                        # DR-4 (FU-578 #17): action-neutral — the bell offers
+                        # both "Mark restocked" (per row) and "Add to list"
+                        # (footer), so the copy shouldn't prescribe one.
+                        detail = "Out of stock and essential.",
+                        related_date = None,
+                        started_on = level_since,
+                    ))
+                else:
+                    raw.append(AlertDto(
+                        alert_id = stock_alert_key(item.id, f"essential_low:{level_since}"),
+                        kind = "essential_low",
+                        severity = SEVERITY_HIGH,
+                        stock_item_id = item.id,
+                        stock_item_name = item.name,
+                        message = f"Essential {item.name} is low",
+                        detail = "Essential and running low.",
+                        related_date = None,
+                        started_on = level_since,
+                    ))
+
+        # ── Stocktake overdue: deliberately NOT an alert ───────────────
+        # Step-0 Q1 cut it. The stocktake runner owns this signal end to end —
+        # it has its own queue, its own overdue resolver and its own toolbar
+        # button. Mirroring it into the bell was one condition shouting from
+        # two places, which is the pattern this plan exists to remove. If the
+        # runner needs to be more discoverable, make the runner louder; don't
+        # re-add a kind here.
+
+        # ── Forward-looking nudges (C-9.4) ─────────────────────────────
+        # Not per-item, so they sit outside the loop. R-021 — `today` is
+        # the household-tz boundary built once at the top of `handle()`.
+        raw.extend(self._no_planned_meals_alerts(today))
+        raw.extend(self._shopping_day_alerts(today))
+        # ── FU-317 Chunk 4 — meal-plan reconcile overdue ───────────────
+        raw.extend(self._meal_reconcile_overdue_alerts(today))
+        # ── Price watches (per user) ───────────────────────────────────
+        if user_id is not None:
+            raw.extend(self._price_drop_alerts(user_id))
+        return raw
 
     def _no_planned_meals_alerts(self, today: date) -> List[AlertDto]:
         """One FYI nudge when *next* week has no meal-plan entries. The key is
@@ -491,7 +499,7 @@ class GetAlertsHandler:
         stays put is the same one, so it fires once.
 
         Money-gated like every price surface (R-029): with money off, no watch
-        fires. `PriceAlert.threshold_unit_price` is compared with the product's
+        fires. `PriceAlert.threshold_price` is compared with the product's
         shelf `price_now`, which is what the watch dialog asks for."""
         if not money_features_enabled(self.repository):
             return []
@@ -500,7 +508,7 @@ class GetAlertsHandler:
         )
         if not watches:
             return []
-        threshold_by_product = {w.product_id: float(w.threshold_unit_price) for w in watches}
+        threshold_by_product = {w.product_id: float(w.threshold_price) for w in watches}
         products: List[Product] = (
             self.repository.get(Product)
             .include(Product.Fields.CURRENT_OFFER)

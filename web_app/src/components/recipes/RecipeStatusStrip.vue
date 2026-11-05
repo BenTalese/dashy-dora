@@ -318,15 +318,15 @@
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
         gap: 1px;
-        margin-top: var(--space-5, 20px);
+        margin-top: var(--space-5);
         background: var(--border-default);
         border: 1px solid var(--border-default);
-        border-radius: var(--radius-lg, 10px);
+        border-radius: var(--radius-lg);
         overflow: hidden;
     }
     .rn__cell {
         background: var(--surface-component);
-        padding: var(--space-3, 12px) var(--space-4, 16px);
+        padding: var(--space-3) var(--space-4);
         display: flex; flex-direction: column; gap: 2px;
         position: relative;
     }
@@ -336,7 +336,7 @@
         flex-direction: row;
         align-items: center;
         justify-content: space-between;
-        gap: var(--space-3, 12px);
+        gap: var(--space-3);
     }
     .rn__cellbody { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
     /* Severity as an edge stripe rather than a washed cell: it survives both
@@ -351,7 +351,7 @@
     .rn__cell--warn::before { background: var(--semantic-warning); }
     .rn__cell--ok::before { background: var(--semantic-positive); }
     .rn__cellv { font-weight: 600; }
-    .rn__cellsub { font-size: 0.8125rem; color: var(--text-muted); }
-    .rn__pool { display: flex; align-items: center; gap: var(--space-2, 8px); flex-wrap: wrap; }
-    .rn__cellbtn { align-self: flex-start; margin-top: var(--space-1, 4px); }
+    .rn__cellsub { font-size: var(--font-size-sm); color: var(--text-muted); }
+    .rn__pool { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+    .rn__cellbtn { align-self: flex-start; margin-top: var(--space-1); }
 </style>

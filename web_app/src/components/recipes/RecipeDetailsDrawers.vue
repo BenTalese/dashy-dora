@@ -240,15 +240,15 @@
     // wears) and `.rn__cellk` (the status strip's key label) are shared.
     @use '../../css/recipeDetail';
 
-    .rn__details { margin-top: var(--space-8, 32px); border-top: 1px solid var(--divider); }
+    .rn__details { margin-top: var(--space-8); border-top: 1px solid var(--divider); }
     /* The expansion headers wear the Ingredients/Method treatment now, so the
        page has one voice for "this is a section" (owner feedback 2026-08-27).
        Quasar's own header padding stays; only the label changes. */
     .rn__details :deep(.q-expansion-item__toggle-icon) { color: var(--text-muted); }
-    .rn__disc { padding: var(--space-3, 12px) var(--space-2, 8px) var(--space-4, 16px); }
+    .rn__disc { padding: var(--space-3) var(--space-2) var(--space-4); }
     .rn__vfacts {
-        display: flex; flex-wrap: wrap; gap: var(--space-2, 8px) var(--space-6, 24px);
-        margin-bottom: var(--space-3, 12px);
+        display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-6);
+        margin-bottom: var(--space-3);
     }
     .rn__vfact { display: flex; flex-direction: column; gap: 2px; }
     .rn__vthis { background: var(--surface-sunken); }
@@ -256,8 +256,8 @@
        button in the panel that talks about versions rather than only an icon
        in the page-wide action row (owner feedback 2026-08-27). */
     .rn__vhead {
-        display: flex; align-items: center; gap: var(--space-2, 8px);
-        margin: var(--space-5, 20px) 0 var(--space-2, 8px);
+        display: flex; align-items: center; gap: var(--space-2);
+        margin: var(--space-5) 0 var(--space-2);
         flex-wrap: wrap;
     }
     .rn__vhead .rn__discsub { margin: 0; }
@@ -270,8 +270,8 @@
     .rn__vnew { margin-left: auto; }
 
     .rn__discsub {
-        font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em;
+        font-size: var(--font-size-xs); font-weight: 700; letter-spacing: 0.06em;
         text-transform: uppercase; color: var(--text-muted);
-        margin: var(--space-5, 20px) 0 var(--space-2, 8px);
+        margin: var(--space-5) 0 var(--space-2);
     }
 </style>

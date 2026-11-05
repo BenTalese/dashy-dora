@@ -96,6 +96,8 @@ def test__capabilities__unauthenticated_and_reports_email_state(api):
     assert body == {
         "email_sender_configured": False, "demo_mode": False,
         "registration_enabled": False,
+        # FU-656: the length rule forms hint before a save.
+        "min_password_length": 8,
     }
 
 

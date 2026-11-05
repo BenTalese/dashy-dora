@@ -207,6 +207,19 @@ def suggest_for_name(repository: Repository, item_name: str) -> FoodSuggestion |
     return _best(item_name, candidates[:_MAX_CANDIDATES_PER_TOKEN * len(conditions)])
 
 
+def _unmatched_condition():
+    return (
+        Field(StockItem, StockItem.Fields.NUTRITION_FOOD_ID).is_null()
+        & Field(StockItem, StockItem.Fields.NUTRITION_IGNORED).eq(False)
+    )
+
+
+def unmatched_item_count(repository: Repository) -> int:
+    """How many items `unmatched_items` would list, without scoring them: the
+    settings badge needs the number, not the suggestions (FU-858)."""
+    return repository.get(StockItem).count(_unmatched_condition())
+
+
 def unmatched_items(repository: Repository) -> List[UnmatchedStockItem]:
     """Every stock item that could take a nutrition link but hasn't got one,
     each with its best suggestion.
@@ -219,10 +232,7 @@ def unmatched_items(repository: Repository) -> List[UnmatchedStockItem]:
     SR Legacy ~7,800) plus whatever individual live foods have been resolved, so
     one read is cheap and predictable.
     """
-    items = repository.get(StockItem).where(
-        Field(StockItem, StockItem.Fields.NUTRITION_FOOD_ID).is_null()
-        & Field(StockItem, StockItem.Fields.NUTRITION_IGNORED).eq(False)
-    ).all()
+    items = repository.get(StockItem).where(_unmatched_condition()).all()
     if not items:
         return []
 

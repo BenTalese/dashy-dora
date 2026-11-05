@@ -63,7 +63,7 @@
        Unlabelled, the glyph *is* the chip, so it gets even padding and no
        label margins. */
     .rbc--glyph {
-        padding: 0 var(--space-1, 4px);
+        padding: 0 var(--space-1);
 
         :deep(.q-chip__icon) {
             margin-left: 0;

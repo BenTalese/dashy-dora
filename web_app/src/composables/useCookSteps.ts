@@ -1,3 +1,4 @@
+import { stripLeadingOrdinal } from 'src/helpers/stepOrdinal';
 /**
  * Cook mode's step model (FU-942, split out of `RecipeCookMode.vue`): the
  * flattener that turns a recipe's method into one linear sequence, the
@@ -115,7 +116,7 @@ export function flattenCookSteps(recipe: CookStepSource | null): CookStep[] {
     }
     const parts = raw
         .split(/\r?\n+/)
-        .map((s) => s.replace(/^\s*\d+[.)]\s*/, '').trim())
+        .map((s) => stripLeadingOrdinal(s.trim()))
         .filter((s) => s.length > 0);
     const lines = parts.length > 0 ? parts : [raw];
     return lines.map((t) => ({

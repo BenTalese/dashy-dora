@@ -117,13 +117,13 @@
            full-bleed photos — the owner's ask, and it finally uses the
            method column's width. */
         grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
-        gap: var(--space-4, 16px);
+        gap: var(--space-4);
     }
     .rsiv__cell {
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: var(--space-1, 4px);
+        gap: var(--space-1);
     }
     .rsiv__tile {
         appearance: none; padding: 0; border: 1px solid var(--border-default);
@@ -132,12 +132,12 @@
         display: block;
         width: 100%;
         aspect-ratio: 1 / 1;
-        border-radius: var(--radius-lg, 10px);
+        border-radius: var(--radius-lg);
         overflow: hidden;
         cursor: pointer;
         transition:
-            border-color var(--motion-fast, 120ms) ease,
-            box-shadow var(--motion-fast, 120ms) ease;
+            border-color var(--motion-fast) ease,
+            box-shadow var(--motion-fast) ease;
     }
     .rsiv__tile:hover,
     .rsiv__tile:focus-visible {
@@ -154,16 +154,16 @@
         background: var(--overlay-scrim);
         color: var(--text-inverse);
         opacity: 0;
-        transition: opacity var(--motion-fast, 120ms) ease;
+        transition: opacity var(--motion-fast) ease;
     }
     .rsiv__tile:hover .rsiv__veil,
     .rsiv__tile:focus-visible .rsiv__veil { opacity: 1; }
     .rsiv__num {
-        font-size: 0.8125rem; font-weight: 700;
+        font-size: var(--font-size-sm); font-weight: 700;
         font-variant-numeric: tabular-nums;
         color: var(--text-muted);
     }
-    .rsiv__empty { color: var(--text-muted); font-size: 0.875rem; }
+    .rsiv__empty { color: var(--text-muted); font-size: var(--font-size-sm); }
 
     .rsiv__preview {
         display: flex; align-items: center; justify-content: center;
@@ -174,6 +174,6 @@
         max-width: 100%;
         max-height: 100%;
         object-fit: contain;
-        border-radius: var(--radius-md, 6px);
+        border-radius: var(--radius-md);
     }
 </style>

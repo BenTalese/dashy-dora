@@ -310,7 +310,7 @@
         stockItemIds: string[],
     ): Promise<{ added: number; skipped: number }> {
         if (stockItemIds.length === 0) return { added: 0, skipped: 0 };
-        const result = await api.bulkAddLinesAsync(listId, stockItemIds);
+        const result = await api.bulkAddLinesAsync(listId, stockItemIds.map((id) => ({ stock_item_id: id })));
         return { added: result.added, skipped: result.already_on_list + result.failed_ids.length };
     }
 

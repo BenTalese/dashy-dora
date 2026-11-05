@@ -267,3 +267,14 @@ def test__kcal_to_kj__feeds_the_energy_table_at_the_right_scale():
     the conversion alone, but moves this food five bands."""
     rating = rate(_profile(energy_kj=kcal_to_kj(400)))
     assert rating.energy_points == 4
+
+
+def test__counts_as_produce__fried_potato_products_are_not_vegetables():
+    # FU-749: USDA files these under Vegetables; neither scheme rewards them.
+    from dora_api.features.nutrition.food_categories import counts_as_produce
+    veg = "Vegetables and Vegetable Products"
+    assert counts_as_produce(veg, "Potatoes, raw, skin")
+    assert not counts_as_produce(veg, "Potatoes, french fried, frozen")
+    assert not counts_as_produce(veg, "Potato chips, plain, salted")
+    assert not counts_as_produce(veg, "Vegetables, mixed, tempura", nutri_score=True)
+    assert not counts_as_produce("Cereal Grains and Pasta", "Rice, white")

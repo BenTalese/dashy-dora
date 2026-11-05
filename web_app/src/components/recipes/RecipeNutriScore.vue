@@ -113,11 +113,11 @@
     .rns--md .rns__cell {
         min-width: 18px;
         padding: 4px 5px;
-        font-size: 0.8125rem;
+        font-size: var(--font-size-sm);
     }
     .rns--sm .rns__cell {
         min-width: 13px;
         padding: 2px 3px;
-        font-size: 0.6875rem;
+        font-size: var(--font-size-xs);
     }
 </style>

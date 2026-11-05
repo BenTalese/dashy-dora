@@ -74,14 +74,14 @@
     }
     .rhs__star--empty { color: var(--border-strong); }
     .rhs__value {
-        margin-left: var(--space-1, 4px);
+        margin-left: var(--space-1);
         font-weight: 700;
         font-variant-numeric: tabular-nums;
         color: var(--text-secondary);
     }
 
     .rhs--md .rhs__star { font-size: 20px; }
-    .rhs--md .rhs__value { font-size: 0.875rem; }
+    .rhs--md .rhs__value { font-size: var(--font-size-sm); }
     .rhs--sm .rhs__star { font-size: 14px; }
-    .rhs--sm .rhs__value { font-size: 0.75rem; }
+    .rhs--sm .rhs__value { font-size: var(--font-size-xs); }
 </style>

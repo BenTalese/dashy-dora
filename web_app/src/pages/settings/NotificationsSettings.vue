@@ -66,7 +66,7 @@
                             <q-item-label>{{ watch.product_name }}</q-item-label>
                             <q-item-label caption>
                                 {{ watch.store_name }} · at or below
-                                {{ formatMoney(watch.threshold_unit_price) }}
+                                {{ formatMoney(watch.threshold_price) }}
                             </q-item-label>
                         </q-item-section>
                         <q-item-section side>
