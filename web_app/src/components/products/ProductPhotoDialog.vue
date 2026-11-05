@@ -72,7 +72,7 @@
     import ImageEditTile from 'src/components/ImageEditTile.vue';
     import ProductThumb from 'src/components/products/ProductThumb.vue';
     import ProductApiService from 'src/services/api/productApiService';
-    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+    import { isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import type { ProcessedImage } from 'src/services/files/imageService';
     import type { Product } from 'src/models/product';
     import { ICONS } from 'src/style/icons';
@@ -118,11 +118,13 @@
             emit('saved');
             return true;
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: failure,
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: failure,
+                    caption: toastCaption(err),
+                });
+            }
             return false;
         } finally {
             busy.value = false;

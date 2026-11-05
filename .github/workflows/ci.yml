@@ -1,95 +1,95 @@
-# name: CI
+name: CI
 
-# # D4 — the cheap, automatic safety net. Runs on every push + PR so a
-# # broken commit lights up red within a minute. Does NOT build or
-# # publish anything; that's the manually-triggered Release workflow's
-# # job (see .github/workflows/release.yml).
+# D4 — the cheap, automatic safety net. Runs on every push + PR so a
+# broken commit lights up red within a minute. Does NOT build or
+# publish anything; that's the manually-triggered Release workflow's
+# job (see .github/workflows/release.yml).
 
-# on:
-#     push:
-#         branches: ["**"]
-#         paths-ignore:
-#             - "**.md"
-#             - "CHANGELOG.md"
-#             - "docs/**"
-#             - ".vscode/**"
-#             - ".gitignore"
-#     pull_request:
-#         branches: [main]
-#     workflow_dispatch:
+on:
+    push:
+        branches: ["**"]
+        paths-ignore:
+            - "**.md"
+            - "CHANGELOG.md"
+            - "docs/**"
+            - ".vscode/**"
+            - ".gitignore"
+    pull_request:
+        branches: [main]
+    workflow_dispatch:
 
-# concurrency:
-#     # Cancel in-flight runs for the same ref so a fast follow-up
-#     # commit doesn't stack a backlog of redundant CI runs.
-#     group: ci-${{ github.ref }}
-#     cancel-in-progress: true
+concurrency:
+    # Cancel in-flight runs for the same ref so a fast follow-up
+    # commit doesn't stack a backlog of redundant CI runs.
+    group: ci-${{ github.ref }}
+    cancel-in-progress: true
 
-# jobs:
-#     # ─────────────────────────────────────────────────────────────────
-#     # Frontend (Quasar / Vue)
-#     # ─────────────────────────────────────────────────────────────────
-#     frontend:
-#         name: Frontend (lint + typecheck + build)
-#         runs-on: ubuntu-latest
-#         defaults:
-#             run:
-#                 working-directory: web_app
-#         steps:
-#             - uses: actions/checkout@v4
+jobs:
+    # ─────────────────────────────────────────────────────────────────
+    # Frontend (Quasar / Vue)
+    # ─────────────────────────────────────────────────────────────────
+    frontend:
+        name: Frontend (lint + typecheck + build)
+        runs-on: ubuntu-latest
+        defaults:
+            run:
+                working-directory: web_app
+        steps:
+            - uses: actions/checkout@v4
 
-#             - name: Set up Node
-#               uses: actions/setup-node@v4
-#               with:
-#                   node-version: "20"
-#                   cache: npm
-#                   cache-dependency-path: web_app/package-lock.json
+            - name: Set up Node
+              uses: actions/setup-node@v4
+              with:
+                  node-version: "22"
+                  cache: npm
+                  cache-dependency-path: web_app/package-lock.json
 
-#             - name: Install deps
-#               run: npm ci
+            - name: Install deps
+              run: npm ci
 
-#             - name: Lint
-#               run: npm run lint
+            - name: Lint
+              run: npm run lint
 
-#             - name: Typecheck
-#               run: npx vue-tsc --noEmit
+            - name: Typecheck
+              run: npx vue-tsc --noEmit
 
-#             - name: Unit tests (vitest)
-#               run: npm test
+            - name: Unit tests (vitest)
+              run: npm test
 
-#             - name: Build
-#               run: npm run build
+            - name: Build
+              run: npm run build
 
-#     # ─────────────────────────────────────────────────────────────────
-#     # Dora API — the full pytest suite (domain units + e2e; testpaths
-#     # in pytest.ini). Bare `pytest` closes the PROPOSAL_TEST_SUITE_
-#     # IMPROVEMENTS §3.1 scope gap where CI ran only tests/e2e/dora_api
-#     # and the domain unit layer never gated merges.
-#     # ─────────────────────────────────────────────────────────────────
-#     dora-api:
-#         name: Dora API (pytest)
-#         runs-on: ubuntu-latest
-#         env:
-#             # Run the suite under the test profile so any code that
-#             # asks "what profile am I in?" gets a sensible answer.
-#             DORA_ENV: test
-#         steps:
-#             - uses: actions/checkout@v4
+    # ─────────────────────────────────────────────────────────────────
+    # Dora API — the full pytest suite (domain units + e2e; testpaths
+    # in pytest.ini). Bare `pytest` closes the PROPOSAL_TEST_SUITE_
+    # IMPROVEMENTS §3.1 scope gap where CI ran only tests/e2e/dora_api
+    # and the domain unit layer never gated merges.
+    # ─────────────────────────────────────────────────────────────────
+    dora-api:
+        name: Dora API (pytest)
+        runs-on: ubuntu-latest
+        env:
+            # Run the suite under the test profile so any code that
+            # asks "what profile am I in?" gets a sensible answer.
+            DORA_ENV: test
+        steps:
+            - uses: actions/checkout@v4
 
-#             - name: Set up Python 3.11
-#               uses: actions/setup-python@v5
-#               with:
-#                   python-version: "3.11"
-#                   cache: pip
-#                   cache-dependency-path: requirements.txt
+            - name: Set up Python 3.11
+              uses: actions/setup-python@v5
+              with:
+                  python-version: "3.11"
+                  cache: pip
+                  cache-dependency-path: requirements.txt
 
-#             - name: Install deps
-#               run: |
-#                   python -m pip install --upgrade pip
-#                   pip install -r requirements.txt
+            - name: Install deps
+              run: |
+                  python -m pip install --upgrade pip
+                  pip install -r requirements.txt
 
-#             - name: Run pytest
-#               run: pytest
+            - name: Run pytest
+              run: pytest
 
-#     # Phase D / FU-186: the `merchant_api` + `emailer` byte-compile
-#     # smoke job retired with the directories — the companion lives in
-#     # the sibling `dora-companion` repo and runs its own CI.
+    # Phase D / FU-186: the `merchant_api` + `emailer` byte-compile
+    # smoke job retired with the directories — the companion lives in
+    # the sibling `dora-companion` repo and runs its own CI.

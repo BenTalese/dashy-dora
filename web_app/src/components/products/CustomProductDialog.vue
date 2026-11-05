@@ -142,7 +142,7 @@
     import ProductApiService from 'src/services/api/productApiService';
     import { useFeatureFlags } from 'src/composables/useFeatureFlags';
     import StoresApiService from 'src/services/api/storesApiService';
-    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+    import { isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { useQuasar } from 'quasar';
     import { computed, reactive, ref, watch } from 'vue';
     import { PACK_COUNT_RULE, parsePackCount } from 'src/helpers/packCount';
@@ -286,11 +286,13 @@
             open.value = false;
             emit('created');
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not add the product.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not add the product.',
+                    caption: toastCaption(err),
+                });
+            }
         } finally {
             busy.value = false;
         }

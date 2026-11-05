@@ -38,7 +38,7 @@
                 active-class="settings-mnav__chip--active"
                 exact-active-class="settings-mnav__chip--active"
             >
-                <q-icon :name="leaf.icon" size="16px" class="q-mr-xs" />
+                <q-icon :name="settingsPageIcon(leaf.path)" size="16px" class="q-mr-xs" />
                 {{ leaf.label }}
                 <span v-if="leaf.badge" class="settings-mnav__chip-badge">{{ leaf.badge }}</span>
             </router-link>
@@ -47,6 +47,7 @@
 </template>
 
 <script setup lang="ts">
+    import { settingsPageIcon } from 'src/config/settingsPageIcons';
     import type {
         SettingsNavEntry,
         SettingsNavLeaf,

@@ -5,6 +5,7 @@
                 v-model="axis"
                 :options="AXIS_OPTIONS"
                 dense
+                aria-label="Group spend by"
             />
         </template>
 
@@ -169,8 +170,8 @@
         storeSpend: StoreSpendResponse | null;
         spendByCategory: SpendByCategoryResponse | null;
         spendYoY: SpendYoYResponse | null;
-        /** Null when products are off — savings only ever has data if you pick
-         *  product offers, so the support line simply doesn't render (B9). */
+        /** Spend vs your usual prices (FU-831); the support line renders only
+         *  when some line had a usual price to compare against. */
         savings: SavingsCapturedResponse | null;
         /** Categorical colour for a bucket with no colour of its own. Passed in
          *  rather than re-implemented so the page keeps one hash (R-002). */
@@ -214,10 +215,16 @@
         })),
     );
 
+    /** Against the household's own usual prices (ADR-068), with the coverage
+     *  beside it (R-041): only lines whose item had a usual price compare. */
     const savingsLine = computed(() => {
-        const savings = props.savings;
-        if (!savings || savings.total_spent <= 0 || savings.total_savings <= 0) return null;
-        return `${formatMoney(savings.total_savings)} of that was under shelf price.`;
+        const s = props.savings;
+        if (!s || s.counted === 0 || s.total_spent <= 0) return null;
+        const amount = Math.abs(s.savings_vs_usual_price);
+        const of = `on ${s.counted} of ${s.total} item${s.total === 1 ? '' : 's'} with a usual price`;
+        if (amount < 0.005) return `About what you usually pay, ${of}.`;
+        const direction = s.savings_vs_usual_price > 0 ? 'less' : 'more';
+        return `${formatMoney(amount)} ${direction} than you usually pay, ${of}.`;
     });
 
     /** R-041 — the total states what it was built from. */

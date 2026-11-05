@@ -1,6 +1,6 @@
 ﻿# Dashy Dora — Project State
 
-**Last reviewed: 2026-11-04.**
+**Last reviewed: 2026-11-05.**
 
 This is the single front door: where every phase and workstream is up
 to, and what needs your attention. For *where things stand* this doc
@@ -18,7 +18,7 @@ Status key: ✅ done-clean · ➗ done-with-carve-outs · 🟡 active/in-progres
 
 ## Where we are right now
 
-**Dora 1.0.0 is finished and waiting on you to ship it.** Everything an agent can do alone is built. Your next step: commit the 11-01 to 11-04 work, then build, tag and deploy 1.0.0 (both repos). Two calls are still unanswered and neither blocks the release: the support channel (FU-557) and CI (FU-721).
+**Dora 1.0.0 is deployed to Altair (Dora and the companion); you want every FU resolved before launch.** 11-05: the stray `1.0.0` tag deleted; CI workflows back in the repo (Actions off until you switch them on); warning ink (FU-986); then your batch 2: item history groups repeats (DR-13), loose vs boxed prices kept apart (FU-983), admins hear about new releases (FU-626), Reports cards can be hidden and reordered (FU-832), savings measured against your usual price (FU-831), and Firefox can talk to Dora through server speech recognition (FU-788). All uncommitted. Then batch 3: "Use soon", good-news price chips, Price watches, one essentials option, touch sizes, the burger QR mark; FU-648/638 confirmed fine. Then batch 4: FU-578 closed out, AU/UK food names in nutrition matching, System theme follows the device live, release notes fix, Discussions linked. Then a leftovers sweep: one toast per server error, named segmented controls, sign-out drops push alerts, `test/` linted. 108 FUs open, all leftovers I can do alone (donation links done: FU-608).
 
 **11-01 to 11-04: every open owner decision was answered and built.** Highlights: Dora's AI reads the Help guides; configuration is env-only; onboarding finishes in one all-or-nothing request; preferred buys coexist with products; the colour-board picks are applied; cook timers persist; templates keep batches and product lines; lists name themselves; server dates follow the region; one "bought" rule; stores in backups; cooking-word units; current Claude models.
 
@@ -26,7 +26,7 @@ Status key: ✅ done-clean · ➗ done-with-carve-outs · 🟡 active/in-progres
 
 **Your decisions today:** FU-965 and FU-918 closed (not worried); iOS is won't-do; every device and browser check up to 11-04 counts as done, so the 10-23 to 11-04 DORA_VERIFY sections were deleted. Three new lines remain there for what the drives couldn't reach.
 
-**Tests:** full pytest passes, vitest 916, vue-tsc and eslint clean. Nothing from 11-01 onwards is committed yet.
+**Tests:** full pytest passes, vitest 924, vue-tsc and eslint clean. Alembic head `a4d9e2b7c5f1`. The 11-05 work is uncommitted.
 
 ---
 
@@ -34,11 +34,11 @@ Status key: ✅ done-clean · ➗ done-with-carve-outs · 🟡 active/in-progres
 
 | Phase | Scope | Status | Remaining |
 |---|---|---|---|
-| **0 — Foundations & truth** | Theming, filters, modals, loading, text, renames (P8-01), Wave-B bugs, config/opt-ins | ✅ | Colour picks applied 11-03; token debt (FU-834/764/941/850/839) closed 11-04. Residual: FU-986 (warning text ink, a colour call), FU-865, FU-224/FU-010 (late look review). |
+| **0 — Foundations & truth** | Theming, filters, modals, loading, text, renames (P8-01), Wave-B bugs, config/opt-ins | ✅ | Colour picks applied 11-03; token debt (FU-834/764/941/850/839) closed 11-04. Warning ink added 11-05 (FU-986). Residual: FU-865, FU-224/FU-010 (late look review). |
 | **1 — Close the loop** | Shopping lists, cook mode, stock, cookbook, meal planner, suggestions, costing, stocktake | ✅ | Nothing unbuilt. Three QA rounds (10-29/30), the FU-971 walks and the 11-04 sweep are done, and you count the browser walks done. Left: minor leftover FUs per workstream below. |
 | **2 — Ingestion API + companion** | `/api/ingest` seam, standalone companion, Merchant→Store | ➗ | Products program complete (all 8 batches; FU-884 Aldi rewrite resolved). 11-01: `is_available` on the ingest wire, so deploy the companion with Dora. Open: FU-960 (contract notes), companion debts FU-886/887/891/924. |
 | **3 — Champion** | Zero-Input Pantry, buy/wait oracles, barcode-add, Dora Score, culinary memory, native app | ➗ | P8-01..P8-10 built. Android cleartext built (FU-962); iOS is won't-do. Native FCM push parked until Phase 4 (FU-465). |
-| **4 — Open-source release** *(was Commercialize)* | README/showcase, release process, support channel, ops/CI | 🟡 1.0.0 ready to ship | Commit, then build, tag `v1.0.0` and deploy both repos. Unanswered: FU-557 (support channel), FU-721 (CI). Later: FU-608/FU-406 (OSS infra, showcase), FU-405 (ops). |
+| **4 — Open-source release** *(was Commercialize)* | README/showcase, release process, support channel, ops/CI | 🟡 1.0.0 deployed | Deployed to Altair; CI workflows back 11-05 (Actions off until you switch them on). Unanswered: FU-557 (support channel). Later: FU-608/FU-406 (OSS infra, showcase), FU-405 (ops). |
 
 ---
 
@@ -51,7 +51,7 @@ Status key: ✅ done-clean · ➗ done-with-carve-outs · 🟡 active/in-progres
 | **Settings & admin IA** | ➗ | Three nav groups since 09-03 (Install · Kitchen features · Data & access). Config is env-only (11-01). 11-04: the "Email enabled" switch is gone (FU-906, migration `d5a9c3e7f2b1`); Dora mails once SMTP is set, and Settings → Email warns when the public URL is missing. Open: FU-867, FU-858, FU-859. | `CHANGELOG [Unreleased]` · R-081 |
 | **Feature flags & opt-ins** | ✅ | `scanning_enabled` is hide-only by decision (FU-954, 11-01); the ingest flag is enforced (FU-866); 11-04 swept the remaining install flags for "gates nothing" and dropped `email_enabled` (FU-906). | `ENGINEERING_STANDARDS` R-081 |
 | **Cook mode / Sous Chef** | ✅ | The 09-13 batch (shared step-list look, notes on the step card) and the voice batch stand. 11-04: cook timers persist, the page is split along its seams (FU-942), the placeholder step is no longer spoken (FU-982). FU-853 (chime vs CSP) and FU-763 resolved. No open FUs of its own. | `RecipeCookMode.vue` |
-| **Theming & design tokens** | ✅ | 11-03: colour-board picks applied (`--primary-ink`, `--brand-wordmark`, deeper Pesto/Blueberry, new dark secondaries). 11-04: undeclared and duplicate tokens fixed, one focus ring readable in every theme (FU-941). Open: FU-986 (warning text below the contrast floor in light themes; needs an ink tier), FU-865. | [board](https://claude.ai/artifact/39cAkaYr2TXUpEgxeAum25) |
+| **Theming & design tokens** | ✅ | 11-03: colour-board picks applied (`--primary-ink`, `--brand-wordmark`, deeper Pesto/Blueberry, new dark secondaries). 11-04: undeclared and duplicate tokens fixed, one focus ring readable in every theme (FU-941). 11-05: warning ink tier (FU-986). Open: FU-865. | [board](https://claude.ai/artifact/39cAkaYr2TXUpEgxeAum25) |
 | **Zero-Input Pantry / inference** | 🟡 | Extended to recipes, lists and the planner, each behind its own off-by-default opt-in; planned demand is a sibling signal (R-074/ADR-071). Open: FU-851 (stale after a plan edit elsewhere), FU-849 (not on the shopping list yet). | [PROPOSAL](docs/04_proposals/PROPOSAL_ZERO_INPUT_PANTRY.md) |
 | **Products-as-overlay** | ✅ | Phases 0–E code-complete; the Phase-F tail is superseded by the products program. FU-178 resolved. Single Alembic head, now `d5a9c3e7f2b1`. | [RUNBOOK](docs/04_proposals/PRODUCTS_OVERLAY_RUNBOOK.md) |
 | **Products program (Dora + companion)** | ✅ complete | All eight batches and four decisions closed 09-06 to 09-08 (R-087/ADR-084); custom products built. 11-01: the companion sends `is_available`. 11-03: preferred buys coexist with products per item, and Product Search shows whenever its link is set. | [PLAN](docs/04_proposals/IMPL_PLAN_PRODUCTS_PROGRAM.md) |
@@ -64,35 +64,24 @@ Status key: ✅ done-clean · ➗ done-with-carve-outs · 🟡 active/in-progres
 | **Shared component anatomy** | ✅ | 11-04: `BaseSegmented` and `DoraSegmented` merged into one keyboard-accessible radiogroup (FU-848), every `q-select` on `BaseSelect` (FU-675), the `subtle` button at small-action sites (FU-677); the page splits share state through provide/inject (R-011). Open: FU-980 (unnamed radiogroups), FU-909, FU-920, FU-795. | `BaseSegmented.vue` |
 | **Touch affordances / tap targets** | ➗ | 44px on touch via `@media (pointer: coarse)` (R-085/ADR-082), segmented controls included since 11-04; `InfoTip` shows at once (R-088). Open: FU-877 (the 36–40px tier). | `BaseButton.vue` · `css/app.scss` |
 | **Assistant / voice / offline** | ➗ | Dora's AI looks up Help through `app_help` (11-01); 11-04 moved to current Claude models (no `temperature`, thinking replayed on tool turns). Hosted-LLM tool calls and voice download fixed 10-30. Offline: an unvisited page keeps the shell and banner (11-03). FU-722/751/724 closed. Open: FU-788 (Firefox voice input), FU-787 (Piper packaging). | `useOfflineQueue.ts` |
-| **Design remediation (DR)** | 🔴 | DR-1..12/14/15 done or done-with-carve-outs; **DR-13 (history grouping) and DR-16 (onboarding "get food in" step) still need your product call**. | [DESIGN_REMEDIATION_PLAN](docs/04_proposals/DESIGN_REMEDIATION_PLAN.md) |
-| **Build & deploy** | 🟡 ready | 1.0.0: one version source, build id on About, PUID/PGID, README quick start, Secure cookies by default, env-only config, migrations on boot; the deploy script ships the companion too. FU-965 closed (you're not worried); FU-955 (cross-install restore) and FU-719 resolved; Android cleartext built, iOS won't-do. **Next: commit, build, tag, deploy.** Open: FU-721 (CI, unanswered), FU-720 (route-map check). | `README.md` · FU-721 |
+| **Design remediation (DR)** | ✅ | DR-1..15 done or done-with-carve-outs (DR-13 built 11-05); DR-16 skipped by you 11-05. | [DESIGN_REMEDIATION_PLAN](docs/04_proposals/DESIGN_REMEDIATION_PLAN.md) |
+| **Build & deploy** | ✅ deployed | 1.0.0: one version source, build id on About, PUID/PGID, README quick start, Secure cookies by default, env-only config, migrations on boot; the deploy script ships the companion too. FU-965 closed (you're not worried); FU-955 (cross-install restore) and FU-719 resolved; Android cleartext built, iOS won't-do. Deployed to Altair; the old `1.0.0` tag deleted 11-05; CI workflows uncommented (FU-721 closed). Open: FU-720 (route-map check). | `README.md` |
 | **Verify tooling** | ✅ | Scratch backend + Playwright drives are the default; FU-758 resolved. 11-04: `DORA_TEST_DB_FILE` lets parallel pytest runs use separate DBs (part of FU-952). DORA_VERIFY lost its 10-23 to 11-04 sections on your word; three new lines remain. | `DORA_VERIFY_TRIAGE.md` |
 | **Postgres portability & migrations** | ✅ | The whole chain runs on an empty Postgres (fixed 10-30, R-102/ADR-099); FU-045 and FU-965 closed. Single head `d5a9c3e7f2b1`. Open: FU-888 (a NUL byte in a nutrition search 500s on Postgres). | `ENGINEERING_STANDARDS` R-102 |
 | **Security** | ✅ | 10-30 hardening (14 fixes, SEC-2/3/4, R-104/ADR-101); sign-ups closed by default; FU-964 accepted risk; FU-973 (split-host CSRF) closed. Open: FU-655, FU-575. | `CHANGELOG [Unreleased]` |
 | **Regional formats & rendered documents** | ✅ | Print views, CSVs and emails follow the household region through `locale_format.py`. 11-04 closed FU-969: server-built dates and list names follow the region, and quantities use the regional decimal mark. | `locale_format.py` |
-| **Accessibility** | ➗ | Axe rules fixed 10-30; contrast settled by the colour picks (FU-963). 11-04 found two leftovers: FU-980 (radiogroups without a name) and FU-986 (warning text contrast). | FU-980 · FU-986 |
+| **Accessibility** | ➗ | Axe rules fixed 10-30; contrast settled by the colour picks (FU-963). Warning text contrast fixed 11-05 (FU-986). Open: FU-980 (radiogroups without a name). | FU-980 |
 
 ---
 
 ## ⚠️ Needs your attention now
 
-**Total open backlog: 161 items in `DORA_FOLLOWUPS.md`.** None blocks the release. The list below is what needs you now.
+**Total open backlog: 108 items in `DORA_FOLLOWUPS.md`.** None blocks the release. The list below is what needs you now.
 
-1. 🟢 **Commit** the 11-01 to 11-04 work (both repos; nothing since 11-01 is committed).
-2. 🟢 **Build, tag and deploy 1.0.0:** `DORA_BUILD_ID=$(git rev-parse --short HEAD) docker compose build`, tag `v1.0.0`, deploy Dora and the companion together (the companion sends `is_available`). Migrations run on boot. Set `DORA_SECURE_COOKIES=false` only if prod is plain http; an old `appsettings.json` is ignored.
-3. 🟢 **After deploy:** the three "Finish-off sweep" lines at the top of `DORA_VERIFY.md` (trim-to-budget banner, recipe photo change/remove, the two new segmented controls).
-4. 🔴 **FU-557 support channel:** pick one (a public issues repo is the recommendation) and set `DORA_SUPPORT_URL`; the Help and error-screen buttons light up by themselves.
-5. 🔴 **FU-721 CI:** revive the two commented-out workflows (their Node pin is stale) or keep CI off.
-6. 🔴 **DR-13 / DR-16:** history grouping and an onboarding "get food in" step: build or drop.
-7. 🔴 **FU-986:** a warning text shade per light theme (warning text reads 2.0–2.8:1). A colour call, like the board.
-8. 🔴 **FU-983 (1):** should "packet", "box" and "carton" price as a whole pack, as "pack" now does?
-9. 🟡 **FU-608 / FU-406:** the open-source infrastructure and README showcase, when you publish the repo.
-10. 🟡 **FU-578:** your UX review list from 07-18 still wants a triage pass.
-11. 🟡 **FU-779:** the QR centre mark needs a proper asset from you.
-12. 🟡 **FU-648 / FU-638:** two reported defects still open for a confirm on your install (the QR dialog; the cookbook saying "no recipes match" while showing results). Close them if you've seen them working.
-13. 🟡 **FU-670:** at-risk ingredient chips in cook mode and edit rows, if you want them (small).
-14. 🟡 **FU-697:** the lost tail of an old worklog entry; fill it in only if you remember it.
-15. 🟡 **Leftovers when convenient:** FU-981 (13 small parts), FU-984 (double toasts), FU-985 (dashboard speed on a big cookbook), FU-980 (radiogroup names).
+1. 🟢 **Commit** the 11-05 work, then deploy (three new migrations run on boot; the image now installs faster-whisper).
+2. 🟢 **After deploy:** the "Finish-off sweep" and "Voice from Firefox" lines at the top of `DORA_VERIFY.md`.
+3. 🟢 **CI:** workflows are back (FU-721 closed); switch Actions on when you want them.
+4. 🟡 **Leftovers I can do alone:** FU-981 (13 small parts), FU-984 (double toasts), FU-985 (dashboard speed on a big cookbook), FU-980 (radiogroup names) and about 110 more.
 
 ---
 
@@ -100,7 +89,7 @@ Status key: ✅ done-clean · ➗ done-with-carve-outs · 🟡 active/in-progres
 
 - **`DORA_WORKLOG.md`** — per-session handoff narrative (what ran, decisions, what's next).
 - **`CHANGELOG.md`** — product/code changes that shipped.
-- **`DORA_FOLLOWUPS.md`** — the full ~161-item open backlog (this dashboard shows only the top).
+- **`DORA_FOLLOWUPS.md`** — the full ~108-item open backlog (this dashboard shows only the top).
 - **`DORA_VERIFY.md`** — your browser-verify checklist (walk + delete as you confirm).
 - **The full per-doc register is below** — every planning doc's verified state.
 - **Charter / how & why:** `docs/01_charter/` (vision, standards, master plan).

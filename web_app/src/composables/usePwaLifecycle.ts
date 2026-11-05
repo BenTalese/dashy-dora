@@ -28,6 +28,7 @@ let lifecycleInstalled = false;
 // a toast — the toast fired once and was easy to miss (owner feedback).
 const updateAvailable = ref(false);
 const updateDismissed = ref(false);
+const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
 
 /** True once a genuinely new SW has replaced the one that was controlling
  *  the page at boot, and the user hasn't dismissed the prompt. */
@@ -138,6 +139,21 @@ export function installPwaLifecycle(): void {
         navigator.serviceWorker.addEventListener('controllerchange', () => {
             if (!hadControllerAtBoot) return; // initial claim, not an upgrade
             updateAvailable.value = true;
+            // A second release in one session is news again (FU-959 (2)).
+            updateDismissed.value = false;
+        });
+
+        // An installed app resumed from the background never navigates, so
+        // the browser's own update check (on navigation) never runs. Ask on
+        // each return to the foreground, at most once an hour (FU-959 (2)).
+        let lastUpdateCheck = Date.now();
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState !== 'visible') return;
+            if (Date.now() - lastUpdateCheck < UPDATE_CHECK_INTERVAL_MS) return;
+            lastUpdateCheck = Date.now();
+            void navigator.serviceWorker.getRegistration()
+                .then((registration) => registration?.update())
+                .catch(() => { /* offline or unregistered: the next resume asks again */ });
         });
     }
 }

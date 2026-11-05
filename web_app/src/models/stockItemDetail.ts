@@ -131,12 +131,25 @@ export type PriceObservation = {
     total_measure: number;
     unit: string;
     observed_at: string; // ISO datetime
+    store_id: string | null;
     store_name: string | null;
     shopping_list_name: string | null;
     /** Multipack metadata (FU-227 follow-up). When set, the obs list
      *  renders "4 × 125g" instead of "500g flat". Math is unaffected —
      *  `total_measure` is still the TOTAL. */
     pack_count: number | null;
+};
+
+/** What the PriceEntry form submits, for a new price and for a correction
+ *  (FU-706). `observed_at` is null when the date was left alone: "now" for a
+ *  new price, unchanged for an edit. */
+export type PriceEntryValue = {
+    total_price: number;
+    total_measure: number;
+    unit: string;
+    store_id: string | null;
+    pack_count: number | null;
+    observed_at: string | null;
 };
 
 // what the PriceEntry widget seeds itself with on open (F2).
@@ -170,7 +183,12 @@ export type YourPrices = {
     baseline_unit: string | null;
     current: number | null;
     above_baseline: boolean;
+    below_baseline: boolean;
     sample_count: number;
+    /** Fewer prices behind the usual price than make it steady (FU-707). */
+    rough: boolean;
+    /** Prices on another basis that the usual price leaves out (R-105). */
+    left_out_count: number;
     last_observed_at: string | null; // ISO datetime
     last_seen_store_name: string | null;
     offers_sidecar: OfferSidecar[];

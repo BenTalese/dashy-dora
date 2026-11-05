@@ -14,14 +14,12 @@ export type EditableStepImage = {
      *  freshly-uploaded rows; the existing RecipeStepImage.image_id when
      *  hydrated from the server. */
     client_id: string;
-    /** Non-null when this row was loaded from a saved RecipeStepImage; the
-     *  bytes endpoint URL works without needing data_url. Null for rows
-     *  added in this edit session (data_url carries the payload). */
+    /** Non-null when this row was loaded from a saved RecipeStepImage, whose
+     *  bytes `RecipeStepPhoto` fetches. Null for rows added in this edit
+     *  session (data_url carries the payload). */
     existing_image_id: string | null;
-    /** What the editor renders — a data URL for freshly-picked rows, or
-     *  the `/recipes/<id>/step-images/<image_id>` URL for hydrated rows. */
-    preview_url: string;
-    /** The `data:image/jpeg;base64,...` payload to POST on save. Empty
+    /** The `data:image/jpeg;base64,...` payload to POST on save, and what a
+     *  freshly-picked row renders. Empty
      *  string for hydrated rows — they round-trip by sending their
      *  existing_image_id in the same `step_images[]` slot, so the server
      *  keeps the saved image in the new order. */

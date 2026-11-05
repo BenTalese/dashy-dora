@@ -3,7 +3,6 @@
         <SettingsPageHeader
             title="Nutrition matching"
             description="Stock items that aren't linked to a food yet. Dora suggests a match from the installed food data where it can."
-            :icon="ICONS.monitor_heart"
         />
 
         <div v-if="loading" class="row items-center q-gutter-sm">
@@ -387,7 +386,7 @@
     }
     .match-notice__icon {
         flex: 0 0 auto;
-        color: var(--semantic-warning);
+        color: var(--semantic-warning-ink);
         margin-top: 2px;
     }
     .match-notice__body { flex: 1 1 auto; min-width: 0; }

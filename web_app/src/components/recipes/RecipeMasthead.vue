@@ -237,7 +237,8 @@
     import { DIFFICULTY_OPTIONS } from 'src/helpers/recipeVocabulary';
     import { useNutritionMode } from 'src/composables/useNutritionMode';
     import { useRecipeDetail } from 'src/composables/useRecipeDetail';
-    import { recipeImageUrl } from 'src/services/api/recipeApiService';
+    import { recipeImagePath } from 'src/services/api/recipeApiService';
+    import { useAuthedImage } from 'src/composables/useAuthedImage';
     import { useRecipeStore } from 'src/stores/recipeStore';
     import { useRecipeVocabStore } from 'src/stores/recipeVocabStore';
     import { useMealSlotStore } from 'src/stores/mealSlotStore';
@@ -275,18 +276,20 @@
     const photoTile = ref<InstanceType<typeof ImageEditTile> | null>(null);
     const photoDialogOpen = ref(false);
 
-    const photoUrl = computed(() => {
-        if (imageDirty.value) return form.image;
-        if (recipe.value?.has_image) {
-            return recipeImageUrl(recipe.value.recipe_id, imageVersion.value);
-        }
-        return null;
-    });
-    // Owner call 2026-08-29 — `hasPhoto` used to mean "a photo exists even
-    // though you've asked not to see photos", which was the only reason it
-    // differed from `photoUrl`. With the `show_recipe_images` preference cut,
-    // a photo that exists is a photo that renders, so the two collapse.
-    const hasPhoto = computed(() => photoUrl.value !== null);
+    // The saved photo through the HTTP client (R-045, FU-931); a photo picked
+    // in this edit shows its data URL until it is saved.
+    const savedPhoto = useAuthedImage(() => (
+        !imageDirty.value && recipe.value?.has_image
+            ? recipeImagePath(recipe.value.recipe_id, imageVersion.value)
+            : null
+    ));
+    const photoUrl = computed(() => (imageDirty.value ? form.image : savedPhoto.value));
+    // Owner call 2026-08-29 — a photo that exists is a photo that renders. Read
+    // from the record rather than the fetched bytes, so the tile doesn't
+    // flash its empty "add a photo" face while the saved photo loads.
+    const hasPhoto = computed(() => (
+        imageDirty.value ? form.image !== null : !!recipe.value?.has_image
+    ));
 
     function onPickPhoto(image: { dataUrl: string }) {
         form.image = image.dataUrl;

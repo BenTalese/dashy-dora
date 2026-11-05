@@ -149,6 +149,8 @@ export const ICONS = {
     replay: 'mdi-replay',
     report: 'mdi-alert-octagon',
     restart_alt: 'mdi-restart',
+    // A meal, an occasion of eating (FU-692): meal plans, the no-meals alert,
+    // meal swaps. Cooking takes `chef_hat`; the kitchen-features group `kitchen`.
     restaurant: 'mdi-silverware-fork-knife',
     save: 'mdi-content-save',
     schedule: 'mdi-clock-outline',
@@ -192,7 +194,6 @@ export const ICONS = {
     favorite: 'mdi-heart',
     favorite_border: 'mdi-heart-outline',
     volunteer_activism: 'mdi-hand-heart',
-    coffee: 'mdi-coffee',
     keyboard: 'mdi-keyboard',
     play_circle: 'mdi-play-circle',
     add_box: 'mdi-plus-box',

@@ -185,9 +185,9 @@
 
                 <!-- Primary row: two big buttons, side by side.
                      Still correct: positive.
-                     Change level: coloured to the current level so the
-                     button doubles as the level readout. Small "(change)"
-                     underneath makes the action explicit. -->
+                     Change level: coloured to the current level, which it
+                     names underneath. Labelled with the action (FU-578 #27):
+                     a red "Low Stock" on its own read as "set it to Low". -->
                 <q-card-section class="runner-primary-row">
                     <BaseButton
                         variant="positive"
@@ -212,10 +212,10 @@
                         @click="changeOpen = true"
                     >
                         <div class="runner-change-level__stack">
-                            <div class="runner-change-level__level">
-                                {{ current.stock_level_name ?? '–' }}
+                            <div class="runner-change-level__level">Change level</div>
+                            <div class="runner-change-level__hint">
+                                Now {{ current.stock_level_name ?? 'not set' }}
                             </div>
-                            <div class="runner-change-level__hint">(change)</div>
                         </div>
                     </q-btn>
                 </q-card-section>
@@ -388,7 +388,7 @@
     import { useStockItemStore } from 'src/stores/stockItemStore';
     import { colourForSequence } from 'src/helpers/stockLevelLogic';
     import { needsRestockSequence } from 'src/helpers/stockStatus';
-    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+    import { isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { useFeatureFlags } from 'src/composables/useFeatureFlags';
     import { useConfirm } from 'src/composables/useConfirm';
 
@@ -574,11 +574,13 @@
             summary.checked += 1;
             advance();
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not confirm.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not confirm.',
+                    caption: toastCaption(err),
+                });
+            }
         } finally { busy.value = false; }
     }
 
@@ -599,11 +601,13 @@
                 summary.changed += 1;
                 dropFromSweep(stockItemId);
             } catch (err) {
-                $q.notify({
-                    type: 'negative',
-                    message: 'Could not update.',
-                    caption: toastCaption(err),
-                });
+                if (!isAlreadyNotified(err)) {
+                    $q.notify({
+                        type: 'negative',
+                        message: 'Could not update.',
+                        caption: toastCaption(err),
+                    });
+                }
             } finally { busy.value = false; }
             return;
         }
@@ -634,11 +638,13 @@
             }
             advance();
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not update.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not update.',
+                    caption: toastCaption(err),
+                });
+            }
         } finally { busy.value = false; }
     }
 
@@ -662,11 +668,13 @@
             summary.pushed += 1;
             advance();
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not push.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not push.',
+                    caption: toastCaption(err),
+                });
+            }
         } finally { busy.value = false; }
     }
 
@@ -696,11 +704,13 @@
             summary.muted += 1;
             advance();
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not mute.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not mute.',
+                    caption: toastCaption(err),
+                });
+            }
         } finally { busy.value = false; }
         }
 
@@ -733,11 +743,13 @@
             // the next phase here instead.
             if (session.value.length === 0) leaveWalk();
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not save those checks.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not save those checks.',
+                    caption: toastCaption(err),
+                });
+            }
         } finally { busy.value = false; }
     }
 
@@ -780,11 +792,13 @@
             summary.muted += 1;
             dropFromSweep(item.stock_item_id);
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not mute.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not mute.',
+                    caption: toastCaption(err),
+                });
+            }
         } finally { busy.value = false; }
         }
 
@@ -805,11 +819,13 @@
             await stockItemStore.deleteStockItemAsync(item.stock_item_id);
             dropFromSweep(item.stock_item_id);
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not delete.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not delete.',
+                    caption: toastCaption(err),
+                });
+            }
         } finally { busy.value = false; }
     }
 
@@ -909,7 +925,7 @@
         padding: 6px 8px;
     }
     .runner-belief .q-icon {
-        color: var(--semantic-warning);
+        color: var(--semantic-warning-ink);
     }
     /* The band, said once, above its reason. */
     .runner-belief__head {

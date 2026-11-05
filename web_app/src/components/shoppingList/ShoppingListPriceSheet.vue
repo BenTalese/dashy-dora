@@ -152,7 +152,7 @@
     } from 'src/models/shoppingList';
     import type { UpdateLineCommand } from 'src/services/api/shoppingListApiService';
     import { useStoresStore } from 'src/stores/storesStore';
-    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+    import { isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { useQuasar } from 'quasar';
     import { computed, reactive, ref } from 'vue';
 
@@ -295,7 +295,9 @@
             line.actual_unit_price = previous.price;
             line.purchased_store_id = previous.storeId;
             line.purchased_store_name = previous.storeName;
-            $q.notify({ type: 'negative', message: failMessage, caption: toastCaption(err) });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({ type: 'negative', message: failMessage, caption: toastCaption(err) });
+            }
         }
     }
 

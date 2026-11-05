@@ -431,19 +431,6 @@ export default defineConfig((ctx): any => {
                             cacheableResponse: { statuses: [0, 200] },
                         },
                     },
-                    {
-                        // Stock-item images served back by dora_api — longer
-                        // TTL. (`/data/images/` never existed as a route — 17-R8.)
-                        // These are user content: `swCacheEviction` clears this
-                        // cache on sign-out alongside `dora-api` (R-052, 17-R7).
-                        urlPattern: /\/stock-items\/[^/]+\/image$/,
-                        handler: 'CacheFirst',
-                        options: {
-                            cacheName: 'dora-stock-images',
-                            expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 30 },
-                            cacheableResponse: { statuses: [0, 200] },
-                        },
-                    },
                 ];
             },
         },

@@ -71,6 +71,7 @@
     import { computed, onMounted, ref } from 'vue';
     import { useRoute } from 'vue-router';
     import AuthApiService from 'src/services/api/authApiService';
+    import { isAlreadyNotified } from 'src/services/errorHandling/apiErrorHandler';
 
     const $q = useQuasar();
     const route = useRoute();
@@ -117,10 +118,12 @@
             resendOpen.value = false;
             resendEmail.value = '';
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: err instanceof Error ? err.message : 'Could not send.',
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: err instanceof Error ? err.message : 'Could not send.',
+                });
+            }
         } finally {
             resending.value = false;
         }

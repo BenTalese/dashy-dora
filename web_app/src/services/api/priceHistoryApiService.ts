@@ -25,7 +25,9 @@ export interface SeriesYourPrices {
     baseline_unit: string | null;
     current: number | null;
     above_baseline: boolean;
+    below_baseline: boolean;
     sample_count: number;
+    rough: boolean;
 }
 
 export interface PriceHistorySeries {
@@ -67,7 +69,9 @@ export interface StockItemPriceHistory {
     baseline_unit: string | null;
     current: number | null;
     above_baseline: boolean;
+    below_baseline: boolean;
     sample_count: number;
+    rough: boolean;
     points: StockItemPriceHistoryPoint[];
 }
 

@@ -42,7 +42,7 @@
                                 {{ formatMoney(offer.price_now) }} at
                             </template>{{ offer.store_name }}
                             <span v-if="moneyEnabled && offerSavings(offer) > 0" class="line-choice__save">
-                                save {{ formatMoney(offerSavings(offer)) }}
+                                {{ formatMoney(offerSavings(offer)) }} off
                             </span>
                         </q-item-label>
                     </q-item-section>

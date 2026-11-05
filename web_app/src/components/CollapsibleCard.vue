@@ -17,6 +17,13 @@
                 <slot name="header" :expanded="expanded" />
             </component>
 
+            <!-- Controls that act rather than disclose (the buy verdict's one-tap
+                 action), between the lead and the caret and outside both, so a
+                 tap on one never toggles the card (FU-950 (1)). -->
+            <div v-if="$slots.actions" class="collapsible-card__actions">
+                <slot name="actions" />
+            </div>
+
             <!-- Always its own control, even when the header toggles too. It is
                  the only affordance that *says* there is more here, and it is
                  the one that can be given a 44px target (D-004) without
@@ -170,6 +177,12 @@
         color: inherit;
         text-align: left;
         cursor: pointer;
+    }
+    .collapsible-card__actions {
+        display: flex;
+        align-items: center;
+        flex: 0 0 auto;
+        min-height: 44px;
     }
     /* D-004: an 18px glyph inside a 44px target. */
     .collapsible-card__caret {

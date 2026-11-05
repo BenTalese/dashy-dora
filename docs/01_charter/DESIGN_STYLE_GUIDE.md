@@ -73,13 +73,20 @@ Never pick a colour by eye. Pick it by **role**, then use that role's token.
 |---|---|---|---|
 | Positive / success / stocked | `--semantic-positive` | `--semantic-positive-soft` | success toasts, Stocked level, "good" scores |
 | Warning / low / caution | `--semantic-warning` | `--semantic-warning-soft` | Low-stock level, "fair" scores, non-blocking warnings |
+
+**Warning ink:** the warning fill is a fill. As text or a glyph on a page,
+component or soft ground use `--semantic-warning-ink` (held at 4.5:1 in every
+light theme; the dark themes pass the fill through). Quasar's `text-warning`
+class is routed to it. `--severity-attention-ink` is the same tier for the
+attention tone (FU-986).
 | Negative / danger / out | `--semantic-negative` | `--semantic-negative-soft` | Out-of-stock level, destructive actions, errors |
 | Info | `--semantic-info` | `--semantic-info-soft` | neutral informational callouts |
 
 **Soft-token rule:** a `-soft` token is a **background** only. Text/icons on a
 soft background use the **full-strength** semantic token, never the soft one
 (that is the D-002 badge failure). E.g. a Low chip = `background:
---semantic-warning-soft; color: --semantic-warning`.
+--semantic-warning-soft; color: --semantic-warning-ink` (warning is the one
+semantic whose fill is too light to be ink; see Warning ink above).
 
 ### Ordinal severity (when rank matters, not just meaning)
 `--severity-critical` > `--severity-high` > `--severity-medium` >

@@ -12,11 +12,10 @@
              on the cookbook is the cards/compact switch. -->
         <div class="recipe-card__media" :style="mediaStyle">
             <img
-                v-if="recipe.has_image && !imgFailed"
+                v-if="imageUrl"
                 class="recipe-card__img"
                 :src="imageUrl"
                 alt=""
-                @error="imgFailed = true"
             />
             <span v-else class="recipe-card__initial">{{ initial }}</span>
         </div>
@@ -161,6 +160,8 @@
 </template>
 
 <script lang="ts" setup>
+    import { useAuthedImage } from 'src/composables/useAuthedImage';
+    import { recipeImagePath } from 'src/services/api/recipeApiService';
     import BaseTooltip from 'src/components/BaseTooltip.vue';
     import ExpiringChip from 'src/components/recipes/ExpiringChip.vue';
     import RecipeBeliefChip from 'src/components/recipes/RecipeBeliefChip.vue';
@@ -170,7 +171,6 @@
     import type { Recipe } from 'src/models/recipe';
     import { useRecipeDisplay } from 'src/composables/useRecipeDisplay';
     import { useMoneyEnabled } from 'src/composables/useMoneyEnabled';
-    import { ref } from 'vue';
 
     const props = withDefaults(
         defineProps<{
@@ -202,16 +202,19 @@
         (e: 'filter-by-ingredients', recipeId: string): void;
     }>();
 
-    const imgFailed = ref(false);
-
     // Everything derived from the recipe for display lives in one place,
     // shared with the compact `RecipeRow` (R-003) — the card decides only
     // how to lay it out.
     const {
         totalTime, ingredientCount, kcal, kcalTooltip, cost, costTooltip,
         metaLine, tagNames,
-        initial, mediaStyle, imageUrl,
+        initial, mediaStyle,
     } = useRecipeDisplay(() => props.recipe);
+    // Through the HTTP client (R-045, FU-931); null (no photo, or it failed
+    // to load) shows the initial.
+    const imageUrl = useAuthedImage(() => (
+        props.recipe.has_image ? recipeImagePath(props.recipe.recipe_id) : null
+    ));
     const { moneyEnabled } = useMoneyEnabled();
 
     function onCardClick() {

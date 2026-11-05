@@ -40,85 +40,15 @@
                      `onMounted(loadAll)` already refreshes on every navigation
                      to the dashboard, so the button earned nothing. `loadAll`
                      itself stays (alert actions re-fetch through it). -->
-                <!-- Icon-only below `sm`, the same rule Settings' sign-out
-                     follows — the label is what pushed the greeting's line
-                     into an early wrap on a phone. D-005: an icon-only
-                     control keeps its accessible name and a tooltip. -->
-                <BaseButton
-                    variant="ghost"
-                    dense
-                    :icon="ICONS.tune"
-                    :label="$q.screen.lt.sm ? undefined : 'Cards'"
-                    aria-label="Cards"
-                >
-                    <BaseTooltip v-if="$q.screen.lt.sm">Show &amp; order cards</BaseTooltip>
-                    <q-menu anchor="bottom right" self="top right" transition-show="jump-down" transition-hide="jump-up">
-                        <q-list dense class="dashboard-cards-menu">
-                            <q-item-label header>Show & order cards</q-item-label>
-                            <!-- One flat list since the owner cut the zones
-                                 (2026-09-04): reorder now spans every card
-                                 rather than being trapped inside a band. The
-                                 up/down buttons are C13's tap-mandatory
-                                 alternative — they work on mobile and from the
-                                 keyboard; drag is the desktop extra. -->
-                            <q-item
-                                v-for="card in menuCards"
-                                :key="card.id"
-                                :class="cardDnd.bind(card.id).rowClass"
-                                v-bind="cardDnd.bind(card.id).rowProps"
-                            >
-                                <!-- desktop-only drag handle. The
-                                     up/down buttons remain (C13's
-                                     tap-mandatory alternative); drag is
-                                     the power-user extra. The handle's
-                                     `draggable` attribute is gated by
-                                     `$q.platform.is.mobile` so touch
-                                     devices keep tap-only. -->
-                                <q-item-section
-                                    v-if="cardDragEnabled"
-                                    avatar
-                                    class="dora-dnd-handle"
-                                    v-bind="cardDnd.bind(card.id).handleProps"
-                                >
-                                    <q-icon :name="ICONS.drag_indicator" />
-                                    <BaseTooltip>Drag to reorder</BaseTooltip>
-                                </q-item-section>
-                                <q-item-section avatar>
-                                    <q-icon :name="card.icon" />
-                                </q-item-section>
-                                <q-item-section>{{ card.label }}</q-item-section>
-                                <q-item-section side>
-                                    <div class="row items-center no-wrap">
-                                        <BaseButton
-                                            :aria-label="`Move ${card.label} up`"
-                                            variant="icon"
-                                            size="sm"
-                                            :icon="ICONS.arrow_upward"
-                                            :disable="!canMove(card.id, 'up')"
-                                            @click="moveCard(card.id, 'up')"
-                                        >
-                                            <BaseTooltip>Move up</BaseTooltip>
-                                        </BaseButton>
-                                        <BaseButton
-                                            :aria-label="`Move ${card.label} down`"
-                                            variant="icon"
-                                            size="sm"
-                                            :icon="ICONS.arrow_downward"
-                                            :disable="!canMove(card.id, 'down')"
-                                            @click="moveCard(card.id, 'down')"
-                                        >
-                                            <BaseTooltip>Move down</BaseTooltip>
-                                        </BaseButton>
-                                        <q-toggle
-                                            :model-value="isCardVisible(card.id)"
-                                            @update:model-value="toggleCard(card.id)"
-                                        />
-                                    </div>
-                                </q-item-section>
-                            </q-item>
-                        </q-list>
-                    </q-menu>
-                </BaseButton>
+                <CardsMenu
+                    :cards="menuCards"
+                    :is-visible="isCardVisible"
+                    :can-move="canMove"
+                    mime="application/x-dora-dashboard-card"
+                    @move="moveCard"
+                    @toggle="toggleCard"
+                    @drop="dropCardOn"
+                />
             </div>
 
             <!-- Owner 2026-09-08 — *"Put the hint from the hero card into an
@@ -432,7 +362,6 @@
 </template>
 
 <script lang="ts" setup>
-    import BaseTooltip from 'src/components/BaseTooltip.vue';
     import { ICONS } from 'src/style/icons';
     // FU-820 — dates come from the shared date authority (D-006/R-003); the
     // page's own copies parsed `YYYY-MM-DD` as UTC midnight.
@@ -504,9 +433,7 @@
     // the comment there for the staleness bug that made it necessary.
     import { useDoraScore } from 'src/composables/useDoraScore';
     import { useFeatureFlags } from 'src/composables/useFeatureFlags';
-    import { useDragDropList } from 'src/composables/useDragDropList';
     import { computed, onMounted, ref, watch } from 'vue';
-    import { useQuasar } from 'quasar';
     import { useRouter } from 'vue-router';
     // FU-824 — reactive token reads for the SVG donut (see `stockSegments`).
     import { paletteToken } from 'src/composables/useThemePalette';
@@ -515,7 +442,8 @@
     import { CARD_COL_HALF } from 'src/helpers/dashboardGrid';
     // FU-830 — the card registry, extracted so its default-visible count (a
     // decision §2.2 owns) can be held by a test rather than by nothing.
-    import type { CardId } from 'src/helpers/dashboardCards';
+    import { CARD_DEFS } from 'src/helpers/dashboardCards';
+    import CardsMenu from 'src/components/cards/CardsMenu.vue';
     import { useCardLayout } from 'src/composables/useCardLayout';
 
     // FU-821 — every money render goes through `formatMoney`, including the
@@ -533,7 +461,6 @@
 
     const authStore = useAuthStore();
     const router = useRouter();
-    const $q = useQuasar();
     const { currentUser } = storeToRefs(authStore);
 
     // Feature gates for the Money/Products cards (Phase 4). `moneyEnabled`
@@ -693,6 +620,7 @@
         applyStored: applyLayoutFromUser, cardRendered, isCardVisible, toggleCard,
         visibleCardCount, cardCol, cardCssOrder, canMove, moveCard, dropCardOn, menuCards,
     } = useCardLayout({
+        defs: CARD_DEFS,
         stored: () => currentUser.value?.dashboard_layout ?? null,
         persist: (layout) => {
             void authStore.updateMeAsync({ dashboard_layout: JSON.stringify(layout) });
@@ -703,16 +631,6 @@
     // Reload on user switch (or another device's update landing via refresh).
     watch(() => currentUser.value?.user_id, applyLayoutFromUser);
 
-    // Drag-handle reorder for the Cards menu: the desktop extra on top of the
-    // tap up/down (C13). Off on touch (`$q.platform.is.mobile` includes
-    // tablets) so touch-first surfaces keep the tap path uncluttered.
-    const cardDragEnabled = computed(() => !$q.platform.is.mobile);
-    const cardDnd = useDragDropList<CardId>({
-        mime: 'application/x-dora-dashboard-card',
-        getId: (id) => id,
-        canDragStart: () => cardDragEnabled.value,
-        onDrop: ({ id: sourceId }, { id: targetId }) => dropCardOn(sourceId as CardId, targetId as CardId),
-    });
 
     // ── Derived data for stock donut ─────────────────────────────────────
     const stockInStockCount = computed(() => {
@@ -1127,9 +1045,6 @@
 </script>
 
 <style scoped lang="scss">
-    .dashboard-cards-menu {
-        min-width: 300px;
-    }
     /* ───── Page root ───────────────────────────────────────────────────
        FU-747 / chunk 6: the page-local `--c-*` alias layer that used to be
        declared here is **gone**. It mapped 14 global tokens to page-local
@@ -1338,7 +1253,7 @@
         font-weight: 700;
     }
     .dora-welcome--warn .dora-welcome-line strong {
-        color: var(--semantic-warning);
+        color: var(--semantic-warning-ink);
     }
     .dora-welcome-hint {
         margin-top: var(--space-1);

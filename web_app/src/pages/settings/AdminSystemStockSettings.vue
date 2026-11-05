@@ -3,7 +3,6 @@
         <SettingsPageHeader
             title="Stock"
             description="Install-wide stock defaults: how Dora auto-adds items when they run low, and whether this install can scan barcodes and print QR labels."
-            :icon="ICONS.inventory_2"
         />
 
         <template v-if="ready">
@@ -19,6 +18,7 @@
 
                 <SettingsRow label="Fire for">
                     <BaseSegmented
+                        aria-label="Fire for"
                         :model-value="draft.auto_add_mode"
                         :options="MODE_OPTIONS"
                         @update:model-value="onModeChange"

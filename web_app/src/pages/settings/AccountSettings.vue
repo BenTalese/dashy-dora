@@ -1,7 +1,7 @@
 <template>
     <!-- The router guard owns "signed in"; this only waits for the user row. -->
     <div v-if="currentUser" class="settings-page">
-        <SettingsPageHeader title="Account" :icon="ICONS.person" />
+        <SettingsPageHeader title="Account" />
 
         <SettingsSection>
             <template #title>Profile picture</template>

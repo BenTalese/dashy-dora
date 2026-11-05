@@ -3,7 +3,6 @@
         <SettingsPageHeader
             title="Audit log"
             description="Every mutating request, login attempt, client crash, and explicit service-layer event lands here. Filters narrow the view; click a row to see the full payload."
-            :icon="ICONS.history"
         >
             <template #actions>
                 <BaseButton
@@ -265,6 +264,7 @@
     import SettingsRow from 'src/components/settings/SettingsRow.vue';
     import InfoTip from 'src/components/help/InfoTip.vue';
     import { useAppSettingDrafts } from 'src/composables/useAppSettingDrafts';
+    import { isAlreadyNotified } from 'src/services/errorHandling/apiErrorHandler';
 
     const $q = useQuasar();
     const auditApi = new AuditApiService();
@@ -373,11 +373,13 @@
             detail.value = await auditApi.getAsync(row.audit_event_id);
             detailOpen.value = true;
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: "Couldn't load that event.",
-                caption: err instanceof Error ? err.message : String(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: "Couldn't load that event.",
+                    caption: err instanceof Error ? err.message : String(err),
+                });
+            }
         }
     }
 

@@ -153,14 +153,26 @@ def get_deal_quality(
 ) -> Optional[DealQuality]:
     """Load a product's offers + the household's paid prices for its linked
     stock item, then delegate to :func:`compute_deal_quality`."""
-    product: Product | None = (
+    return gather_deal_quality_for_products([product_id], repository, window_days).get(product_id)
+
+
+def gather_deal_quality_for_products(
+    product_ids: list[UUID],
+    repository: SqlAlchemyRepository,
+    window_days: int = DEFAULT_WINDOW_DAYS,
+) -> dict[UUID, Optional[DealQuality]]:
+    """:func:`get_deal_quality` for many products in three queries: the
+    products with both offer collections, their stock-item links, and the
+    linked items' paid prices (FU-950 (2) — the list buy verdict walked each
+    product on its own). A product with no current offer maps to None."""
+    if not product_ids:
+        return {}
+    products: list[Product] = (
         repository.get(Product)
         .include(Product.Fields.CURRENT_OFFER)
         .include(Product.Fields.HISTORIC_OFFERS)
-        .by_id(product_id)
+        .all(EntityField(Product, "id").in_(list(product_ids)))
     )
-    if product is None or product.current_offer is None:
-        return None
 
     # The window opens at the household's midnight (R-021). SQLite hands back
     # naive datetimes, which are stored as UTC.
@@ -170,38 +182,44 @@ def get_deal_quality(
         datetime.min.time(), tzinfo=household_timezone(repository),
     )
 
-    current = product.current_offer
-    window_prices = window_offer_prices(current, product.historic_offers or [], horizon)
-
-    offer_claims_saving = (
-        current.price_was is not None and current.price_was > current.price_now
-    )
-    product_per_unit = per_unit_in_canonical(
-        total_price=current.price_now,
-        total_measure=product.size_value or 0,
-        unit=product.size_unit or "",
-    )
-
-    # Household paid prices for whichever stock items this product links to,
+    # Household paid prices for whichever stock item each product links to,
     # per canonical unit — the same basis Buy Verdict reasons over.
-    observations: list[StockItemPriceObservation] = []
-    link = linked_stock_items(repository, [product_id]).get(product_id)
-    stock_item_ids = [link.stock_item_id] if link else []
+    links = linked_stock_items(repository, [p.id for p in products])
+    stock_item_ids = list({link.stock_item_id for link in links.values()})
+    observations_by_item: dict[UUID, list[StockItemPriceObservation]] = {}
     if stock_item_ids:
-        observations = repository.get(StockItemPriceObservation).all(
+        for o in repository.get(StockItemPriceObservation).all(
             EntityField(
                 StockItemPriceObservation,
                 StockItemPriceObservation.Fields.STOCK_ITEM_ID,
             ).in_(stock_item_ids)
-        )
+        ):
+            observations_by_item.setdefault(o.stock_item_id, []).append(o)
 
-    return compute_deal_quality(
-        current_price=current.price_now,
-        offer_claims_saving=offer_claims_saving,
-        window_prices=window_prices,
-        household_unit_paid_prices=household_unit_prices_like(product_per_unit, observations),
-        current_unit_price=product_per_unit[0] if product_per_unit else None,
-    )
+    out: dict[UUID, Optional[DealQuality]] = {pid: None for pid in product_ids}
+    for product in products:
+        current = product.current_offer
+        if current is None:
+            continue
+        window_prices = window_offer_prices(current, product.historic_offers or [], horizon)
+        offer_claims_saving = (
+            current.price_was is not None and current.price_was > current.price_now
+        )
+        product_per_unit = per_unit_in_canonical(
+            total_price=current.price_now,
+            total_measure=product.size_value or 0,
+            unit=product.size_unit or "",
+        )
+        link = links.get(product.id)
+        observations = observations_by_item.get(link.stock_item_id, []) if link else []
+        out[product.id] = compute_deal_quality(
+            current_price=current.price_now,
+            offer_claims_saving=offer_claims_saving,
+            window_prices=window_prices,
+            household_unit_paid_prices=household_unit_prices_like(product_per_unit, observations),
+            current_unit_price=product_per_unit[0] if product_per_unit else None,
+        )
+    return out
 
 
 def window_offer_prices(current, historic_offers, horizon: datetime) -> list[float]:
@@ -234,12 +252,15 @@ def household_unit_prices_like(
 
     Each observation is in its own unit; only those that land in the same
     canonical unit as the product (L / kg / ea) are comparable. No product
-    basis ⇒ nothing is comparable."""
+    basis ⇒ nothing is comparable. A product is always sized, so a price per
+    pack of unknown size (`is_sizeless`) never compares (FU-983)."""
     if product_per_unit is None:
         return []
     _price, canonical = product_per_unit
     prices: list[float] = []
     for o in observations:
+        if o.is_sizeless:
+            continue
         per_unit = per_unit_in_canonical(
             total_price=o.total_price, total_measure=o.total_measure or 0, unit=o.unit or "",
         )

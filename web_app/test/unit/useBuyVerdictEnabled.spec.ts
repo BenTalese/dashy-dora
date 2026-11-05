@@ -12,6 +12,7 @@
  * developing with money on.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as ModuleUnderTest from 'src/composables/useBuyVerdictEnabled';
 import { ref, type Ref } from 'vue';
 
 let money: Ref<boolean>;
@@ -23,7 +24,7 @@ let user: Ref<{ buy_verdict_enabled: boolean } | null>;
 vi.mock('src/stores/authStore', () => ({ useAuthStore: () => ({}) }));
 vi.mock('pinia', () => ({ storeToRefs: () => ({ currentUser: user }) }));
 
-type Mod = typeof import('src/composables/useBuyVerdictEnabled');
+type Mod = typeof ModuleUnderTest;
 
 async function load(): Promise<Mod> {
     vi.resetModules();

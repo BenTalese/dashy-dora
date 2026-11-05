@@ -66,7 +66,7 @@
         secondary: 'var(--brand-secondary-strong)',
         positive: 'var(--q-positive)',
         negative: 'var(--q-negative)',
-        warning: 'var(--q-warning)',
+        warning: 'var(--semantic-warning-ink)',
     };
 
     const activeToneColour = computed(

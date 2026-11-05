@@ -149,6 +149,10 @@ services:
       - DORA_SUPPORT_URL=${DORA_SUPPORT_URL:-}
       - DORA_SUPPORT_EMAIL=${DORA_SUPPORT_EMAIL:-}
 
+      # ── Update check (read at runtime) ─────────────────────────────
+      # false = never ask GitHub for the latest release (FU-626).
+      - DORA_UPDATE_CHECK=${DORA_UPDATE_CHECK:-}
+
       # ── Demo mode (FU-392, read at runtime) ────────────────────────
       # Serves the curated showcase dataset + a persistent banner, and
       # periodically resets itself. Env-only by design so a prospect
@@ -161,6 +165,7 @@ services:
       # which rides the dora_data volume — only set this to stage models
       # on a different mount.
       - DORA_PIPER_VOICE_DIR=${DORA_PIPER_VOICE_DIR:-}
+      - DORA_STT_MODEL_DIR=${DORA_STT_MODEL_DIR:-}
 
       # ── Bootstrap admin ────────────────────────────────────────────
       - ADMIN_BOOTSTRAP_EMAIL=${ADMIN_BOOTSTRAP_EMAIL:-}

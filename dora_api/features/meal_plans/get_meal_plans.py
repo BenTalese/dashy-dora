@@ -168,58 +168,14 @@ class MealPlanEntryDto:
 
 
 @dataclass(frozen=True, slots=True)
-class MealPlanDayNutritionDto:
-    """FU-637 — one day's planned calories, per serving.
-
-    The figure answers "if I eat one serving of each meal planned for this
-    day, what's that?" — which is the question a calorie-conscious cook is
-    actually asking while building a week, and the only one Dora can answer
-    honestly: a meal plan schedules *pots of food*, not plates for named
-    people (`MealPlanEntry` has no eater), so per-person intake is not a
-    number this app has, and won't invent.
-
-    Coverage travels with it (R-041): `counted_meals` of `total_meals`.
-    A meal whose figure isn't reliable is left out of the sum and shows up in
-    the shortfall rather than quietly dragging the total down.
-    """
-    scheduled_for: date
-    kcal_per_serving: float | None
-    counted_meals: int
-    total_meals: int
-
-
-@dataclass(frozen=True, slots=True)
-class MealPlanDayCostDto:
-    """Owner 2026-09-05 — one day's planned cost, and how much of the day it
-    covers.
-
-    Deliberately the same shape as `MealPlanDayNutritionDto` beside it, because
-    it answers the same kind of question under the same honesty rule (R-041):
-    a day whose meals can't all be priced reports the sum of the ones that can
-    PLUS the coverage, rather than a confident total that quietly omits two
-    meals. `estimated_cost` is None when nothing on the day could be priced —
-    never 0.0, which would read as a free day.
-    """
-    scheduled_for: date
-    estimated_cost: float | None
-    counted_meals: int
-    total_meals: int
-
-
-@dataclass(frozen=True, slots=True)
 class MealPlanDto:
     meal_plan_id: UUID
     name: str | None
     start_date: date
     entries: List[MealPlanEntryDto]
-    # FU-637 — per-day rollup over `entries`, server-side because summing a
-    # fetched collection is exactly the cross-entity aggregate the
-    # state-ownership rule keeps out of the client.
-    day_nutrition: List['MealPlanDayNutritionDto'] = dataclasses.field(default_factory=list)
-    # Owner 2026-09-05 — the money rollups, same reasoning as the nutrition one
-    # above: the client must not sum a fetched collection. `estimated_cost` is
-    # the whole plan's, which for the planner is the week's.
-    day_cost: List['MealPlanDayCostDto'] = dataclasses.field(default_factory=list)
+    # Owner 2026-09-05 — the week's cost, summed here because the client must
+    # not sum a fetched collection. (The per-day rows went with FU-937: no
+    # surface read them.)
     estimated_cost: float | None = None
     cost_counted_meals: int = 0
     cost_total_meals: int = 0
@@ -335,7 +291,7 @@ class GetMealPlansHandler:
         ]
 
     def _hydrate_nutrition(self, plans: list[MealPlanDto]) -> list[MealPlanDto]:
-        """FU-637 — per-entry and per-day calories across every plan in the page.
+        """FU-637 — per-entry calories across every plan in the page.
 
         Costs a constant number of queries: the shared recipe load
         (`_recipes_with_ingredients`), then the rollup's own three. Skipped entirely when nutrition is off, so the
@@ -367,25 +323,6 @@ class GetMealPlansHandler:
             for recipe in recipes
         }
 
-        def _day_rows(entries: list[MealPlanEntryDto]) -> list[MealPlanDayNutritionDto]:
-            by_day: dict = defaultdict(list)
-            for entry in entries:
-                by_day[entry.scheduled_for].append(entry)
-            rows = []
-            for day, day_entries in sorted(by_day.items()):
-                counted = [e for e in day_entries if e.kcal_is_reliable and e.kcal_per_serving]
-                rows.append(MealPlanDayNutritionDto(
-                    scheduled_for = day,
-                    # None rather than 0.0 when nothing counted — zero would
-                    # read as "a day of no calories" (R-041).
-                    kcal_per_serving = (
-                        round(sum(e.kcal_per_serving for e in counted)) if counted else None
-                    ),
-                    counted_meals = len(counted),
-                    total_meals = len(day_entries),
-                ))
-            return rows
-
         hydrated = []
         for plan in plans:
             entries = [
@@ -399,12 +336,12 @@ class GetMealPlansHandler:
                 for entry in plan.entries
             ]
             hydrated.append(dataclasses.replace(
-                plan, entries=entries, day_nutrition=_day_rows(entries),
+                plan, entries=entries,
             ))
         return hydrated
 
     def _hydrate_cost(self, plans: list[MealPlanDto]) -> list[MealPlanDto]:
-        """Owner 2026-09-05 — per-meal, per-day and per-week cost estimates.
+        """Owner 2026-09-05 — per-meal and per-week cost estimates.
 
         Same shape as `_hydrate_nutrition` above, for the same reasons: one
         load of the distinct recipes with their ingredients, then the pricing
@@ -455,23 +392,6 @@ class GetMealPlansHandler:
                 return None
             return round(per_serving * entry.servings, 2)
 
-        def _day_rows(entries: list[MealPlanEntryDto]) -> list[MealPlanDayCostDto]:
-            by_day: dict = defaultdict(list)
-            for entry in entries:
-                by_day[entry.scheduled_for].append(entry)
-            rows = []
-            for day, day_entries in sorted(by_day.items()):
-                priced = [e for e in day_entries if e.estimated_cost is not None]
-                rows.append(MealPlanDayCostDto(
-                    scheduled_for = day,
-                    estimated_cost = (
-                        round(sum(e.estimated_cost for e in priced), 2) if priced else None
-                    ),
-                    counted_meals = len(priced),
-                    total_meals = len(day_entries),
-                ))
-            return rows
-
         def _batch_costs(entries: list[MealPlanEntryDto]) -> dict:
             """What one cook of each linked batch costs — the sum of its days'
             own figures, so the cook day's chip and the week total can't
@@ -505,7 +425,6 @@ class GetMealPlansHandler:
             hydrated.append(dataclasses.replace(
                 plan,
                 entries = entries,
-                day_cost = _day_rows(entries),
                 estimated_cost = (
                     round(sum(e.estimated_cost for e in priced), 2) if priced else None
                 ),

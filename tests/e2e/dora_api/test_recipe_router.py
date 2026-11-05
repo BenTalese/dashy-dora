@@ -930,3 +930,15 @@ def test__get_recipes__TagsIncludeHasAnUnknownTag__MatchesNothing(api):
     assert _list_items(f"?{_ById}&tags_include={_TagId},no-such-tag-{uuid4().hex[:6]}") == []
 
 #endregion write-path validation
+
+
+def test__recipe_name__is_stripped_and_blank_refused(api):
+    # FU-575: the same request-boundary strip stock-item names have.
+    from uuid import uuid4
+    name = f"strip-probe-{uuid4()}"
+    created = requests.post(f"{BASE}/recipes", json={"name": f"  {name}  "})
+    assert created.status_code in (200, 201), created.text
+    names = [r["name"] for r in requests.get(f"{BASE}/recipes?limit=500").json()["items"]]
+    assert name in names
+
+    assert requests.post(f"{BASE}/recipes", json={"name": "   "}).status_code == 400

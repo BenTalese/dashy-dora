@@ -2,8 +2,8 @@
     <div class="settings-page">
         <SettingsPageHeader
             title="Import"
+            help="Import stock items from a spreadsheet"
             description="Bring stock items in from a spreadsheet. Upload an .xlsx or .csv, map columns to Dora's fields, preview, then commit. Errors are reported row-by-row."
-            :icon="ICONS.file_upload"
         >
             <template v-if="templates.length" #actions>
                 <!-- per-section CSV template. "Download a blank one" is a peer
@@ -213,69 +213,7 @@
             </SettingsSection>
         </template>
 
-        <!-- ── Result dialog ─────────────────────────────────────────── -->
-        <BaseDialog v-model="resultOpen" card-style="min-width: 420px; max-width: 720px">
-                <q-card-section class="row items-center q-gutter-md">
-                    <q-icon
-                        :name="result?.ok ? ICONS.check_circle : ICONS.error"
-                        :color="result?.ok ? 'positive' : 'negative'"
-                        size="32px"
-                    />
-                    <div>
-                        <div class="text-h6">
-                            {{ result?.headline ?? '' }}
-                        </div>
-                        <div v-if="result?.subline" class="text-caption dora-text-muted">
-                            {{ result.subline }}
-                        </div>
-                    </div>
-                </q-card-section>
-                <q-separator />
-                <q-card-section v-if="result?.rows.length" class="q-pa-none">
-                    <q-virtual-scroll
-                        :items="result.rows"
-                        :virtual-scroll-item-size="38"
-                        style="max-height: 360px"
-                        v-slot="{ item }"
-                    >
-                        <q-item dense>
-                            <q-item-section avatar>
-                                <q-chip
-                                    dense
-                                    size="sm"
-                                    :color="rowChipColour(item.status) ?? undefined"
-                                    :text-color="rowChipColour(item.status) ? 'white' : undefined"
-                                    :class="{ 'dora-bg-sunken dora-text-secondary': !rowChipColour(item.status) }"
-                                >
-                                    {{ rowChipLabel(item.status) }}
-                                </q-chip>
-                            </q-item-section>
-                            <q-item-section>
-                                <q-item-label class="text-caption">
-                                    Row {{ item.row_number }}: {{ item.name || '(blank)' }}
-                                </q-item-label>
-                                <q-item-label
-                                    v-if="item.reason"
-                                    caption
-                                    class="text-negative"
-                                >
-                                    {{ item.reason }}
-                                </q-item-label>
-                            </q-item-section>
-                        </q-item>
-                    </q-virtual-scroll>
-                </q-card-section>
-                <template #actions>
-                    <BaseButton
-                        v-if="errorRows.length"
-                        variant="ghost"
-                        label="Download error rows (CSV)"
-                        :icon="ICONS.download"
-                        @click="downloadErrorRows"
-                    />
-                    <BaseButton variant="ghost" label="Close" @click="onResultClose" />
-                </template>
-        </BaseDialog>
+        <ImportResultDialog v-model="resultOpen" :result="result" @close="onResultClose" />
     </div>
 </template>
 
@@ -283,17 +221,20 @@
     import BaseTooltip from 'src/components/BaseTooltip.vue';
     import BaseButton from 'src/components/BaseButton.vue';
     import BaseSelect from 'src/components/BaseSelect.vue';
-    import BaseDialog from 'src/components/BaseDialog.vue';
     import SettingsPageHeader from 'src/components/settings/SettingsPageHeader.vue';
     import SettingsSection from 'src/components/settings/SettingsSection.vue';
     import SettingsRow from 'src/components/settings/SettingsRow.vue';
     import SettingsFileDrop from 'src/components/settings/SettingsFileDrop.vue';
+    import ImportResultDialog from 'src/components/settings/ImportResultDialog.vue';
     import { ICONS } from 'src/style/icons';
     import { useQuasar } from 'quasar';
-    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+    import { isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { computed, onMounted, reactive, ref, watch } from 'vue';
-    import DataApiService, { type ImportTemplate, type SpreadsheetRowReport } from 'src/services/api/dataApiService';
-    import { downloadCsv, triggerSave } from 'src/services/files/downloadHelpers';
+    import DataApiService, {
+        type ImportTemplate,
+        type SpreadsheetImportResult,
+    } from 'src/services/api/dataApiService';
+    import { triggerSave } from 'src/services/files/downloadHelpers';
     import { useChunkedUpload } from 'src/composables/useChunkedUpload';
     import { useConfirm } from 'src/composables/useConfirm';
 
@@ -323,11 +264,13 @@
             const { blob, filename } = await dataApi.downloadImportTemplateAsync(template.section);
             triggerSave(blob, filename ?? `dora-import-${template.section}.csv`);
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: "Couldn't download the template.",
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: "Couldn't download the template.",
+                    caption: toastCaption(err),
+                });
+            }
         } finally {
             templatesLoading.value = false;
         }
@@ -358,13 +301,6 @@
         warnings: string[];
     }
 
-    interface ImportResult {
-        ok: boolean;
-        headline: string;
-        subline: string;
-        rows: SpreadsheetRowReport[];
-    }
-
     // ── State ────────────────────────────────────────────────────────
     const pickedFile = ref<File | null>(null);
     const uploadId = ref<string | null>(null);
@@ -385,7 +321,7 @@
         halt_on_error: false,
     });
 
-    const result = ref<ImportResult | null>(null);
+    const result = ref<SpreadsheetImportResult | null>(null);
     const resultOpen = ref(false);
 
     const targetFields = computed(() => inspect.value?.target_fields ?? Object.keys(FIELD_LABELS));
@@ -425,10 +361,6 @@
         });
     });
 
-    const errorRows = computed(
-        () => result.value?.rows.filter((r) => r.status === 'error') ?? [],
-    );
-
     // When inspect lands or the user picks a different sheet, snap the
     // column map to the server's auto-pick for that sheet.
     watch(selectedSheet, (sheet) => {
@@ -449,11 +381,13 @@
             const id = await upload(file);
             uploadId.value = id;
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Upload failed.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Upload failed.',
+                    caption: toastCaption(err),
+                });
+            }
             await onClearPick();
             return;
         } finally {
@@ -469,11 +403,13 @@
             // Default to the first sheet so the mapping UI is immediately useful.
             selectedSheet.value = inspect.value?.sheets[0] ?? null;
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: "Couldn't read that spreadsheet.",
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: "Couldn't read that spreadsheet.",
+                    caption: toastCaption(err),
+                });
+            }
             await onClearPick();
         } finally {
             inspecting.value = false;
@@ -571,32 +507,6 @@
         if (result.value?.ok) {
             void onClearPick();
         }
-    }
-
-    // R-002: neutral "skipped" routes through `dora-bg-sunken` /
-    // `dora-text-secondary` (see template), not a `grey-N` literal.
-    function rowChipColour(status: SpreadsheetRowReport['status']): string | null {
-        if (status === 'created') return 'positive';
-        if (status === 'skipped_duplicate') return null;
-        return 'negative';
-    }
-    function rowChipLabel(status: SpreadsheetRowReport['status']): string {
-        if (status === 'created') return 'ok';
-        if (status === 'skipped_duplicate') return 'dup';
-        return 'err';
-    }
-
-    // Lets the user iterate on a partially-bad spreadsheet without
-    // squinting at the result dialog — they fix the highlighted rows
-    // offline and re-import only those.
-    function downloadErrorRows() {
-        const rows = errorRows.value;
-        if (!rows.length) return;
-        downloadCsv(
-            ['row_number', 'name', 'reason'],
-            rows.map((r) => [r.row_number, r.name, r.reason ?? '']),
-            'dora-import-errors.csv',
-        );
     }
 </script>
 

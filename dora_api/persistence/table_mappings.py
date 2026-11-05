@@ -466,6 +466,8 @@ def configure_mappings(db: SQLAlchemy):
         Column("added_at", DateTime(timezone=True), nullable=True),
         Column("picked_offer_price", Float, nullable=True),
         Column("list_price_at_pick", Float, nullable=True),
+        # The household's usual price for one, frozen at finish (FU-831).
+        Column("usual_price_at_pick", Float, nullable=True),
         # what the shopper actually paid / where
         # they bought it. NULL when the user didn't override the planned
         # offer; reports & the assistant fall back to picked_offer_price.
@@ -629,6 +631,8 @@ def configure_mappings(db: SQLAlchemy):
         # pack_count is informational so the obs row can render
         # "4 × 125g" instead of "500g flat".
         Column("pack_count", Integer, nullable=True),
+        # The measure is an item count with no known size (FU-983).
+        Column("is_sizeless", Boolean, nullable=False, server_default=false()),
     )
 
     # user's negative decisions on Dora suggestions. One row per
@@ -1196,6 +1200,7 @@ def configure_mappings(db: SQLAlchemy):
         # Postgres/SQLite portability (R-005/006). Not deferred — it's tiny and
         # read on the /me path; never selected on user-list rows in practice.
         Column("dashboard_layout", Text, nullable=True),
+        Column("reports_layout", Text, nullable=True),
         # per-user assistant config. `llm_enabled` is the AI-mode opt-in and
         # `llm_provider` the active provider (closed-set sentinel 'ollama' |
         # 'openai' | 'anthropic' | 'gemini', validated at update_me). The

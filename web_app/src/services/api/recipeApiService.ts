@@ -1,24 +1,19 @@
 import type { Recipe, RecipeStepsMode, RecipeTagCatalogue } from 'src/models/recipe';
-import AxiosHttpClient, { resolveBaseURL } from './axiosHttpClient';
+import AxiosHttpClient from './axiosHttpClient';
 import { fetchAllPages, type Page } from './queryStringBuilder';
 
 /** C-4 Chunk 5 — URL for a recipe's image (served as raw bytes). Pass a
  *  `version` (e.g. a counter bumped after upload) to bust the browser cache. */
-export function recipeImageUrl(recipeId: string, version?: number | string): string {
-    const base = resolveBaseURL();
+/** API path of a recipe's photo, for `useAuthedImage` (R-045, FU-931). The
+ *  version busts the browser cache after a replace. */
+export function recipeImagePath(recipeId: string, version?: number | string): string {
     const suffix = version !== undefined ? `?v=${encodeURIComponent(String(version))}` : '';
-    return `${base}/recipes/${recipeId}/image${suffix}`;
+    return `/recipes/${recipeId}/image${suffix}`;
 }
 
-/** PROPOSAL_RECIPE_IMAGE_STEPS — URL for a single step image (raw bytes). */
-export function recipeStepImageUrl(
-    recipeId: string,
-    imageId: string,
-    version?: number | string,
-): string {
-    const base = resolveBaseURL();
-    const suffix = version !== undefined ? `?v=${encodeURIComponent(String(version))}` : '';
-    return `${base}/recipes/${recipeId}/step-images/${imageId}${suffix}`;
+/** PROPOSAL_RECIPE_IMAGE_STEPS — API path of a single step photo. */
+export function recipeStepImagePath(recipeId: string, imageId: string): string {
+    return `/recipes/${recipeId}/step-images/${imageId}`;
 }
 
 export type CreateRecipeIngredientCommand = {

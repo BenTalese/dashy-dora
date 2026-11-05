@@ -187,7 +187,9 @@ def get_price_history():
                 "baseline_unit": _Yp.baseline_unit,
                 "current": _Yp.current,
                 "above_baseline": _Yp.above_baseline,
+                "below_baseline": _Yp.below_baseline,
                 "sample_count": _Yp.sample_count,
+                "rough": _Yp.rough,
             },
             # H2 — per-unit observation series ("date" matches the offer
             # points' key so the chart treats them uniformly).

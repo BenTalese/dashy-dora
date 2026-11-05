@@ -307,9 +307,11 @@ _GARBAGE_QUERIES = [
     (
         "surface-garbage",
         "cookable=banana&expiring_within_days=-5&types=%3BDROP%20TABLE"
-        "&status=;DROP&days=NaN&limit=-3&q=%00%27%22&search=%27--"
+        "&status=;DROP&days=NaN&limit=-3&q=%27%22&search=%27--"
         "&from=13th-of-never&to=0000-00-00&window=-7&kind=42",
     ),
+    # FU-888: a NUL byte 500'd on Postgres only; it is refused centrally.
+    ("nul-byte", "q=%00%27%22&search=a%00b"),
 ]
 
 
@@ -521,6 +523,16 @@ def test__wrong_typed_fields_on_core_creates__reject_with_400_problem_details(ap
         f"{len(failures)} wrong-typed-field case(s) escaped the 400 "
         "problem-details contract:\n" + "\n".join(failures)
     )
+
+
+def test__nul_byte_in_query_or_body__is_a_400_on_every_backend(api):
+    # FU-888: Postgres rejects NUL in text while SQLite stores it, so the
+    # refusal happens before any handler reaches the database.
+    lookup = requests.get(f"{BASE}/api/nutrition/lookup?q=a%00b")
+    assert lookup.status_code == 400
+
+    create = requests.post(f"{BASE}/api/stock-items", json={"name": "Flour\u0000"})
+    assert create.status_code == 400
 
 
 # ── Known-bug pins (strict xfail — XPASS when fixed, then delete the

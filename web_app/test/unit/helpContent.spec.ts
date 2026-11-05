@@ -11,13 +11,29 @@ import { HELP_TOPICS, allEntries, resolveDeepLink, searchHelp } from 'src/help/h
 import routes from 'src/router/routes';
 
 /** Titles other surfaces navigate to with `/help?q=<title>` (HelpHint,
- *  RunnerShell, StocktakeRunner, AssistantSettings). */
+ *  SettingsPageHeader/SettingsSection `help`, RunnerShell, StocktakeRunner,
+ *  AssistantSettings). */
 const DEEP_LINKED_TITLES = [
     'Substitutes',
     'QR label',
     'Barcodes',
     'How stocktake works',
     'Reconcile past meals',
+    // FU-951
+    'Ingredients and the pantry',
+    'Three ways to write a method',
+    'Nutrition: off, simple, complex',
+    'Versions of a recipe',
+    'Plan a week',
+    'Build my week',
+    'Cook mode',
+    'One list, three faces',
+    'Back up your install',
+    'Import stock items from a spreadsheet',
+    'Create an API key',
+    'Install Dora on your phone or computer',
+    'Region and locale (admin)',
+    'Stock locations',
 ];
 
 function flatten(list: typeof routes, prefix = ''): string[] {

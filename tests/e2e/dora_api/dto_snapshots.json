@@ -74,6 +74,7 @@
       "llm_enabled",
       "llm_provider",
       "onboarding_completed_at",
+      "reports_layout",
       "send_deals_on_day",
       "show_assistant",
       "theme",
@@ -166,8 +167,6 @@
     "item_keys": [
       "cost_counted_meals",
       "cost_total_meals",
-      "day_cost",
-      "day_nutrition",
       "entries",
       "estimated_cost",
       "meal_plan_id",
@@ -348,7 +347,8 @@
       "stock_level_id",
       "stock_level_last_updated",
       "stock_level_sequence",
-      "stock_location_id"
+      "stock_location_id",
+      "use_soon"
     ]
   },
   "stock_levels": {

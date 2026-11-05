@@ -16,6 +16,8 @@ from dora_api.domain.stock_status import (effective_expiring_soon_window,
                                           needs_restock)
 from dora_api.features.app_settings.clock import household_today
 from dora_api.features.stock_items.stock_attention import (RANK_NONE,
+                                                          is_expired,
+                                                          is_expiring_soon,
                                                           resolve_attention_map)
 from dora_api.features.routers import STOCK_ITEM_ROUTER
 from dora_api.infrastructure.api_response import bad_request, paginated
@@ -68,6 +70,10 @@ class StockItemDto:
     # so the overview's sort fell through to alphabetical and read as random
     # (owner, 2026-08-21). See `stock_attention.py` for the full ordering.
     attention_rank: int = RANK_NONE
+    # Expired, or expiring inside the household's window: a fact about the
+    # item, with no notification preference applied (FU-702). The overview's
+    # "Use soon" chip reads it, so muting expiry alerts never empties a filter.
+    use_soon: bool = False
     # count of linked products. Drives the "2+ products →
     # combined choice modal" decision in `AddToListButton`. 0 = generic
     # stock-item line (no offer); 1 = preselect; 2+ = open QuickAddSheet
@@ -131,6 +137,7 @@ class GetStockItemsHandler:
         settings: list[AppSetting] = self.repository.get(AppSetting).all()
         window = effective_expiring_soon_window(settings[0] if settings else None)
         today = household_today(self.repository)
+        by_id = {e.id: e for e in entities}
         attention = resolve_attention_map(
             entities,
             today=today,
@@ -144,9 +151,16 @@ class GetStockItemsHandler:
                 attention_severity=attention[d.stock_item_id].severity,
                 attention_kinds=attention[d.stock_item_id].kinds,
                 attention_rank=attention[d.stock_item_id].rank,
+                use_soon=self._use_soon(by_id.get(d.stock_item_id), today, window),
             )
             for d in dtos
         ]
+
+    @staticmethod
+    def _use_soon(item: StockItem | None, today, window: int) -> bool:
+        return item is not None and (
+            is_expired(item, today) or is_expiring_soon(item, today, window)
+        )
 
     def _disabled_kinds(self) -> frozenset[str]:
         """Kinds the requesting user has switched off. B2: the bell honoured

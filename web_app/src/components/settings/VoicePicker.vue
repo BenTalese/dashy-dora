@@ -165,7 +165,7 @@
     import AppSpinner from 'src/components/AppSpinner.vue';
     import { ICONS } from 'src/style/icons';
     import TtsApiService, { type TtsVoice } from 'src/services/api/ttsApiService';
-    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+    import { isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { primeAudioForGesture } from 'src/utils/audioUnlock';
 
     const props = defineProps<{
@@ -318,11 +318,13 @@
             playingId.value = voice.id;
             await el.play();
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: `Could not preview ${voice.label}.`,
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: `Could not preview ${voice.label}.`,
+                    caption: toastCaption(err),
+                });
+            }
             stopPlayback();
         } finally {
             if (loadingId.value === voice.id) loadingId.value = null;

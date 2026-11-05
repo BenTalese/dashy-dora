@@ -23,7 +23,7 @@ import type { StockItem } from 'src/models/stockItem';
 import ShoppingListApiService from 'src/services/api/shoppingListApiService';
 import StockItemApiService from 'src/services/api/stockItemApiService';
 import WasteApiService, { type WasteReason } from 'src/services/api/wasteApiService';
-import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+import { isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
 import { useRecipeStore } from 'src/stores/recipeStore';
 import { useShoppingListStore } from 'src/stores/shoppingListStore';
 import { useStockItemStore } from 'src/stores/stockItemStore';
@@ -120,11 +120,13 @@ export function useStockBulkActions(deps: StockBulkActionsDeps) {
             });
             cancelBulk();
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not add all items.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not add all items.',
+                    caption: toastCaption(err),
+                });
+            }
         } finally {
             bulkBusy.value = false;
         }
@@ -163,11 +165,13 @@ export function useStockBulkActions(deps: StockBulkActionsDeps) {
             });
             cancelBulk();
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not restock.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not restock.',
+                    caption: toastCaption(err),
+                });
+            }
         } finally {
             bulkBusy.value = false;
         }
@@ -218,11 +222,13 @@ export function useStockBulkActions(deps: StockBulkActionsDeps) {
             // are stale — one refresh for the whole batch.
             await stockItemStore.getStockItemsAsync();
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not log any as wasted.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not log any as wasted.',
+                    caption: toastCaption(err),
+                });
+            }
             return;
         } finally {
             bulkBusy.value = false;
@@ -264,11 +270,13 @@ export function useStockBulkActions(deps: StockBulkActionsDeps) {
                                 message: 'Undone.',
                             });
                         } catch (err) {
-                            $q.notify({
-                                type: 'negative',
-                                message: 'Could not undo.',
-                                caption: toastCaption(err),
-                            });
+                            if (!isAlreadyNotified(err)) {
+                                $q.notify({
+                                    type: 'negative',
+                                    message: 'Could not undo.',
+                                    caption: toastCaption(err),
+                                });
+                            }
                         }
                     })();
                 },
@@ -329,11 +337,13 @@ export function useStockBulkActions(deps: StockBulkActionsDeps) {
             });
             cancelBulk();
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not add all items.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not add all items.',
+                    caption: toastCaption(err),
+                });
+            }
         } finally {
             bulkBusy.value = false;
         }
@@ -364,11 +374,13 @@ export function useStockBulkActions(deps: StockBulkActionsDeps) {
             });
             cancelBulk();
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not remove from list.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not remove from list.',
+                    caption: toastCaption(err),
+                });
+            }
         } finally {
             bulkBusy.value = false;
         }
@@ -392,11 +404,13 @@ export function useStockBulkActions(deps: StockBulkActionsDeps) {
             moveDialogOpen.value = false;
             cancelBulk();
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not move items.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not move items.',
+                    caption: toastCaption(err),
+                });
+            }
         } finally {
             bulkBusy.value = false;
         }

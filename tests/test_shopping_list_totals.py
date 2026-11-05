@@ -61,7 +61,7 @@ def test__single_unticked_line_price_and_savings():
     t = compute_list_totals([_line(quantity=2, offers=[_offer(2.0, 3.0)])])
     assert t.total_price == 4.0          # 2.0 * 2
     assert t.remaining_price == 4.0      # unticked
-    assert t.total_savings == 2.0        # (3 - 2) * 2
+    assert t.savings_vs_shelf_price == 2.0        # (3 - 2) * 2
     assert t.unticked_count == 1
     assert t.ticked_count == 0
     assert t.line_count == 1
@@ -84,19 +84,19 @@ def test__actual_price_override_wins_for_price_and_savings():
     t = compute_list_totals([_line(quantity=1, actual_unit_price=1.5,
                                    offers=[_offer(2.0, 3.0)])])
     assert t.total_price == 1.5          # uses actual, not offer
-    assert t.total_savings == 1.5        # (3.0 - 1.5) * 1
+    assert t.savings_vs_shelf_price == 1.5        # (3.0 - 1.5) * 1
 
 
 def test__no_offer_is_zero():
     t = compute_list_totals([_line(offers=[])])
     assert t.total_price == 0.0
-    assert t.total_savings == 0.0
+    assert t.savings_vs_shelf_price == 0.0
 
 
 def test__no_price_was_means_no_savings():
     t = compute_list_totals([_line(offers=[_offer(2.0, None)])])
     assert t.total_price == 2.0
-    assert t.total_savings == 0.0
+    assert t.savings_vs_shelf_price == 0.0
 
 
 def test__selected_offer_is_chosen_over_first():
@@ -105,13 +105,13 @@ def test__selected_offer_is_chosen_over_first():
     line = _line(quantity=1, offers=[cheap, chosen])
     t = compute_list_totals([line])
     assert t.total_price == 4.0          # the selected offer, not the cheaper first
-    assert t.total_savings == 2.0        # 6 - 4
+    assert t.savings_vs_shelf_price == 2.0        # 6 - 4
 
 
 def test__negative_savings_floored_to_zero():
     # price_was below paid → no "savings".
     t = compute_list_totals([_line(offers=[_offer(5.0, 4.0)])])
-    assert t.total_savings == 0.0
+    assert t.savings_vs_shelf_price == 0.0
 
 
 def test__none_quantity_treated_as_one():
@@ -123,7 +123,7 @@ def test__empty_list_is_all_zero():
     t = compute_list_totals([])
     assert t.total_price == 0.0
     assert t.remaining_price == 0.0
-    assert t.total_savings == 0.0
+    assert t.savings_vs_shelf_price == 0.0
     assert t.unticked_count == 0
     assert t.ticked_count == 0
     assert t.line_count == 0

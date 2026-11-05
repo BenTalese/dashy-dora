@@ -1,5 +1,8 @@
 <template>
-    <!-- Owner feedback 2026-09-05 — *"low and out to be circles with numbers
+    <!-- The app's count circle (the planner rail's, the shopping list's run
+         face, the ingredient summary). Named for what it is since FU-920; it
+         began as `MealPlanRailCount`.
+         Owner feedback 2026-09-05 — *"low and out to be circles with numbers
          left of the dropdown chevron, matching the all ingredients circle but
          with the low and out colours."* One badge, one shape: `sequence` null
          is the neutral count the "All ingredients" header carries, and a stock
@@ -14,7 +17,7 @@
          badge carries an accessible name. It is deliberately NOT a tooltip:
          the tooltips these replaced were the ones the owner called useless. -->
     <span
-        class="rail-count"
+        class="count-badge"
         :class="tintClassForSequence(sequence ?? null)"
         role="img"
         :aria-label="label"
@@ -38,7 +41,7 @@
     /* Overrides the shared tint pill's left-aligned, text-width shape into a
        centred circle: these hold one or two digits beside a chevron, not a
        phrase. */
-    .rail-count {
+    .count-badge {
         justify-content: center;
         min-width: 24px;
         min-height: 24px;

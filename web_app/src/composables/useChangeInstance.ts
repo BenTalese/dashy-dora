@@ -1,6 +1,6 @@
 import { Notify } from 'quasar';
 import { getBackendBaseUrl, setBackendBaseUrl } from 'src/services/api/backendUrl';
-import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+import { isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
 import { useConfirm } from 'src/composables/useConfirm';
 const { prompt } = useConfirm();
 
@@ -32,11 +32,13 @@ export async function promptAndSaveInstanceUrl(): Promise<string | null> {
         });
         return normalised;
     } catch (err) {
-        Notify.create({
-            type: 'negative',
-            message: 'Could not save the URL.',
-            caption: toastCaption(err),
-        });
+        if (!isAlreadyNotified(err)) {
+            Notify.create({
+                type: 'negative',
+                message: 'Could not save the URL.',
+                caption: toastCaption(err),
+            });
+        }
         return null;
     }
 }

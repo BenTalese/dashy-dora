@@ -86,6 +86,8 @@ class UpdateMeRequest(BaseModel):
     # the default layout. Opaque to the backend (client view-state); the cap is
     # generous for the small JSON but bounds abuse.
     dashboard_layout: str | None = Field(default=None, max_length=20_000)
+    # The Reports page's layout JSON, the same contract (FU-832).
+    reports_layout: str | None = Field(default=None, max_length=20_000)
     # per-user assistant Mode. `llm_enabled` is the AI-mode opt-in and
     # `llm_provider` the active provider (closed-set sentinel, R-010,
     # validated below against ALLOWED_LLM_PROVIDERS). The per-provider
@@ -238,6 +240,8 @@ class UpdateMeHandler:
         # backend doesn't parse it (client view-state).
         if "dashboard_layout" in _SetFields:
             _User.dashboard_layout = request.dashboard_layout
+        if "reports_layout" in _SetFields:
+            _User.reports_layout = request.reports_layout
 
         # per-user assistant Mode selection. `llm_provider` picks the active
         # provider (or None → Basic); `llm_enabled` is the AI opt-in. Details

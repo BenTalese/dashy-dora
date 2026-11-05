@@ -72,41 +72,14 @@ export type MealPlanEntry = {
     cook_batch_estimated_cost: number | null;
 };
 
-/** Owner 2026-09-05 — one day's planned cost, with the coverage that keeps it
- *  honest: a day that could only price two of its three meals says so rather
- *  than quoting a confident total (R-041). Null cost means nothing on the day
- *  could be priced — never 0, which would read as a free day. */
-export type MealPlanDayCost = {
-    scheduled_for: string;
-    estimated_cost: number | null;
-    counted_meals: number;
-    total_meals: number;
-};
-
-/** FU-637 — one day's planned calories: "a serving of each meal planned that
- *  day". Not an intake figure — a meal plan schedules pots of food, not plates
- *  for named people. Coverage travels with it: meals whose figure isn't
- *  reliable are left out of the sum and counted in the shortfall. */
-export type MealPlanDayNutrition = {
-    scheduled_for: string;
-    kcal_per_serving: number | null;
-    counted_meals: number;
-    total_meals: number;
-};
-
 export type MealPlan = {
     meal_plan_id: string;
     // instances are nameless (UI shows "Week starting <date>").
     name: string | null;
     start_date: string;
     entries: MealPlanEntry[];
-    /** FU-637 — per-day rollup over `entries`, summed server-side. Empty when
-     *  nutrition is off. */
-    day_nutrition: MealPlanDayNutrition[];
-    /** Owner 2026-09-05 — the money rollups, summed server-side for the same
-     *  reason. Empty / null when money features are off. `estimated_cost` is
-     *  the whole plan's, which for the planner is the week's. */
-    day_cost: MealPlanDayCost[];
+    /** Owner 2026-09-05 — the week's cost, summed server-side. Null when
+     *  money features are off. */
     estimated_cost: number | null;
     cost_counted_meals: number;
     cost_total_meals: number;

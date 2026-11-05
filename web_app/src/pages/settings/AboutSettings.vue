@@ -53,7 +53,7 @@
              install prompt can never fire there and the section fell through
              to "Install isn't available in this browser. Try Chrome…"
              (finalisation 17-R9). -->
-        <SettingsSection v-if="!isNative">
+        <SettingsSection v-if="!isNative" help="Install Dora on your phone or computer">
             <template #title>Install as an app</template>
             <template #description>
                 Adds a Dora icon to your home screen or launcher.
@@ -253,7 +253,7 @@
     import DoraBrand from 'src/components/DoraBrand.vue';
     import { computed, onMounted, ref } from 'vue';
     import { useRouter } from 'vue-router';
-    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+    import { isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import SettingsSection from 'src/components/settings/SettingsSection.vue';
     import { useSupportChannel, supportHref } from 'src/composables/useSupportChannel';
     import { useFeatureFlags } from 'src/composables/useFeatureFlags';
@@ -288,7 +288,9 @@
             await authStore.refreshAsync();
             void router.push('/welcome');
         } catch (err) {
-            $q.notify({ type: 'negative', message: "Couldn't restart the tour.", caption: toastCaption(err) });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({ type: 'negative', message: "Couldn't restart the tour.", caption: toastCaption(err) });
+            }
         } finally {
             restartingTour.value = false;
         }
@@ -308,7 +310,7 @@
                 text: 'Keeps track of what\'s in your kitchen, and what\'s running out.',
             },
             {
-                icon: ICONS.restaurant,
+                icon: ICONS.chef_hat,
                 text: 'Tells you what you can cook tonight from what you already have.',
             },
         ];

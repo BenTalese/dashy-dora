@@ -3,9 +3,9 @@
 The planner's number answers "if I eat one serving of each meal planned for
 this day, what's that?" — the only calorie question a plan can answer honestly,
 since `MealPlanEntry` has no eater and the app is not an intake tracker. What's
-pinned here is that the day rollup agrees with the recipes it's built from, that
-an unreliable meal is *excluded and reported* rather than quietly folded in, and
-that the whole thing costs a constant number of queries.
+pinned here is that each entry carries its recipe's figure, that a meal with no
+reliable figure carries none rather than a guess, and that the whole thing costs
+a constant number of queries. (The per-day rollup went with FU-937.)
 """
 from datetime import date, timedelta
 from uuid import uuid4
@@ -63,25 +63,6 @@ def test__meal_plan__SimpleMode__EntriesAndDayTotalCarryTheTypedKcal(api):
     ])
 
     assert sorted(e["kcal_per_serving"] for e in plan["entries"]) == [300.0, 650.0]
-    day = next(d for d in plan["day_nutrition"] if d["scheduled_for"] == today.isoformat())
-    # One serving of each meal planned that day.
-    assert day["kcal_per_serving"] == 950
-    assert (day["counted_meals"], day["total_meals"]) == (2, 2)
-
-
-def test__meal_plan__DaysAreSeparate__EachCarriesItsOwnTotal(api):
-    _set_mode("simple")
-    today, slot = _household_today(), _slot()
-    tomorrow = today + timedelta(days=1)
-
-    plan = _plan_with([
-        {"recipe_id": _recipe(300), "scheduled_for": today.isoformat(), "servings": 1, "slot": slot},
-        {"recipe_id": _recipe(700), "scheduled_for": tomorrow.isoformat(), "servings": 1, "slot": slot},
-    ])
-
-    totals = {d["scheduled_for"]: d["kcal_per_serving"] for d in plan["day_nutrition"]}
-    assert totals[today.isoformat()] == 300
-    assert totals[tomorrow.isoformat()] == 700
 
 
 def test__meal_plan__MealWithNoFigure__IsReportedNotSilentlyDropped(api):
@@ -96,9 +77,9 @@ def test__meal_plan__MealWithNoFigure__IsReportedNotSilentlyDropped(api):
         {"recipe_id": _recipe(None), "scheduled_for": today.isoformat(), "servings": 1, "slot": slot},
     ])
 
-    day = next(d for d in plan["day_nutrition"] if d["scheduled_for"] == today.isoformat())
-    assert day["kcal_per_serving"] == 500
-    assert (day["counted_meals"], day["total_meals"]) == (1, 3)
+    figures = [e["kcal_per_serving"] for e in plan["entries"]]
+    assert sorted(f for f in figures if f is not None) == [500.0]
+    assert figures.count(None) == 2
 
 
 def test__meal_plan__NoMealCountable__ReportsNullNotZero(api):
@@ -110,9 +91,7 @@ def test__meal_plan__NoMealCountable__ReportsNullNotZero(api):
         {"recipe_id": _recipe(None), "scheduled_for": today.isoformat(), "servings": 1, "slot": slot},
     ])
 
-    day = next(d for d in plan["day_nutrition"] if d["scheduled_for"] == today.isoformat())
-    assert day["kcal_per_serving"] is None
-    assert (day["counted_meals"], day["total_meals"]) == (0, 1)
+    assert plan["entries"][0]["kcal_per_serving"] is None
 
 
 def test__meal_plan__NutritionOff__CarriesNoFiguresAtAll(api):
@@ -123,7 +102,6 @@ def test__meal_plan__NutritionOff__CarriesNoFiguresAtAll(api):
         {"recipe_id": _recipe(500), "scheduled_for": today.isoformat(), "servings": 1, "slot": slot},
     ])
 
-    assert plan["day_nutrition"] == []
     assert plan["entries"][0]["kcal_per_serving"] is None
 
 

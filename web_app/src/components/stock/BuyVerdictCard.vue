@@ -7,17 +7,16 @@
          elevated shell wrapping a tinted header block. It now wears the same
          single-surface shape as `PantryBeliefCard` (the "Dora thinks" card it
          sits under): the verdict tint lives on the card itself, the summary
-         line is the disclosure, and the one-tap action is an icon-only button
-         sitting to the RIGHT of the caret, exactly where the belief card's
-         chevron ends. Two cards, one idiom. -->
-    <div v-if="verdict" :class="['dora-signal-card', 'dora-buy-verdict-card', toneClass]">
-        <div class="dora-buy-verdict-card__header">
-            <button
-                type="button"
-                class="dora-buy-verdict-card__summary"
-                :aria-expanded="expanded"
-                @click="expanded = !expanded"
-            >
+         line is the disclosure, and both cards are `CollapsibleCard`s, so
+         their carets share an x by construction. Two cards, one idiom. -->
+    <CollapsibleCard
+        v-if="verdict"
+        :class="['dora-signal-card', 'dora-buy-verdict-card', toneClass]"
+        header-toggles
+        reveals="details"
+    >
+        <template #header>
+            <div class="dora-signal-card__summary">
                 <!-- Always the dollar glyph. A per-verdict icon meant `unsure`
                      drew a question-mark bubble, which read as an info chip
                      rather than as "this card is about money". -->
@@ -37,23 +36,22 @@
                         {{ planReason.label }}
                     </span>
                 </span>
-            </button>
-            <!-- Feedback 2026-09-01: the cart action used to be a plain
-                 primary button that always read "add", so a card on an item
-                 already sitting on a list still offered to add it again. It
-                 now routes through the same `AddToListButton` the stock
-                 overview row uses, so on/off-list state (and the toggle-off +
-                 multi-list popover) reads identically in both places. -->
+            </div>
+        </template>
+        <!-- Feedback 2026-09-01: the cart action routes through the same
+             `AddToListButton` the stock overview row uses, so on/off-list
+             state reads identically in both places. Feedback 2026-08-23: the
+             caret is always the last control in the row; the action sits just
+             before it (FU-950 (1): the slot CollapsibleCard owns for this). -->
+        <template v-if="verdict.one_tap_action.kind !== 'none'" #actions>
             <AddToListButton
                 v-if="verdict.one_tap_action.kind === 'add_to_list'"
                 variant="row"
                 :stock-item-id="stockItemId"
             />
-            <!-- Icon-only, and outside the disclosure button so a tap on the
-                 action can't toggle the card. The name survives as the tooltip
-                 + aria-label (D-rule: icon-only controls are still named). -->
+            <!-- Icon-only; the name survives as the tooltip + aria-label. -->
             <BaseButton
-                v-else-if="verdict.one_tap_action.kind !== 'none'"
+                v-else
                 variant="primary"
                 dense
                 :icon="actionIcon"
@@ -62,27 +60,9 @@
             >
                 <BaseTooltip>{{ actionLabel }}</BaseTooltip>
             </BaseButton>
-            <!-- Feedback 2026-08-23: the caret used to live inside the summary
-                 button, which put it LEFT of the action — so it sat in a
-                 different place depending on whether the verdict had a one-tap
-                 action. It's now the last control in the row, always the same
-                 spot; it toggles the same disclosure the summary line does. -->
-            <button
-                type="button"
-                class="dora-buy-verdict-card__caret"
-                :aria-expanded="expanded"
-                :aria-label="expanded ? 'Hide details' : 'Show details'"
-                @click="expanded = !expanded"
-            >
-                <q-icon
-                    :name="expanded ? ICONS.collapse : ICONS.expand"
-                    size="18px"
-                    class="dora-text-muted"
-                />
-            </button>
-        </div>
+        </template>
 
-        <div v-if="expanded" class="dora-buy-verdict-card__body">
+        <div class="dora-buy-verdict-card__body">
         <!-- Named "data confidence" since 2026-08-24: with strength carrying
              "how much you should care", this number is only ever about the
              evidence, and a bare "high confidence" under "No strong buy
@@ -132,12 +112,13 @@
             {{ dataUsedLine(verdict.data_used) }}
         </div>
         </div>
-    </div>
+    </CollapsibleCard>
 </template>
 
 <script setup lang="ts">
     import BaseTooltip from 'src/components/BaseTooltip.vue';
     import AddToListButton from 'src/components/AddToListButton.vue';
+    import CollapsibleCard from 'src/components/CollapsibleCard.vue';
     import BaseButton from 'src/components/BaseButton.vue';
     import {
         axisIcon, dataUsedLine, headlineFor, reasonDetail,
@@ -145,7 +126,7 @@
     import { formatDate as formatLocaleDate } from 'src/composables/useDateFormat';
     import type { BuyVerdict } from 'src/services/api/buyVerdictApiService';
     import { ICONS } from 'src/style/icons';
-    import { computed, ref } from 'vue';
+    import { computed } from 'vue';
 
     const props = defineProps<{
         verdict: BuyVerdict | null;
@@ -155,7 +136,6 @@
         stockItemId: string;
     }>();
 
-    const expanded = ref(false);
 
     const emit = defineEmits<{
         (e: 'action', kind: BuyVerdict['one_tap_action']['kind']): void;
@@ -217,11 +197,6 @@
 
 <style scoped>
     /* Shell and tones: `.dora-signal-card` (css/signalCards.scss). */
-    .dora-buy-verdict-card__header {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-    }
     .dora-buy-verdict-card__body {
         margin-top: 6px;
         display: flex;
@@ -246,46 +221,6 @@
         font-size: var(--font-size-sm);
         color: var(--text-secondary);
     }
-    /* The whole summary line is the disclosure control, so it has to be a
-       real button: keyboard-reachable, and wide enough that a thumb lands on
-       it (D-004). Chrome is stripped back to the surrounding card. */
-    .dora-buy-verdict-card__summary {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        /* Takes the row; the action button keeps its intrinsic width. */
-        flex: 1 1 auto;
-        min-width: 0;
-        min-height: 44px;
-        padding: 0;
-        border: none;
-        background: none;
-        font: inherit;
-        color: inherit;
-        text-align: left;
-        cursor: pointer;
-    }
-    .dora-buy-verdict-card__summary:focus-visible,
-    .dora-buy-verdict-card__caret:focus-visible {
-        outline: 2px solid var(--focus-ring);
-        outline-offset: 2px;
-        border-radius: 4px;
-    }
-    /* 44px tap target (D-004) for a control that's only an 18px glyph. */
-    .dora-buy-verdict-card__caret {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        flex: 0 0 auto;
-        min-width: 44px;
-        min-height: 44px;
-        padding: 0;
-        border: none;
-        background: none;
-        color: inherit;
-        cursor: pointer;
-    }
-
     /* P8-06 — the wait-hint block sits between header and reasons. It used
        to carry its own warm fill, which on a now-already-warm `wait` card was
        both invisible and one more nested box — the exact "card inside a card"

@@ -45,6 +45,8 @@ BUDGET_ROUTER = Blueprint("BUDGET_ROUTER", __name__, url_prefix="/api/budget")
 WASTE_ROUTER = Blueprint("WASTE_ROUTER", __name__, url_prefix="/api/waste")
 SUGGESTIONS_ROUTER = Blueprint("SUGGESTIONS_ROUTER", __name__, url_prefix="/api/suggestions")
 TTS_ROUTER = Blueprint("TTS_ROUTER", __name__, url_prefix="/api/tts")
+# Server-side speech-to-text for browsers without the Web Speech API (FU-788).
+STT_ROUTER = Blueprint("STT_ROUTER", __name__, url_prefix="/api/stt")
 
 # Nutrition complex-mode: source status, dataset import, and the unified
 # food lookup that the stock-item picker searches.

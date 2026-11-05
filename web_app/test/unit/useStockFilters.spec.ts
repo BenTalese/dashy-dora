@@ -14,7 +14,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { clearAllListState } from 'src/composables/useListState';
 import { migrateStockSort, useStockFilters } from 'src/composables/useStockFilters';
-import type { LocationNode } from 'src/models/location';
+import { NO_LOCATION_FILTER, type LocationNode } from 'src/models/location';
 import type { Recipe } from 'src/models/recipe';
 import type { Membership } from 'src/models/shoppingList';
 import type { StockGroup } from 'src/models/stockGroup';
@@ -60,8 +60,8 @@ const ITEMS: StockItem[] = [
     item({ stock_item_id: 'si-apple', name: 'Apple', stock_location_id: 'loc-pantry', stock_group_id: 'grp-fresh', stock_level_last_updated: '2026-07-01T00:00:00Z' }),
     item({ stock_item_id: 'si-bread', name: 'Bread', stock_level_id: 'lv-low', is_essential: true, stock_location_id: 'loc-pantry', stock_level_last_updated: '2026-07-09T00:00:00Z', needs_attention: true, attention_severity: 'high', attention_kinds: ['essential_low'], attention_rank: 3 }),
     item({ stock_item_id: 'si-cheese', name: 'Cheese', stock_level_id: 'lv-out', is_essential: true, needs_attention: true, attention_severity: 'high', attention_kinds: ['essential_low'], attention_rank: 1 }),
-    item({ stock_item_id: 'si-dill', name: 'Dill', expiry_date: '2026-07-13', stock_location_id: 'loc-shelf', stock_group_id: 'grp-fresh', needs_attention: true, attention_severity: 'medium', attention_kinds: ['expiring_soon'], attention_rank: 2 }),
-    item({ stock_item_id: 'si-egg', name: 'Egg', expiry_date: '2026-07-01', needs_attention: true, attention_severity: 'high', attention_kinds: ['expired'], attention_rank: 0 }),
+    item({ stock_item_id: 'si-dill', name: 'Dill', expiry_date: '2026-07-13', stock_location_id: 'loc-shelf', stock_group_id: 'grp-fresh', needs_attention: true, attention_severity: 'medium', attention_kinds: ['expiring_soon'], attention_rank: 2, use_soon: true }),
+    item({ stock_item_id: 'si-egg', name: 'Egg', expiry_date: '2026-07-01', needs_attention: true, attention_severity: 'high', attention_kinds: ['expired'], attention_rank: 0, use_soon: true }),
     item({ stock_item_id: 'si-flour', name: 'Flour', stock_level_id: 'lv-low', is_open: true, stock_level_last_updated: '2026-07-05T00:00:00Z' }),
 ];
 
@@ -128,6 +128,7 @@ const MEMBERSHIP: Membership = {
  */
 function makeFilters(overrides: {
     membership?: Membership | null;
+    items?: StockItem[];
 } = {}) {
     const filters = makeFiltersOnDefaultSort(overrides);
     filters.sortBy.value = 'name';
@@ -138,9 +139,10 @@ function makeFilters(overrides: {
 /** Same fixtures, sort left exactly as the composable ships it. */
 function makeFiltersOnDefaultSort(overrides: {
     membership?: Membership | null;
+    items?: StockItem[];
 } = {}) {
     return useStockFilters({
-        stockItems: () => ITEMS,
+        stockItems: () => overrides.items ?? ITEMS,
         stockLevels: () => LEVELS,
         locationTree: () => TREE,
         recipes: () => RECIPES,
@@ -233,14 +235,22 @@ describe('useStockFilters — filtering', () => {
     // stocktake queue is no longer a filter axis here (it still paints the
     // row's dashed marker, which StockOverview owns).
 
-    it('expiring-soon keeps the expiry-flagged items (FU-583 freshness deep-link)', () => {
+    it('use soon keeps the items the server says to use soon (FU-583 freshness deep-link)', () => {
         const f = makeFilters();
-        f.expiringSoonOnly.value = true;
-        // Dill is expiring_soon, Egg is expired; both are the expiry axis.
-        // The chip reads the server's kinds rather than re-measuring days,
-        // so the admin's configurable window governs it too (B1).
+        f.useSoonOnly.value = true;
+        // Dill is expiring soon, Egg is expired; the server says both. The chip
+        // reads its `use_soon` rather than re-measuring days, so the admin's
+        // window governs it too (B1).
         expect(names(f)).toEqual(['Dill', 'Egg']);
         expect(f.activeFilterCount.value).toBe(1);
+    });
+
+    it('use soon ignores muted expiry alerts (FU-702)', () => {
+        // With expiry alerts muted the server sends no expiry kinds, but the
+        // items still have to be used soon.
+        const f = makeFilters({ items: ITEMS.map((i) => ({ ...i, attention_kinds: [] })) });
+        f.useSoonOnly.value = true;
+        expect(names(f)).toEqual(['Dill', 'Egg']);
     });
 
     it('cart filter: on_list keeps items on any unticked list, off_list the rest', () => {
@@ -443,10 +453,19 @@ describe('migrateStockSort — persisted sorts survive the axis/direction split'
 describe('useStockFilters — options and helpers', () => {
     it('location options render full "parent › child" paths, alphabetically', () => {
         const f = makeFilters();
-        expect(f.allLocationOptions.value).toEqual([
+        expect(f.moveTargetOptions.value).toEqual([
             { label: 'Pantry', value: 'loc-pantry' },
             { label: 'Pantry › Middle shelf', value: 'loc-shelf' },
         ]);
+    });
+
+    it('the filter leads with "Not stored anywhere", which keeps only unplaced items (FU-633)', () => {
+        const f = makeFilters();
+        expect(f.locationOptions.value[0]).toEqual({ label: 'Not stored anywhere', value: NO_LOCATION_FILTER });
+        f.locationFilter.value = NO_LOCATION_FILTER;
+        const names = f.filteredStockItems.value.map((i) => i.name);
+        expect(names.length).toBeGreaterThan(0);
+        for (const placed of ['Apple', 'Bread', 'Dill']) expect(names).not.toContain(placed);
     });
 
     it('filterLocations narrows the searchable options and restores on empty', () => {
@@ -457,7 +476,7 @@ describe('useStockFilters — options and helpers', () => {
             { label: 'Pantry › Middle shelf', value: 'loc-shelf' },
         ]);
         f.filterLocations('', runNow);
-        expect(f.locationOptions.value).toHaveLength(2);
+        expect(f.locationOptions.value).toHaveLength(3);
     });
 
     it('activeFilterCount counts set filters but never the search text', () => {
@@ -477,7 +496,7 @@ describe('useStockFilters — options and helpers', () => {
         f.essentialsOnly.value = true;
         f.openOnly.value = true;
         f.hasAlertOnly.value = true;
-        f.expiringSoonOnly.value = true;
+        f.useSoonOnly.value = true;
         f.cartFilter.value = 'on_list';
         f.recipeFilter.value = 'rcp-pie';
 

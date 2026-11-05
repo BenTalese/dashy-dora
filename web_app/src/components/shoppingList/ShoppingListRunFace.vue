@@ -77,7 +77,7 @@
                     </q-item-label>
                 </q-item-section>
                 <q-item-section side>
-                    <MealPlanRailCount
+                    <CountBadge
                         :count="pickedLines.length"
                         :label="`${pickedLines.length} collected`"
                     />
@@ -140,7 +140,7 @@
     import { computed, toRef } from 'vue';
     import { ICONS } from 'src/style/icons';
     import ShoppingListRunRow from 'src/components/shoppingList/ShoppingListRunRow.vue';
-    import MealPlanRailCount from 'src/components/MealPlanRailCount.vue';
+    import CountBadge from 'src/components/CountBadge.vue';
     import { formatMoney } from 'src/composables/useMoney';
     import { useMoneyEnabled } from 'src/composables/useMoneyEnabled';
     import {

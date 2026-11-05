@@ -3,7 +3,6 @@
         <SettingsPageHeader
             title="Money"
             description="Whether this install talks about money at all."
-            :icon="ICONS.savings"
         />
 
         <template v-if="ready">
@@ -32,7 +31,6 @@
     // features rather than a row on the personal `/settings/budget` page,
     // because that page is itself hidden when this flag is off: the switch
     // would have been the one control you can't reach once you've used it.
-    import { ICONS } from 'src/style/icons';
     import { useAppSettingDrafts } from 'src/composables/useAppSettingDrafts';
     import { useFeatureFlags } from 'src/composables/useFeatureFlags';
     import SettingsSection from 'src/components/settings/SettingsSection.vue';

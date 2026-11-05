@@ -102,6 +102,12 @@ export const UNIT_TABLE: Readonly<Record<string, UnitDef>> = {
     "wholes": { dimension: "count", factor: 1.0, canonical: "whole" },
     "pack": { dimension: "count", factor: 1.0, canonical: "pack" },
     "packs": { dimension: "count", factor: 1.0, canonical: "pack" },
+    "packet": { dimension: "count", factor: 1.0, canonical: "packet" },
+    "packets": { dimension: "count", factor: 1.0, canonical: "packet" },
+    "box": { dimension: "count", factor: 1.0, canonical: "box" },
+    "boxes": { dimension: "count", factor: 1.0, canonical: "box" },
+    "carton": { dimension: "count", factor: 1.0, canonical: "carton" },
+    "cartons": { dimension: "count", factor: 1.0, canonical: "carton" },
     "dozen": { dimension: "count", factor: 12.0, canonical: "dozen" },
     "dozens": { dimension: "count", factor: 12.0, canonical: "dozen" },
     "mm": { dimension: "length", factor: 1.0, canonical: "mm" },
@@ -144,7 +150,7 @@ export const MEASUREMENT_SYSTEMS: ReadonlyArray<MeasurementSystem> = ["metric", 
 
 /** Canonical units that belong to every system — the informal cooking
  *  amounts, the count units, and energy. Always offered. */
-export const UNIVERSAL_CANONICAL_UNITS: ReadonlySet<string> = new Set(["J", "dash", "dozen", "ea", "kJ", "kcal", "pack", "pinch", "smidgen", "tsp", "whole"]);
+export const UNIVERSAL_CANONICAL_UNITS: ReadonlySet<string> = new Set(["J", "box", "carton", "dash", "dozen", "ea", "kJ", "kcal", "pack", "packet", "pinch", "smidgen", "tsp", "whole"]);
 
 /** Canonical unit → the systems that offer it. Units absent from both
  *  this map and `UNIVERSAL_CANONICAL_UNITS` are offered by no system. */

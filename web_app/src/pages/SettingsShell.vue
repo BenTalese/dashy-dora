@@ -59,6 +59,27 @@
             </div>
         </header>
 
+        <!-- FU-626: admins hear about a newer release here, where the header's
+             glowing account button leads them. -->
+        <SettingsNotice
+            v-if="isAdmin && releaseAvailable && releaseInfo"
+            tone="info"
+            class="settings-shell__release"
+            :title="`Dora ${releaseInfo.latest_version} is out`"
+        >
+            This server runs {{ releaseInfo.current_version }}. Update your deployment to get it.
+            <template v-if="releaseInfo.release_url" #actions>
+                <BaseButton
+                    variant="secondary"
+                    :icon="ICONS.open_in_new"
+                    label="What's in it"
+                    :href="releaseInfo.release_url"
+                    target="_blank"
+                    rel="noopener"
+                />
+            </template>
+        </SettingsNotice>
+
         <!-- Mobile (<md): top tab strip (§6.3). Shown via CSS below. -->
         <SettingsMobileNav class="settings-shell__mnav" :groups="navGroups" />
 
@@ -92,6 +113,8 @@
     import { useUnlinkedIngredientsStore } from 'src/stores/unlinkedIngredientsStore';
     import BaseButton from 'src/components/BaseButton.vue';
     import DonateButton from 'src/components/donate/DonateButton.vue';
+    import SettingsNotice from 'src/components/settings/SettingsNotice.vue';
+    import { useReleaseUpdate } from 'src/composables/useReleaseUpdate';
     import SettingsNavGroup, { type SettingsNavEntry } from 'src/components/settings/SettingsNavGroup.vue';
     import SettingsMobileNav, { type SettingsNavGroupDef } from 'src/components/settings/SettingsMobileNav.vue';
     import { useScanningEnabled } from 'src/composables/useScanningEnabled';
@@ -116,20 +139,20 @@
     // at the foot of the list. Both standalone groups are `headerless` —
     // they're single destinations, not categories.
     const accountSections: SettingsNavEntry[] = [
-        { path: '/settings/account', label: 'Account', icon: ICONS.person },
+        { path: '/settings/account', label: 'Account' },
     ];
 
     const preferenceSections: SettingsNavEntry[] = [
         // Palette, not the generic `tune` slider it used to carry — this page is
         // theme/colour/text-size, and `tune` is the admin Features page's icon.
-        { path: '/settings/preferences', label: 'Appearance', icon: ICONS.palette },
-        { path: '/settings/notifications', label: 'Notifications', icon: ICONS.notifications },
-        { path: '/settings/voice', label: 'Voice', icon: ICONS.record_voice_over },
-        { path: '/settings/assistant', label: 'Assistant', icon: ICONS.smart_toy },
+        { path: '/settings/preferences', label: 'Appearance' },
+        { path: '/settings/notifications', label: 'Notifications' },
+        { path: '/settings/voice', label: 'Voice' },
+        { path: '/settings/assistant', label: 'Assistant' },
     ];
 
     const aboutSections: SettingsNavEntry[] = [
-        { path: '/settings/about', label: 'About', icon: ICONS.info },
+        { path: '/settings/about', label: 'About' },
     ];
 
     // QR labels only surfaces when scanning is enabled (matches
@@ -168,22 +191,21 @@
 
     const kitchenSetupSections = computed<SettingsNavEntry[]>(() => {
         const base: SettingsNavEntry[] = [
-            { path: '/settings/kitchen-setup/stock-locations', label: 'Stock locations', icon: ICONS.place },
-            { path: '/settings/kitchen-setup/stock-groups', label: 'Stock groups', icon: ICONS.tag_multiple },
-            { path: '/settings/kitchen-setup/stores', label: 'Stores', icon: ICONS.store },
+            { path: '/settings/kitchen-setup/stock-locations', label: 'Stock locations' },
+            { path: '/settings/kitchen-setup/stock-groups', label: 'Stock groups' },
+            { path: '/settings/kitchen-setup/stores', label: 'Stores' },
         ];
         if (moneyEnabled.value) {
-            base.push({ path: '/settings/budget', label: 'Budget', icon: ICONS.savings });
+            base.push({ path: '/settings/budget', label: 'Budget' });
         }
         if (scanningEnabled.value) {
-            base.push({ path: '/settings/kitchen-setup/qr-labels', label: 'QR labels', icon: ICONS.qr_code });
+            base.push({ path: '/settings/kitchen-setup/qr-labels', label: 'QR labels' });
         }
         // Recipe-ingredient bulk-linker — moved out of Admin → Data
         // (user-curated recipe data, no admin guard on its endpoints).
         base.push({
             path: '/settings/kitchen-setup/unlinked-ingredients',
             label: 'Unlinked ingredients',
-            icon: ICONS.link,
             badge: unlinkedCount.value,
         });
         // Complex-mode only: in off/simple there are no food links to make, so
@@ -196,7 +218,6 @@
             base.push({
                 path: '/settings/kitchen-setup/nutrition-matching',
                 label: 'Nutrition matching',
-                icon: ICONS.monitor_heart,
                 badge: nutritionUnmatchedCount.value,
             });
         }
@@ -205,11 +226,11 @@
         // blender for equipment/tools, clock for time-of-day meal slots,
         // leaf for dietary tags.
         base.push(
-            { path: '/settings/kitchen-setup/recipe-cuisines', label: 'Cuisines', icon: ICONS.public },
-            { path: '/settings/kitchen-setup/recipe-categories', label: 'Categories', icon: ICONS.category },
-            { path: '/settings/kitchen-setup/recipe-tools', label: 'Tools', icon: ICONS.blender },
-            { path: '/settings/kitchen-setup/recipe-meal-slots', label: 'Meal slots', icon: ICONS.schedule },
-            { path: '/settings/kitchen-setup/recipe-dietary-tags', label: 'Dietary tags', icon: ICONS.eco },
+            { path: '/settings/kitchen-setup/recipe-cuisines', label: 'Cuisines' },
+            { path: '/settings/kitchen-setup/recipe-categories', label: 'Categories' },
+            { path: '/settings/kitchen-setup/recipe-tools', label: 'Tools' },
+            { path: '/settings/kitchen-setup/recipe-meal-slots', label: 'Meal slots' },
+            { path: '/settings/kitchen-setup/recipe-dietary-tags', label: 'Dietary tags' },
         );
         return base;
     });
@@ -235,21 +256,21 @@
     //     Audit log — and **Image quality** joined Data & access.
     // Every URL that survives is untouched; the two retired pages redirect.
     const adminInstall: SettingsNavEntry[] = [
-        { path: '/settings/admin/users', label: 'Users', icon: ICONS.group },
-        { path: '/settings/admin/system/region', label: 'Region & locale', icon: ICONS.language },
-        { path: '/settings/admin/system/email', label: 'Email', icon: ICONS.mark_email_read },
-        { path: '/settings/admin/system/push', label: 'Push notifications', icon: ICONS.notifications_active },
-        { path: '/settings/admin/system/voice', label: 'Voice', icon: ICONS.record_voice_over },
+        { path: '/settings/admin/users', label: 'Users' },
+        { path: '/settings/admin/system/region', label: 'Region & locale' },
+        { path: '/settings/admin/system/email', label: 'Email' },
+        { path: '/settings/admin/system/push', label: 'Push notifications' },
+        { path: '/settings/admin/system/voice', label: 'Voice' },
     ];
 
     const adminKitchenFeatures: SettingsNavEntry[] = [
-        { path: '/settings/admin/system/stock', label: 'Stock', icon: ICONS.inventory_2 },
-        { path: '/settings/admin/system/stocktake', label: 'Stocktake', icon: ICONS.fact_check },
-        { path: '/settings/admin/system/cooking', label: 'Cooking', icon: ICONS.restaurant },
-        { path: '/settings/admin/system/meal-reconcile', label: 'Meal reconciliation', icon: ICONS.event_note },
-        { path: '/settings/admin/system/nutrition', label: 'Nutrition', icon: ICONS.monitor_heart },
-        { path: '/settings/admin/system/money', label: 'Money', icon: ICONS.savings },
-        { path: '/settings/admin/system/alerts', label: 'Expiring-soon window', icon: ICONS.notifications },
+        { path: '/settings/admin/system/stock', label: 'Stock' },
+        { path: '/settings/admin/system/stocktake', label: 'Stocktake' },
+        { path: '/settings/admin/system/cooking', label: 'Cooking' },
+        { path: '/settings/admin/system/meal-reconcile', label: 'Meal reconciliation' },
+        { path: '/settings/admin/system/nutrition', label: 'Nutrition' },
+        { path: '/settings/admin/system/money', label: 'Money' },
+        { path: '/settings/admin/system/alerts', label: 'Expiring-soon window' },
     ];
 
     // Backup & restore + Import were relocated here from the retired `/data`
@@ -258,17 +279,18 @@
     // ingestion (data arriving from outside) and image quality (how uploaded
     // data is stored), both added 2026-09-03.
     const adminData: SettingsNavEntry[] = [
-        { path: '/settings/admin/system/ingestion', label: 'Product data ingestion', icon: ICONS.cloud_upload },
-        { path: '/settings/admin/data/backup', label: 'Backup & restore', icon: ICONS.cloud_download },
-        { path: '/settings/admin/data/import', label: 'Import', icon: ICONS.file_upload },
-        { path: '/settings/admin/system/images', label: 'Image quality', icon: ICONS.image },
-        { path: '/settings/admin/api-access', label: 'API access', icon: ICONS.key },
-        { path: '/settings/admin/audit-log', label: 'Audit log', icon: ICONS.history },
+        { path: '/settings/admin/system/ingestion', label: 'Product data ingestion' },
+        { path: '/settings/admin/data/backup', label: 'Backup & restore' },
+        { path: '/settings/admin/data/import', label: 'Import' },
+        { path: '/settings/admin/system/images', label: 'Image quality' },
+        { path: '/settings/admin/api-access', label: 'API access' },
+        { path: '/settings/admin/audit-log', label: 'Audit log' },
     ];
 
     const $q = useQuasar();
     const authStore = useAuthStore();
     const { isAdmin } = storeToRefs(authStore);
+    const { info: releaseInfo, available: releaseAvailable } = useReleaseUpdate();
 
     // Independent-scroll shell: the sidebar and the main pane each own their
     // own overflow (see styles below), so the *window* never needs to scroll
@@ -331,7 +353,7 @@
         if (isAdmin.value && mode.value === 'admin') {
             return [
                 { label: 'Install', items: adminInstall, icon: ICONS.settings },
-                { label: 'Kitchen features', items: adminKitchenFeatures, icon: ICONS.restaurant },
+                { label: 'Kitchen features', items: adminKitchenFeatures, icon: ICONS.kitchen },
                 { label: 'Data & access', items: adminData, icon: ICONS.storage },
             ];
         }
@@ -476,6 +498,10 @@
     // §6.3 — the mobile tab strip is hidden on desktop; the sidebar shows.
     .settings-shell__mnav {
         display: none;
+    }
+
+    .settings-shell__release {
+        margin-bottom: 16px;
     }
 
     /* Mobile: fall back to a single-column, window-scrolled layout. The

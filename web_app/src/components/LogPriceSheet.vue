@@ -106,7 +106,7 @@
     import PriceEntry from 'src/components/dora/PriceEntry.vue';
     import { ICONS } from 'src/style/icons';
     import { storeToRefs } from 'pinia';
-    import type { PriceEntryPrefill } from 'src/models/stockItemDetail';
+    import type { PriceEntryPrefill, PriceEntryValue } from 'src/models/stockItemDetail';
     import type { StockItem } from 'src/models/stockItem';
     import StockItemApiService, {
         type RecentlyPricedItem,
@@ -208,13 +208,7 @@
         clearSelection();
     }
 
-    async function onSubmit(value: {
-        total_price: number;
-        total_measure: number;
-        unit: string;
-        store_id: string | null;
-        pack_count: number | null;
-    }) {
+    async function onSubmit(value: PriceEntryValue) {
         if (!selectedItem.value) return;
         submitting.value = true;
         try {

@@ -124,9 +124,13 @@
        fields carry, so the one star on a card is now the same size as the star
        on the rating filter that produced the card. The pill's height is set by
        its text, not the glyph, so this doesn't grow the chip run's row. */
+    /* The pill's ink, not the brand colour (FU-772): on dark themes the pill
+       is a wash of the brand colour, so a brand-coloured star sat at 2.8:1 on
+       Pesto Dark, under D-002's 3:1 for a graphic. The text ink clears 4.8:1
+       in every dark theme. */
     .rating-chip__glyph {
         font-size: 18px;
-        color: var(--primary-ink);
+        color: var(--text-primary);
     }
     .rating-chip__value {
         font-size: var(--font-size-sm);

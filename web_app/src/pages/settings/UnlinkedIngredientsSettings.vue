@@ -10,7 +10,6 @@
         <SettingsPageHeader
             title="Unlinked ingredients"
             description="Recipe ingredients that couldn't be matched to a stock item when you imported them via the recipe importer. Linking these ingredients allows Dora to determine the cookable state of a recipe."
-            :icon="ICONS.link"
         />
 
         <div v-if="loading" class="row items-center q-gutter-sm">
@@ -125,7 +124,6 @@
     import CreateStockItemDialog from 'src/components/stock/CreateStockItemDialog.vue';
     import type { CreateStockItemPrefill } from 'src/components/stock/createStockItemPrefill';
     import SettingsPageHeader from 'src/components/settings/SettingsPageHeader.vue';
-    import { ICONS } from 'src/style/icons';
     import RecipeApiService, {
         type UnlinkedIngredientGroup,
     } from 'src/services/api/recipeApiService';
@@ -133,6 +131,7 @@
     import { useStockLevelStore } from 'src/stores/stockLevelStore';
     import { useUnlinkedIngredientsStore } from 'src/stores/unlinkedIngredientsStore';
     import { storeToRefs } from 'pinia';
+    import { isAlreadyNotified } from 'src/services/errorHandling/apiErrorHandler';
 
     const $q = useQuasar();
     const recipeApi = new RecipeApiService();
@@ -208,10 +207,12 @@
             unlinkedStore.setCount(dto.unlinked.length);
         } catch (err) {
             console.warn('Failed to load unlinked ingredients', err);
-            $q.notify({
-                type: 'negative',
-                message: 'Could not load unlinked ingredients.',
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not load unlinked ingredients.',
+                });
+            }
         } finally {
             loading.value = false;
         }
@@ -238,10 +239,12 @@
             await refresh();
         } catch (err) {
             console.warn('Bulk-link failed', err);
-            $q.notify({
-                type: 'negative',
-                message: 'Could not link. Try again in a moment.',
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not link. Try again in a moment.',
+                });
+            }
         } finally {
             linkingKey.value = null;
         }
@@ -287,10 +290,12 @@
             await refresh();
         } catch (err) {
             console.warn('Link after create failed', err);
-            $q.notify({
-                type: 'negative',
-                message: 'Item created, but it could not be linked. Pick it above and press Link.',
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Item created, but it could not be linked. Pick it above and press Link.',
+                });
+            }
         } finally {
             linkingKey.value = null;
         }

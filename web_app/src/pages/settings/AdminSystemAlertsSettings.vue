@@ -3,7 +3,6 @@
         <SettingsPageHeader
             title="Expiring-soon window"
             description="When an item starts showing as expiring soon, for everyone in the household. Each person still chooses which alerts they get in their own Notifications settings."
-            :icon="ICONS.notifications"
         />
 
         <template v-if="ready">
@@ -40,7 +39,6 @@
 </template>
 
 <script lang="ts" setup>
-    import { ICONS } from 'src/style/icons';
     import { useAppSettingDrafts } from 'src/composables/useAppSettingDrafts';
     import SettingsSection from 'src/components/settings/SettingsSection.vue';
     import SettingsRow from 'src/components/settings/SettingsRow.vue';

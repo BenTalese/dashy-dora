@@ -206,7 +206,9 @@ class ShoppingListTotalsDto:
     # needs it, and summing it across the fetched lines client-side would put
     # a second definition of the money ladder in the browser.
     picked_price: float
-    total_savings: float      # savings vs RRP across all lines
+    # Live, in-list: under the chosen offers' shelf (was) price. R-071's tense
+    # split (ADR-068): the report's figure is vs your usual price instead.
+    savings_vs_shelf_price: float
     unticked_count: int
     ticked_count: int
     line_count: int
@@ -286,7 +288,7 @@ def compute_list_totals(
     total_price = 0.0
     remaining_price = 0.0
     picked_price = 0.0
-    total_savings = 0.0
+    savings_vs_shelf_price = 0.0
     unticked = 0
     active_line_count = 0
     # store_id (None = unassigned) → [name, line_count, priced_count, subtotal]
@@ -306,7 +308,7 @@ def compute_list_totals(
         if spent_only and not line.is_ticked:
             continue
         total_price += price
-        total_savings += _line_savings(line)
+        savings_vs_shelf_price += _line_savings(line)
         _Key = line.resolved_store_id
         _Bucket = _Buckets.get(_Key)
         if _Bucket is None:
@@ -343,7 +345,7 @@ def compute_list_totals(
         total_price = total_price,
         remaining_price = remaining_price,
         picked_price = picked_price,
-        total_savings = total_savings,
+        savings_vs_shelf_price = savings_vs_shelf_price,
         unticked_count = unticked,
         ticked_count = active_line_count - unticked,
         line_count = active_line_count,

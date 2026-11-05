@@ -22,6 +22,7 @@ import { useShoppingListStore } from 'src/stores/shoppingListStore';
 import { useStockItemStore } from 'src/stores/stockItemStore';
 import { useStockLevelStore } from 'src/stores/stockLevelStore';
 import { storeToRefs } from 'pinia';
+import { isAlreadyNotified } from 'src/services/errorHandling/apiErrorHandler';
 
 export function useBuyVerdictActions() {
     const stockItemStore = useStockItemStore();
@@ -64,12 +65,14 @@ export function useBuyVerdictActions() {
             });
             return true;
         } catch (err) {
-            Notify.create({
-                type: 'negative',
-                message: "Couldn't update the stock level.",
-                caption: err instanceof Error ? err.message : String(err),
-                timeout: 4000,
-            });
+            if (!isAlreadyNotified(err)) {
+                Notify.create({
+                    type: 'negative',
+                    message: "Couldn't update the stock level.",
+                    caption: err instanceof Error ? err.message : String(err),
+                    timeout: 4000,
+                });
+            }
             return false;
         }
     }

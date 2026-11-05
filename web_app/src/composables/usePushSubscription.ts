@@ -77,6 +77,26 @@ export async function resolvePushRegistration(
     return registered;
 }
 
+/**
+ * Sign-out teardown (FU-959): drop this browser's push subscription, here and
+ * on the server, so the next person to sign in on a shared device doesn't keep
+ * receiving the previous user's alerts. Best-effort and quiet; it must never
+ * stop the sign-out. Only an existing registration is consulted, so it never
+ * registers a worker just to find nothing there.
+ */
+export async function dropPushSubscriptionAsync(): Promise<void> {
+    if (!browserSupports()) return;
+    try {
+        const reg = await navigator.serviceWorker.getRegistration();
+        const sub = await reg?.pushManager.getSubscription();
+        if (!sub) return;
+        await new AlertApiService().unsubscribePushAsync(sub.endpoint).catch(() => undefined);
+        await sub.unsubscribe();
+    } catch {
+        // The server prunes a dead endpoint on its next send.
+    }
+}
+
 export function usePushSubscription() {
     const state = ref<PushState>('loading');
     const error = ref<string | null>(null);

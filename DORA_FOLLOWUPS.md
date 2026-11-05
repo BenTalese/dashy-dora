@@ -29,47 +29,13 @@ long session summary. Distinct from the other logs:
 ## Entry template
 
 ```
-## [OPEN] FU-980 — `BaseSegmented` radiogroups without an accessible name
-- **Raised:** 2026-11-04 (frontend review of FU-848)
-- **Type:** finding (a11y)
-- **What:** the merged `BaseSegmented` is a real `role="radiogroup"`, and several uses pass no `aria-label`, so a screen reader announces an unnamed group: `ReportsPage`, `SpendCard`, `PriceHistoryPage`, `PreferencesSettings` (x3), `WelcomeWizard` (x2), `BudgetSettings`, and the admin Stock, Stocktake, Cooking and Nutrition settings. The old `DoraSegmented` had the same gap; most sit beside a visible label that could be wired with `aria-labelledby`.
-- **Why deferred:** each needs the right label text from its row; outside the merge.
-- **Recommended resolution:** opportunistic; consider making `BaseSegmented` warn in dev when neither `aria-label` nor `aria-labelledby` is passed.
-
-## [OPEN] FU-986 — `--semantic-warning` as text is under the contrast floor in every light theme
-- **Raised:** 2026-11-04 (design-token sweep, FU-834/850)
-- **Type:** finding (D-002)
-- **What:** `--semantic-warning` and `--severity-attention` used as text measure 2.0–2.8:1 in every light theme, and style guide A1's "Low chip = `color: --semantic-warning`" is itself below the 4.5:1 floor. A warning *ink* tier (like `--primary-ink` / `--accent-ink`) is needed, then the text uses moved onto it. Minor, same sweep: on Appearance, the active theme card shows the grey hover border while hovered instead of its accent border.
-- **Why deferred:** a new token tier per theme is a colour decision; the sweep's scope was declared tokens and the focus ring.
-- **Recommended resolution:** next colour/theme pass.
-
-## [OPEN] FU-985 — Dashboard and Dora Score still load the whole cookbook's cookability
-- **Raised:** 2026-11-04 (FU-908 check)
-- **Type:** finding (performance, 08-R16)
-- **What:** `get_dashboard_summary.py` and `get_dora_score.py` call `load_recipe_cookability` with no `recipe_ids`, so they compute every recipe (586 ms on a 510-recipe cookbook vs 37 ms scoped). The planner endpoint is already scoped and pinned by a test.
-- **Why deferred:** outside the planner fix; each caller needs to say which recipes it actually shows.
-- **Recommended resolution:** opportunistic, or if the dashboard feels slow on a big cookbook.
-
-## [OPEN] FU-984 — Other catch-and-toast sites still double-toast on a 5xx
-- **Raised:** 2026-11-04 (FU-976 (4))
-- **Type:** leftover
-- **What:** on a 5xx the HTTP client already shows a toast; sites that catch and toast again show two. The price-save sites now check `isAlreadyNotified(err)` (`apiErrorHandler.ts`); others haven't been swept (e.g. `ShoppingListPriceSheet`'s "Could not save the price.").
-- **Why deferred:** only the reported site was in scope.
-- **Recommended resolution:** opportunistic — grep `notify(` inside `catch` blocks and gate each on `isAlreadyNotified`.
-
-## [OPEN] FU-983 — Recipe "pack" pricing edges the QA2-18 fix can't see
-- **Raised:** 2026-11-04 (FU-978)
-- **Type:** finding
-- **What:** (1) pack-like words the unit table doesn't know ("packet", "box", "carton") still price as one item, not the whole pack; only `pack`/`packs` changed. (2) a counted observation logged by hand (no shopping-list line) with no multipack count is read as "one item is the pack" — the data can't tell a carton from loose eggs. (3) "Your prices" (`per_unit_in_canonical` over harvested observations) still mixes sizeless and count-sized lines the way the buy verdict did before today's fix.
-- **Why deferred:** (1) is a vocabulary call; (2) is a data limit; (3) is a separate surface.
-- **Recommended resolution:** opportunistic; (3) first if "Your prices" reads oddly for an item bought both loose and boxed.
-
 ## [OPEN] FU-981 — Small leftovers from the 2026-11-04 sweep
 - **Raised:** 2026-11-04
 - **Type:** leftover
 - **What:** (1) `AdminSystemNutritionSettings.vue` ~185/201: two `q-toggle`s still pass `:disable="saving"` (D-019; the segmented controls on that page were fixed). (2) `DoraChat`: a refused `/act` (finished list) re-enables Add, so the refusal can be retried pointlessly. (3) `serve_spa.py` injects the same-origin meta with `html.replace("<head>", …)`, which silently does nothing if a build emits `<head` with attributes; and the index now has no ETag, so `no-cache` re-downloads it each time. (4) Restock radar hides items on *any* non-done list, so a forgotten draft hides them indefinitely (owner's call was "hide them"; revisit if it bites). (5) Restore can now run twice for one `upload_id` on a double click, since the staged file survives until commit; the skip-duplicate modes make it mostly harmless. (6) `test_data_router.py::test__backup__assistant_providers__round_trip_without_keys` passes in the full suite but fails when run alone: it relies on an earlier test setting `DORA_SECRET_ENCRYPTION_KEY`. (7) `useStockOverviewExport.spec.ts:47` has an unused `flush` (test files aren't linted, FU-756). (8) `ENGINEERING_STANDARDS.md` still cites `email_enabled` as live context in two historical passages. From the frontend review: (9) `adoptHealthProbe` waits for the probe's 4 s timeout before the fallback `/health` request, so a slow server delays policy loading (fire both in parallel). (10) `useChunkedUpload`'s dispose aborts a staged id the server may still be reading if you leave the restore page mid-restore (harmless on POSIX; the Windows desktop unlink fails, best-effort). (11) the same-origin `backendUrl` assumes the API at the domain root, wrong behind a path-prefix proxy. (12) `cookSections.scss` `.cook-section__head` targets QExpansionItem internals without `:deep()` (dead since before the split). (13) after the splits, an in-progress preferred-buy rename, the plan face's add-back/suggestion spinners and the receipt zoom reset on a tab or face switch.
 - **Why deferred:** each is small and outside the item it was found under.
 - **Recommended resolution:** opportunistic.
+- **Progress (2026-11-05):** done: (1) the two `:disable="saving"` dropped (and the now-unread `saving` ref); (2) a refused `/act` (4xx, e.g. a finished list's 422) keeps the Add card closed, only a network error or 5xx re-enables it; (3) the meta is injected after `<head` with or without attributes, and the index carries an ETag so revalidation answers 304; (6) the key fixture is a shared `secret_encryption_key` in the e2e conftest and the backup test asks for it; (7) unused `flush` removed; (12) `:deep(.cook-section__head)`. Closed without change: (8) both mentions are ADR context recording what was true then; (9) firing both requests in parallel would undo FU-974's one-request boot, and an unreachable server is what the 4 s wait is for. Remaining: (4), (5), (10), (11), (13).
 
 ## [OPEN] FU-NNN — short title
 - **Raised:** YYYY-MM-DD (prompt id / task)
@@ -93,6 +59,7 @@ long session summary. Distinct from the other logs:
   should send an offset-carrying timestamp and a full URL; its guide (`docs/04_proposals/…ingestion…`) should say so.
 - **Why deferred:** (1) changes an endpoint contract; (2) lives in the other repo.
 - **Recommended resolution:** (1) next onboarding touch; (2) next companion release.
+- **Progress (2026-11-05):** (1) done: `/onboarding/finish` returns 403 for `seed`, `items` or `seed_demo` unless the caller is the install's first account, with a test. (2) remains (companion repo).
 
 ## [OPEN] FU-959 — PWA / session leftovers from the QA sweep: no push unsubscribe on logout, no background update check, NetworkFirst 5 s fallback, query lost on session expiry
 - **Raised:** 2026-10-29 (autonomous QA sweep, round 2)
@@ -108,6 +75,7 @@ long session summary. Distinct from the other logs:
   read-only) rather than an obvious bug; (4) is small but touches the auth redirect contract.
 - **Recommended resolution:** (1) with the next auth/notifications unit — it is a privacy issue on shared devices;
   (2)–(4) opportunistic.
+- **Progress (2026-11-05):** (1) sign-out drops this browser's push subscription, server row first, best-effort (`dropPushSubscriptionAsync`). (4) the session-expiry redirect keeps the query. (2) and (3) remain.
 
 ## [OPEN] FU-953 — Planner leftovers from the QA sweep: only add/adjust are queued; the stepper isn't disabled while a save is pending
 - **Raised:** 2026-10-29 (autonomous QA sweep; R-101)
@@ -119,19 +87,6 @@ long session summary. Distinct from the other logs:
   skeleton flash, R-084) rather than the quiet refresh.
 - **Why deferred:** each is a small, separate change beyond the obvious-bug fixes the sweep was for.
 - **Recommended resolution:** opportunistic, next planner or shopping-list unit.
-
-## [OPEN] FU-952 — Tidy after the QA sweep: `rollbackRegistry` has no registrants; QR blob URLs are never revoked; concurrent pytest runs collide on one DB file
-- **Raised:** 2026-10-29 (autonomous QA sweep)
-- **Type:** leftover
-- **What:** (1) `stockItemStore.updateStockLevelAsync` was the only `registerRollback` caller and now reverts in place, so
-  `services/errorHandling/rollbackRegistry.ts` only ever runs an empty stack from `boot/globalErrorHandler.ts` (its spec
-  and the FU-539 comments still describe the old contract) — retire it or keep it as the documented hook. (2)
-  `fetchQrImageUrlAsync` blob URLs are never `URL.revokeObjectURL`'d (pre-existing; the stale-fetch guard now discards
-  more of them). (3) `tests/conftest.py` pins `data/dora.test.db`, so two pytest runs on one box corrupt each other
-  ("no such table: User") — a per-run temp path (or `DORA_TEST_DB_PATH`) would let parallel sessions run the suite.
-- **Why deferred:** none is user-visible; each is a few lines in its own file.
-- **Recommended resolution:** opportunistic.
-- **Progress (2026-11-04):** concurrent pytest runs: `DORA_TEST_DB_FILE` gives a run its own SQLite file and snapshot (`tests/db_backend.py`). The rollbackRegistry and QR blob-URL parts remain.
 
 ## [OPEN] FU-951 — Put a (?) HelpHint beside the headings the help drafts named
 - **Raised:** 2026-10-29 (help redesign; the drafts' "Chip:" rows in `HELP_CONTENT.md`)
@@ -258,19 +213,6 @@ long session summary. Distinct from the other logs:
 - **Recommended resolution:** opportunistic (next companion pass).
 - **2026-10-23 (finalisation Stage 1):** two more companion-side notes from CHUNK_16 §E: `dora_ingest.fetch_saved_products` docstring still says the list is filtered to mapped stores (Dora stopped filtering 2026-10-15); `IngestResult.has_pending_store_mappings` only knows `store_not_mapped`, not `store_unknown`. (d) is fixed on Dora's side by 16-R1.
 
-## [OPEN] FU-923 — `get_link_status` keeps its own product→stock-item lookup (R-003)
-- **Raised:** 2026-10-17 (owner batch, price-drop add-to-list)
-- **Type:** leftover
-- **What:** `dora_api/features/products/product_links.py` is now the shared
-  lookup (products list + price_drop alerts use it);
-  `features/ingestion/get_link_status.py::_stamp_linked_stock_items` still has a
-  copy. Point it at `linked_stock_items`.
-- **Why deferred:** a different surface, touched concurrently by the ingest work.
-- **Recommended resolution:** opportunistic.
-- **2026-10-23 (finalisation Stage 1):** consolidated raw-table reader list is CHUNK_20 **20-R27** (products, app_settings, ingestion ×5 → 4 after 16-R7, import_spreadsheet ×3 to fix, backup_library:268, audit_retention:40, health_check:67 + the dump/restore engine as the documented carve-out).
-- **2026-10-27 (finalisation 16-R24):** the four ingestion sites that remain — `get_ingestable_products.py` (×2), `get_ingest_stores.py:ingest_list_stores`, `infrastructure/ingestion_auth.find_ingestion_source` (which mirrors `auth_helpers.find_active_token`; move the two together).
-- **2026-10-27 (finalisation 18-R20):** `import_spreadsheet.py`'s three raw inserts now go through `repository.add(...)` and `backup_library.list_backups` reads users through the repository — off the list. The generic dump/inspect/restore table walk (`backup.py`, `inspect_backup.py`, `restore_backup.py`, `restore_shared.py`) is the documented R-005 carve-out, not a site to fix.
-
 ## [OPEN] FU-922 — Product photo can only be set from the cards view
 - **Raised:** 2026-10-17 (owner batch, My products)
 - **Type:** leftover
@@ -315,22 +257,6 @@ long session summary. Distinct from the other logs:
   matches any live alert and that are older than the longest discard window.
 - **Why deferred:** no measurable cost yet.
 - **Recommended resolution:** opportunistic, or when the table passes ~10k rows.
-
-## [OPEN] FU-913 — `auto-generate` still offers two essentials sources that overlap
-- **Raised:** 2026-09-19 (provenance simplification)
-- **Type:** finding
-- **What:** `AutoGenerateSources` now has `essentials` (every essential item,
-  any stock level) and `essentials_only_for_low` (essentials that are low/out).
-  Renaming the former off `flagged` made the overlap visible: ticking both is
-  the same as ticking `essentials` alone, and the New list dialog presents them
-  as two unrelated checkboxes ("All your essentials, however much is left" and
-  "...but only the essentials among them"). Nothing is broken; the option set
-  just doesn't read as one coherent choice.
-- **Why deferred:** R-007. Redesigning the dialog's source picker is a UX call,
-  not a rename, and the owner hasn't asked for it.
-- **Recommended resolution:** opportunistic — next time the New list dialog is
-  open for other reasons. Likely shape: one "essentials" control with a
-  low/out-only modifier, rather than two peer checkboxes.
 
 ## [OPEN] FU-911 — `unit_price` on the product price axis is a *pack* price
 - **Raised:** 2026-09-13 (shelf-denominator batch)
@@ -504,27 +430,6 @@ long session summary. Distinct from the other logs:
   surfaces is touched, or as a deliberate small sweep. Cross-ref R-001/R-002
   (componentisation-first) and D-006.
 
-## [OPEN] FU-889 — `window.onerror` runs `executeRollbacks()` for anything, including non-errors
-- **Raised:** 2026-09-06 (products program, batch F — found by driving the page)
-- **Type:** finding
-- **What:** `boot/globalErrorHandler.ts`'s `window.onerror` unconditionally
-  toasts *"Oops, something went wrong"* **and calls `executeRollbacks()`**,
-  which reverts pending optimistic UI. `window.onerror` receives things that
-  are not application errors — browser notices, and script errors from any
-  source — so a stray non-event can silently undo a user's in-flight change.
-  Batch F fixed the one instance that reproduces reliably (the browser's
-  benign *"ResizeObserver loop completed with undelivered notifications"*, which
-  My Products' card grid triggers on every viewport change) by filtering it out
-  ahead of the handler. **The general shape is unaddressed:** the filter is an
-  allow-list of one, and the deeper question — whether a global error handler
-  should be entitled to roll back state at all, versus only reporting — is
-  untouched.
-- **Why deferred:** rollback-on-crash is a deliberate design
-  (`rollbackRegistry`), so narrowing it needs a decision about which error
-  classes should trigger it, not a quick edit. Out of scope for a UI batch.
-- **Recommended resolution:** opportunistic — next time the error-handling or
-  rollback layer is touched. Cross-ref `IMPL_PLAN_ERROR_HANDLING.md`.
-
 ## [OPEN] FU-888 — `GET /api/nutrition/lookup` 500s on a NUL byte in `q` — Postgres only
 - **Raised:** 2026-09-06 (products program, batch C2 — found by running the full suite on Postgres)
 - **Type:** finding
@@ -605,46 +510,6 @@ long session summary. Distinct from the other logs:
   already touching companion configuration/plumbing) or batch E. Cross-ref
   [[FU-887]].
 
-## [OPEN] FU-877 — the 38–40px controls the tap-target sweep deliberately didn't touch
-- **Raised:** 2026-09-05 (tap-target sweep, ADR-082)
-- **Type:** deferred job
-- **What:** the sweep's scope was the owner's words — "every menu and icon
-  button" — and that is what R-085 + the `pointer: coarse` rules now cover. A
-  second tier sits at 38–40px, under D-004's floor but nowhere near the 30px the
-  owner reported: `DoraTabs` (40px tab rows), `BaseSelect` (40px `--chips`
-  control), `SortControl` (`--filter-control-h` minus 6px ≈ 38px direction
-  toggle), `DoraSegmented` (36px), `SettingsNavGroup` (36px). Below those again
-  are the ~28px chip-shaped controls (`TriStateFilter`, `MealPlanEntryChip`,
-  `MealPlanRecipePicker`, `MealPlanWeekDayCard`) and `DoraModeSlider` at 24px,
-  which is already **FU-663**.
-- **Why deferred:** each of these is a deliberate size with a comment explaining
-  it, and several are shared controls whose proportions were tuned against a
-  specific row. Bumping them to 44px on touch is one line each, but the *result*
-  needs an eye — a segmented control that grows changes the balance of the
-  filter strip it sits in, which is a surface the owner has signed off (R-007).
-  Changing nine components blind, inside a batch whose reported symptom was two
-  specific 30px controls, is the over-correction the standards warn about.
-- **Recommended resolution:** later, as its own unit, with a phone in hand — now
-  cheap, because R-085 settled the mechanism and each fix is a `pointer: coarse`
-  block. Cross-ref: FU-663, D-004, B1, ADR-082.
-
-## [OPEN] FU-873 — `frequently_added.py` reads a `lazy="noload"` relationship and reports `None`
-- **Raised:** 2026-09-04 (log-price picker ordering)
-- **Type:** finding (R-082 trap, currently harmless)
-- **What:** `GetFrequentlyAddedHandler` builds each row with
-  `item.stock_level.id if item.stock_level else None`. Its query doesn't
-  `.include(STOCK_LEVEL)`, and that relationship is mapped `lazy="noload"`, so
-  the guard always takes the `None` branch: `/shopping-lists/frequently-added`
-  has been returning `stock_level_id: null` for every row since it was written.
-- **Why it's harmless today:** the only consumer, `QuickAddSheet`, uses the
-  response for *ordering* and for `isFrequent()`, and reads each item's level
-  from its own store — so nothing renders the null. The new
-  `/stock-items/recently-priced` was deliberately shaped without the field for
-  the same reason.
-- **Recommended resolution:** opportunistic — either add the `include` (and
-  resolve through `_level_access.py`, per R-082) or drop the field from the DTO
-  so it can't be trusted by a future caller. The second is probably right.
-
 ## [OPEN] FU-871 — Six retired dashboard card ids are still sitting in every user's saved layout
 - **Raised:** 2026-09-04 (dashboard feedback batch)
 - **Type:** follow-up (data hygiene, low urgency)
@@ -661,22 +526,6 @@ long session summary. Distinct from the other logs:
 - **Recommended resolution:** opportunistic — fold into the next migration that
   touches `User`, or never.
 
-## [OPEN] FU-870 — Kitchen health's trend arrow now moves on four signals, not five
-- **Raised:** 2026-09-04 (dashboard feedback batch)
-- **Type:** finding (accepted trade, recorded so it isn't rediscovered)
-- **What:** `plan_coverage` is deliberately forward-looking — it grades the next
-  7 days — so the lagged recompute sees the same future and returns the same
-  number, and it cancels out of `trend_delta` entirely. The arrow is therefore a
-  mean over the other four components while the card presents five.
-- **Why it's accepted:** the arrow is a secondary flourish; *"your plan is
-  half-uncookable"* is the most actionable thing the card can say, and making it
-  trend-comparable would mean grading a *past* week's coverage, which nobody can
-  act on. Stated in `_score_plan_coverage`'s docstring.
-- **Recommended resolution:** when the trend arrow is next revisited — decide
-  whether to (a) leave it, (b) exclude forward-looking components from the trend
-  explicitly rather than incidentally, or (c) drop the arrow.
-- **State 2026-09-27:** plan adherence was cut, so the arrow now moves on three trailing signals (waste, budget, freshness); plan coverage still cancels out. The finding stands.
-
 ## [OPEN] FU-868 — Two dashboard cards were never seen with their feature gate OFF
 - **Raised:** 2026-09-04 (dashboard feedback batch — browser walk)
 - **Type:** finding (verification gap)
@@ -689,21 +538,6 @@ long session summary. Distinct from the other logs:
   which is a whole verify pairing rather than a step in this one.
 - **Recommended resolution:** when a money-off verify run next happens — the
   corresponding eyes-on steps are in `DORA_VERIFY.md` under Dashboard.
-
-## [OPEN] FU-867 — Add-user dialog still changes height when "Generate password" flips
-- **Raised:** 2026-09-03 (owner feedback batch — admin settings)
-- **Type:** follow-up
-- **What:** the owner's complaint was that the dialog *grew* when you chose to
-  generate a password. The cause was a caption that appeared only in that state;
-  it's gone, so it no longer grows — but the password field itself is still
-  `v-if`'d away, so the dialog now **shrinks** by ~82px (measured live: 507 →
-  425). Less jarring, not zero.
-- **Why deferred:** the remaining jump is the field genuinely leaving, which is
-  arguably correct. Removing it entirely means rendering a disabled field that
-  says "Dora will generate this", i.e. a dead control — a worse trade unless the
-  owner finds the shrink annoying in use.
-- **Recommended resolution:** opportunistic — decide when the owner has walked the
-  dialog.
 
 ## [OPEN] FU-865 — Quasar palette vars are set on `<body>`, so the `html` scrollbar rule never gets the theme
 - **Raised:** 2026-09-03 (owner misc batch — found while fixing FU-709)
@@ -754,22 +588,6 @@ long session summary. Distinct from the other logs:
   a lone entry as its own cook).
 - **Recommended resolution:** later, with any pass over the meal-plan write path.
 
-## [OPEN] FU-859 — Zone/area/section counts no longer distinguish direct from descendant items
-- **Raised:** 2026-09-03 (owner feedback batch — settings/Stock locations)
-- **Type:** finding
-- **What:** per the owner (*"too much arithmetic/text going on, just show count
-  of items"*), the area row's label went from `3 here · 11 in total` to plain
-  `11 items`, and the zone header dropped its area tally. That is what was asked
-  for and it reads far better, but it does lose one fact the old label carried:
-  how many items sit **directly** on a level rather than in its children. A zone
-  with 23 items and one area holding 23 now looks identical to a zone with 23
-  loose items.
-- **Why deferred:** the owner explicitly asked for less text here, so adding it
-  back inline would be re-litigating the request. If it turns out to matter, the
-  place for it is the overflow menu's "View items" (which now exists at all three
-  levels) or a tooltip — not the row.
-- **Recommended resolution:** opportunistic — only if the owner misses it in use.
-
 ## [OPEN] FU-858 — Nutrition-matching badge fetches for every user in complex mode
 - **Raised:** 2026-09-03 (owner feedback batch — settings/Nutrition matching)
 - **Type:** finding
@@ -802,22 +620,6 @@ long session summary. Distinct from the other logs:
 - **Recommended resolution:** opportunistic — or now, if the doubled numbering
   turns up in a recipe the strip doesn't catch.
 
-## [OPEN] FU-855 — Counted ingredients against a measured pack lost coverage they used to have
-- **Raised:** 2026-09-03 (recipe-view owner batch, item 13)
-- **Type:** finding
-- **What:** deliberate consequence of ADR-073, logged because it is a *narrowing*
-  and the owner should get to see it. "2 tins" of a product sized `400 g` with no
-  `pack_count` is now reported **unpriced** ("Units don't match the price") where
-  it previously billed 2 × the shelf price — which was the right answer for a tin
-  and the wrong one for the eggs carton that produced the $16.50 report. The two
-  are indistinguishable in the schema, so the honest gap won. Impact is visible
-  as a lower "Priced N of M" ratio on recipes that count packs.
-- **Why deferred:** it is the trade the fix was chosen for, not a bug — but if the
-  owner would rather have the old guess back for single-container products, the
-  lever is FU-856 (record `pack_count = 1`) rather than reverting the rule.
-- **Recommended resolution:** when the owner has walked a costed recipe and said
-  whether the narrower coverage reads acceptably.
-
 ## [OPEN] FU-851 — Planned demand goes stale after a plan edit anywhere but the stock detail page
 - **Raised:** 2026-09-03 (owner batch — planned-demand signal)
 - **Type:** finding
@@ -835,23 +637,6 @@ long session summary. Distinct from the other logs:
 - **Recommended resolution:** opportunistic, with any pass over the overlay
   caches. Cross-ref: R-074, ADR-071.
 - **Progress (2026-10-24, finalisation 07-R6):** `usePantryBeliefs` and `usePlannedDemand` are now one shape, `composables/createOverlayCache.ts` (+ spec), so an invalidation bus has one subscriber type.
-
-## [OPEN] FU-849 — Planned demand isn't on the shopping list yet
-- **Raised:** 2026-09-03 (owner batch — planned-demand signal)
-- **Type:** deferred job
-- **What:** D-10 (2026-08-19) says a derived signal belongs on *"the two
-  surfaces the user opens to ask"* — the stock-item detail card and the
-  shopping list. Planned demand shipped on the first. The second is arguably
-  where it pays off most: *"3 planned meals need this by Friday"* on a line you
-  are deciding whether to tick is a stronger argument than the same sentence on
-  a page you had to go looking for.
-- **Why deferred:** the shopping list has its own line model, its own gating
-  and its own crowded row, and the owner asked about the *belief metric*, not
-  about the list. Adding it there is a design call about that row, not a
-  mechanical extension — the signal, the endpoint and the client cache are all
-  already there.
-- **Recommended resolution:** later, when the shopping-list surface is next
-  open. Cross-ref: ADR-071, D-10.
 
 ## [OPEN] FU-847 — Four hosts now measure their own box to size the SVG chart
 - **Raised:** 2026-09-02 (FU-833 — dropping ECharts)
@@ -904,32 +689,6 @@ long session summary. Distinct from the other logs:
 - **Recommended resolution:** opportunistic, or with [[FU-843]] item 1 (the
   categorical ramp's collision), which is the same "who owns a series' colour"
   question. Cross-ref: R-073, `useThemePalette.seriesColour`.
-
-## [OPEN] FU-845 — One of §4.10's ten design moves is still unbuilt (#8, "every number is a door")
-- **Raised:** 2026-09-02 (Reports chunk 3 close-gate)
-- **Type:** deferred job
-- **#2 DONE 2026-09-02 (chunk 5).** The range control names its window ("3 Aug –
-  2 Sept"), from a new ungated `GET /reports/range-window` — the window is a
-  property of the **range parameter**, not of any report, so it is one endpoint
-  rather than a field on nine responses. It **removed** an R-003 duplication
-  instead of adding one: the client's `RANGE_TO_DAYS` table was a second copy of
-  the server's `_RANGE_DAYS`, kept only to feed the waste endpoint its day count,
-  and is deleted. Driving it caught a defect in the label itself — the 1-year
-  range rendered *"2 Sept – 2 Sept"* because the formatter dropped the year, so
-  the control built to make the window concrete claimed a one-day window; the
-  year now renders whenever the window crosses one. Only **#8** remains.
-- **What:** `REPORTS_PAGE_REVIEW.md` §4.10 lists ten moves; chunk 3 built eight
-  of them; chunk 5 built #2 (above). The one left:
-  - **#8 — every number is a door.** N6 asked for this and it has never been
-     built: a store row should filter shopping-list history to that store, a
-     group row should open Stock filtered to that group, the wastage count
-     should open the waste log. Chunk 3 landed the *cheap* half — recipe and
-     stock-item rows in Kitchen memory are links now — so what remains is the
-     aggregate rows, each of which needs a target route that accepts the filter.
-- **Why deferred:** #8 is in neither chunk's brief, and its real cost is in the
-  *destination* pages accepting a filter param, not in Reports at all.
-- **Recommended resolution:** later — #8 on its own, since it touches three
-  other pages. Cross-ref: `REPORTS_PAGE_REVIEW.md` §4.10 #8, [[FU-703]].
 
 ## [OPEN] FU-844 — Two pages have now shipped the same feature-flag race; the guard should be the composable's job
 - **Raised:** 2026-09-02 (Reports chunk 1 — found by driving it live)
@@ -1003,95 +762,6 @@ long session summary. Distinct from the other logs:
 - **Progress (2026-10-27, finalisation 12-R13):** the hash now lives in one place, `useThemePalette.categoricalColour(key)`
   over the `seriesColour` ramp (Reports' six hex fallbacks went). Rank-assigning instead of hashing is still the fix
   for the collision, and now changes one function.
-
-## [OPEN] FU-832 — One flat card catalogue + an extracted `useCardLayout()`, shared by the dashboard and Reports
-- **Raised:** 2026-09-02 (owner decision on [[FU-809]])
-- **Type:** deferred job (decided, not started)
-- **What:** the owner resolved FU-809 as **share a flat catalogue plus the
-  machinery — but not the card bodies.** Measured overlap: after [[FU-830]] the two
-  surfaces share **five endpoints** (`savings-captured`, `spend-by-store`,
-  `stock-value`, `price-drops`, `keeps-running-out`) and **no presentation** — the
-  dashboard's cards are glance-sized, Reports' are full-size with range controls.
-  So:
-  1. **A flat data table** keyed by card id declaring `gate` / `label` / `icon` /
-     `endpoint`, consumed by both surfaces, each picking which entries it renders
-     and at what density. **Explicitly a table, not a plugin architecture or an
-     abstraction layer** — the constraint the owner attached, and the right one for
-     a hand-maintainable codebase. Resist a `render:` field or per-card component
-     registry; the surfaces keep their own bodies and just look ids up.
-  2. **Extract `useCardLayout()`** from `DashboardPage.vue:1473-1653` — visibility,
-     within-zone order, the tap/drag reorder, and the server-persisted layout on
-     `user.dashboard_layout`. Reports gets it too, which is what finally answers
-     "Reports has too many widgets" with *the user decides* rather than a cut list.
-     Note the persistence key: Reports' layout must not collide with the
-     dashboard's on the same `User` column — either a second column or a namespaced
-     payload (`{dashboard: {...}, reports: {...}}`), which is a migration decision
-     to make inside this unit.
-  3. **The `DashboardCard` shell** was [[FU-814]]'s job and is **done** (Reports
-     chunk 3, 2026-09-02) — all four Reports cards render `<DashboardCard>`, so
-     this FU just consumes it.
-  **The concrete R-003 win:** the money/products **gate facts stop being declared
-  twice** — today they are declared once on the dashboard and *zero* times on
-  Reports, which is precisely why [[FU-816]] exists.
-- **Why deferred:** it is an architecture change across two large pages and it
-  wants both restructures ([[FU-830]] here, Reports chunk 3) to have settled which
-  cards exist first — extracting a catalogue of cards that are about to be merged
-  or cut is the same mistake the dashboard rebuild avoided in its Phases 0/1.
-- **Do NOT block [[FU-816]] on this.** Adding the money/products gates to Reports
-  is a live contradiction with feedback L254 and ships standalone in Reports
-  chunk 1; the catalogue later moves those declarations, it does not need to
-  introduce them.
-- **Recommended resolution:** later — **both gating restructures have now
-  landed** (FU-830 on the dashboard; Reports chunk 3 on 2026-09-02, which settled
-  the card set at four), so the blocker this FU was waiting on is gone.
-  Cross-ref: `REPORTS_PAGE_REVIEW.md` §3.2 + §8 D1, [[FU-809]] (resolved),
-  [[FU-814]], [[FU-830]].
-- **Progress (2026-10-27, finalisation 08-R18):** the dashboard half is done: `composables/useCardLayout.ts` (+ spec) owns the order, hidden set, gates, columns, CSS order and the move / toggle / drop actions; the page keeps only the drag wiring. Left: the flat catalogue shared with Reports, and the Cards menu as its own `CardsMenu.vue` (08-R19).
-
-## [OPEN] FU-831 — Savings gets an own-price baseline: snapshot column, tense split, reseed (ADR-068)
-- **Raised:** 2026-09-02 (owner decisions on the two page reviews)
-- **Type:** deferred job (decided, not started)
-- **What:** implement **ADR-068 / R-071**. The owner resolved [[FU-810]] as *keep
-  the card, change the baseline*, and two follow-on calls set the app-wide scope:
-  1. **Snapshot column.** Add a pick-time `usual_price_at_pick` (name TBD) beside
-     `list_price_at_pick` on `ShoppingListLine`, written on the same finish-shop
-     path that writes `picked_offer_price`. It must be a snapshot: deriving the
-     household's usual price retroactively would make every past shop's savings
-     move each time a price is logged — the failure the existing design avoids.
-     Migration must stay Postgres/SQLite portable (§7.5) with a deterministic
-     constraint name (R-015).
-  2. **Retrospective handler onto the new baseline.** `SavingsCapturedHandler`
-     (`reports.py:774-843`) currently sums `list_price_at_pick − picked_offer_price`.
-     Move it to the own-price baseline, and **rename the DTO field to name its
-     baseline** (`savings_vs_usual_price`, not `savings` / `total_savings`) per
-     R-071.
-  3. **R-041 coverage, replacing a silent zero.** The handler's current
-     "no RRP snapshot ⇒ fall back to the picked price ⇒ contribute 0 savings"
-     branch (`:814-820`) is not acceptable under the new baseline: an item with no
-     price history has *no* baseline, which is a named gap, not zero savings. Ship
-     `counted` / `total` alongside the figure and render the coverage whenever the
-     number renders.
-  4. **Spend becomes the headline** on the card, savings the support line — on both
-     `/reports` and the dashboard's Money card.
-  5. **Tense split, both halves labelled.** Live in-list savings **keep** the
-     vs-shelf-price baseline — `ShoppingListDetail.totals.total_savings`,
-     `ShoppingListOverviewCard.vue:496`, the primary-list card stat
-     (`DashboardPage.vue:396`), and the per-line model (`shoppingList.ts:282`) are
-     all correct as computations but must **stop rendering a bare "saved"**: they
-     say "under shelf price", the report says "less than you usually pay".
-  6. **Reseed, don't backfill.** No back-fill for already-archived lists; regenerate
-     the dev/demo dataset (`seed.py` / `seed_dense.py`) so the metric is coherent
-     from its first row. Pre-release, no real users — clean non-preserving migration
-     is allowed. R-017: the seed change ships with this.
-- **Why deferred:** it is a schema + write-path + handler + copy change across three
-  surfaces, and it is the only item out of the two reviews that needs a migration.
-  Everything else can ship around it.
-- **Sequencing note:** do **not** block [[FU-830]] on this. Land the Budget/Savings
-  card merge against the existing figure and let this FU swap the number underneath;
-  only the card's final copy depends on it. `DASHBOARD_PAGE_REVIEW.md` §7 Chunk 3b.
-- **Recommended resolution:** later — its own unit, parallel to the dashboard
-  chunks. Cross-ref: ADR-068, R-071, R-041, [[FU-810]] (resolved), and
-  `REPORTS_PAGE_REVIEW.md` §3.7 / `DASHBOARD_PAGE_REVIEW.md` §3.5.
 
 ## [OPEN] FU-837 — A short dashboard card stretches to its tall row-mate, which reads as dead space
 - **Raised:** 2026-09-02 (dashboard chunk 2 — seen in the verification screenshot)
@@ -1252,46 +922,6 @@ long session summary. Distinct from the other logs:
 
 ---
 
-## [OPEN] FU-788 — Voice input can't work in Firefox without server-side transcription
-- **Raised:** 2026-08-29 (settings feedback batch)
-- **Type:** follow-up
-- **What:** speech *recognition* is the browser's `SpeechRecognition` API, which
-  Firefox has never shipped and offers no flag for. Batch 1 replaced the flat
-  grey "your browser doesn't expose the Web Speech API" line with a warning card
-  that names the browsers that do work (owner picked "better messaging only"),
-  so nobody is left thinking they've misconfigured something — but Firefox users
-  still cannot talk to Dora. Making them able to needs Dora to transcribe
-  server-side (record audio in the browser, POST it, run Whisper or similar),
-  which is the input-side mirror of what Piper already does for output.
-- **Why deferred:** owner call 2026-08-29 — messaging now, the feature later. It
-  would add a second optional heavyweight binary dependency with the same
-  "not installable from pip on Windows" shape as Piper (R-018 / ADR-013), so it
-  wants the same packaging treatment and its own decision.
-- **Recommended resolution:** when voice input is worth a phase of its own — or
-  opportunistically alongside any future Piper/packaging work, since the
-  install story is shared.
-
-## [OPEN] FU-787 — Piper's absence from a from-source install is a packaging gap, not just a copy problem
-- **Raised:** 2026-08-29 (settings feedback batch)
-- **Type:** finding
-- **What:** the owner's reaction to "Dora's neural-voice engine isn't installed
-  on this server" was *"In what situations does this happen? I'd expect it to
-  always work."* The honest answer is that Piper is deliberately not a hard
-  dependency (R-018 / ADR-013 — `piper-phonemize` has no Windows wheel), so the
-  Docker image installs it and the desktop bundle ships it, but `pip install -r
-  requirements.txt` + `python -m dora_api.startup` gets you an install with no
-  neural voice at all. Batch 1 made the Voice page say exactly that and stopped
-  offering 60–110MB voice downloads for an engine that cannot run them — but the
-  expectation the owner voiced ("I'd expect it to always work") is the right one
-  and the copy is only managing the gap.
-- **Why deferred:** closing it for real means either finding a Windows-safe
-  install path for Piper, vendoring the standalone binary per-platform the way
-  `packaging/fetch_piper.py` already does for the desktop build, or picking a
-  different engine. That is a packaging decision, out of scope for a settings
-  copy pass.
-- **Recommended resolution:** opportunistic — next time the packaging or
-  desktop-build story is open.
-
 ## [OPEN] FU-784 — `DoraBubble` has no placement budget against page-level bottom chrome
 - **Raised:** 2026-08-29 (shopping-list UX v3 audit)
 - **Type:** finding
@@ -1343,46 +973,6 @@ long session summary. Distinct from the other logs:
   the full suite goes red** rather than re-running immediately. Cheap to fix
   once the cause is known; noisy to leave, because a suite that fails at random
   trains everyone to re-run instead of read.
-
-## [OPEN] FU-779 — The QR centre mark needs a proper asset; the wordmark reads as crap
-- **Raised:** 2026-08-28 (owner, on seeing the first render)
-- **Type:** design / needs an asset from the owner
-- **What:** the D/D mark now centred in every stock-item QR
-  (`dora_api/assets/dora_qr_mark.png`, composited by `_paste_centre_mark` in
-  [barcodes.py](dora_api/features/data/barcodes.py)) was rasterised from
-  `web_app/public/icons/safari-pinned-tab.svg` — chosen because it was the only
-  flat monochrome mark in the repo, not because it suits this job. It doesn't.
-  It's a **2.5:1 wordmark**, so at 26% of the code's width it lands as a thin
-  horizontal strip of letterforms: it reads as small text sitting on the code
-  rather than as a logo embedded in it, and the two `D` bowls are close enough
-  to the surrounding module noise that the eye doesn't lock onto it. A centre
-  mark wants a compact, roughly square, high-contrast glyph — the shape the rest
-  of the industry uses — and Dora doesn't currently own one.
-- **What's needed from the owner:** a single flat mark, ideally SVG:
-  - **roughly square** (1:1 to 4:3). This is the main thing the current asset
-    gets wrong.
-  - **one solid colour on transparent**, pure black preferred (it is composited
-    onto a white knockout; a mid-tone or a gradient loses contrast against the
-    quiet ring and reads muddy at label size).
-  - **chunky strokes, no hairlines and no fine interior detail** — the mark
-    renders ~47px wide on a 180px print-sheet cell.
-  - not the `dorabot-*` illustrations: already ruled out, far too detailed to
-    survive that size.
-- **Then what:** genuinely a drop-in. Re-run
-  `inkscape <mark>.svg --export-type=png --export-filename=dora_api/assets/dora_qr_mark.png --export-width=1520 --export-background-opacity=0`,
-  crop to the alpha bbox, and it works — the compositor derives its aspect from
-  the asset. Two knobs may want a nudge for a squarer mark: `_MARK_WIDTH_RATIO`
-  (0.26) and, in `tests/test_qr_centre_mark.py`, the hardcoded `544 / 1350`
-  aspect used to locate the ring. The area guard in that file
-  (`box_w * box_h < 0.08`) is the safety rail — a squarer mark at the same width
-  covers ~2.4× the area, so **re-run the decode + degradation sweep** rather
-  than assuming the ERROR_CORRECT_H budget still covers it.
-- **Meanwhile:** the codes scan correctly, so this is cosmetic only. If it
-  bothers you before an asset exists, setting `_MARK_MIN_SIZE` above
-  `QR_MAX_SIZE` (1024) turns the mark off everywhere in one line and renders
-  plain codes — the missing-asset path is already tested to degrade that way.
-- **Recommended resolution:** **when you have a mark** — blocked on the asset,
-  nothing to investigate.
 
 ## [OPEN] FU-778 — A Quasar portal timer fires after teardown in the vitest run
 - **Raised:** 2026-08-28 (seen while re-running the suite for the toast change)
@@ -1450,21 +1040,6 @@ long session summary. Distinct from the other logs:
 - **Recommended resolution:** opportunistic, and only if a third surface needs a
   kcal figure. Supersedes the kcal half of **FU-747**; cites **R-001**.
 
-## [OPEN] FU-760 — The cookbook's stored rating filter/sort keys were renamed, so saved views silently reset
-- **Raised:** 2026-08-27 (Nutri-Score build)
-- **Type:** finding
-- **What:** `RecipesOverview` renamed its filter ref `healthStarsMin` →
-  `ratingMin` and its sort key `'health_stars'` → `'rating'`, both of which are
-  persisted. A user whose stored cookbook view held either will find that facet
-  quietly back at its default on next load. Correct rename — neither name was
-  true once Nutri-Score existed — but the reset is real.
-- **Why deferred:** pre-release, and the blast radius is one filter chip and one
-  sort axis reverting to default, not data loss. A migration shim for stored
-  view state is exactly the compat scaffolding this project has said it doesn't
-  want before release.
-- **Recommended resolution:** **no action expected** — logged so it isn't
-  mistaken for a bug if it's noticed. Close it if release is still ahead.
-
 ## [OPEN] FU-757 — "New shopping list → start from a meal plan" still drops unlinked ingredients silently
 - **Raised:** 2026-08-27 (meal-plan add-to-list unification)
 - **Type:** finding
@@ -1481,21 +1056,6 @@ long session summary. Distinct from the other logs:
 - **Recommended resolution:** opportunistic — next time that dialog is open for
   any reason. Cites **R-057**; the data is already on the wire, so it's a
   rendering job, not an API change.
-
-## [OPEN] FU-756 — `web_app/test/` is outside the lint scope and has drifted
-- **Raised:** 2026-08-27 (meal-plan add-to-list unification)
-- **Type:** finding
-- **What:** the project lints `web_app/src` only. Running eslint over `test/` as
-  well surfaces one pre-existing error —
-  `test/unit/useBuyVerdict.spec.ts:34` uses an `import()` type annotation, which
-  `@typescript-eslint/consistent-type-imports` forbids. One error across 46 spec
-  files means the specs are essentially compliant already, so widening the scope
-  is cheap; leaving it means the next drift is equally invisible.
-- **Why deferred:** unrelated to the change in hand (R-007), and widening a lint
-  scope is the kind of thing that should land on its own so a red gate has one
-  obvious cause.
-- **Recommended resolution:** opportunistic — fix the one error and add `test` to
-  the lint script's paths in the same small change.
 
 ## [OPEN] FU-792 — `seed_showcase.py` has no structured- or image-mode recipe
 - **Raised:** 2026-08-31 (dense-seed unit; the surviving half of the now-resolved FU-754)
@@ -1584,21 +1144,6 @@ long session summary. Distinct from the other logs:
   visibly wrong. The place to fix it is `features/nutrition/food_categories.py`,
   which already owns the vocabulary.
 
-## [OPEN] FU-748 — Health Star Rating uses raw ingredient weight as its per-100g denominator
-- **Raised:** 2026-08-27 (Health Star Rating build)
-- **Type:** decision, recorded rather than open.
-- **What:** HSR scores per 100 g of the food **as consumed**. Dora sums *raw*
-  ingredient weights, so a sauce that reduces reads too kindly and a soup made
-  with water nobody listed as an ingredient reads too harshly. An optional
-  "finished weight" field on the recipe would make it exact.
-- **Why deferred:** the owner's explicit call 2026-08-27 was to accept the
-  approximation and label the rating an estimate rather than add a field most
-  people would leave blank. Logged so the trade-off is findable rather than
-  buried in a module docstring, and so a future complaint about a soup's rating
-  has somewhere to land.
-- **Recommended resolution:** when <someone reports a rating that looks wrong on
-  a reduced or watered dish>.
-
 ## [OPEN] FU-746 — The AU/NZ Health Star Rating nudge has no automated cover
 - **Raised:** 2026-08-27 (Health Star Rating build)
 - **Type:** finding.
@@ -1628,19 +1173,6 @@ long session summary. Distinct from the other logs:
 - **Recommended resolution:** opportunistic — a data migration calling
   `sync_recipe_tools_from_steps` for every recipe with `steps_mode='structured'`
   would close it in about ten lines, if the filter ever misbehaves visibly.
-
-## [OPEN] FU-743 — `web_app/test/` is outside the lint script, and already has an error in it
-- **Raised:** 2026-08-26 (recipe-view feedback batch)
-- **Type:** finding.
-- **What:** `npm run lint` globs `./src*/**/*` only, so nothing has ever linted
-  `web_app/test/`. Running eslint over it by hand turns up one real error —
-  `test/unit/useBuyVerdict.spec.ts:34` uses an `import()` type annotation, which
-  `@typescript-eslint/consistent-type-imports` forbids. Pre-existing; found while
-  checking this batch's own files.
-- **Why deferred:** widening the lint glob is a repo-wide config change that may
-  surface more than one error, and this batch's files lint clean on their own.
-- **Recommended resolution:** opportunistic — one line in `package.json` plus
-  whatever the widened run reports.
 
 ## [OPEN] FU-742 — The recipe facts strip got longer when it gained icons
 - **Raised:** 2026-08-26 (recipe-view feedback batch)
@@ -1673,22 +1205,6 @@ long session summary. Distinct from the other logs:
   the actual missing data.
 - **Recommended resolution:** opportunistic — either say it in the toast caption or
   decide `is_favourite` should in fact carry (the other two clearly shouldn't).
-
-## [OPEN] FU-740 — No bulk "Remove" on the shopping list: there is no remove-by-line-ids endpoint
-- **Raised:** 2026-08-26 (shopping-list feedback batch)
-- **Type:** leftover.
-- **What:** the rebuilt bulk bar carries Tick / Untick / Move to list…, but no
-  Remove. Stock overview's equivalent has destructive actions, so its absence is
-  noticeable once you're selecting things. The blocker is that
-  `shoppingListApiService` has `bulk-add` and `bulk-remove-by-stock-item` but no
-  "remove these line ids", and looping N `deleteLineAsync` calls is precisely the
-  per-item request loop [[FU-713]]/[[FU-714]] exist to eliminate.
-- **Why deferred:** the feedback batch didn't ask for it, and adding an endpoint
-  plus a UI affordance unprompted is scope growth. A comment in
-  `ShoppingListDetail.vue`'s bulk bar records the reasoning in place.
-- **Recommended resolution:** opportunistic — next time `bulk_operations.py` is
-  touched. `BulkRemoveByLineIdsHandler` is a near-copy of the existing
-  by-stock-item one.
 
 ## [OPEN] FU-735 — per-serving `kcal` is a masthead fact but isn't in the masthead edit grid
 - **Raised:** 2026-08-23 (recipe-view feedback batch)
@@ -1773,50 +1289,6 @@ long session summary. Distinct from the other logs:
 - **Recommended resolution:** opportunistic — whenever a second recipe write
   path is added, stamp it there too (or lift the stamp into the repository's
   save path for `Recipe`).
-## [OPEN] FU-721 — revive `.github/workflows/` (CI + Release) and prove they actually work
-- **Raised:** 2026-08-23 (owner request)
-- **Type:** deferred job.
-- **What:** both workflows are **fully commented out** — `ci.yml` (95 lines) and
-  `release.yml` (164 lines), every line prefixed `#`, to preserve GitHub
-  free-tier minutes during rapid Claude-assisted development. Uncomment them,
-  then treat them as untested code: they have never run in their current shape,
-  and the repo has moved under them for ~7 weeks (`ci.yml` last touched
-  2026-07-10, `release.yml` 2026-07-01). Reviving them blind would just trade a
-  silent gap for a red badge.
-- **Known-stale already found (2026-08-23, static read):**
-  - **CI pins Node 20 and that is now wrong.** `ci.yml`'s frontend job sets
-    `node-version: "20"`, but `package-lock.json` resolves
-    `@quasar/app-vite@2.6.0`, whose `engines.node` is `^30 || ^28 || ^26 || ^24
-    || ^22`. The `Dockerfile` already moved to NodeSource 22 for exactly this
-    reason. `web_app/package.json`'s own `engines.node` still lists `^20 || ^18`
-    and is the stale one — reconcile all three, don't copy the loosest.
-  - **`release.yml` has never been exercised at all** and is the riskier of the
-    two (it builds + publishes). It predates the P8-01 Dashy-Dora rename
-    landing, the Postgres-standard decision, and the current `dora.spec` /
-    packaging layout, so its artifact names, image refs and version handling all
-    need re-reading against today's reality rather than assumed-good.
-  - **Verified fine, so don't "fix" it:** `pytest` in CI needs **no** live
-    server. `tests/e2e/dora_api/conftest.py` calls `startup(is_test_env=True)`
-    and adapts `http://localhost:5170/...` URLs onto a Flask test client, and
-    `tests/db_backend.py` defaults to a throwaway SQLite file. A Postgres
-    service container is *optional* (`DORA_TEST_DB=postgres`) and worth adding
-    as a second matrix leg only if the SQLite-vs-Postgres divergence class
-    (FU-526 / FU-533) is judged worth the minutes.
-  - Both suites are green locally as of 2026-08-23 (backend 1936 passed,
-    frontend 502 vitest, `vue-tsc` clean), so a red CI on first run means the
-    workflow is wrong, not the code — a useful signal to keep in mind.
-- **Why deferred:** the standing policy is that these stay commented during
-  rapid development to protect the GitHub free tier, and that policy hasn't
-  changed yet — reviving them mid-stream would burn minutes on every push of a
-  branch that changes 20 times a day. This FU is the record of the debt, not a
-  licence to switch it on now.
-- **Recommended resolution:** when the feedback-polish stream slows, or at the
-  first real release — whichever comes first. It gates/pairs with **FU-405**
-  (ops/CI), which in turn gates FU-520 and FU-404, and it belongs with the
-  Phase-4 open-source release work (FU-406). Do CI first and let it go green on
-  a throwaway branch before touching `release.yml`; a broken release workflow is
-  discovered at the worst possible moment.
-
 ## [OPEN] FU-720 — nothing verifies the deployed route map; a deploy can delete a feature silently
 - **Raised:** 2026-08-23 (FU-717 post-mortem)
 - **Type:** finding.
@@ -1959,82 +1431,6 @@ long session summary. Distinct from the other logs:
 - **Recommended resolution:** now-ish — the no-edit path is a data-quality hole in
   the dataset the whole feature exists to build.
 
-## [OPEN] FU-707 — "Your prices" signal: only bad news, no confidence, four phrasings, silent dimension flip
-- **Raised:** 2026-08-21 (prices-surface UX investigation)
-- **Type:** finding
-- **What:** `your_prices.py` is clean and correctly server-owned (R-003); the
-  *presentation* has four problems. (1) **Only bad news gets a chip** —
-  above-usual renders a warning chip, below-usual a muted `· about average` text
-  fragment, so a money-saving app nags on overpay and stays silent on a win.
-  (2) The **warning colour** implies user error when the fact is shelf inflation
-  (D-rule colour semantics). (3) **Confidence is invisible** — 3 samples and 40
-  render identically, with `Based on N prices` demoted to a caption under a
-  full-strength conclusion. (4) **Four phrasings of one number** across surfaces:
-  `Usually $X` / `Your usual: $X` / `Usually $X/L` / `above usual` vs
-  `paying more than usual`. Separately: baselines are per-dimension and "the most
-  recent dimension wins for the headline", so a single count-based log (`1 ea`)
-  can move a mass-based item's headline baseline with **zero** UI signal.
-- **Why deferred:** read-only investigation; the dimension-flip fix needs a
-  server-side signal on the DTO, not just copy.
-- **Recommended resolution:** now-ish. If it lands as described, run the ADR
-  evaluation on the candidate rule noted in the memo §9 — *a domain signal must
-  not be presented as a warning when the user did not cause it*.
-
-## [OPEN] FU-708 — `/price-history` copy + affordance bugs (incl. 6 unresolved PRODUCT HISTORY feedback bullets)
-- **Raised:** 2026-08-21 (prices-surface UX investigation)
-- **Type:** finding
-- **What:** **Mis-parented tooltip** — `All-time low: $X · currently N% above`
-  (`PriceHistoryPage.vue:147`) carries a tooltip saying *"You're paying more than
-  your own usual price… Not a comparison to the all-time-low"*, which contradicts
-  the label it is attached to; that copy belongs on the "Your usual" line below,
-  which already has its own. **"Manage alerts" cannot create an alert** — the
-  modal only lists and deletes, so the prominent affordance is the incomplete
-  one. On mobile the `col-12 col-md-3` picker rail stacks a 360px scrolling list
-  *above* the chart on every visit, and the chart empty state still reads *"Pick
-  one or more products on the left."* Also carries the still-open PRODUCT HISTORY
-  feedback bullets PH3–PH9: squished card / clipped notify-under placeholder, no
-  decimal formatting on the price input, tiny %-off text, %-off chip not using the
-  shared deal chip (R-001), the graph not reaching the box edge (real — reserved
-  right padding for baseline labels), and **PH7 "hover bubble not theme-aware,
-  white on white in dark mode" — not reproduced in the static read, so per the
-  mandatory rule it stays open and needs confirming in the browser.**
-- **Why deferred:** read-only investigation, and the whole page's future is FU-703.
-- **Recommended resolution:** after FU-703 — don't polish a page that may be
-  retired. Exception: PH7 can be confirmed in the browser at any time.
-
-## [OPEN] FU-702 — "Expiring soon" chip is coupled to the notifications system
-- **Raised:** 2026-08-21 (stock-overview quick-filter review)
-- **Type:** finding
-- **What:** `isExpiryFlagged` reads `item.attention_kinds`, and the server filters
-  those by the requesting user's `AlertPreference` (`get_stock_items.py:140`). So a
-  user who mutes expiry *notifications* silently loses the **Expiring soon**
-  *filter* — the chip stays on screen, tappable, and matches nothing. Owner's
-  reaction: it's weird that a filter is tied to the notification system at all.
-  Whether an item is near its expiry date is a fact about the item; whether Dora
-  pings you about it is a preference. Suggested fix: carry an unfiltered expiry
-  state on the DTO (computed from the household window, prefs not applied) and
-  have the chip read that; leave `needs_attention` / the bell as the pref-aware
-  pair. Same class of dead-control risk applies to **Needs attention** when a
-  user mutes every kind.
-- **Why deferred:** needs a DTO/contract change + a call on whether
-  `needs_attention` should also stop honouring per-user mutes.
-- **Recommended resolution:** now-ish — it's a live wrong-behaviour path, and the
-  chip rename below wants to land in the same pass.
-
-## [OPEN] FU-701 — "Expiring soon" wording + its overlap with "Needs attention"
-- **Raised:** 2026-08-21 (stock-overview quick-filter review)
-- **Type:** follow-up
-- **What:** two things about the same chip. (a) The label says "Expiring soon" but
-  the predicate also matches **already expired** items. (b) Its set is a strict
-  subset of **Needs attention** (`expired ∪ expiring_soon` vs
-  `expired ∪ expiring_soon ∪ essential_low`), so the row shows A∪B beside B as
-  visual peers, and the only slice of A they don't share is roughly what the
-  **Essential** chip gets you. Recommendation on the table: rename to a
-  freshness-axis label that honestly covers both states, and decide whether the
-  two chips collapse into one alert chip + a reason control.
-- **Why deferred:** owner is choosing the wording.
-- **Recommended resolution:** now — pairs with FU-702.
-
 ## [OPEN] FU-700 — the stocktake install switch isn't gated on the dashboard / help copy
 - **Raised:** 2026-08-20 (stock-overview feedback batch).
 - **Type:** leftover.
@@ -2050,33 +1446,6 @@ long session summary. Distinct from the other logs:
   question), not just whether to hide a link.
 - **Recommended resolution:** later, alongside FU-182's app-wide feature-gate
   sweep — or now if the owner intends to actually run with stocktake off.
-
-## [OPEN] FU-697 — I destroyed the tail of the "later 8" worklog entry; partial reconstruction is in place
-- **Raised:** 2026-08-20 (DR-15 micro-motion pass).
-- **Type:** finding.
-- **What:** while appending this session's worklog entry I first wrote it with
-  PowerShell `Get-Content`/`Set-Content`, which in PS 5.1 reads as ANSI and
-  mangled every em-dash in the file. Reaching for `git checkout --
-  DORA_WORKLOG.md` to undo that was the actual mistake: `DORA_WORKLOG.md` had
-  **uncommitted** changes (the *later 8* Cookbook-feedback-batch-3 entry), and
-  the checkout took them with the corruption. I reconstructed that entry verbatim
-  from a read taken at session start, which covered it down to the "Serves filter
-  added" bullet; **anything it said past that point is gone.** The entry now
-  carries a banner marking the truncation. Nothing else was affected — only
-  `DORA_WORKLOG.md` was checked out, the code changes and every other modified
-  file are intact, and the product-level record of that work survives in
-  `CHANGELOG.md`.
-- **Why deferred:** it can't be fixed by me — only the owner (or the session that
-  wrote it) knows what the missing tail said. Filed so the gap is on the record
-  rather than looking like the entry simply ended there.
-- **Recommended resolution:** now, if the owner remembers what the batch-3 entry
-  covered after the Serves filter (likely: the verify/close-gate sections); then
-  delete the banner. Otherwise leave the banner and close.
-- **Process note for the next session:** in this repo, edit these UTF-8 markdown
-  logs with Python (`encoding='utf-8'`) or the Write/Edit tools — never PS 5.1
-  `Get-Content`/`Set-Content` without `-Encoding utf8`. And never `git checkout
-  --` a file that `git status` shows as modified; the logs are append-mostly and
-  routinely carry uncommitted work.
 
 ## [OPEN] FU-694 — route-change transitions: the last critique §6 bullet, deliberately deferred
 - **Raised:** 2026-08-20 (DR-15 micro-motion pass).
@@ -2208,89 +1577,6 @@ long session summary. Distinct from the other logs:
   rebuild); the rest opportunistically. If several turn out to be live bugs, R-032
   needs a stronger "don't trust `.include()` alone" clause.
 
-## [OPEN] FU-683 — stock-surface signal consolidation: 7 live bugs + 5 duplications, plan written, Step 0 gates the main chunk
-- **Raised:** 2026-08-19 (stock overview signal-crossover design session)
-- **Type:** deferred job + findings
-- **What:** the owner flagged that Stock Overview has too many competing signals
-  (stocktake, Dora thinks, expiry, needs attention, essential, needs check, buy
-  verdict, open/in-use). The investigation found nine visual channels on one row
-  sharing a two-colour palette with **inverted meanings** (red level box = "buy
-  this urgently", red cart ring eight pixels away = "don't buy this"), plus two
-  independent attention engines and three independent cadence implementations.
-  Full context, evidence register, and a 6-chunk plan:
-  **`docs/04_proposals/IMPL_PLAN_STOCK_SIGNAL_CONSOLIDATION.md`**.
-  **Live bugs found (all verifiable independently of the plan):**
-  - **B1** `useStockFilters.ts:137` hardcodes a 7-day expiring-soon window while
-    the server resolves a configurable one — admin changes it, row outlines and
-    the "Needs attention" count don't move.
-  - **B2** per-user `AlertPreference` is honoured by the bell and **ignored
-    entirely** by the overview; disabling a kind silences the bell but not the rows.
-  - **B3** `AlertsPage.vue:331` deep-links to `/stock?attention=true`, which
-    filters by a *different rule* than the count that was tapped.
-  - **B4** non-essential out-of-stock is a MEDIUM **actionable** alert server-side
-    but the row is **dimmed** — same item is "act on this" and de-emphasised.
-  - **B5** `StockItemRow.vue:390` fires **one HTTP request per rendered row** for
-    the buy verdict (the module cache dedupes by id, it doesn't stop fan-out);
-    200-item pantry = 200 requests to render a ring that's suppressed at low
-    confidence. `useBuyVerdict.ts`'s own comment claims otherwise — it's wrong.
-  - **B6** same per-line N+1 on the shopping list (`BuyVerdictBadgeInline`);
-    survives B5's fix and becomes the primary surface after it.
-  - **B7** `buy_verdict_enabled` is a household AppSetting despite being a pure
-    per-user display overlay — **owner confirmed this is a mistake**.
-  - **D1–D3 (R-003):** `14`-day and `90`-day windows each declared twice across
-    `stocktake.py` / `cadence.py` (one carries a comment admitting the mirror);
-    and **three** implementations of "mean gap between movements" —
-    `pantry_belief._mean_gap_days`, `get_buy_verdict._cadence_detail` (identical
-    inputs, identical math), `cadence.auto_band_from_history`.
-  - **D4 (R-003):** `hasAlert` computes a cross-entity domain rule client-side.
-- **Why deferred:** Chunk 3 (the one attention rule) is **gated on a Step-0
-  assessment of the alerts system with the owner** — it was largely AI-built from
-  loose ideas and has never been vetted (9 kinds, 2 tiers, per-user prefs, a page,
-  a bell, `act_on_alert`, a digest email). Consolidating onto an unvetted
-  foundation makes it harder to change later, not easier. Chunks 1 and 2 have no
-  such dependency.
-- **Fix shape:** the plan's §3. Chunks 1 (constant + cadence consolidation) and 2
-  (verdict off the row + settings scope) can land immediately; 3–6 follow Step 0.
-- **Progress (2026-08-19):** **Chunk 1 is done** — D1/D2 constants collapsed onto
-  `cadence.py` (now public `AUTO_HISTORY_WINDOW_DAYS` / `LOW_OUT_BUMP_WINDOW_DAYS`);
-  D3 resolved by a shared `domain/cadence_math.py::mean_gap_days` that all three
-  cadence readers now call; **D-11 landed** — the verdict's `need` axis consumes
-  `compute_belief`, hedges its wording when the band is an inference that disagrees
-  with the recorded level, and steps its own confidence down for one; **B6** has its
-  bulk endpoint (`GET /api/shopping-lists/<id>/buy-verdicts`); the misleading
-  `useBuyVerdict.ts` cache comment (B5) is corrected. Landing D-11 also exposed a
-  live bug that made the whole verdict feature inert — see **FU-684**.
-  **Chunk 2 is done (2026-08-19):** D-10 — the verdict ring is off `StockItemRow`
-  and `AddToListButton`'s `verdict` prop, branch, tooltip block and CSS are
-  deleted (it had no other caller); B5 — the overview fires **zero** verdict
-  requests, measured in a browser drive, not inferred; D-12/B7 —
-  `buy_verdict_enabled` moved AppSetting → User (migration `d9f4b2c7e803`,
-  clean drop-and-add, no backfill shim), the toggle moved Admin→Features to
-  Settings→Assistant, the `features.buy_verdict` health flag is gone and
-  `useBuyVerdictEnabled` now reads `/auth/me`; B6 — `ShoppingListDetail`
-  primes the whole list's verdicts through the Chunk-1 endpoint in **one**
-  request (also measured).
-  **Step 0 is DONE (2026-08-20)** — the owner answered all five questions; the
-  canonical attention rule is written into the plan's §3. Cuts: `out_of_stock`,
-  `low_stock`, `stocktake_overdue` (Q1, wider than the plan proposed); per-user
-  `tier_override` (Q2/Q3, on/off survives); the digest email (Q4). Q5 is
-  superseded — with the kind cut there is nothing to demote, though **D-8's row
-  half still governs Chunk 4**.
-  **Chunk 3 is done (2026-08-20)**, split 3a/3b on size. 3a: the cuts above, plus
-  `acknowledge_stocktake` (the retired kind's only action, now a pinned 422) and
-  migration `e4b1c7a95d20`. 3b: **B1–B4 all closed** by a single server-owned rule
-  in `features/stock_items/stock_attention.py` — `get_alerts.py` emits its three
-  per-item kinds from the same predicates, the stock DTO carries
-  `needs_attention` / `attention_severity` / `attention_kinds`, client `hasAlert`
-  is a read, the hardcoded 7-day window is deleted (B1), disabled kinds now reach
-  the rows (B2), the deep-link and the count run one rule (B3), and non-essential
-  out is no longer "actionable and dimmed" (B4). D-7's single outline landed with
-  it. 15 new unit tests on the rule.
-  **Still open:** Chunks 4–6 (row treatments + sort, queue ranking, runner
-  rebuild). Browser-verify of Chunk 3 is owed — see `DORA_VERIFY.md`.
-- **Recommended resolution:** **Chunk 4 next** — it is unblocked and its input
-  (`attention_severity`) is already on the DTO.
-
 ## [OPEN] FU-680 — the ingredient-unit reconciliation has no density bridge
 - **Raised:** 2026-08-19 (recipe view feedback batch)
 - **Type:** follow-up
@@ -2309,19 +1595,6 @@ long session summary. Distinct from the other logs:
   estimate is density-derived.
 - **Recommended resolution:** when the cost card next comes up, or if the owner
   reports "it says it can't price something it obviously can".
-
-## [OPEN] FU-673 — three test files carry pre-existing lint errors
-- **Raised:** 2026-08-19 (cookbook feedback batch)
-- **Type:** finding
-- **What:** `npx eslint src test` reports 11 errors, all in
-  `test/unit/offlineQueue.spec.ts`, `test/unit/useBuyVerdict.spec.ts`,
-  `test/unit/useOfflineQueue.spec.ts` — `@typescript-eslint/require-await` and
-  `consistent-type-imports`. None are in `src/`; none were touched by this
-  batch. They mean a plain `eslint src test` is not currently green, so a real
-  regression in a test file would be lost in the noise.
-- **Why deferred:** unrelated to the work in flight; mechanical but wants its
-  own commit so the diff is reviewable as "lint only".
-- **Recommended resolution:** opportunistic.
 
 ## [OPEN] FU-672 — settings page-header icon is declared twice per page (nav + page)
 - **Raised:** 2026-08-18 (settings heading-icon sweep)
@@ -2357,20 +1630,6 @@ long session summary. Distinct from the other logs:
   "`-soft` background + semantic ink" replaces solid semantic chips generally.
 - **2026-10-23 (finalisation Stage 1):** now **24 sites / 16 files** — `AlertKindAvatar, AlertsBell, chips/DiscountChip, dashboard/PriceDropsCard, dora/DoraChat, dora/PriceHistoryBottomSheet, products/ProductCard, recipes/ExpiringChip, DoraHelpPage, PriceHistoryPage, RecipeCookMode, settings/AdminDataBackupRestore, settings/ApiAccessSettings, settings/AuditLogSettings, StockItemDetailPage, StockOverview` (CHUNK_20 §0 table). Pairs with FU-674's `--text-on-*` tokens.
 - **2026-10-27 (finalisation 20-R11 sweep, unit 30):** six more sites flipped to `dark` (price history above-baseline chip, backup duplicate chip, API-access pending + unmapped badges, audit-log severity chips ×2). Left on purpose: primary/accent/secondary + white (`--text-on-primary` is the sanctioned pairing; `RecipeCookMode` carries its own note), `DiscountChip` positive + white, `PriceHistoryPage` series colours, `AlertKindAvatar` (decorative icon). The tint-vs-solid question above is still the owner's.
-
-## [OPEN] FU-670 — At-risk ingredient chips are read-view only (not cook mode / edit rows)
-- **Raised:** 2026-08-17 (expiring-ingredient chips).
-- **Type:** follow-up.
-- **What:** `RecipeIngredientDto.is_expiring` / `is_expired` now ship on both the list
-  and detail endpoints, but only the recipe **read view** renders a chip. The two other
-  places the same ingredients appear don't: **cook mode** (arguably where it matters
-  most — you're standing at the bench deciding what to use) and the **edit-mode
-  ingredient rows** (which already show Missing + stock-level chips, so the slot exists).
-  The data is already on the wire; each is a template addition reading `expiringChip`.
-- **Why deferred:** the owner asked for the recipe page specifically; adding two more
-  surfaces uninvited is the anti-creep principle's exact target.
-- **Recommended resolution:** now, if the owner wants it — it's small and the server
-  half is done. Otherwise opportunistic, next time either surface is open.
 
 ## [OPEN] FU-669 — The cookbook's at-risk horizon still lives in two languages
 - **Raised:** 2026-08-17 (expiring-ingredient chips).
@@ -2488,19 +1747,6 @@ long session summary. Distinct from the other logs:
 - **Recommended resolution:** with FU-654 — the check is two lines once the resolver
   exists.
 
-## [OPEN] FU-650 — Two `stockLevelDot` unit tests fail on `main`-as-of-this-branch
-- **Raised:** 2026-08-16 (stock-overview filter feedback).
-- **Type:** finding.
-- **What:** `web_app/test/unit/stockLevelDot.spec.ts` has 2 failing assertions — it
-  expects `bg-negative` for the out-of-stock sequence and `dora-bg-neutral` for
-  out-of-stock *and* unknown; the component now renders `bg-negative` for out-of-stock
-  and reserves `dora-bg-neutral` for unknown only. Confirmed pre-existing: the same two
-  fail with this session's changes stashed. Everything else is green (434 passing).
-- **Why deferred:** out of scope — it's the D-001 escalation (Out = red) landing in the
-  component without the test following, not a regression from this unit.
-- **Recommended resolution:** opportunistic — decide which is right (the test looks
-  stale against D-001) and fix the losing side.
-
 ## [OPEN] FU-652 — Sweep the remaining `secondary` colour uses against D-020
 - **Raised:** 2026-08-16 (stock-overview dark-mode colour fix).
 - **Type:** follow-up.
@@ -2514,54 +1760,6 @@ long session summary. Distinct from the other logs:
 - **Why deferred:** scope — the owner reported two specific surfaces; converting the
   rest unasked is exactly the drive-by the standards warn against.
 - **Recommended resolution:** opportunistic — next time one of those files is open.
-
-## [OPEN] FU-648 — QR: "Print one" root-caused and fixed; the dialog failure still unexplained
-- **Raised:** 2026-08-16 (stock-item detail feedback batch). **Re-reported 2026-08-17**
-  by the owner after the first fix: "when I tap on it I get 'couldn't load…' and then
-  print one gives me an error."
-- **Type:** finding.
-- **What (updated 2026-08-17 — this round stopped guessing and measured):**
-  - **Server half: proven green.** New e2e pin `tests/e2e/dora_api/test_qr_labels.py`
-    (7 tests) exercises both endpoints through the real stack: PNG renders with the
-    right magic bytes, `size=512` (what the dialog asks for) is accepted, absurd sizes
-    400, an unknown item 404s, the sheet renders in caller order, skips unknown ids,
-    prints-all with no ids, and — the load-bearing one — contains
-    `data:image/png;base64,` and **no** `/api/stock-items` back-reference.
-  - **Transport half: proven green.** Driven live from the Browser pane at `:5174`
-    against the API at `:5170` — i.e. genuinely cross-origin with `credentials:
-    'include'` — both endpoints answered 200, and `fetchQrImageUrlAsync` from the real
-    composable returned a blob URL. So neither CORS, the cookie, nor the base URL is
-    broken on this shape of deployment.
-  - **"Print one": root-caused and fixed.** ADR-041's fix moved `window.open` to
-    *after* the `await`, which every browser treats as an unsolicited pop-up and blocks
-    — unconditionally on mobile, which is where the owner tapped. Now opened inside the
-    click and navigated when the fetch lands (**R-046 / ADR-042**), with a blocked
-    pop-up reported as its own message.
-  - **"Couldn't load…": still not reproduced**, on the third attempt. It is now
-    *instrumented* rather than guessed at: the dialog reports the HTTP status and the
-    correlation-id prefix instead of a flat sentence, and network errors are worded
-    differently from server errors.
-- **Why it matters:** the remaining unknown is specific to the owner's install, and the
-  previous two rounds failed precisely because the error message carried no evidence.
-- **Recommended resolution:** confirm in browser on the owner's actual install. If the
-  dialog still fails, **the message now names the cause** — quote it verbatim (status +
-  `Ref:` prefix) and this closes in one pass. If it works, close. See DORA_VERIFY → Stock.
-- **Round 4 (2026-08-21) — re-reported as "still getting 'Couldn't load this item's QR
-  code (error 404)'". Two findings, both fixed; the cause is now named on screen:**
-  - **The instrumentation was blind.** `getBlob` sets `responseType: 'blob'`, which
-    applies to the *error* body too — so the server's problem-detail JSON arrived as a
-    Blob, `isCustomApiErrorResponse` rejected it, and `details`/`title` were always
-    empty. That is why three rounds of "the message will tell us next time" told us
-    nothing. `AxiosHttpClient.getBlob` now reads the Blob back into JSON before
-    normalising (all blob endpoints benefit).
-  - **A 404 has two meanings and the copy conflated them.** `describeQrFailure` now
-    splits them on the server's `title`: *route* miss ("This server has no QR endpoint
-    at … — its API is older than this page. Restart or update the Dora server") vs
-    *entity* miss ("That stock item no longer exists"). Server re-proven green over
-    real HTTP the same day (200 + `image/png` at `size=512`).
-  - **Now paired with FU-710** (the barcode POST in the same module 404s too on the
-    same install) — one shared explanation is far more likely than two: the running API
-    doesn't carry `features/data/barcodes`. Next step is the FU-710 lookup-URL check.
 
 ## [OPEN] FU-647 — `print-view` and the CSV export still build API URLs by hand (R-045)
 - **Raised:** 2026-08-16 (QR fix — noticed in the same composable).
@@ -2636,60 +1834,6 @@ long session summary. Distinct from the other logs:
   vitamins" instead of "we haven't downloaded them". That makes the one-line hint on
   the admin Nutrition page more worth doing, not less.
 
-## [OPEN] FU-643 — The nutrition matcher has no vocabulary layer: regional synonyms score zero
-- **Raised:** 2026-08-15 (nutrition auto-suggest build).
-- **Type:** finding.
-- **What:** matching is set-overlap on de-pluralised words, so two names for the same
-  food never meet. "Tinned tomatoes" vs USDA's "Tomatoes, canned" scores 0.40 and is
-  rejected; the same goes for aubergine/eggplant, coriander/cilantro, mince/ground
-  beef, prawns/shrimp, capsicum/bell pepper — the whole AU/UK-vs-US split, against a
-  catalogue that is entirely US-vocabulary. The user isn't stranded (Search still
-  finds it), but this is the largest single source of "no match" on an AU pantry,
-  which is the app's primary audience.
-- **Why deferred:** a synonym table is its own design call — where it lives (code
-  constant vs seeded table vs per-install editable), whether it's regional or global,
-  and how it interacts with `AppSetting.locale`. Out of scope for the build, and
-  guessing at it would be worse than the honest gap.
-- **Recommended resolution:** when the owner has walked the matching page against a
-  real USDA import (see the `DORA_VERIFY.md` item) and can say how often it actually
-  bites — that read should decide whether this is a 30-word constant or a real feature.
-
-## [OPEN] FU-638 — Cookbook renders "No recipes match the current filters" while its own footer counts 11 shown
-- **Raised:** 2026-08-14 (FU-637 — spotted while verifying the kcal badge).
-- **Type:** finding.
-- **What:** On `#/cookbook` in the agent's browser pane, the grid renders the
-  empty state (`filteredRecipes.length === 0`) while the sticky footer — reading
-  **the same computed** — shows "11 Shown / 8 Cookable now / 1 Favourites".
-  Zero `.recipe-group` and zero `.recipe-card` nodes in the DOM; **no console
-  error** of any kind (console capture verified working — Vite/Quasar messages
-  come through). `GET /api/recipes` returns all 11 rows correctly.
-- **Why deferred / not attributed:** **not caused by the FU-637 changes** —
-  reproduced with `nutrition_mode = off`, where the new filter path isn't
-  reached at all, and observed earlier in the same session before
-  `RecipesOverview.vue` was touched. Reproduced in a fresh tab (so not the
-  known stale-tab-after-backend-restart trap) and after a hard reload. Could
-  not be attributed further from a static read: two readers of one computed
-  disagreeing, with nothing thrown, points at either a render-time wedge
-  (`FadeTransition mode="out-in"` wraps the grid — the R-037/FU-609 blank-page
-  signature) or something specific to the agent's embedded browser.
-- **Recommended resolution:** **confirm in browser** — open the cookbook in a
-  real browser (dev *and* a production build) and see whether recipe cards
-  render. If they do, this is an agent-pane artifact and can be closed with a
-  note; if they don't, it's a live cookbook regression and the transition
-  wrapper is the first suspect.
-- **2026-08-17 evidence (cookbook toolbar/compact-view work) — now strongly
-  looks like the pane artifact.** Reproduced exactly on the **first** navigation
-  to `#/cookbook` (empty state rendered, footer read "15 Shown / 9 Cookable"),
-  then **navigating away and back rendered 2 groups / 15 cards with no empty
-  state** — i.e. it only misses when the data arrives *during* the transition.
-  That is the rAF-wedge signature: `requestAnimationFrame` never fires in the
-  agent pane, so a Vue `<Transition>` (here `FadeTransition mode="out-in"`
-  around the grid) can wedge mid-leave, leaving the pre-data branch on screen
-  while the footer — outside the transition — updates normally. Same failure
-  mode as the DR-8 boot-splash wedge. Still needs the real-browser check to
-  close, but the transition wrapper is now the confirmed first suspect and the
-  bug is unlikely to exist outside the pane.
-
 ## [OPEN] FU-636 — USDA Foundation dataset URL carries a release date and will eventually 404
 - **Raised:** 2026-08-14 (nutrition complex-mode build).
 - **Type:** finding.
@@ -2727,123 +1871,6 @@ long session summary. Distinct from the other logs:
   Note `get_location_tree.py:62` already says "None = unassigned, surfaced separately in
   the UI", which was never true.
 
-## [OPEN] FU-632 — DR-14 carve-outs: first-boot region derivation (#48) + theme-mechanism reconciliation (#7b)
-- **Raised:** 2026-08-13 (design-remediation DR-14; carved from FU-578 #48/#7b).
-- **Type:** follow-up (two distinct concerns split from the DR-14 date-format authority).
-- **What:** DR-14 shipped the date-format authority (`useDateFormat`, reads the shared
-  household locale via `useMoney`'s `locale_policy`) and migrated all 26 call sites, so
-  dates now render in the household locale (en-AU default) not the browser's US format
-  (#9 fixed). Two adjacent pieces from the DR-14 backlog remain:
-  1. **First-boot region derivation (#48).** The health `locale_policy` comes back
-     **null** on a fresh install — locale/timezone are never asked. Onboarding SETUP has
-     no region step, while Admin → System → Timezone already has a "Use this device"
-     one-click derivation that nothing invokes at first run. So money/date formats rely
-     on the en-AU *default* until an admin finds that page. Wire a first-boot
-     derivation (browser `Intl.DateTimeFormat().resolvedOptions()` → locale + tz) or a
-     one-line SETUP step, persisted server-side, keeping the admin override. Backend
-     endpoint already exists. **Also add a timezone to `locale_policy`** so datetime
-     renders (currently browser-tz) become household-tz correct.
-  2. **Theme-mechanism reconciliation (#7b).** `body--dark` (Quasar Dark plugin) and raw
-     `prefers-color-scheme` CSS are two sources of theme truth that disagree until a full
-     reload — boot dark + flip the OS to light with no reload and the header/row cards go
-     light while the page bg/toolbar/footer stay dark (screenshot-confirmed). Pick one
-     authority (drive everything off the Quasar dark state, or off the media query, not
-     both). R-002/R-003-adjacent.
-- **Why deferred:** DR-14's core (D-006 "one date/number authority" + the visible #9
-  bug) is shipped and verified; these two are separable — #48 spans onboarding +
-  backend, #7b is a theming-system fix — each its own focused unit. Same split pattern
-  as DR-7 → FU-624, DR-9 → FU-631.
-- **Recommended resolution:** #48 opportunistically or in a Phase-4 onboarding pass; #7b
-  in a theming turn. Cross-ref: `DESIGN_REMEDIATION_PLAN.md` DR-14, D-006, [[FU-578]].
-- **Progress (2026-11-01):** (1) done: onboarding now asks timezone (device default) and Language & format (device default, 14-D6). (2) remains.
-
-## [OPEN] FU-631 — DR-9 carve-outs: mobile toolbar tidy, stock-row overflow menu, stranded dashboard cards
-- **Raised:** 2026-08-13 (design-remediation DR-9; carved from FU-578 #15b/#19/#30).
-- **Type:** follow-up (redesign-scope layout work carved from DR-9).
-- **What:** DR-9 shipped the core toolbar-overflow fix (shared `PageToolbar` now
-  wraps its actions — verified: 0 horizontal scroll at 375px, no title collision at
-  1280px) + a mobile stock-row **name 2-line wrap** so names stop truncating at ~10
-  chars. Three heavier pieces from the DR-9 backlog are carved here because each is
-  a mini-redesign with real interaction/layout risk that deserves its own focused
-  unit:
-  1. **Shopping-list toolbar mobile tidy (#4 refinement).** The wrap fix removed the
-     overflow, but at 375px the action cluster wraps to ~165px of stacked toolbar
-     chrome (Quick add · [No grouping|Location|Store] segmented · Refresh deals ·
-     Select · More). Cleaner: on mobile collapse the secondary actions (grouping,
-     Refresh deals, Select) into the existing **More** menu so only Quick add + More
-     stay inline. Needs per-page work in `ShoppingListDetail.vue` (the segmented
-     grouping control is the widest offender).
-  2. **Stock-row trailing-icon overflow menu (#15b).** On phones the expiry / open /
-     cart cluster still squeezes the row; the prescribed fix is to collapse the
-     trailing action buttons into a single ⋮ overflow menu on mobile. Deferred
-     because each button carries a rich nested interaction (expiry date-picker +
-     push-menu, open→dialog, cart=`AddToListButton`) that a naive menu-in-menu would
-     regress. **Tap-target pass (#19)** rides with it: `RowActionButton` is `size="md"`
-     (~36px); D-004 wants ≥44px on touch surfaces.
-     **⚠️ Measured addition (2026-09-02, dashboard chunk 6) — it is not only the
-     tap target, it is the label.** Quasar's `size` prop sets a button's
-     *font-size* directly, and **`sm` is 10px** — under D-003's 12px hard floor,
-     on an interactive element where B2 asks for 14. Counted live on the
-     dashboard at 1440px: **10 action-button labels at 10px** — "Cook" ×3,
-     "Mark restocked" ×2, "Open item" ×2, "Dismiss" ×2, "Add", "Push 7 days",
-     "Clear expiry". Chunk 6 fixed the *segmented-control* half of this in
-     `BaseSegmented.vue` (one component, 19 consumers) and deliberately left the
-     action buttons here: `size="sm"` on `q-btn` is an app-wide pattern, and
-     re-scaling it is a design change across every surface, not a token sweep.
-     The fix is one rule on a shared button wrapper, the same shape as
-     `BaseSegmented`'s — not per-call-site edits.
-  3. **Dashboard / reports stranded half-width cards (#30).** A lone `col-lg-6` card
-     at the end of a zone sits beside dead air (D-011). The dashboard uses a CSS
-     `order`-based zone system, so "make a lone last-in-zone card full-width" needs
-     per-zone odd-count logic (the page already computes `zoneHasVisibleCards`), not
-     a pure-CSS rule — hence its own unit.
-     **✅ RESOLVED for the dashboard 2026-09-02 (chunk 2).** The reports half of
-     this item is still open; the dashboard half is done and measured.
-     *Amended then corrected:* the dashboard review claimed **five** dead regions
-     "on a default desktop", which measurement showed is true at **≥1440px** and
-     wrong below — because `col-lg-*` engages at Quasar's `lg` (**≥1440**), not at
-     the app's own ≥1024 "desktop" (A8). Measured with the old classes re-applied
-     in a browser: **1920px → 5 · 1440px → 5 · 1280px → 2 · 1024px → 2 ·
-     768px → 2**. Two causes: mixed widths (`meal_plan` at `col-lg-8` could not
-     share a row above 1440 and stranded a card above it *and* a third beside it;
-     Kitchen's three `col-lg-4`s rendered 4+4 because `reconcile_pending` is
-     hide-when-empty) and odd counts (an odd number of half-width cards always
-     strands its last — the pair visible at *every* width).
-     *Fix:* `helpers/dashboardGrid.ts` — `zoneColClasses()` gives the last card of
-     any odd run of consecutive half-width cards the full row. Parity is per
-     **run**, not per zone, because a genuinely full-width card mid-zone (the
-     fortnight calendar) splits the zone into independent runs. Driven by a new
-     `cardRendered()` predicate that folds in the two data guards (`budget`'s
-     loaded status, `reconcile_pending`'s empty queue) so the layout maths cannot
-     disagree with the template's `v-if` (R-003). All 17 wrappers now bind
-     `cardCol(id)`; the ad-hoc `col-lg-4`/`col-lg-8`/missing-`col-sm-6` variants
-     are gone, and the grid gutter moved to `q-col-gutter-lg` (24px = `--space-6`,
-     which is what B4 specifies). **Verified: 0 dead regions at 375 / 768 / 1024 /
-     1280 / 1440 / 1920**, measured in a browser, plus 16 unit tests including an
-     exhaustive sweep of zone sizes 1–8. Spun off: **[[FU-836]]** (the
-     `col-lg-*`-means-desktop trap) and **[[FU-837]]** (short cards stretching to
-     a tall row-mate, seen in the chunk-2 screenshot).
-- **Why deferred:** DR-9's accept criteria ("no horizontal scroll at 375px; row
-  names readable on mobile") are met by the shipped toolbar wrap + name wrap; these
-  three are quality refinements, each redesign-scope and higher-risk. Splitting keeps
-  the shipped fix clean and verifiable (mirrors DR-7 → FU-624).
-- **Recommended resolution:** opportunistic, or a dedicated mobile-layout turn. Cross-ref:
-  `DESIGN_REMEDIATION_PLAN.md` DR-9, D-011/D-004, [[FU-578]].
-
-## [OPEN] FU-630 — Assess inline corrections in the auto-mode meal-reconcile log
-- **Raised:** 2026-08-13 (meal-reconcile auto-mode log; owner decision).
-- **Type:** follow-up (deferred scope).
-- **What:** The new auto-mode reconcile **log** (`MealReconcileLog.vue`, view `/meal-plans/reconcile` when `reconcile_policy.auto_drain` is true) is **view-only** by owner call — a record of what Dora did, no per-row actions. If a user spots a wrong auto-assumption ("Dora logged this cooked but I didn't"), there's currently **no correction path in auto mode** (the runner, which carries the verbs, only shows in manual mode). Assess whether the log needs a lightweight per-row correction (at least "Didn't cook" / "Adjust"), which would call the existing `POST /meal-plans/reconcile/<entry_id>` verb endpoint (the backend already supports correcting an `unresolved_auto` entry — see `submit_verb`). The verb API + receipt model already handle this; it's purely a UI addition.
-- **Why deferred:** owner chose "view-only first, assess need for corrections later" — ship the log, see if corrections are actually wanted before adding per-row action affordances.
-- **Recommended resolution:** when the owner has used the log a while, or a wrong auto-log is hit in practice. Add per-row "Didn't cook / Adjust" to `MealReconcileLog.vue` wired to `submitReconcileVerbAsync`.
-
-## [OPEN] FU-626 — Admin "a newer Dora release is available to deploy" notification
-- **Raised:** 2026-08-13 (Notifications settings feedback, item 10).
-- **Type:** deferred job (new feature).
-- **What:** Distinct from the in-app "reload for the new frontend" banner shipped this unit (that's the *already-deployed* build activating). This is the **operator-facing** signal the owner wants: "the Dora project has published a newer release than the one this server runs — admin, go update the deployment." Owner's shape: an **admin-only banner on the Settings page**, plus a **flashy attention affordance on the Settings nav/menu button for admins** to draw them to it. Needs a source of truth for "latest available release" (e.g. poll GitHub Releases / a version manifest) compared against `CURRENT_VERSION` from `/api/health`; must degrade gracefully when the check is unavailable or disabled (self-host / air-gapped), and probably be an opt-in check (don't phone home by default). `BaseButton` already has an `attention` pulse modifier that could drive the nav-button glow.
-- **Why deferred:** genuinely new feature with a design fork (where does "latest release" come from? is the check opt-in? how does it behave offline / self-host?) — out of scope for a settings-copy/gating polish unit. Owner explicitly acknowledged this is its own task.
-- **Recommended resolution:** later — needs a short design note first (release-source + opt-in posture), then build. Check §7.5 distribution-posture (no phone-home by default).
-
 ## [OPEN] FU-627 — Per-user deals-email opt-in ignores the install-wide `deals_email` admin flag
 - **Raised:** 2026-08-13 (Notifications settings feedback, item 2).
 - **Type:** finding.
@@ -2853,39 +1880,12 @@ long session summary. Distinct from the other logs:
 
 ---
 
-## [OPEN] FU-624 — Toast lifecycle: single-column `notify()` wrapper + dismiss-on-route-change
-- **Raised:** 2026-08-12 (FU-578 DR-7 carve-out).
-- **Type:** deferred job (cross-cutting tidy).
-- **What:** DR-7 de-congested the toast corner (CSS lift of the bottom-right column clear of the Dora launcher) but did **not** fix the other half of FU-578 #41 — a toast fired just before navigation **persists across the route change** past its read time. The robust fix is a single `notify()`/`useNotify()` wrapper that (a) is the one place toast position/timeout defaults live and (b) tracks active dismiss handles so a `router.afterEach` can clear them on navigation. There are **~296 `$q.notify({ position: 'bottom-right' })` call sites** to migrate to it (also lets us drop the repeated inline `position`/`timeout` and centralise the column — R-003). A boot-level monkeypatch of `Notify.create` was rejected: `$q.notify` captures the original reference at install time (before boot files run), so the wrapper is bypassed — call-site migration is the correct path.
-- **Why deferred:** the mechanism is small but the 296-site migration is its own unit with real churn/regression surface; out of scope for a placement-polish unit. The visible congestion (the headline complaint) is already resolved by the CSS lift.
-- **Recommended resolution:** opportunistic, or a dedicated tidy turn. Cross-ref: `DESIGN_REMEDIATION_PLAN.md` DR-7, D-009, [[FU-578]].
-
 ## [OPEN] FU-623 — Centralise `$q.dialog` behind a `noCaps`-injecting wrapper (enforce R-039)
 - **Raised:** 2026-08-12 (FU-578 DR-3 dialog-casing sweep).
 - **Type:** deferred job (tidy / single-source).
 - **What:** DR-3 fixed ~15 files where `$q.dialog` buttons rendered ALL-CAPS by converting every `cancel: true` / string-shorthand `ok:`/`cancel:` to `{ label, noCaps: true }`. That matches the ~15 sites that already spelled `noCaps` out, but the app now has **~30 hand-rolled `$q.dialog` calls each re-stating `noCaps`** — R-039 is enforced by convention, not code. A thin composable (e.g. `useDoraDialog()` returning a wrapper that injects `noCaps: true` into `ok`/`cancel` unless already set, passing `{ component }` dialogs straight through, and preserving the returned `DialogChainObject` so `.onOk().onCancel().onDismiss()` chains are untouched) would make R-039 structural.
 - **Why deferred / not done in-audit:** a **half-migrated** wrapper (some sites through it, some raw) is worse than the current consistent explicit pattern; migrating all ~30 sites — including `options`/`prompt`/`component` dialogs and chained resolvers — is its own unit with real regression surface, out of scope for a casing detail-audit.
 - **Recommended resolution:** opportunistic — when next touching dialog code in bulk, or as a dedicated tidy. Cross-ref: R-039 / ADR-035 in `ENGINEERING_STANDARDS.md`, `DESIGN_REMEDIATION_PLAN.md` DR-3.
-
-## [OPEN] FU-608 — Owner checklist: stand up the open-source + donation infrastructure, then swap the in-app placeholders
-- **Raised:** 2026-07-31 (donation / open-source pivot — [[FU-562]]/[[FU-567]] resolved; part of the reframed [[FU-406]] release readiness).
-- **Type:** deferred job (owner/external actions + a one-pass placeholder swap).
-- **What:** the in-app donation buttons, `FUNDING.yml`, README, and issue/support links were **built with placeholders** on 2026-07-31 (see that worklog entry). This FU is the owner's checklist to stand up the real external accounts and then swap the placeholders to live URLs in one pass.
-- **Owner checklist (external, do in this order):**
-  - [ ] **Make the GitHub repo public** — `github.com/BenTalese/dashy-dora`. Until it's public, every restored issue/support link 404s for outsiders. (Confirm the canonical slug is `dashy-dora`, not the stale `DashyDora`/`DiscountDora` the old README/SECURITY.md carried — both are being corrected to `dashy-dora`.)
-  - [ ] **Set up GitHub Sponsors** — apply at `github.com/sponsors`, complete Stripe/payout onboarding (has an approval wait). Once live, the profile is `github.com/sponsors/BenTalese`.
-  - [ ] **Set up Buy Me a Coffee** — create the page, note the handle (`buymeacoffee.com/<handle>`). Instant, no approval wait — good candidate for the **primary** in-app CTA while Sponsors is pending.
-  - [ ] **Set up PayPal.me** — the universal catch-all (owner added 2026-07-31). Create/confirm your `paypal.me/<handle>` link (near-zero setup). Already wired as the third in-app option + `FUNDING.yml` + README — just needs the real handle at swap time. *(Decided: these three only — they span one-off↔recurring↔catch-all and casual↔developer. Skip Ko-fi (dupes BMC), Patreon/Open Collective (overkill).)*
-  - [ ] **Pick the primary in-app CTA** — currently Buy Me a Coffee (instant). Switch to whichever is live first if that changes.
-  - [ ] **Supply README media** — real banner + screenshots + the feature GIFs (placeholder `<!-- GIF: … -->` blocks are already marked in `README.md`).
-- **Then swap placeholders (one pass — all point at the sentinel `PLACEHOLDER`):**
-  - [ ] `web_app/src/config/donationLinks.ts` — the single source for all donation URLs + which is primary (R-003). Swap the `PLACEHOLDER` values; the three button placements (menu bar, auth shell, settings) + tests read from here.
-  - [ ] `.github/FUNDING.yml` — swap the placeholder handles so the repo's native **Sponsor** button lights up.
-  - [ ] `README.md` — donation section links + media.
-  - [ ] `dora_api/features/support/support_channel.py` — `_DEFAULT_SUPPORT_URL` is set to the real `dashy-dora` issues URL; confirm it once the repo is public (auto-lights Help / page errors / DoraBot report).
-  - [x] GitHub **issue templates** written 2026-07-31 — `.github/ISSUE_TEMPLATE/{config.yml,bug_report.yml,feature_request.yml}` (YAML issue forms + a security/donate chooser). Remaining: (optional) enable GitHub **Discussions** and uncomment the Discussions contact link in `config.yml`; the donate contact link in `config.yml` also carries the `PLACEHOLDER` and rides the swap above.
-- **Why deferred:** every account setup is an out-of-app owner action with signup/approval/payout steps; only the owner can do them.
-- **Recommended resolution:** when you're ready to publish the repo publicly. Cross-ref: [[FU-406]] (release readiness), [[FU-557]] (support channel — the issues URL doubles as the support channel).
 
 ## [OPEN] FU-579 — `quasar dev` vite-checker overlay: pre-existing type errors block fresh-browser interaction
 - **Raised:** 2026-07-18 (building the drive.mjs app driver)
@@ -2913,241 +1913,6 @@ long session summary. Distinct from the other logs:
   checker only (they do NOT appear in `vue-tsc --noEmit` or `quasar build`), so the
   overlay problem in `quasar dev` may persist — re-test `quasar dev` fresh and scope
   the checker if it still trips.
-
-## [OPEN] FU-578 — UX/UI review findings (owner-requested critical drive, 2026-07-18)
-- **Raised:** 2026-07-18 (owner asked for a critical UX/UI pass; app driven live via the
-  in-app browser pane — DOM/geometry/computed-style audit, no pixel rendering available)
-- **Type:** finding (bundle — split into fix units as the owner prioritises)
-- **ACTIONING (2026-07-18):** every item below is mapped to a work unit in
-  `docs/04_proposals/DESIGN_REMEDIATION_PLAN.md` (DR-1..DR-16 — see its coverage
-  table; three units flagged for owner sign-off: DR-6 scope, DR-10, DR-16). The
-  standing rules extracted from this audit are now
-  `docs/01_charter/DESIGN_STYLE_GUIDE.md` (D-001..D-015, enforced via R-035/ADR-031).
-  This FU stays open as the finding-of-record until the DR units close; resolve
-  items by DR unit, not piecemeal.
-- **PROGRESS:** DR-6 ✅ closed 2026-07-22 (finish-pickers cut confirmed).
-  **DR-1 ➗ ramp done 2026-08-12** — `--text-muted` retuned to ≥4.5:1 across all 10
-  themes (probe-verified; worst Pesto 3.0→4.62); `--text-secondary` already passed.
-  **DR-1b (2026-08-12):** ✅ alerts count badge + ✅ Buy/Wait/Skip verdict badge
-  fixed (probe-verified AA all themes). New-item primary button + wordmark →
-  owner-call "leave" (brand pairing / WCAG logo exemption). Essential stat +
-  brand-secondary rethink spun out as [[FU-621]] (needs a visual options board).
-  **DR-4 ✅ done 2026-08-12** — copy/leakage sweep shipped (items #1/10/12/13/14/17/21/22/38;
-  #13 was already fixed by the account redesign; **#49 won't-do** — pre-release wants
-  *no* back-compat redirects, so the uneven-alias finding is resolved by leaving both
-  legacy paths 404-ing, not adding one). Backend 36 tests green, vue-tsc + eslint
-  clean; live walk queued in DORA_VERIFY. **Note:** the existing legacy-redirect
-  block in `router/routes.ts` (`/data*`, `stock-locations`, `stock-groups`,
-  `recipe-vocab`, `admin/stores`, `meal-plans/board`, `stocktake/run`) is all dead
-  back-compat aliases (confirmed unreferenced) — a pre-release strip is an available
-  opportunistic cleanup if the owner wants it. **Remaining units:**
-  DR-1 (contrast tokens), DR-2 (level colours + row legend), DR-3 (a11y/casing/glyphs),
-  DR-5 (open-toggle mutation trap), DR-7 (toast/bubble placement), DR-8 (loading states),
-  DR-9 (toolbar/grid layout), DR-10 (nav labels — owner call), DR-11 (recipe read-mode),
-  DR-12 (alerts order + calendars), DR-13 (history grouping), DR-14 (locale/theme authority),
-  DR-15 (micro-motion), DR-16 (onboarding activation — owner call). Suggested next: DR-1 then DR-3/DR-5.
-- **What (bugs — concrete, verified in DOM/server):**
-  1. **Copy bug:** "Vanilla Ice Cream expires expired 3 days ago." — `generators.py:113`
-     composes `"{name} expires {window}"` but the past branch (line 98) already reads
-     "expired N days ago". Only the `days < 0` branch is wrong.
-  2. **Open-toggle click is an instant mutation with no cancel:** the stock-row
-     open/sealed icon button PATCHes `is_open=true` immediately; the "Marking as open"
-     dialog only governs expiry (Skip / Update — no Cancel), Escape doesn't close it,
-     and backdrop-dismiss leaves the item open silently (server-verified). No undo toast.
-  3. **Same button is unlabelled:** no aria-label, no tooltip (every other row action
-     has one) — a11y + discoverability.
-  4. **Mobile (375px) shopping-list detail overflows horizontally by ~255px** — the
-     `page-toolbar-actions` row (Quick add / grouping / Store / Refresh deals / More)
-     is 930px and never wraps. Confirmed visually (headless-Chrome screenshot): the
-     grouping control clips at "Store", Refresh deals/More unreachable without
-     horizontal scroll, page title truncates to "Shoppin…".
-  5. **Main nav is icon-only with no labels at every width** (desktop included) —
-     six ambiguous glyphs (box/bag/book/calendar/cart/chart) with no text, no
-     active-page label. Discoverability cost for anyone who hasn't memorised them.
-     [Corrected 2026-07-18 with real rendering: mobile properly collapses to a
-     hamburger — the original "24px sliver" reading was the hidden strip.]
-  6. **Dora helper bubble + tip toast float OVER page content on every page** —
-     screenshots show the tip covering stock rows and sitting directly on top of the
-     item-detail Level controls; the mascot overlaps the dashboard attention card and
-     the footer stats. Carries an unexplained "6" badge. Needs safe-area placement
-     (and the tip should auto-dismiss). [Replaces the retracted peek-at-phone-width
-     item — real mobile row-tap correctly navigates to the detail page.]
-  7. **Light-theme contrast fails broadly (WCAG AA):** muted secondary text
-     rgb(117,138,134) at 12px ≈3.0–3.7:1 (footer stats, chips, captions); ghost toolbar
-     buttons green 3.5:1; BUY badge 2.5:1@11px; brand-yellow titlebar text 2.8:1; count
-     digits 2.9:1. Dark theme also: alerts badge 3.0:1, "New item" button 3.6:1,
-     Essential stat 2.3:1 (visually confirmed barely legible in the footer).
-  7b. **Split-theme render under System mode (REAL, screenshot evidence):** with the
-     app booted dark and the OS scheme flipping to light (no reload), the header and
-     row cards flip light while the page background, toolbar, and footer stay dark —
-     `body--dark` (Quasar Dark plugin) and raw `prefers-color-scheme` CSS are two
-     sources of theme truth that disagree until a full reload. R-002/R-003-adjacent.
-- **What (friction / polish):**
-  8. Belief chip copy "Dora: ~Low · low" — band and confidence both read "low"
-     with different meanings; confidence needs a label or icon.
-  9. US date format everywhere ("7/17/2026", "7/13 – 7/19") for an AU-market install —
-     check default locale derivation (FU-043 surface).
-  10. Alert copy "Expired 3 day(s) ago" / "Expires in 1 day(s)" — "(s)" pluralisation
-     in the bell/alerts, while other surfaces pluralise properly.
-  11. Recipe detail "Available meals: 0 unallocated of 1 cooked" next to "Last cooked:
-     Never" — adjacent widgets disagree (seed data or display rule).
-  12. "Add (file)" button label (recipe image + profile picture) is cryptic.
-  13. Account page displays the user's raw UUID under their email.
-  14. Cookbook card chips can duplicate ("Dessert · Dessert" when cuisine = category).
-  15. ~~Meal-plans renders blank with no skeleton~~ RETRACTED — real rendering shows
-     proper skeletons (they're textless, so the blind DOM probe missed them). Still
-     true on the **dashboard**: async cards show literal "Loading totals…" /
-     "Loading…" text instead of skeletons, so the page settles piecemeal.
-  15b. Stock rows on mobile truncate names hard ("Barilla Pa…", "Brown O…",
-     "Chicken …") — three always-visible 36px trailing icons (expiry, open-toggle,
-     cart) eat the name column; consider collapsing to an overflow menu on phones.
-     Also the belief chip crowds/overlaps the location line on rows that have one,
-     and page titles truncate in the mobile header ("Stock it…", "Meal pla…").
-  15c. The open/sealed toggle renders as a **padlock** (locked = sealed, green
-     unlocked = open) — reads as security/permissions, not food state.
-  15d. Item-peek tab strip clips off-screen at desktop width ("Substitu…" cut, no
-     scroll affordance); Location breadcrumb truncates mid-word ("Middle shel…").
-  15e. Dashboard desktop layout leaves large dead zones — several rows render a
-     lone half-width card with empty space beside it (Next to cook, Best deals).
-  16. Meal-plans header stats confusing: "1 planned / fully stocked" vs the sidebar's
-     "0 / fully stocked for this week"; week shows 6 planned slots.
-  17. Bell suggestion text/action mismatch: "Add it to your shopping list —
-     flagged essential" but the only offered action is "Mark restocked".
-  18. Stock rows aren't real links (no href) — no middle-click/new-tab on desktop.
-  19. Tap targets 32–36px across stock rows/toolbars (guideline 44–48px); in-store
-     tick checkboxes are properly 50×50.
-  20. Kitchen-health "Stocktake 0/100" punishes an account that simply hasn't used
-     stocktake yet — drags the overall score before first use (Effortless-charter rub).
-  21. Dashboard greeting "Good afternoon, dora" — raw lowercase username.
-  22. "$1 saves vs rrp" stat grammar ("saved"/"savings"; "RRP").
-- **Second pass (2026-07-18, drive.mjs screenshots — cook mode / stocktake / reports / alerts):**
-  26. **Full page load sits on the boot splash 2+ seconds** (warm dev reload): every
-     hard navigation shows "Waking up Dora…" full-screen well past 2s before any
-     content. Check what the splash is actually waiting on (and against a prod build).
-  27. Stocktake runner's current-level button (e.g. red "Low Stock (change)") reads as
-     an *action* ("set it to Low") next to the green "Still correct" — it's actually a
-     state display that opens the picker. The "(change)" subscript carries all the
-     disambiguation; consider "Change level" wording or a dropdown affordance.
-  28. Alerts page leads with the 14-day "Upcoming" calendar — a huge, mostly-empty
-     grid with unlabeled ~4px dots — while the 7 actionable alerts are below the
-     fold. On a page named Alerts, the list should come first; the calendar dots
-     need labels/counts on the day cells.
-  29. Reports "Meals cooked" chart renders as one solid filled block (binary 0/1
-     y-axis over the whole range) — adds no information next to the per-recipe list;
-     the stock-value chart's dense 2-day x-labels are near-unreadable at 10px muted.
-  30. Reports/dashboard share the lone-half-width-card dead-zone layout pattern
-     ("Savings captured", "You keep running out of these" mostly empty at 2×768px).
-  31. The Dora tip bubble confirmed overlapping content on cook mode (ingredient
-     list), reports (Top-10 rows), and the alerts calendar — reinforces item 6; in
-     cook mode it collides with the surface's whole big-text hands-free purpose.
-  32. **History tab has no grouping/collapsing for repetitive events:** the chatty
-     seed item renders 50 consecutive "Pushed expiry +N days" cards as a 6,500px
-     monotonous wall (cap + footer work, but a "×50 over 3 months" collapse or
-     per-kind filter chips are needed for it to be readable). Each card also mixes
-     date formats — US timestamp header ("7/16/2026, 12:15:37 PM") over an ISO body
-     ("2026-10-08 → 2026-10-10").
-  33. **Unexplained dimmed row state on Stock Overview:** Parmesan Cheese renders
-     fully greyed (muted name, grey level square, ghost icons) with no tooltip or
-     legend saying why, while its BUY-badged neighbour Sourdough is normal. Whatever
-     the state is (inactive? unknown level?), it needs to say so.
-  34. My Products: solid surface (price + strikethrough + % off + store + linked-item
-     chip + Link… affordance). Nits: the permanent "Select products to add them to a
-     list, unlink, or mark inactive" instruction banner spends a full-width row on a
-     rare mode; "Stock items without products (15)" reads as data, not as the filter
-     button it is; two different cart glyphs (filled vs plus-variant) carry meaning
-     (on-list vs add) with no cue.
-  35. Dora helper panel is genuinely good (context "On this page" actions, the P8-07
-     quick-check card with Why?/Snooze/Dismiss, Basic/AI toggle). Nits: "Hi, dora!
-     Burger online. What's the move?" — lowercase raw username again + "Burger
-     online" is cute but cryptic; the disabled "AI" segment shows only a hammer
-     glyph with no hint why it's off (no LLM configured).
-  36. Item detail's standalone page tabs fit fine — the tab-strip clipping (15d) is
-     peek-pane-specific.
-- **Fourth pass (2026-07-18, onboarding via fresh `qa-ux-walk` account + draft-shop + add-item):**
-  37. Register form shows **"Username is required" before the user has typed anything**
-     (eager validation on a pristine form).
-  38. Onboarding STORY scenes are excellent copy ("The weekly shop is detective
-     work.", "every part of Dora is a toggle."); nit: the final scene's CTA renames
-     Next → "Set up in about a minute", fine for humans. SETUP step 1's "I batch-cook"
-     explainer is jargon-heavy for a first run ("cook-pool controls", "'N free' chip",
-     "shortfall warning") — the Preferences page says the same thing more simply.
-  39. The "You're all set!" hub offers **Price history as a first destination** — on a
-     brand-new account that page is empty by definition (data-gated); dead-end risk.
-     No guided "add your first items / import" step in SETUP — pantry seeding is just
-     one of eight equal cards, yet it's the activation make-or-break for this app.
-  40. Shopping-lists page at 1280px: the page title wraps ("Shopping / lists") with
-     the Quick-add button colliding beside it — toolbar spacing is off even at
-     desktop (same toolbar that overflows on mobile, item 4).
-  41. Bottom-right congestion: success toasts, the Dora tip toast, and the mascot all
-     stack in the same corner; the "Drafted 10 items." toast also **persists across
-     route changes** well past its read time.
-  42. "Draft my shop" flow itself is great (10 items, lands on the review list, clear
-     toast copy) and the Add-a-stock-item dialog is exemplary (4 fields, optionals
-     marked, Essential info hint) — keep both as-is.
-- **Fifth pass (2026-07-18, light theme + finish flow + cook-mode end):**
-  43. Light theme seen with real pixels: broadly pleasant (white cards read well);
-     the faint bits match the earlier AA numbers — belief-chip "· low" suffix and
-     footer stats are visibly weak; the yellow-on-green wordmark is loud/borderline.
-     Theme save is eager with a "Theme updated." toast ✓.
-  44. **Row state visual language is undocumented and inconsistently signalled:**
-     rows carry meaningful edge/tint codes (blue edge = on a list, amber = attention,
-     red = out, cream tint = ?) with no legend anywhere; Canned Tomatoes shows a
-     cream tint with NO matching icon signal, and the dimmed Parmesan (33) is still
-     unexplained. One legend (or tooltips on the edge) would pay for itself.
-  45. The missing restock-review pickers were FU-582 — **resolved 2026-07-22 as not-a-gap**: the picker was cut on purpose in `a3b82644`; the contract has now been removed server-side too. Not a finding.
-  46. Cook mode end-state: "Finish ✓" swaps in for Next, and the step's ingredient
-     row highlights as you advance — excellent detail, keep.
-- **Sixth pass (2026-07-18, plan wizard / kitchen-setup + admin settings / search / tablet):**
-  47. Plan step-by-step wizard: the same recipe appears in multiple groups
-     (Favourites AND All recipes) **each with its own checkbox** — duplicate
-     selectable rows in one pick list (same duplication in the meal-plans left
-     rail). Dedupe or visually link the instances.
-  48. **Locale/timezone root cause of the US dates (item 9):** household timezone
-     ships as UTC and locale is never asked — onboarding SETUP has no region step,
-     while Admin → System → Timezone even has a "Use this device" one-click
-     derivation that nothing invokes at first run. Money/date formats are wrong
-     until an admin finds that page. Recommend: derive tz/locale from the browser
-     at first boot (or a one-line SETUP step), keep admin override.
-  49. Trivial: `/settings/stores` has no legacy alias (404s) while sibling
-     `/settings/stock-locations` redirects — uneven alias coverage; real nav is fine.
-  50. Meal-plans' mini month calendar (right rail) shares the alerts-calendar
-     problem (28): a big grid of featureless cells with one outline + one dot.
-  Keep-as-is positives this pass: Stock-locations settings page (tree + counts +
-  explainer copy is the best settings page in the app); Admin → System sidebar
-  organisation; stock search (instant substring filter, footer stats re-scope to
-  the matches, clear-X affordance).
-- **Seventh pass (2026-07-18, reconcile queue / bulk mode / export):**
-  51. Reconcile queue reuses the stocktake card-runner pattern (progress bar, one
-     card, verb buttons incl. red "Didn't cook" + "Skip for now") — consistency
-     keep-as-is. But its date reads "Mon, Jul 13" while the meal-plans grid shows
-     "7/13/2026" for the same slot — one more face of the locale/format family
-     (9/48): the app has no single date-format authority.
-  52. **Belief chips pop in late and shift row layout:** consecutive shots of the
-     same stock list show rows first without, then with "Dora: ~Low" chips — the
-     async beliefs fetch reflows the name/location line after paint. Reserve the
-     space or fade in without reflow.
-  53. Bulk-select bar at 0 selected: disabled actions ("Add to list…", "Log
-     waste…" — functionally disabled, e2e-pinned) render in the same white as
-     enabled ones; only "Deselect all" greys. Style the disabled state.
-  54. Export menu (CSV / Print-PDF) is clean — keep.
-  (Positives worth keeping as-is: cook mode's step layout — big type, progress,
-  location-grouped scaled ingredients, per-ingredient swap, tools chips — is the
-  strongest screen in the app; stocktake's focused card flow; reports' friendly
-  empty states and wastage-reason tiles.)
-- **Needs a real-browser check (pane is hidden → paint/rAF-gated, may be harness-only):**
-  23. Splash "Waking up Dora..." dismissal is transition-gated (`splash-fade-leave-active`
-      wedged at opacity 1, z-9000, pointer-events auto — it ate clicks). Check a
-      backgrounded/throttled first load on a real device.
-  24. UPGRADED to 7b (confirmed real in headless Chrome — split-theme render).
-  25. One Vue render error in console during login→dashboard: `AuthShell.vue:114`
-      renderSlot "Cannot read properties of null ('ce')" (twice, also captured by the
-      client-log channel). Reproduce cleanly before chasing.
-- **Why deferred:** review unit was assessment-only per owner instruction; no code
-  changed.
-- **Recommended resolution:** owner triages this list; quick wins (1, 3, 10, 12, 13, 21,
-  22, 14) are one-line-ish fixes; 2 needs a design call (defer mutation until dialog
-  resolution, or add Cancel+undo); 4–6 are a mobile-layout unit; 7 is a theme-token
-  contrast pass (R-002 territory); 23–25 go to DORA_VERIFY after triage.
 
 ## [OPEN] FU-576 — uploads.spec.ts L79 pin fails under the system-Chrome e2e channel
 - **Raised:** 2026-07-17 (verify-campaign Batch 2, running the e2e suite)
@@ -3178,85 +1943,6 @@ long session summary. Distinct from the other logs:
 - **Why deferred:** the race is vanishingly unlikely + low-harm on a single-household self-host app (Codex itself rated it low). A real fix means a **unique constraint + migration + a case-insensitivity decision** (a plain unique index is case-sensitive on Postgres; case-insensitive uniqueness needs a functional index / `citext`, which differs SQLite↔Postgres — R-005/R-006 care). Disproportionate right now.
 - **Recommended resolution:** opportunistic. (a) The recipe-name strip is a trivial 4-line `field_validator` mirror of the stock-item fix — do it next time recipes are touched. (b) The unique-constraint/race is a data-model call — bundle with the FU-045 Postgres/migration work or whenever concurrent-write hardening is on the table; decide case-insensitive-uniqueness semantics then.
 
-## [OPEN] FU-557 — Stand up + wire the real support channel (FU-370 hook-up)
-- **Raised:** 2026-07-14 (FU-370 build).
-- **Type:** deferred job (out-of-app operator action + a one-line code change).
-- **What:** FU-370 shipped the full support/"Report an issue" plumbing **dormant** —
-  it renders nothing until a channel is configured. To turn it on:
-  1. Pick + stand up a channel (see `docs/04_proposals/PROPOSAL_SUPPORT_CHANNEL.md`
-     §3 / §6 — Option A public `dashy-dora-issues` repo w/ a `bug_report.yml`
-     template is the recommendation; Option B hosted form; Option C email).
-  2. Set the target in **one** place: either edit `_DEFAULT_SUPPORT_URL` /
-     `_DEFAULT_SUPPORT_EMAIL` in
-     [`support_channel.py`](dora_api/features/support/support_channel.py) and commit,
-     OR set `DORA_SUPPORT_URL` / `DORA_SUPPORT_EMAIL` env for that install.
-  3. Rewrite the Help "About" copy (currently a solid honest draft) into your own
-     voice if you want — `HelpPage.vue`, the `support-copy` block.
-  Once set, the Help button, the error-state "Report this" button, and the DoraBot
-  `report_issue` link all light up automatically. No further code needed.
-- **Why deferred:** the channel is an out-of-app decision that involves creating
-  external infrastructure (repo/form/alias) — the user's to make, on his time.
-- **2026-07-31 (donation / open-source pivot):** with the paid model dropped, support is
-  now explicitly **best-effort, not contractual**. Option A (a public GitHub issues repo
-  with a `bug_report.yml` template) is now clearly the right fit — it's the natural
-  open-source channel and doubles as the "show it off" surface. No commercial SLA framing.
-- **Recommended resolution:** when you're ready to point people at a channel (the
-  user asked for this FU explicitly so the hook-up isn't forgotten). Natural to pair with
-  the open-source release work in [[FU-406]].
-
-## [OPEN] FU-520 — Test-suite improvements Phase 4: frontend Vitest + Hypothesis + Postgres CI + scraper/emailer fixture tests
-- **Raised:** 2026-07-09 (split from FU-169 close-out).
-- **Type:** deferred job (large — should be its own multi-session unit).
-- **What:** the Phase-4 slice of [`docs/04_proposals/PROPOSAL_TEST_SUITE_IMPROVEMENTS.md`](docs/04_proposals/PROPOSAL_TEST_SUITE_IMPROVEMENTS.md) §5.E-F P2. Status after the 2026-07-10 targeted sweep:
-  1. **Frontend Vitest + Vue Test Utils — SHIPPED incl. first component tests (2026-07-10, two passes).** 9 util/composable spec files (139 tests) + `stockLevelDot.spec.ts` (11 component tests over both StockLevelDot components) → 203 total, ~1.5s. The Quasar component-mount pattern is now established in `vitest.config.ts` + that spec: `@vitejs/plugin-vue` wired, `quasar` aliased to its client bundle (the SSR bundle throws under vitest), real Quasar components registered per-mount, per-file `// @vitest-environment jsdom` pragma. **Remaining:** `AddToListButton` (601 lines, API-coupled — needs service mocking) + shopping rail + lifecycle-coupled composables (`useMealPlanExport`, `useOfflineQueue`); all unblocked by the established pattern.
-  2. **`merchant_api` scraper tests** against saved HTML fixtures — **still open**; the scraper lives in the sibling `dora-companion` repo, so this belongs there ([[FU-161]] Aldi net).
-  3. **`emailer` tests — SHIPPED 2026-07-10.** `tests/test_email_templates.py` (13) + `tests/test_email_sender.py` (16): all 5 content templates + layout + autoescape, MIME assembly, SMTP wire choreography via fake transport, dry-run degradation, error propagation. Found [[FU-522]].
-  4. **Hypothesis property tests — SHIPPED 2026-07-10.** `tests/test_domain_properties.py` (26): invariants over `recipe_cookability` (incl. the canonical *cookable ⇒ nothing required missing*), `stock_status`, `product_offer`, `units`. Found [[FU-524]]. `hypothesis` pinned in requirements.txt.
-  5. **Postgres-backed CI test runs** once CI is un-commented ([[FU-405]] / `.github/workflows/ci.yml`) — **still open**. Note the commented workflow was fixed 2026-07-10 to run bare `pytest` (full suite) + `npm test`, so un-commenting inherits the right scope.
-- **2026-07-11 update:** component-level Vitest expanded — **AddToListButton (20, the queued item), AlertRow (13, incl. the unknown-kind degrade regression), DoraModeSlider (6), SettingsFileDrop (12)**; frontend suite now 254 tests / 15 files. Pattern note for future specs: module-boundary Pinia store mocks must return `reactive({...})`, not plain objects of refs (`storeToRefs` rewraps computeds — documented in `addToListButton.spec.ts`). Remaining: scraper tests (companion repo), Postgres CI.
-- **2026-07-12 update:** **Pinia store layer** now covered — `stockItemStore` (16, incl. optimistic level-swap + rollback-registry contract + FU-511 cross-store toast), `shoppingListStore` (10), `alertStore` (9, pins server-owned `actionable_count` = R-003), `locationStore` (9). Frontend suite now **298 tests / 19 files**. `authStore` (bootstrap retry / in-flight sharing / 401 clear) flagged as the strongest remaining single-store candidate; thin fetch-wrapper stores deliberately skipped. Store oddities noted (not bugs): `stockItemStore` rollback is index-captured (narrow race) and only fires via the global unhandled-rejection handler — a caller that `catch`es strands optimistic state (documented design). Remaining: scraper tests (companion repo), Postgres CI, authStore spec.
-- **2026-07-13 update — parent FU-371 resolved; this FU tightened to its three real remnants (everything else shipped):**
-  1. **Postgres-backed CI + coverage gate/ratchet** — blocked on CI being un-commented ([[FU-405]] P7-09 Ops; `.github/workflows/ci.yml` is deliberately fully commented). No point gating coverage while CI doesn't run. Un-blocks as a set when FU-405 lands.
-  2. **`merchant_api` scraper fixture tests** — the scraper lives in the sibling `dora-companion` repo; belongs there under [[FU-161]], not this repo.
-  3. **Opportunistic component/composable specs** — `authStore` (strongest remaining candidate), shopping rail, lifecycle-coupled composables (`useMealPlanExport`, `useOfflineQueue`); pattern is established, done per-touch when the surface next changes.
-- **2026-07-14 update — item 3 `authStore` SHIPPED.** `web_app/test/unit/authStore.spec.ts` (17 tests): bootstrap probe (existing-session /me, fresh-install skip, **shared in-flight promise**, post-boot short-circuit), the **parked-promise boot-retry loop** (network vs generic message; real `NormalisedApiError` so the `isNetworkError` branch runs), credential entry points, the **FU-355 logout + silent-401 → clear-user + `clearAllListState`** contract (401 handler captured via a spied `setUnauthorizedHandler`), and the avatar cache-bust. Frontend suite now **360 tests / 27 files**. Pattern note: partial-mock `axiosHttpClient` with `vi.importActual` to keep the real error class while spying the unauthorized-handler setter. Remaining item-3 surfaces (shopping rail, `useMealPlanExport`, `useOfflineQueue`) stay opportunistic.
-- **2026-07-14 update (later) — Postgres runs + scraper fixtures + two divergence bug fixes SHIPPED; item 1 reduced to CI wiring only.** Ran the **full backend suite on real Postgres** via a new `DORA_TEST_DB=postgres` selector (`tests/db_backend.py`) + a Postgres per-test isolation snapshot (DELETE-all reverse-FK + bulk reinsert; `tests/e2e/dora_api/conftest.py`). 37 failures → **0**; 1490 passed on both PG and SQLite (no regression). The failures traced to **two systemic SQLite-vs-Postgres divergence bugs, fixed at source** (real runtime bugs on a PG deployment): (a) **raw-`text()` UUID bind is dialect-dependent** — SQLite wants `bytes`, Postgres wants `str` (a wrong bind is a 500 on PG / silent zero-rows on SQLite); fixed `recipes/pool.py:bump_pool`, `meal_plans/reconcile.py:_id_bytes`, `tests/support.py:uuid_bind`; (b) **over-length `alert_key` (String(255)) 500s on Postgres** (`StringDataRightTruncation`) but passes silently on SQLite — `alerts/interact_with_alert.py` now length-guards to an idempotent no-op. **Item 2 (scraper fixtures) DONE** — `dora-companion/tests/test_provider_parsers.py` (8: Coles JSON translate + Aldi HTML parse via real selectors). **Item 3 leftovers:** shopping-rail (`shoppingListRailItem.spec.ts`, 9) + `useMealPlanExport` (3) DONE; frontend suite **372**. So item 1 is now **just the CI wiring** (gated on [[FU-405]]); only `useOfflineQueue` remains opportunistic on item 3. The dialect-aware-bind lesson is recorded in the `sqlite-uuid-text-binding` memory for future hand-rolled `text()` sites.
-- **2026-07-15 update — item 3 fully drained; `useOfflineQueue` SHIPPED.** `web_app/test/unit/useOfflineQueue.spec.ts` (13 tests): `tryWithQueue` swallow-network-only vs rethrow-others vs pass-through-success; `drain` replays oldest-first, STOPS on the first network error (rest stay queued, `attempts` counted), shunts a non-network rejection into the conflict pile and continues; the false→true `apiReachable` auto-drain edge; `discardConflict`/`retryConflict` (retry re-queues + drains); per-user localStorage isolation + rehydrate-on-user-switch + corrupt-payload degrade-to-empty. Pattern note for future singleton-composable specs: the module registers **module-level watchers that are never torn down**, so the reactive seams (`useNetworkStatus`, `authStore`) must be re-mocked with a FRESH ref per test via `vi.doMock` in `beforeEach` (a hoisted `vi.mock` shares one ref across `resetModules`, letting a prior test's zombie watcher fire on the current flip and drain its stale queue). Import `NormalisedApiError` fresh alongside the composable so `instanceof` lines up with the re-evaluated class. Frontend suite now **385 tests / 30 files**. **Only item 1 (Postgres CI wiring) remains — nothing else on this FU is actionable in-repo.**
-- **Recommended resolution (remaining):** item 1's *run-on-Postgres* half is done (suite is green on PG via the selector) — only the CI wiring remains, gated on [[FU-405]]. Item 3 is now fully done (all component/composable surfaces covered). **Recommended resolution point:** Postgres CI with [[FU-405]] — that is the sole remaining trigger.
-- **Cross-ref:** parent [[FU-371]] (RESOLVED 2026-07-13); [[FU-519]] Phase 3 (RESOLVED 2026-07-13).
-
-## [OPEN] FU-406 — Open-source release readiness (was: self-host launch; de-commercialized 2026-07-31)
-- **Raised:** 2026-07-01 (legacy prompt-plan audit). **Narrowed 2026-07-14 (self-host-first). Reframed 2026-07-31 (donation / open-source pivot).**
-- **Type:** deferred job (release gate for the open-source product).
-- **What (post-pivot):** the checklist to **release Dora as free open-source software**:
-  a **project README / showcase** (what it is, screenshots, how to self-host, a donation/
-  Sponsors link), a **release process** (GitHub Releases + versioning + changelog — no paid
-  download gate), and pointing at a **support channel** (best-effort, [[FU-557]]).
-- **Dropped by the pivot ([[FU-562]] / [[FU-567]] resolved won't-do):** the *sales* landing
-  page, the licence change (keeping MIT), the scraping/terms disclaimer (owner dropped it),
-  and any billing/download-gate wiring. The "never overpay — personal price intelligence"
-  framing survives as a **product story** for the README, not a sales pitch.
-- **Relocated (unchanged):** the operate-the-service sliver — uptime/SLA, on-call, escalation
-  — stays in `docs/04_proposals/OPTIONAL_SAAS_AND_MANAGED_DEPLOYMENT.md` §3 (hosted-only).
-- **Why deferred:** last-mile; do it when you're ready to publish the repo publicly.
-- **Recommended resolution:** at the open-source release. **QA half already covered by [FINALISATION_PLAN.md](docs/01_charter/FINALISATION_PLAN.md)** (Track 1 FST + release-gate). Remaining: README/showcase, release process, support-channel stand-up ([[FU-557]]).
-
-## [OPEN] FU-405 — P7-09 Ops (observability, CI/CD deploy, staging, backups)
-- **Raised:** 2026-07-01 (legacy prompt-plan audit).
-- **Type:** deferred job (Phase 4).
-- **What:** P7-09 — production ops. CI is deliberately disabled in this repo (`.github/workflows/*.yml` commented out to preserve GH free-tier — see memory `feedback_ci_disabled_policy`). Observability, staging, backups all unplanned. **Do not silently re-enable CI as part of this** — separate call.
-- **Why deferred:** Phase 4 + CI-cost policy.
-- **Recommended resolution:** Phase 4 — pair with billing (P7-06) so ops cost lands with revenue.
-- **Note (2026-07-09, FU-387 audit):** when CI is re-enabled at Phase 4, wire in dependency scanning as part of this FU — a scheduled `pip-audit -r requirements.txt` + `npm audit --prefix web_app` job that opens an issue on new advisories. FU-387 shipped a manual `scripts/security-audit.sh` runner as the interim; promoting it to CI belongs here, not in a fresh FU. See [SECURITY_REVIEW.md](docs/security/SECURITY_REVIEW.md) §6 for the current baseline the CI job should measure against.
-
-## [OPEN] FU-404 — P7-08 Compliance (privacy policy, DSAR, deletion) — hosted/controller-scoped
-- **Raised:** 2026-07-01 (legacy prompt-plan audit). **Scoped 2026-07-16 (self-host-first, FU-412 plan).**
-- **Type:** deferred job (hosted/managed — not a self-host sale prerequisite).
-- **What:** P7-08 — the privacy-law **compliance contract**: privacy policy + ToS wording, and self-service **data export + account/data deletion (DSAR)**. Overlaps with [[FU-401]] (P5-02 Privacy). Security-headers half already shipped (FU-387).
-- **Scoping (2026-07-16):** the DSAR/compliance obligation follows the **data controller**. On self-host that's the *operator*, not the software vendor (`COMMERCIALIZATION_REPORT.md` §1.2 — "self-hosted sidesteps most; SaaS does not"), so this **activates only when you host user data** → it now lives with the parked hosted work in [`OPTIONAL_SAAS_AND_MANAGED_DEPLOYMENT.md`](docs/04_proposals/OPTIONAL_SAAS_AND_MANAGED_DEPLOYMENT.md) §3. The **self-host** track keeps only a short honest **privacy statement** (`SELF_HOST_COMMERCIALIZATION_PLAN.md` Track 3), drafted with the licence text. Self-service export/delete may still ship as optional *product features* on the repository seam, but they're driven by this hosted need, not by the self-host sale.
-- **Why deferred:** hosted-path work; no near-term trigger while the product is self-host-only.
-- **Recommended resolution:** when a hosted/managed offering is opened (OPTIONAL_SAAS revisit trigger). **Partially covered by [FINALISATION_PLAN.md](docs/01_charter/FINALISATION_PLAN.md)** — the multi-user + admin FST persona flows (Track 1) will *exercise* any export/delete/privacy surfaces that do get built; the senior-review pass on auth + backup catches security-header/credential-exclusion drift. **Not covered:** the legal drafting + compliance contract wording (owner + lawyer).
-
 ## [OPEN] FU-363 — Cross-cutting / niche feedback (Bucket C in COVERAGE_GAPS) — 4 of 8 actioned
 - **Raised:** 2026-07-01 (COVERAGE_GAPS sweep).
 - **Type:** deferred job (bundle — 8 sub-items; **items 2, 5, 6, 7 actioned 2026-07-15, 4 remain**).
@@ -3271,46 +1957,4 @@ long session summary. Distinct from the other logs:
   8. **[OPEN]** General UI consistency — cross-cutting.
 - **Why deferred:** no per-surface home; the 4 remaining are Phase 3/4-timed or design-only.
 - **Recommended resolution:** split into per-item FUs *only when picked up*. Remaining: items 1 (QA test doc) + 3 (polish pass) + 8 (UI consistency) are natural Phase-4 gates; item 4 (push notifications) is a Phase-3-ish feature build. Close this bundle once those four are picked up.
-
-## [OPEN] FU-224 — App-wide colour-usage assessment (primary vs secondary vs accent)
-- **Raised:** 2026-06-18 (Stock-pages feedback pass)
-- **Type:** deferred job
-- **What:** During the feedback pass the user noted that the open / in-use button on the
-  Stock Overview row was using `secondary` and was hard to see in Pesto dark — that fix
-  landed by promoting to `primary`, but the user flagged that the broader pattern
-  ("majority primary usage; not sure where secondary actually pulls weight") may need a
-  separate audit. Walk the app, list every place `color="secondary"` (and other lower-used
-  semantics like `info`, `accent`) appears, decide which deserve to stay vs. which should
-  consolidate to `primary` or theme tokens for visual hierarchy reasons. Likely outputs:
-  a short proposal under `docs/04_proposals/` + targeted fixes.
-- **Why deferred:** intentionally out of scope for the feedback pass (R-007). The user
-  explicitly called it out as a separate task to think about.
-- **Recommended resolution:** opportunistic — fold in next time a theming/styling pass
-  comes around, or after FU-046 (theme-token compliance) gets another round. **Ride-along with [FINALISATION_PLAN.md](docs/01_charter/FINALISATION_PLAN.md) Track 3** — every chunk's senior-review pass logs any `color="secondary" | info | accent"` sites worth reconsidering against this FU, so by plan close the shortlist is already assembled. Actual resolution still needs eyes-on-the-app judgement, not a code walk — so this FU stays open past plan close.
-- **2026-10-23 (finalisation Stage 1):** Stage 2 produces the `color="secondary"` site list as part of CHUNK_20 20-D5; nothing else in the sweep decides this — it stays the owner's visual pass.
-
-## [OPEN] FU-010 — Late-game holistic theme / colour / overall-look review
-- **Raised:** 2026-06-05 (user request)
-- **Type:** finding / deferred job
-- **What:** A dedicated end-to-end pass over all themes, colours, and the overall
-  visual feel of the app — viewed as a whole, in the browser, across the full
-  theme set — rather than the per-chunk token work done piecemeal in A1/A1b.
-- **Known input — Pesto looks over-dulled:** the user believes Pesto was dulled
-  *too far*. Likely cause: the brightness tuning in A1b happened while a theme-logic
-  bug was overriding the new values (the `themeService.ts` `THEMES` dict clobbering
-  `themes.scss` via `setCssVar` — see the 2026-06-04 A1b round-2 worklog entry and
-  the structural fix tracked in [[FU-004]]). So the dulling may have over-corrected
-  against values that weren't actually rendering. Now that Pesto/Pesto Dark were
-  synced, the *final* dulled value should be re-judged from scratch.
-- **Also feed in:** the structural dual-source collapse ([[FU-004]]) so the review
-  isn't fighting a moving target. (Note: FU-003 — the Pesto-only `--text-muted`
-  42% bump — was reverted 2026-07-06; all light themes are back on the original
-  50% baseline, so this holistic review starts from parity across the family.)
-- **Why deferred:** look-and-feel polish is best judged late, in one sitting, on a
-  near-final app — not litigated token-by-token mid-build.
-- **Recommended resolution:** later — a dedicated pass during **Phase 3 (champion
-  polish)** or just before **Phase 4 (commercialize)**, once the app is feature-
-  complete enough to eyeball holistically. Requires the app actually running
-  (deps installed) and ideally a side-by-side across all themes. **Ride-along with [FINALISATION_PLAN.md](docs/01_charter/FINALISATION_PLAN.md) Track 3** — every chunk's senior-review pass logs theme/colour anomalies against this FU so the eventual holistic pass starts with a triaged shortlist instead of a blank slate. Doesn't replace the eyes-on-app judgement pass; complements it.
-- **2026-10-23 (finalisation Stage 1):** measured inputs handed over in CHUNK_20 **20-D5 / C11**: 14 theme blocks, 127 root tokens, `--text-on-primary` pure white in 5 themes (FU-674), `text-color="white"` ×24 (FU-671), `--ring-focus` literal at `:root` recoloured in only 5 themes (20-R8), hex outside the auth ladder in 8 files, the `AuthShell` private ladder (15-R10/R6), banner accent-on-primary pairs (17/19 C11).
 

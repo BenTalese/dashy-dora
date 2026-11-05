@@ -195,6 +195,13 @@
      */
     const attrs = useAttrs();
 
+    // Quasar names the combobox from `label`; a select whose label is drawn
+    // beside it (a SettingsRow, an inline-edit row) passes `aria-label`,
+    // which QSelect lets override (FU-734). Flagged in dev when neither is.
+    if (import.meta.env.DEV && !attrs.label && !attrs['aria-label'] && !attrs['aria-labelledby']) {
+        console.warn('BaseSelect: pass label or aria-label to name the field.');
+    }
+
     /** Outlined unless the call site picked another QField design. A
      *  `borderless` select is an inline, in-row control (the stock detail
      *  page's level / location / group pickers), where an outline would
@@ -325,6 +332,12 @@
     .base-select--chips :deep(.q-field__control) {
         height: auto;
         min-height: 40px;
+    }
+    /* D-004 on touch (R-085 / FU-877). */
+    @media (pointer: coarse) {
+        .base-select--chips :deep(.q-field__control) {
+            min-height: 44px;
+        }
     }
 
     .base-select__dialog-bar {

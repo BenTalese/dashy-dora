@@ -62,15 +62,21 @@
                 v-model="form.source_low_or_out"
                 :label="`Items that are low or out of stock${lowOrOutCount > 0 ? ` (${lowOrOutCount})` : ''}`"
             />
-            <q-checkbox
-                v-model="form.source_essentials_only_for_low"
-                :disable="!form.source_low_or_out"
-                label="...but only the essentials among them"
-                class="q-ml-md"
-            />
+            <!-- FU-913: one essentials control. It used to be two peer
+                 checkboxes, "...but only the essentials among them" and "All
+                 your essentials, however much is left", where ticking both was
+                 the same as the second alone. -->
             <q-checkbox
                 v-model="form.source_essentials"
-                label="All your essentials, however much is left"
+                label="Your essentials"
+            />
+            <BaseSegmented
+                v-if="form.source_essentials"
+                v-model="form.essentials_when"
+                :options="ESSENTIALS_WHEN_OPTIONS"
+                dense
+                aria-label="When to add essentials"
+                class="q-ml-xl q-mb-xs"
             />
             <q-checkbox
                 v-model="form.source_frequently_added"
@@ -129,6 +135,7 @@
 
 <script lang="ts" setup>
     import BaseButton from 'src/components/BaseButton.vue';
+    import BaseSegmented from 'src/components/BaseSegmented.vue';
     import BaseSelect from 'src/components/BaseSelect.vue';
     import BaseDialog from 'src/components/BaseDialog.vue';
     import { storeToRefs } from 'pinia';
@@ -142,7 +149,7 @@
     import { useShoppingListStore } from 'src/stores/shoppingListStore';
     import { useStockItemStore } from 'src/stores/stockItemStore';
     import { useStockLevelStore } from 'src/stores/stockLevelStore';
-    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+    import { isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { computed, reactive, ref, watch } from 'vue';
 
     type StartFrom = 'empty' | 'template' | 'recipe' | 'meal_plan';
@@ -176,8 +183,16 @@
     const submitting = ref(false);
     const loadingPickers = ref(false);
     const templateOptions = ref<{ label: string; value: string }[]>([]);
-    const recipeOptions = ref<{ label: string; value: string; ingredientIds: string[] }[]>([]);
+    const recipeOptions = ref<{
+        label: string; value: string; ingredientIds: string[]; unlinkedCount: number;
+    }[]>([]);
     const mealPlanOptions = ref<{ label: string; value: string }[]>([]);
+
+    type EssentialsWhen = 'low_or_out' | 'always';
+    const ESSENTIALS_WHEN_OPTIONS: { label: string; value: EssentialsWhen }[] = [
+        { label: 'When low or out', value: 'low_or_out' },
+        { label: 'Always', value: 'always' },
+    ];
 
     const lowOrOutCount = computed(() => {
         const ids = new Set(
@@ -203,8 +218,8 @@
         name: '',
         plannedShopDate: '' as string,
         source_low_or_out: false,
-        source_essentials_only_for_low: false,
         source_essentials: false,
+        essentials_when: 'low_or_out' as EssentialsWhen,
         source_frequently_added: false,
         targetMode: 'new' as TargetMode,
         mergeIntoListId: null as string | null,
@@ -251,8 +266,8 @@
             form.name = '';
             form.plannedShopDate = '';
             form.source_low_or_out = props.presetLowOrOut;
-            form.source_essentials_only_for_low = false;
             form.source_essentials = false;
+            form.essentials_when = 'low_or_out';
             form.source_frequently_added = false;
             form.targetMode = props.presetMergeIntoListId ? 'merge' : 'new';
             form.mergeIntoListId = props.presetMergeIntoListId;
@@ -275,6 +290,7 @@
                         label: `${r.name}${ingredientIds.length ? ` (${ingredientIds.length} ingredients)` : ''}`,
                         value: r.recipe_id,
                         ingredientIds,
+                        unlinkedCount: (r.ingredients ?? []).filter((i) => !i.stock_item_id).length,
                     };
                 });
                 mealPlanOptions.value = plans.map((p) => ({
@@ -331,17 +347,22 @@
                 createdNew = true;
             }
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not create list.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not create list.',
+                    caption: toastCaption(err),
+                });
+            }
             return;
         }
         if (!targetListId) return;
 
         let preSeededAdded = 0;
         let preSeededSkipped = 0;
+        // FU-757: free-text ingredients have no stock item to become a line;
+        // counted so the toast says what was left out rather than dropping it.
+        let notLinked = 0;
         try {
             if (f.startFrom === 'template' && f.templateId) {
                 // Into the list chosen or just created, so a new list keeps
@@ -357,6 +378,7 @@
                     const counts = await bulkAddToList(targetListId, opt.ingredientIds);
                     preSeededAdded += counts.added;
                     preSeededSkipped += counts.skipped;
+                    notLinked += opt.unlinkedCount;
                 }
             } else if (f.startFrom === 'meal_plan' && f.mealPlanId) {
                 const ingredients = await mealPlanApi.getIngredientsAsync(f.mealPlanId);
@@ -369,14 +391,17 @@
                     );
                     preSeededAdded += counts.added;
                     preSeededSkipped += counts.skipped;
+                    notLinked += ingredients.unlinked.length;
                 }
             }
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not pre-fill from the chosen source.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not pre-fill from the chosen source.',
+                    caption: toastCaption(err),
+                });
+            }
         }
 
         let autoAdded = 0;
@@ -384,14 +409,16 @@
         let autoNothingToAdd = false;
         if (wantsAutoFill && targetListId) {
             try {
+                const essentialsWhenShort = f.source_essentials && f.essentials_when === 'low_or_out';
                 const result = await api.autoGenerateAsync({
                     merge_into_list_id: targetListId,
                     sources: {
-                        low_stock: f.source_low_or_out,
-                        out_of_stock: f.source_low_or_out,
-                        essentials_only_for_low:
-                            f.source_low_or_out && f.source_essentials_only_for_low,
-                        essentials: f.source_essentials,
+                        // Low/out covers essentials that are low/out, so the
+                        // essentials-only narrowing applies only on its own.
+                        low_stock: f.source_low_or_out || essentialsWhenShort,
+                        out_of_stock: f.source_low_or_out || essentialsWhenShort,
+                        essentials_only_for_low: !f.source_low_or_out && essentialsWhenShort,
+                        essentials: f.source_essentials && f.essentials_when === 'always',
                         frequently_added: f.source_frequently_added,
                     },
                 });
@@ -402,11 +429,13 @@
                     autoSkipped = result.skipped_already_on_list ?? 0;
                 }
             } catch (err) {
-                $q.notify({
-                    type: 'negative',
-                    message: 'Could not auto-fill from stock.',
-                    caption: toastCaption(err),
-                });
+                if (!isAlreadyNotified(err)) {
+                    $q.notify({
+                        type: 'negative',
+                        message: 'Could not auto-fill from stock.',
+                        caption: toastCaption(err),
+                    });
+                }
             }
         }
 
@@ -433,6 +462,9 @@
                     + `${totalAdded} item${totalAdded === 1 ? '' : 's'} added`
                     + (totalSkipped > 0 ? `, ${totalSkipped} already on list` : '')
                     + '.',
+                ...(notLinked > 0 ? {
+                    caption: `${notLinked} ingredient${notLinked === 1 ? ' isn\'t' : 's aren\'t'} linked to your pantry, so ${notLinked === 1 ? 'it was' : 'they were'} left off.`,
+                } : {}),
             });
         }
 

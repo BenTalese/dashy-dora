@@ -289,9 +289,9 @@
     } from 'src/models/shoppingList';
     import { useProductStore } from 'src/stores/productStore';
     import { useStoresStore } from 'src/stores/storesStore';
-    import { describeApiError, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+    import { describeApiError, isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { useQuasar } from 'quasar';
-    import { computed, ref } from 'vue';
+    import { computed } from 'vue';
 
     const props = defineProps<{
         /** The page's "Group by" preference. Read-only here: the overview card
@@ -308,8 +308,9 @@
     const {
         api, listId, detail, baseLines, deferredLines,
         trimBanner, previewTrim, applyTrim, keepFromTrim, dismissTrim,
-        load, refreshDetailQuietly, refreshAllQuietly,
+        refreshDetailQuietly, refreshAllQuietly,
         setLineQuantity, onAdjustQuantity,
+        addingBackLineIds, addingSuggestionId,
     } = useShoppingListDetail();
 
     const modeRef = computed(() => props.mode);
@@ -392,12 +393,14 @@
             try {
                 await api.reorderLinesAsync(listId.value, ids);
             } catch (err) {
-                await load();
-                $q.notify({
-                    type: 'negative',
-                    message: 'Could not reorder.',
-                    caption: toastCaption(err),
-                });
+                await refreshDetailQuietly();
+                if (!isAlreadyNotified(err)) {
+                    $q.notify({
+                        type: 'negative',
+                        message: 'Could not reorder.',
+                        caption: toastCaption(err),
+                    });
+                }
             }
         })();
     }
@@ -432,7 +435,6 @@
     const deferredTotal = computed(() =>
         deferredLines.value.reduce((sum, l) => sum + priceOfLine(l), 0),
     );
-    const addingBackLineIds = ref<Set<string>>(new Set());
 
     async function addLineBackToActive(lineId: string): Promise<void> {
         if (addingBackLineIds.value.has(lineId)) return;
@@ -444,10 +446,12 @@
             // Quiet — see `onRemoveLine`; the line moves section, the page stays.
             await refreshAllQuietly();
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: describeApiError(err) ?? 'Could not add that line back.',
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: describeApiError(err) ?? 'Could not add that line back.',
+                });
+            }
         } finally {
             const next = new Set(addingBackLineIds.value);
             next.delete(lineId);
@@ -470,7 +474,6 @@
     // No dismissal state any more (2026-09-17) — the strip is either something
     // the household opted into or it isn't rendered at all, and a session-only
     // hide was a third state in between that nothing remembered.
-    const addingSuggestionId = ref<string | null>(null);
 
     const visibleSuggestions = computed<InferredSuggestion[]>(
         () => detail.value?.inferred_suggestions ?? [],
@@ -490,11 +493,13 @@
                 message: `Added ${suggestion.name}.`,
             });
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: `Could not add ${suggestion.name}.`,
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: `Could not add ${suggestion.name}.`,
+                    caption: toastCaption(err),
+                });
+            }
         } finally {
             addingSuggestionId.value = null;
         }
@@ -556,11 +561,13 @@
         } catch (err) {
             line.planned_store_id = previousId;
             line.planned_store_name = previousName;
-            $q.notify({
-                type: 'negative',
-                message: 'Could not set the store.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not set the store.',
+                    caption: toastCaption(err),
+                });
+            }
         }
     }
 
@@ -579,11 +586,13 @@
             }
         } catch (err) {
             line.preferred_buy_id = previous;
-            $q.notify({
-                type: 'negative',
-                message: 'Could not set the hint.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not set the hint.',
+                    caption: toastCaption(err),
+                });
+            }
         }
     }
 
@@ -616,11 +625,13 @@
             await refreshDetailQuietly();
         } catch (err) {
             line.selected_product_id = previous;
-            $q.notify({
-                type: 'negative',
-                message: 'Could not set offer.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not set offer.',
+                    caption: toastCaption(err),
+                });
+            }
         }
     }
 
@@ -708,11 +719,13 @@
                 });
             }
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not remove line.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not remove line.',
+                    caption: toastCaption(err),
+                });
+            }
         }
     }
 </script>
@@ -754,7 +767,7 @@
        button beside it. Tinted text that wraps says the same thing and can be
        as long as the sentence it is. */
     .sld-deferred-reason {
-        color: var(--semantic-warning);
+        color: var(--semantic-warning-ink);
         margin-right: var(--space-1);
     }
     /* R-022 — DnD affordances live in src/css/dnd.scss

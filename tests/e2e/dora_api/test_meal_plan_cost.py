@@ -158,7 +158,7 @@ def test__create_meal_plan__PricedRecipe__ResponseBodyCarriesTheCost(api):
     assert resp.json()["estimated_cost"] == 2.0
 
 
-def test__meal_plan_cost__DayAndWeekTotals__AgreeWithTheEntriesTheySum(api):
+def test__meal_plan_cost__WeekTotal__AgreesWithTheEntriesItSums(api):
     set_money_enabled(True)
     today, slot = _household_today(), _slot()
 
@@ -170,9 +170,6 @@ def test__meal_plan_cost__DayAndWeekTotals__AgreeWithTheEntriesTheySum(api):
     ])
 
     assert sorted(e["estimated_cost"] for e in plan["entries"]) == [2.0, 4.0]
-    day = next(d for d in plan["day_cost"] if d["scheduled_for"] == today.isoformat())
-    assert day["estimated_cost"] == 6.0
-    assert (day["counted_meals"], day["total_meals"]) == (2, 2)
     assert plan["estimated_cost"] == 6.0
 
 
@@ -220,5 +217,4 @@ def test__meal_plan_cost__MoneyOff__CarriesNoFiguresAtAll(api):
     ])
 
     assert plan["entries"][0]["estimated_cost"] is None
-    assert plan["day_cost"] == []
     assert plan["estimated_cost"] is None

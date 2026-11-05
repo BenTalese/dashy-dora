@@ -25,8 +25,10 @@
         <ol v-if="modelValue.length > 0" class="rsie">
             <li v-for="(row, index) in modelValue" :key="row.client_id" class="rsie__cell">
                 <div class="rsie__tile">
-                    <img
-                        :src="row.preview_url"
+                    <RecipeStepPhoto
+                        :recipe-id="recipeId"
+                        :image-id="row.existing_image_id"
+                        :data-url="row.data_url"
                         :alt="`Step photo ${index + 1}`"
                         class="rsie__img"
                     />
@@ -78,6 +80,7 @@
 </template>
 
 <script setup lang="ts">
+    import RecipeStepPhoto from 'src/components/recipes/RecipeStepPhoto.vue';
     import { computed, ref } from 'vue';
     import BaseButton from 'src/components/BaseButton.vue';
     import { ICONS } from 'src/style/icons';
@@ -89,6 +92,7 @@
 
     const props = defineProps<{
         modelValue: EditableStepImage[];
+        recipeId: string;
     }>();
 
     const emit = defineEmits<{
@@ -122,7 +126,6 @@
         pickQueue.value.push({
             client_id: newClientId(),
             existing_image_id: null,
-            preview_url: image.dataUrl,
             data_url: image.dataUrl,
         });
         // Coalesce a burst of `pick` events into one update so the parent

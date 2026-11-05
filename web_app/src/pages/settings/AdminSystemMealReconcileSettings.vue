@@ -3,7 +3,6 @@
         <SettingsPageHeader
             title="Meal reconciliation"
             description="Whether Dora assumes past meals were cooked, or asks you to confirm them."
-            :icon="ICONS.event_note"
         />
 
         <template v-if="ready">

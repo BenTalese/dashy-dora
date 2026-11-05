@@ -2,8 +2,8 @@
     <div class="settings-page">
         <SettingsPageHeader
             title="Stock locations"
+            help="Stock locations"
             description="Where things live. Zones (e.g. Pantry), areas inside them (e.g. Top shelf), and sections inside those (e.g. Left). Items can go at any level."
-            :icon="ICONS.place"
         >
             <template #actions>
                 <BaseButton
@@ -46,6 +46,15 @@
                 @add-child="onAddChild"
                 @view-items="onViewItems"
             />
+            <!-- FU-633: items with no location have no zone to sit in. -->
+            <section v-if="unassignedCount > 0 && !isSearching" class="unplaced">
+                <q-icon :name="ICONS.inventory_2" size="18px" class="unplaced__icon" />
+                <span class="unplaced__name">Not stored anywhere</span>
+                <span class="unplaced__meta">
+                    {{ unassignedCount }} item{{ unassignedCount === 1 ? '' : 's' }}
+                </span>
+                <BaseButton variant="subtle" label="Review" @click="onViewUnplaced" />
+            </section>
         </div>
 
         <div v-if="!loading && tree.length === 0" class="settings-empty">
@@ -79,7 +88,8 @@
     import { ICONS } from 'src/style/icons';
     import { computed, onMounted, ref, watch } from 'vue';
     import { useRouter } from 'vue-router';
-    import type { LocationKind, LocationNode } from 'src/models/location';
+    import { NO_LOCATION_FILTER, type LocationKind, type LocationNode } from 'src/models/location';
+    import LocationApiService from 'src/services/api/locationApiService';
     import { useLocationStore } from 'src/stores/locationStore';
     import { useListState } from 'src/composables/useListState';
     import { filterLocationTree } from 'src/helpers/locationDisplay';
@@ -244,6 +254,7 @@
             await locationStore.deleteAsync(node.location_id);
             expanded.value.delete(node.location_id);
             persistExpanded();
+            void loadUnassignedCount();
         } catch (err) {
             notifyError('Could not delete.', err);
         }
@@ -251,6 +262,21 @@
 
     function onViewItems(node: LocationNode) {
         void router.push({ path: '/stock', query: { location_id: node.location_id } });
+    }
+
+    // Server-counted (R-003): the tree leaves these items out entirely.
+    const locationApi = new LocationApiService();
+    const unassignedCount = ref(0);
+    async function loadUnassignedCount() {
+        try {
+            unassignedCount.value = await locationApi.getUnassignedCountAsync();
+        } catch {
+            // The row is a convenience; without the count it stays hidden.
+            unassignedCount.value = 0;
+        }
+    }
+    function onViewUnplaced() {
+        void router.push({ path: '/stock', query: { location_id: NO_LOCATION_FILTER } });
     }
 
     // A single zone has nothing to choose between — open it rather than making
@@ -267,6 +293,7 @@
 
     onMounted(() => {
         void locationStore.ensureLoadedAsync();
+        void loadUnassignedCount();
     });
 </script>
 
@@ -276,6 +303,25 @@
         display: flex;
         flex-direction: column;
         gap: var(--space-4);
+    }
+    .unplaced {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        padding: var(--space-2) var(--space-3);
+        border: 1px dashed var(--border-default);
+        border-radius: var(--radius-lg);
+        background: var(--surface-component);
+    }
+    .unplaced__icon { color: var(--text-muted); }
+    .unplaced__name {
+        flex: 1;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+    .unplaced__meta {
+        color: var(--text-secondary);
+        font-size: var(--font-size-sm);
     }
     .settings-empty {
         display: flex;

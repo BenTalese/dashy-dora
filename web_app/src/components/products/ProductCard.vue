@@ -105,9 +105,8 @@
                 v-if="product.is_custom"
                 dense
                 outline
-                color="secondary"
                 :icon="ICONS.edit"
-                class="q-ml-xs"
+                class="q-ml-xs dora-text-secondary-mark"
             >
                 Custom
                 <BaseTooltip>

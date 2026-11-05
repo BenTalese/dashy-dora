@@ -81,7 +81,7 @@
             </p>
             <q-card flat bordered class="dora-attention-essential-sample">
                 <q-card-section class="row items-center">
-                    <q-icon :name="ICONS.flag" color="secondary" size="20px" class="q-mr-sm" />
+                    <q-icon :name="ICONS.flag" size="20px" class="q-mr-sm dora-text-secondary-mark" />
                     <span class="text-body2">A flagged item, full opacity, with the left stripe.</span>
                 </q-card-section>
             </q-card>
@@ -157,7 +157,7 @@
                 Its <strong>colour</strong> is the expiry date: green fine,
                 amber soon, red gone, grey none set. Tap it to set a date, push
                 one by a day or a fortnight, clear it, or log the item as
-                waste. Next to it, the <strong>open / in-use</strong> toggle:
+                waste. Next to it, the <strong>Opened</strong> toggle:
                 marking something open asks you for a revised date, because an
                 opened jar and a sealed one don't keep for the same time.
             </p>

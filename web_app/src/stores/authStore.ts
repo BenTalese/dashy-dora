@@ -12,6 +12,7 @@ import { clearApiResponseCache } from 'src/services/api/apiResponseCache';
 import AuthApiService from 'src/services/api/authApiService';
 import { hasBackendBaseUrl } from 'src/services/api/backendUrl';
 import { isNativePlatform } from 'src/helpers/platform';
+import { dropPushSubscriptionAsync } from 'src/composables/usePushSubscription';
 import { NormalisedApiError, setUnauthorizedHandler } from 'src/services/api/axiosHttpClient';
 import { clearAllListState } from 'src/composables/useListState';
 import { clearBuyVerdictCache } from 'src/composables/useBuyVerdict';
@@ -196,6 +197,8 @@ export const useAuthStore = defineStore('auth', () => {
     };
 
     const logoutAsync = async () => {
+        // Before the session goes: the server row is deleted as this user.
+        await dropPushSubscriptionAsync();
         try {
             await authApiService.logoutAsync();
         } finally {
@@ -213,9 +216,12 @@ export const useAuthStore = defineStore('auth', () => {
         // the user alone left emptied cards on screen until the next
         // navigation. A hash assignment, because the store can't import the
         // router without a cycle; the router guard does the rest.
+        // The way back keeps the query (FU-959): `/stock?location_id=…`
+        // should come back filtered, not as plain `/stock`.
         const path = currentHashPath();
         if (typeof window !== 'undefined' && !PUBLIC_ROUTES.has(path)) {
-            window.location.hash = `#/login?redirect=${encodeURIComponent(path)}`;
+            const full = window.location.hash.replace(/^#/, '') || '/';
+            window.location.hash = `#/login?redirect=${encodeURIComponent(full)}`;
         }
     };
     setUnauthorizedHandler(handleSessionExpired);

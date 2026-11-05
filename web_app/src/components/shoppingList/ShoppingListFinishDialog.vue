@@ -142,7 +142,7 @@
     import { useRecipeStore } from 'src/stores/recipeStore';
     import { useShoppingListStore } from 'src/stores/shoppingListStore';
     import { useStockItemStore } from 'src/stores/stockItemStore';
-    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+    import { isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { useQuasar } from 'quasar';
     import { computed, ref } from 'vue';
 
@@ -326,11 +326,13 @@
             // retry doesn't dispose of them a second time (e.g. a second
             // "Leftovers from …" list).
             await refreshDetailQuietly();
-            $q.notify({
-                type: 'negative',
-                message: 'Could not finish shopping.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not finish shopping.',
+                    caption: toastCaption(err),
+                });
+            }
         } finally {
             finishing.value = false;
         }
@@ -347,7 +349,7 @@
     const deferredUntickedCount = computed(() =>
         (detail.value?.lines ?? []).filter((l) => !l.is_ticked && l.deferred_by_budget).length
     );
-    // The list-level money (`remaining_price`, `total_price`, `total_savings`),
+    // The list-level money (`remaining_price`, `total_price`, `savings_vs_shelf_price`),
     // the progress percentage and the status pill's label all moved into
     // `ShoppingListOverviewCard`, which is the only thing that rendered them.
     // They stay server-owned there (state-ownership Type B) — read off

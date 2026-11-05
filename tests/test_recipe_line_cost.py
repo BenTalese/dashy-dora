@@ -146,6 +146,13 @@ def test__line_cost__OnePack__IsTheWholePackNotOneItem():
     assert _line_cost(_ing("Eggs", 3, None), carton) == pytest.approx(1.50)
 
 
+@pytest.mark.parametrize("unit", ["packet", "packets", "box", "boxes", "carton", "cartons"])
+def test__line_cost__OtherWholePackWords__PriceTheWholePack(unit):
+    """FU-983: packet, box and carton mean the whole pack, the same as "pack"."""
+    carton = UnitPrice(0.50, "ea", pack_amount=0.50, whole_pack_amount=6.00)
+    assert _line_cost(_ing("Eggs", 2, unit), carton) == pytest.approx(12.00)
+
+
 def test__line_cost__OnePackOfAMeasuredProduct__IsPriced():
     """A 500 g bag of pasta has no per-item price, but "1 pack" of it does."""
     pasta = UnitPrice(0.004, "g", whole_pack_amount=2.00)

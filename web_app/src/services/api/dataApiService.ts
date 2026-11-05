@@ -58,6 +58,14 @@ export interface SpreadsheetRowReport {
     reason: string | null;
 }
 
+/** The spreadsheet import's result dialog model (FU-948 (3)). */
+export interface SpreadsheetImportResult {
+    ok: boolean;
+    headline: string;
+    subline: string;
+    rows: SpreadsheetRowReport[];
+}
+
 export interface SpreadsheetCommitResult {
     summary: { created: number; skipped: number; errors: number; halted: number };
     rows: SpreadsheetRowReport[];

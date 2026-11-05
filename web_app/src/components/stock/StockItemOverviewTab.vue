@@ -127,6 +127,7 @@
                         <q-item-section class="dora-text-secondary text-weight-bold dora-inline-edit__label">Location</q-item-section>
                         <q-item-section>
                             <BaseSelect
+                                aria-label="Location"
                                 v-model="form.stock_location_id"
                                 :options="locationOptions"
                                 emit-value
@@ -151,6 +152,7 @@
                         <q-item-section class="dora-text-secondary text-weight-bold dora-inline-edit__label">Stock group</q-item-section>
                         <q-item-section>
                             <BaseSelect
+                                aria-label="Stock group"
                                 v-model="form.stock_group_id"
                                 :options="groupOptions"
                                 emit-value
@@ -168,6 +170,7 @@
                         <q-item-section class="dora-text-secondary text-weight-bold dora-inline-edit__label">Usual store</q-item-section>
                         <q-item-section>
                             <BaseSelect
+                                aria-label="Usual store"
                                 v-model="form.usual_store_id"
                                 :options="storeOptions"
                                 emit-value
@@ -687,7 +690,7 @@
                         <div class="dora-your-prices__label dora-your-prices__recent-label">Recent prices</div>
                         <q-list separator class="dora-your-prices__list">
                             <q-item
-                                v-for="obs in priceObservations"
+                                v-for="obs in shownObservations"
                                 :key="obs.observation_id"
                             >
                                 <q-item-section>
@@ -702,24 +705,60 @@
                                     {{ formatMoney(obs.total_price) }}
                                 </q-item-section>
                                 <q-item-section side>
-                                    <BaseButton
-                                        variant="icon"
-                                        :icon="ICONS.delete_outline"
-                                        :disable="busy"
-                                        aria-label="Remove price"
-                                        @click="deleteObservation(obs)"
-                                    >
-                                        <BaseTooltip>Remove</BaseTooltip>
-                                    </BaseButton>
+                                    <div class="row no-wrap">
+                                        <BaseButton
+                                            variant="icon"
+                                            :icon="ICONS.edit"
+                                            :disable="busy"
+                                            aria-label="Edit price"
+                                            @click="editingObservation = obs"
+                                        >
+                                            <BaseTooltip>Edit</BaseTooltip>
+                                        </BaseButton>
+                                        <BaseButton
+                                            variant="icon"
+                                            :icon="ICONS.delete_outline"
+                                            :disable="busy"
+                                            aria-label="Remove price"
+                                            @click="deleteObservation(obs)"
+                                        >
+                                            <BaseTooltip>Remove</BaseTooltip>
+                                        </BaseButton>
+                                    </div>
                                 </q-item-section>
                             </q-item>
                         </q-list>
+                        <BaseButton
+                            v-if="priceObservations.length > RECENT_PRICES_SHOWN"
+                            variant="subtle"
+                            class="q-mt-xs"
+                            :label="showAllObservations ? 'Show fewer' : `Show all ${priceObservations.length}`"
+                            @click="showAllObservations = !showAllObservations"
+                        />
                     </div>
                     </YourPricesWidget>
                 </template>
             </div>
         </div>
     </template>
+
+    <BaseDialog
+        :model-value="editingObservation !== null"
+        title="Edit price"
+        closable
+        @update:model-value="(open: boolean) => { if (!open) editingObservation = null; }"
+    >
+        <q-card-section v-if="editingObservation">
+            <PriceEntry
+                mode="shelf"
+                :initial="editingObservation"
+                :stores="storesList"
+                :busy="busy"
+                @submit="updateObservation"
+                @cancel="editingObservation = null"
+            />
+        </q-card-section>
+    </BaseDialog>
 
     <BaseDialog v-model="expiryDialogOpen" title="Set expiry" closable card-style="min-width: 320px">
         <q-card-section>
@@ -755,8 +794,10 @@
     import PantryBeliefCard from 'src/components/stock/PantryBeliefCard.vue';
     import PlannedDemandCard from 'src/components/stock/PlannedDemandCard.vue';
     import StockLevelDot from 'src/components/stock/StockLevelDot.vue';
+    import PriceEntry from 'src/components/dora/PriceEntry.vue';
     import YourPricesWidget from 'src/components/dora/YourPricesWidget.vue';
     import { useBuyVerdictActions } from 'src/composables/useBuyVerdictActions';
+    import { useConfirm } from 'src/composables/useConfirm';
     import { formatDate } from 'src/composables/useDateFormat';
     import { useFeatureFlags } from 'src/composables/useFeatureFlags';
     import { useLocationOptions } from 'src/composables/useLocationOptions';
@@ -771,7 +812,11 @@
     import { formatQuantity } from 'src/helpers/formatQuantity';
     import { relativeTime } from 'src/helpers/relativeTime';
     import { usesOffers } from 'src/models/shoppingList';
-    import type { PreferredBuy, PriceObservation } from 'src/models/stockItemDetail';
+    import type {
+        PreferredBuy,
+        PriceEntryValue,
+        PriceObservation,
+    } from 'src/models/stockItemDetail';
     import { isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { useLocationStore } from 'src/stores/locationStore';
     import { useStockGroupStore } from 'src/stores/stockGroupStore';
@@ -789,6 +834,8 @@
         buyVerdict,
         nutritionExpanded,
         newBuyLabel,
+        editingBuyId,
+        editingBuyLabel,
         loadDetail,
         saveField,
         withBusyReload,
@@ -951,8 +998,6 @@
     // withBusyReload so the list reflects the server after each change. The
     // server sends them A–Z (R-003: it owns the order).
     const preferredBuys = computed(() => detail.value?.preferred_buys ?? []);
-    const editingBuyId = ref<string | null>(null);
-    const editingBuyLabel = ref('');
 
     async function addBuy() {
         const label = newBuyLabel.value.trim();
@@ -984,26 +1029,24 @@
     // delete) and a submit handler that talks to the API. R-003: server
     // derives per-unit cost; we never divide here.
     const priceObservations = computed(() => detail.value?.price_observations ?? []);
+    // FU-706: a frequently logged item ran to hundreds of rows mid-tab.
+    const RECENT_PRICES_SHOWN = 5;
+    const showAllObservations = ref(false);
+    const shownObservations = computed(() => (
+        showAllObservations.value
+            ? priceObservations.value
+            : priceObservations.value.slice(0, RECENT_PRICES_SHOWN)
+    ));
+    const editingObservation = ref<PriceObservation | null>(null);
+    const { confirm } = useConfirm();
 
     // Stores list for the optional store picker in PriceEntry (A2). Reuses
     // the `storesStore` instance above (FU-189 — usual store picker).
     const storesList = computed(() => storesStore.stores);
 
-    async function addObservation(value: {
-        total_price: number;
-        total_measure: number;
-        unit: string;
-        store_id: string | null;
-        pack_count: number | null;
-    }, done: () => void) {
+    async function addObservation(value: PriceEntryValue, done: () => void) {
         try {
-            await withBusyReload(() => stockItemApi.addPriceObservationAsync(stockItemId.value, {
-                total_price: value.total_price,
-                total_measure: value.total_measure,
-                unit: value.unit,
-                store_id: value.store_id ?? null,
-                pack_count: value.pack_count ?? null,
-            }));
+            await withBusyReload(() => stockItemApi.addPriceObservationAsync(stockItemId.value, value));
         } catch (err) {
             // FU-976 — the rejection used to escape to the global handler, so
             // a 5xx showed the http client's toast *and* the "oopsie": two
@@ -1031,7 +1074,35 @@
         return formatQuantity(obs.total_measure, obs.unit);
     }
 
+    async function updateObservation(value: PriceEntryValue) {
+        const obs = editingObservation.value;
+        if (!obs) return;
+        try {
+            await withBusyReload(() => stockItemApi.updatePriceObservationAsync(
+                stockItemId.value, obs.observation_id, value,
+            ));
+        } catch (err) {
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: "Couldn't save the price.",
+                    caption: toastCaption(err),
+                });
+            }
+            return;
+        }
+        editingObservation.value = null;
+        stockItemStore.invalidatePriceFacts(stockItemId.value);
+    }
+
     async function deleteObservation(obs: PriceObservation) {
+        const ok = await confirm({
+            title: 'Remove this price?',
+            message: `${formatMoney(obs.total_price)} for ${formatObsMeasure(obs)}, ${relativeTime(obs.observed_at)}.`,
+            okLabel: 'Remove',
+            destructive: true,
+        });
+        if (!ok) return;
         await withBusyReload(() =>
             stockItemApi.deletePriceObservationAsync(stockItemId.value, obs.observation_id),
         );

@@ -42,7 +42,7 @@
             <q-input
                 v-if="mode === 'shelf'"
                 v-model.number="perPackSize"
-                dense outlined type="number"
+                dense outlined type="number" inputmode="decimal"
                 class="col"
                 :label="isMultipack ? 'Size each' : 'Size'"
                 :rules="[(v) => (v != null && v > 0) || 'Required']"
@@ -74,7 +74,7 @@
         <div v-if="mode === 'shelf'" class="row q-gutter-sm items-start">
             <q-input
                 v-model.number="packCount"
-                dense outlined type="number"
+                dense outlined type="number" inputmode="numeric"
                 class="col"
                 label="Pack count (optional)"
                 :rules="[(v) => isBlank(v) || v > 0 || 'Must be > 0']"
@@ -89,6 +89,24 @@
                 label="Store (optional)"
                 hide-bottom-space
             />
+            <q-input
+                v-model="observedDate"
+                dense outlined type="date"
+                class="col"
+                label="Date"
+                :max="todayIso"
+                hide-bottom-space
+            />
+        </div>
+        <!-- FU-704: with no stores the field used to vanish without a word,
+             and "where is this cheapest" with it. -->
+        <div
+            v-if="mode === 'shelf' && storeOptions.length === 0"
+            class="text-caption dora-text-muted"
+        >
+            Add your stores in
+            <router-link to="/settings/kitchen-setup/stores">Settings</router-link>
+            to note where you saw a price.
         </div>
 
         <!-- Live preview: $X.XX per Y. For multipacks, also surface the
@@ -111,8 +129,8 @@
             />
             <BaseButton
                 variant="primary"
-                :icon="ICONS.add"
-                label="Log"
+                :icon="initial ? ICONS.check : ICONS.add"
+                :label="initial ? 'Save' : 'Log'"
                 :disable="!canSubmit || busy"
                 @click="onSubmit"
             />
@@ -131,7 +149,12 @@
     import { useMeasurementSystem } from 'src/composables/useMeasurementSystem';
     import { quoteUnitPrice } from 'src/helpers/unitPriceDisplay';
     import { formatRelativeDay } from 'src/composables/useDateFormat';
-    import type { PriceEntryPrefill } from 'src/models/stockItemDetail';
+    import { localTodayIso } from 'src/helpers/weekDates';
+    import type {
+        PriceEntryPrefill,
+        PriceEntryValue,
+        PriceObservation,
+    } from 'src/models/stockItemDetail';
     import type { Store } from 'src/models/store';
 
     type Mode = 'shelf' | 'harvest';
@@ -140,24 +163,23 @@
         defineProps<{
             mode?: Mode | undefined;
             prefill?: PriceEntryPrefill | null | undefined;
+            /** A logged price being corrected (FU-706); the form opens on its
+             *  values and submits as "Save". */
+            initial?: PriceObservation | null | undefined;
             stores?: ReadonlyArray<Store> | undefined;
             busy?: boolean | undefined;
         }>(),
-        { mode: 'shelf', prefill: null, stores: () => [], busy: false },
+        { mode: 'shelf', prefill: null, initial: null, stores: () => [], busy: false },
     );
 
     const emit = defineEmits<{
-        (e: 'submit', value: {
-            total_price: number;
-            total_measure: number;
-            unit: string;
-            store_id: string | null;
-            pack_count: number | null;
-        }): void;
+        (e: 'submit', value: PriceEntryValue): void;
         (e: 'cancel'): void;
     }>();
 
-    const totalPrice = ref<number | null>(props.prefill?.total_price ?? null);
+    const seed = props.initial ?? props.prefill;
+    const initialPacks = props.initial?.pack_count ?? null;
+    const totalPrice = ref<number | null>(seed?.total_price ?? null);
     // `perPackSize` is the user-visible "Size" field. When multipack is set,
     // it represents the per-pack size and total_measure is derived as
     // `count × perPackSize` at submit time. When multipack is null, it IS
@@ -165,16 +187,26 @@
     // dual-semantic under the hood matches the FU-227 §6a observation
     // that "shelf-price mode never carried a count concept" — an empty pack
     // count means one pack, so the common case is still one number.
-    const perPackSize = ref<number | null>(props.prefill?.total_measure ?? null);
-    const unit = ref<string>(props.prefill?.unit ?? '');
-    const storeId = ref<string | null>(props.prefill?.store_id ?? null);
-    const packCount = ref<number | null>(null);
+    const perPackSize = ref<number | null>(
+        seed == null ? null
+            : initialPacks != null && initialPacks > 1 ? seed.total_measure / initialPacks
+                : seed.total_measure,
+    );
+    const unit = ref<string>(seed?.unit ?? '');
+    const storeId = ref<string | null>(seed?.store_id ?? null);
+    const packCount = ref<number | null>(initialPacks);
+
+    // The calendar day the price was seen. Display-side day (R-021): the
+    // payload is built from what the user picks, not from this default.
+    const todayIso = localTodayIso();
+    const initialDate = props.initial ? localTodayIso(new Date(props.initial.observed_at)) : todayIso;
+    const observedDate = ref<string>(initialDate);
 
     // Re-seed when the prefill arrives lazily (row-button case: fetched
     // after the dialog opens). Don't overwrite user typing — only seed if
     // the field is still at its initial empty state.
     watch(() => props.prefill, (p) => {
-        if (!p) return;
+        if (!p || props.initial) return;
         if (totalPrice.value == null) totalPrice.value = p.total_price;
         if (perPackSize.value == null) perPackSize.value = p.total_measure;
         if (!unit.value) unit.value = p.unit;
@@ -276,12 +308,16 @@
 
     function onSubmit() {
         if (!canSubmit.value) return;
+        // A picked day is sent as its midday UTC, which is that calendar day
+        // from UTC-11 to UTC+11; an untouched date sends nothing.
+        const picked = observedDate.value;
         emit('submit', {
             total_price: totalPrice.value as number,
             total_measure: totalMeasure() as number,
             unit: unit.value,
             store_id: storeId.value,
             pack_count: isMultipack.value ? (packCount.value as number) : null,
+            observed_at: picked && picked !== initialDate ? `${picked}T12:00:00Z` : null,
         });
     }
 

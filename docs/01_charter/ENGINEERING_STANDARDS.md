@@ -3034,6 +3034,20 @@ exceptions, which still must be commented) · **Source** (where it was establish
   "is this user still active?" check.
 - **Established:** 2026-10-30 (finish-off, step 1 — security). See ADR-101.
 
+### R-105: Prices are compared only on one basis — dimension, and for counts whether the size was known
+- **Rule:** two observed prices sit on one scale only when `your_prices.observation_basis` returns the same
+  `PriceBasis` for both. A count bought as a pack of unknown size (`is_sizeless`, "1 ea" off a line with no sized
+  product) is a different basis from a count with a known size ("12 ea" eggs). Every median, movement, deal
+  comparison and usual-price snapshot filters through `PriceBasis.holds` / `active_price_basis`.
+- **Why:** FU-983 — a $6 carton logged loose and the same carton logged sized both stored as `ea`, so "Your
+  prices" read $6 an egg beside 50c an egg. The buy verdict had already been fixed for this once (FU-978) by
+  re-deriving sizedness from the product; the stored observation now carries it.
+- **How to comply:** compare per-unit prices only after a basis check; a shelf offer (always sized) never
+  compares with a sizeless basis.
+- **Violation signal:** filtering observations on `find_unit(o.unit).dimension` alone; mixing offers into a
+  sizeless series.
+- **Established:** 2026-11-05 (FU-983). See ADR-102.
+
 ## ADR process (evaluate every task)
 
 At the end of each work unit, ask: **did this task make or rely on a decision that
@@ -5621,6 +5635,11 @@ A non-binding cookbook of solutions to recurring problems. Not rules — just a
   treatment).
 - **Promotes rule:** R-071.
 
+- **Built:** 2026-11-05 (FU-831): `ShoppingListLine.usual_price_at_pick` is frozen at finish by
+  `_usual_price.snapshot_usual_prices` from the "Your prices" median (R-105 basis), before the shop's own prices
+  are harvested; `/reports/savings-captured` returns `total_spent`, `savings_vs_usual_price`, `counted` and
+  `total`; the in-list figure is `savings_vs_shelf_price` and reads "Under shelf price". Seeds freeze the
+  snapshot oldest shop first.
 ### ADR-069 — A deferred DoD row keeps its own tracking; the follow-up is a pointer, not a substitute (promotes R-072)
 - **Date / task:** 2026-09-02 (dashboard review Chunk 5 — the de-monolith, FU-829)
 - **Status:** accepted
@@ -6522,3 +6541,18 @@ A non-binding cookbook of solutions to recurring problems. Not rules — just a
   household data too).
 - **Consequences:** every authenticated request costs one `User` lookup; tests that forge a session for a missing
   user now get 401 everywhere, not only on `/auth/me`.
+
+### ADR-102: Price observations carry `is_sizeless`; comparisons run on a price basis (promotes R-105)
+- **Date / task:** 2026-11-05 (FU-983 (2)/(3), owner: fix)
+- **Status:** accepted
+- **Context:** a sizeless shopping-list line folds to one `ea` per item, a count-sized one to `size × qty` `ea`;
+  once stored the two were indistinguishable, so "Your prices", Reports' price movers and deal quality mixed
+  them.
+- **Decision:** `StockItemPriceObservation.is_sizeless` is written at harvest (`harvest_observation_fields`
+  returns it) and backfilled once for harvested `ea` rows whose line had no sized product. `PriceBasis`
+  (dimension + sizeless) replaces the bare dimension everywhere an item's prices are compared.
+- **Alternatives considered:** re-deriving sizedness from the line's product at read time (rejected: a deleted
+  product or line loses it, and every reader would repeat the join); treating hand-logged `ea` as sizeless
+  (rejected: the user typed the measure, and the form's pack-count field is how to say "a pack of N").
+- **Consequences:** an item bought both loose and boxed reports on whichever basis most of its prices are on;
+  the minority basis is left out, as a stray dimension already was (FU-876).

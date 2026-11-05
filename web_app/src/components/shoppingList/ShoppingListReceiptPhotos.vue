@@ -83,7 +83,7 @@
     import { ICONS } from 'src/style/icons';
     import { useShoppingListDetail } from 'src/composables/useShoppingListDetail';
     import type { ProcessedImage } from 'src/services/files/imageService';
-    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+    import { isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { useQuasar } from 'quasar';
     import { computed, ref } from 'vue';
 
@@ -112,11 +112,13 @@
             // (R-084): an in-place edit, not a navigation.
             await refreshDetailQuietly();
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not attach receipt.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not attach receipt.',
+                    caption: toastCaption(err),
+                });
+            }
         } finally {
             attachmentUploading.value = false;
         }
@@ -146,11 +148,13 @@
                 attachmentZoomId.value = null;
             }
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not remove receipt.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not remove receipt.',
+                    caption: toastCaption(err),
+                });
+            }
             await refreshDetailQuietly();
         }
     }

@@ -43,6 +43,7 @@ EXPECTED_KEYS = {
     'attention_severity',
     'attention_kinds',
     'attention_rank',
+    'use_soon',
     'linked_product_count',
 }
 
@@ -969,3 +970,24 @@ def test__create_stock_item__UnknownUsualStoreId__IsEntityExistenceFailure(api, 
 
 
 #endregion unknown FK ids
+
+
+def test__use_soon__MutedExpiryAlerts__StillSaysUseSoon(api, stock_level_id):
+    """FU-702: whether an item needs using soon is a fact about the item. Muting
+    expiry notifications drops it from `attention_kinds` (the bell's view) but
+    not from `use_soon`, which the overview's "Use soon" chip reads."""
+    from datetime import date, timedelta
+    prefs = "http://localhost:5170/api/alerts/prefs"
+    created = requests.post(base_route, json={
+        "name": f"Yoghurt {uuid4().hex[:6]}",
+        "stock_level_id": stock_level_id,
+        "expiry_date": (date.today() - timedelta(days=1)).isoformat(),
+    }).json()
+    try:
+        assert requests.patch(prefs, json={"kind": "expired", "enabled": False}).status_code == 200
+        row = next(i for i in _items("?limit=1000") if i["stock_item_id"] == created["stock_item_id"])
+        assert "expired" not in row["attention_kinds"]
+        assert row["use_soon"] is True
+    finally:
+        requests.patch(prefs, json={"kind": "expired", "enabled": True})
+        requests.delete(f"{base_route}/{created['stock_item_id']}")

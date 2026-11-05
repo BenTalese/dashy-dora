@@ -6,9 +6,12 @@
             :class="{ 'settings-section__header--inline': !$slots.description }"
         >
             <div class="settings-section__heading">
-                <h2 v-if="$slots.title" class="settings-section__title">
-                    <slot name="title" />
-                </h2>
+                <div v-if="$slots.title" class="settings-section__title-row">
+                    <h2 class="settings-section__title">
+                        <slot name="title" />
+                    </h2>
+                    <HelpHint v-if="help" :topic="help" />
+                </div>
                 <p v-if="$slots.description" class="settings-section__description">
                     <slot name="description" />
                 </p>
@@ -26,7 +29,11 @@
 <script setup lang="ts">
     // IMPL_PLAN_SETTINGS_REBUILD §2.5 — left-info / right-control wrapper.
     // The parent page renders a 1px divider between sections so spacing
-    // stays consistent.
+    // stays consistent. `help` names the Help guide the (?) beside the title
+    // opens (FU-951).
+    import HelpHint from 'src/components/help/HelpHint.vue';
+
+    defineProps<{ help?: string }>();
 </script>
 
 <style scoped lang="scss">
@@ -55,6 +62,11 @@
         flex-direction: column;
         gap: 4px;
         min-width: 0;
+    }
+    .settings-section__title-row {
+        display: flex;
+        align-items: center;
+        gap: var(--space-1);
     }
     .settings-section__title {
         margin: 0;

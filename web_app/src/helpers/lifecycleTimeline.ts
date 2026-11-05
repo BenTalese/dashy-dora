@@ -21,8 +21,25 @@ import { isDateOnly, parseLocalIso } from 'src/helpers/weekDates';
 import type { StockItemDetail } from 'src/models/stockItemDetail';
 import { ICONS } from 'src/style/icons';
 
+/** The History tab's filter buckets (DR-13). */
+export type LifecycleKind = 'bought' | 'cooked' | 'level' | 'expiry' | 'listed' | 'waste';
+
+export const LIFECYCLE_KIND_LABELS: Record<LifecycleKind, string> = {
+    bought: 'Bought',
+    cooked: 'Used',
+    level: 'Levels',
+    expiry: 'Expiry',
+    listed: 'Lists',
+    waste: 'Waste',
+};
+
 export type LifecycleEvent = {
     id: string;
+    kind: LifecycleKind;
+    /** Events with the same key next to each other collapse into one run. */
+    runKey: string;
+    /** The run's title, e.g. "Pushed expiry" for "Pushed expiry ×12". */
+    runTitle: string;
     at: string;
     title: string;
     body?: string;
@@ -65,6 +82,9 @@ export function buildLifecycleTimeline(d: StockItemDetail): LifecycleEvent[] {
         }
         out.push({
             id: `level-${cur.changed_at}-${i}`,
+            kind: 'level',
+            runKey: 'level',
+            runTitle: 'Level changes',
             at: cur.changed_at,
             title,
             icon: ICONS.refresh,
@@ -78,6 +98,9 @@ export function buildLifecycleTimeline(d: StockItemDetail): LifecycleEvent[] {
         const reason = humaniseWasteReason(w.reason);
         out.push({
             id: `waste-${w.occurred_at}-${reason}`,
+            kind: 'waste',
+            runKey: 'waste',
+            runTitle: 'Wasted',
             at: w.occurred_at,
             title: `Wasted: ${reason}`,
             icon: ICONS.delete_outline,
@@ -89,6 +112,9 @@ export function buildLifecycleTimeline(d: StockItemDetail): LifecycleEvent[] {
     for (const a of d.recent_list_adds ?? []) {
         out.push({
             id: `add-${a.added_at}-${a.shopping_list_id}`,
+            kind: 'listed',
+            runKey: 'listed',
+            runTitle: 'Added to lists',
             at: a.added_at,
             title: `Added to ${a.shopping_list_name}`,
             icon: ICONS.shopping_cart,
@@ -110,6 +136,9 @@ export function buildLifecycleTimeline(d: StockItemDetail): LifecycleEvent[] {
         if (p.store_name) bits.push(`at ${p.store_name}`);
         const entry: LifecycleEvent = {
             id: `bought-${p.occurred_at}-${p.shopping_list_id}`,
+            kind: 'bought',
+            runKey: 'bought',
+            runTitle: 'Bought',
             at: p.occurred_at,
             title: `Bought · ${p.shopping_list_name}`,
             icon: ICONS.shopping_bag,
@@ -128,6 +157,9 @@ export function buildLifecycleTimeline(d: StockItemDetail): LifecycleEvent[] {
         const badge = c.meals_cooked > 1 ? ` · ${c.meals_cooked} meals` : '';
         out.push({
             id: `cook-${c.occurred_at}-${c.recipe_id ?? 'unknown'}`,
+            kind: 'cooked',
+            runKey: `cooked-${c.recipe_name}`,
+            runTitle: `Used in ${c.recipe_name}`,
             at: c.occurred_at,
             title: `Used in ${c.recipe_name}${badge}`,
             icon: ICONS.local_fire_department,
@@ -141,12 +173,14 @@ export function buildLifecycleTimeline(d: StockItemDetail): LifecycleEvent[] {
     // Repeat pushes tell the user "this is stale in your fridge".
     for (const e of d.expiry_events ?? []) {
         let title: string;
+        let runTitle: string;
         let body: string | null = null;
         let color: string;
         // D-006 — install-locale dates, not raw ISO (finalisation 06-R2).
         const fmt = (iso: string | null) => (iso ? formatDate(iso) : '–');
         if (e.kind === 'cleared') {
             title = 'Cleared expiry';
+            runTitle = title;
             body = e.previous_expiry_date
                 ? `Was ${fmt(e.previous_expiry_date)}`
                 : null;
@@ -158,16 +192,21 @@ export function buildLifecycleTimeline(d: StockItemDetail): LifecycleEvent[] {
             const delta = e.delta_days ?? 0;
             title = delta >= 0 ? `Pushed expiry +${delta} day${delta === 1 ? '' : 's'}`
                                : `Expiry moved ${delta} day${delta === -1 ? '' : 's'}`;
+            runTitle = 'Moved expiry';
             body = `${fmt(e.previous_expiry_date)} → ${fmt(e.new_expiry_date)}`;
             // was 'orange-8'; theme-aware --lifecycle-expiry-changed.
             color = 'lifecycle-expiry-changed';
         } else {
             title = 'Set expiry';
+            runTitle = title;
             body = fmt(e.new_expiry_date);
             color = 'lifecycle-expiry-changed';
         }
         const entry: LifecycleEvent = {
             id: `expiry-${e.occurred_at}-${e.kind}`,
+            kind: 'expiry',
+            runKey: `expiry-${e.kind}`,
+            runTitle,
             at: e.occurred_at,
             title,
             icon: ICONS.event,
@@ -185,6 +224,9 @@ export function buildLifecycleTimeline(d: StockItemDetail): LifecycleEvent[] {
     if (d.is_open && d.opened_on) {
         out.push({
             id: `opened-${d.opened_on}`,
+            kind: 'expiry',
+            runKey: 'opened',
+            runTitle: 'Opened',
             at: d.opened_on,
             title: 'Opened',
             icon: ICONS.lock_open,
@@ -203,6 +245,9 @@ export function buildLifecycleTimeline(d: StockItemDetail): LifecycleEvent[] {
     if (d.last_checked_at && d.last_checked_at !== lastLevelAt) {
         out.push({
             id: `checked-${d.last_checked_at}`,
+            kind: 'level',
+            runKey: 'checked',
+            runTitle: 'Checked',
             at: d.last_checked_at,
             title: 'Checked (still correct)',
             icon: ICONS.event,
@@ -216,4 +261,40 @@ export function buildLifecycleTimeline(d: StockItemDetail): LifecycleEvent[] {
     // sends and surface the drop count in the timeline footer.
     out.sort((a, b) => eventTime(b.at) - eventTime(a.at));
     return out;
+}
+
+/** Fewest same-key neighbours that collapse into one row. */
+export const LIFECYCLE_RUN_MIN = 3;
+
+export type LifecycleRow =
+    | { type: 'event'; event: LifecycleEvent }
+    | { type: 'run'; id: string; title: string; events: LifecycleEvent[] };
+
+/**
+ * Collapse runs of the same thing (DR-13): fifty expiry pushes in a row read
+ * as one "Moved expiry ×50" row the user can open, not fifty rows. Input is
+ * the newest-first timeline; a run keeps that order.
+ */
+export function groupLifecycleEvents(events: LifecycleEvent[]): LifecycleRow[] {
+    const rows: LifecycleRow[] = [];
+    let i = 0;
+    while (i < events.length) {
+        let j = i + 1;
+        while (j < events.length && events[j]!.runKey === events[i]!.runKey) j++;
+        const run = events.slice(i, j);
+        if (run.length >= LIFECYCLE_RUN_MIN) {
+            rows.push({ type: 'run', id: `run-${run[0]!.id}`, title: run[0]!.runTitle, events: run });
+        } else {
+            for (const event of run) rows.push({ type: 'event', event });
+        }
+        i = j;
+    }
+    return rows;
+}
+
+/** A run's subtitle: oldest to newest, one date each end. */
+export function formatRunSpan(events: LifecycleEvent[]): string {
+    const newest = formatDate(events[0]!.at, { dateStyle: 'medium' });
+    const oldest = formatDate(events[events.length - 1]!.at, { dateStyle: 'medium' });
+    return newest === oldest ? newest : `${oldest} – ${newest}`;
 }

@@ -23,6 +23,7 @@
             <div class="reports-range">
                 <div class="reports-range__row">
                     <BaseSegmented
+                        aria-label="Date range"
                         v-model="range"
                         :options="RANGE_OPTIONS"
                         dense
@@ -36,13 +37,29 @@
                 </div>
                 <span class="reports-window">{{ windowLabel }}</span>
             </div>
+            <CardsMenu
+                :cards="menuCards"
+                :is-visible="isCardVisible"
+                :can-move="canMove"
+                mime="application/x-dora-report-card"
+                @move="moveCard"
+                @toggle="toggleCard"
+                @drop="dropCardOn"
+            />
         </header>
 
-        <div class="reports-grid">
-            <!-- Money-gated (FU-816). Merges what were three cards — spend by
-                 store, spend by category and year-over-year — into one question
-                 with an axis control (§5). -->
-            <div v-if="moneyEnabled" class="reports-grid__wide">
+        <!-- Cards follow the user's layout (FU-832): which show and in what
+             order, from `user.reports_layout`, with the feature gates read off
+             `helpers/reportCards` rather than declared here. Spend and Price
+             changes are full width by design (two lists side by side and a
+             chart under them, D-011); the half-width pair widens when one of
+             them is hidden. -->
+        <div class="row q-col-gutter-lg reports-cards">
+            <div
+                v-if="cardRendered('spend')"
+                :class="cardCol('spend')"
+                :style="{ order: cardCssOrder('spend') }"
+            >
                 <SpendCard
                     :range="range"
                     :store-spend="storeSpend"
@@ -56,35 +73,44 @@
                 />
             </div>
 
-            <WasteCard
-                :waste="waste"
-                :waste-failed="slotFailed('waste')"
-                :waste-loading="loading.waste"
-                @retry="loadWaste"
-            />
+            <div
+                v-if="cardRendered('waste')"
+                :class="cardCol('waste')"
+                :style="{ order: cardCssOrder('waste') }"
+            >
+                <WasteCard
+                    :waste="waste"
+                    :waste-failed="slotFailed('waste')"
+                    :waste-loading="loading.waste"
+                    @retry="loadWaste"
+                />
+            </div>
 
-            <KitchenMemoryCard
-                :range="range"
-                :meals-cooked="mealsCooked"
-                :most-bought="mostBought"
-                :cooks-failed="slotFailed('mealsCooked')"
-                :bought-failed="slotFailed('mostBought')"
-                :cooks-loading="loading.mealsCooked"
-                :bought-loading="loading.mostBought"
-                @retry-cooks="loadMealsCooked"
-                @retry-bought="loadMostBought"
-            />
+            <div
+                v-if="cardRendered('kitchen_memory')"
+                :class="cardCol('kitchen_memory')"
+                :style="{ order: cardCssOrder('kitchen_memory') }"
+            >
+                <KitchenMemoryCard
+                    :range="range"
+                    :meals-cooked="mealsCooked"
+                    :most-bought="mostBought"
+                    :cooks-failed="slotFailed('mealsCooked')"
+                    :bought-failed="slotFailed('mostBought')"
+                    :cooks-loading="loading.mealsCooked"
+                    :bought-loading="loading.mostBought"
+                    @retry-cooks="loadMealsCooked"
+                    @retry-bought="loadMostBought"
+                />
+            </div>
 
             <!-- Chunk 4 / FU-703 D3 — the everyday-user price report, built
-                 from your own logged prices. Money-gated but NOT products-gated:
-                 it is the price trend an install with an empty catalogue can
-                 still have, which is the whole reason it exists. -->
-            <!-- Full width, and D-011 is why: it holds two lists side by side
-                 *and* opens a chart under them, so at half width it stranded an
-                 empty column beside itself — the same dead-air rule the
-                 dashboard's own grid was fixed for (FU-631 #3). Measured in the
-                 browser, not reasoned about. -->
-            <div v-if="moneyEnabled" class="reports-grid__wide">
+                 from your own logged prices. -->
+            <div
+                v-if="cardRendered('price_changes')"
+                :class="cardCol('price_changes')"
+                :style="{ order: cardCssOrder('price_changes') }"
+            >
                 <ItemPriceMoversCard
                     :range="range"
                     :movers="itemMovers"
@@ -94,6 +120,9 @@
                 />
             </div>
 
+            <div v-if="visibleCardCount === 0" class="col-12 dora-text-muted">
+                Every report is hidden. Turn them back on from Cards.
+            </div>
         </div>
     </q-page>
 </template>
@@ -135,6 +164,11 @@
      * router-link variant — is gone (FU-814 item 1).
      */
     import { computed, onMounted, ref, watch } from 'vue';
+    import { storeToRefs } from 'pinia';
+    import CardsMenu from 'src/components/cards/CardsMenu.vue';
+    import { useCardLayout } from 'src/composables/useCardLayout';
+    import { REPORT_CARD_DEFS, type ReportCardId } from 'src/helpers/reportCards';
+    import { useAuthStore } from 'src/stores/authStore';
     import { ICONS } from 'src/style/icons';
     import BaseSegmented from 'src/components/BaseSegmented.vue';
     import ItemPriceMoversCard from 'src/components/reports/ItemPriceMoversCard.vue';
@@ -188,9 +222,23 @@
     // page would cost two working reports to gate two.
     const { moneyEnabled } = useMoneyEnabled();
     const { products: productsEnabled } = useFeatureFlags();
-    const productMoneyEnabled = computed(
-        () => moneyEnabled.value && productsEnabled.value,
-    );
+
+    // ── Card layout (FU-832) ─────────────────────────────────────────────
+    const authStore = useAuthStore();
+    const { currentUser } = storeToRefs(authStore);
+    const {
+        applyStored: applyLayoutFromUser, cardRendered, isCardVisible, toggleCard,
+        visibleCardCount, cardCol, cardCssOrder, canMove, moveCard, dropCardOn, menuCards,
+    } = useCardLayout({
+        defs: REPORT_CARD_DEFS,
+        stored: () => currentUser.value?.reports_layout ?? null,
+        persist: (layout) => {
+            void authStore.updateMeAsync({ reports_layout: JSON.stringify(layout) });
+        },
+        moneyEnabled: () => moneyEnabled.value,
+        productsEnabled: () => productsEnabled.value,
+    });
+    watch(() => currentUser.value?.user_id, applyLayoutFromUser);
 
     const loading = ref({
         storeSpend: false,
@@ -276,7 +324,7 @@
     // card would render a load failure for a report the install deliberately
     // does not have.
     async function loadStoreSpend() {
-        if (!moneyEnabled.value) { storeSpend.value = null; return; }
+        if (!cardRendered('spend')) { storeSpend.value = null; return; }
         const r = range.value;
         await loadSlot('storeSpend', async () => {
             const data = await reportsApi.getSpendByStoreAsync(r);
@@ -284,7 +332,7 @@
         });
     }
     async function loadSpendByCategory() {
-        if (!moneyEnabled.value) { spendByCategory.value = null; return; }
+        if (!cardRendered('spend')) { spendByCategory.value = null; return; }
         const r = range.value;
         await loadSlot('spendByCategory', async () => {
             const data = await reportsApi.getSpendByCategoryAsync(r);
@@ -292,7 +340,7 @@
         });
     }
     async function loadSpendYoY() {
-        if (!moneyEnabled.value) { spendYoY.value = null; return; }
+        if (!cardRendered('spend')) { spendYoY.value = null; return; }
         // YoY needs a bounded window to compare against the same-length prior
         // window. Blank it on "All time" so the card can explain itself.
         if (range.value === 'all') { spendYoY.value = null; return; }
@@ -305,7 +353,7 @@
         });
     }
     async function loadSavings() {
-        if (!productMoneyEnabled.value) { savings.value = null; return; }
+        if (!cardRendered('spend')) { savings.value = null; return; }
         const r = range.value;
         await loadSlot('savings', async () => {
             const data = await reportsApi.getSavingsCapturedAsync(r);
@@ -320,6 +368,7 @@
     }
 
     async function loadMostBought() {
+        if (!cardRendered('kitchen_memory')) return;
         const r = range.value;
         await loadSlot('mostBought', async () => {
             const data = await reportsApi.getMostBoughtAsync(r);
@@ -327,6 +376,7 @@
         });
     }
     async function loadMealsCooked() {
+        if (!cardRendered('kitchen_memory')) return;
         const r = range.value;
         await loadSlot('mealsCooked', async () => {
             const data = await reportsApi.getMealsCookedAsync(r, 10);
@@ -364,6 +414,7 @@
         // `days` is null for "all time"; the waste report clamps to 365 itself
         // and reports the window it actually used, so a wide number is safe and
         // the card renders whatever came back.
+        if (!cardRendered('waste')) return;
         const r = range.value;
         // The window must be THIS range's: if its load failed (or is from the
         // range just left), fetch it again rather than read another range's
@@ -381,7 +432,7 @@
     }
 
     async function loadItemMovers() {
-        if (!moneyEnabled.value) { itemMovers.value = null; return; }
+        if (!cardRendered('price_changes')) { itemMovers.value = null; return; }
         const r = range.value;
         await loadSlot('itemMovers', async () => {
             const data = await reportsApi.getItemPriceMoversAsync(r, 8);
@@ -415,26 +466,24 @@
         ]);
     }
 
-    // FU-586's failure mode, found in the browser on this page's first live run:
-    // the gates read the once-per-document `/api/health` probe, which had NOT
-    // resolved when the page mounted — so every gated loader early-returned and
-    // only the ungated reports fetched, while the money cards rendered their
-    // *empty* state as if the household had never shopped. Nothing re-ran them
-    // when the flags landed. The dashboard hit this exactly once before and fixed
-    // it the same way; re-fire only the gated loaders on a gate turning on. On a
-    // warm navigation the gate is already true at mount, `loadAll` fetches
-    // normally, and these never fire. (The duplication is FU-844.)
-    watch(moneyEnabled, (on) => {
-        if (!on) return;
-        void loadStoreSpend();
-        void loadSpendByCategory();
-        void loadSpendYoY();
-        void loadItemMovers();
-    });
-    watch(productMoneyEnabled, (on) => {
-        if (!on) return;
-        void loadSavings();
-    });
+    // A card that starts rendering fetches then: the user turned it on from
+    // Cards, or its gate opened. FU-586's failure mode is the second case: the
+    // gates read the once-per-document `/api/health` probe, which may not have
+    // resolved when the page mounted, so a gated loader early-returned and the
+    // card showed its empty state as if the household had never shopped. On a
+    // warm navigation the gate is already open at mount, `loadAll` fetches
+    // normally, and these never fire.
+    const CARD_LOADERS: Record<ReportCardId, () => Promise<unknown>> = {
+        spend: () => Promise.all([loadStoreSpend(), loadSpendByCategory(), loadSpendYoY(), loadSavings()]),
+        waste: loadWaste,
+        kitchen_memory: () => Promise.all([loadMostBought(), loadMealsCooked()]),
+        price_changes: loadItemMovers,
+    };
+    for (const def of REPORT_CARD_DEFS) {
+        watch(() => cardRendered(def.id), (on) => {
+            if (on) void CARD_LOADERS[def.id]();
+        });
+    }
 
     onMounted(() => {
         void loadAll();
@@ -476,17 +525,13 @@
         font-variant-numeric: tabular-nums;
         white-space: nowrap;
     }
-    .reports-grid {
-        display: grid;
-        /* A8's vocabulary — phone <600, tablet 600–1023, desktop ≥1024. The old
-           single 900px breakpoint was N6's "2 cols desktop, 1 col mobile" and
-           isn't a width this app knows about, so a 1000px tablet got two 470px
-           columns holding 280px charts (§4.8). */
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: var(--space-6);
-    }
+    /* A8's vocabulary: phone <600, tablet 600–1023, desktop ≥1024. The shared
+       half-width class goes two-up from 600px, which on a tablet put two 470px
+       columns around 280px charts (§4.8), so Reports stays one column until
+       desktop. */
     @media (max-width: 1023px) {
-        .reports-grid { grid-template-columns: 1fr; }
+        .reports-cards > [class*='col-sm-6'] {
+            width: 100%;
+        }
     }
-    .reports-grid__wide { grid-column: 1 / -1; }
 </style>

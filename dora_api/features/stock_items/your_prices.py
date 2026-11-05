@@ -64,6 +64,11 @@ def measurement_system_from_repo(repo) -> str:
 # Tunable constants — module-level so they're discoverable for review.
 MIN_SAMPLES: int = 3
 ABOVE_THRESHOLD: float = 1.15
+# The mirror for good news (FU-707): at or under 85% of usual is "less than
+# usual", so a saving gets a chip as loud as an overpay.
+BELOW_THRESHOLD: float = 0.85
+# Below this many prices the usual price is a rough guide, and says so.
+STEADY_SAMPLES: int = 6
 BASELINE_WINDOW: timedelta = timedelta(days=365)
 
 
@@ -91,7 +96,14 @@ class YourPrices:
     baseline_unit: str | None       # "L" / "kg" / "ea" — never the raw alias
     current: float | None
     above_baseline: bool
+    below_baseline: bool
     sample_count: int               # observations only (LC-2)
+    # Fewer than STEADY_SAMPLES prices behind the usual price (FU-707).
+    rough: bool
+    # Prices left out because they're on another basis (another unit, or a
+    # pack of unknown size beside sized ones; R-105), so a headline that a
+    # stray log can't move still says what it didn't count.
+    left_out_count: int
     last_observed_at: datetime | None
     last_seen_store_name: str | None
     offers_sidecar: list[OfferSidecarEntry]
@@ -124,10 +136,40 @@ def per_unit_in_canonical(
     return total_price / measure_in_canonical, canonical
 
 
+def window_unit_prices(
+    observations: list[StockItemPriceObservation], basis: PriceBasis, *, now: datetime,
+) -> list[float]:
+    """Per-canonical-unit prices on ``basis`` inside ``BASELINE_WINDOW``: the
+    samples a usual price is the median of."""
+    cutoff = _as_naive_utc(now - BASELINE_WINDOW)
+    prices: list[float] = []
+    for obs in observations:
+        if not basis.holds(obs) or _as_naive_utc(obs.observed_at) < cutoff:
+            continue
+        pu = per_unit_in_canonical(
+            total_price=obs.total_price,
+            total_measure=obs.total_measure,
+            unit=obs.unit,
+        )
+        if pu is not None:
+            prices.append(pu[0])
+    return prices
+
+
+def usual_unit_price(
+    observations: list[StockItemPriceObservation], basis: PriceBasis, *, now: datetime,
+) -> float | None:
+    """The household's usual price per canonical unit on ``basis``: the median
+    the "Your prices" baseline shows, or None below ``MIN_SAMPLES``."""
+    prices = window_unit_prices(observations, basis, now=now)
+    return statistics.median(prices) if len(prices) >= MIN_SAMPLES else None
+
+
 def _empty_your_prices(last_observed_at: datetime | None = None) -> YourPrices:
     return YourPrices(
         baseline=None, baseline_unit=None, current=None,
-        above_baseline=False, sample_count=0,
+        above_baseline=False, below_baseline=False, sample_count=0, rough=False,
+        left_out_count=0,
         last_observed_at=last_observed_at, last_seen_store_name=None,
         offers_sidecar=[],
     )
@@ -157,17 +199,15 @@ def _baseline_from_observations(
         return _empty_your_prices()
 
     observations = sorted(observations, key=lambda o: o.observed_at, reverse=True)
-    active_dim = active_price_dimension(observations)
-    if active_dim is None:
+    basis = active_price_basis(observations)
+    if basis is None:
         # Defensive — the write path validates this so it's a "should never"
         # case; degrade to empty state rather than 500.
         return _empty_your_prices(observations[0].observed_at)
-    # "Current" and the display denominator read the newest price in the
-    # dimension the baseline is in, not a stray in another one.
-    latest = next(
-        o for o in observations
-        if (d := units.find_unit(o.unit)) is not None and d.dimension == active_dim
-    )
+    active_dim = basis.dimension
+    # "Current" and the display denominator read the newest price on the
+    # basis the baseline is on, not a stray in another one.
+    latest = next(o for o in observations if basis.holds(o))
     canonical_unit = units.CANONICAL_PRICE_UNIT[active_dim]
 
     latest_per_unit = per_unit_in_canonical(
@@ -198,25 +238,12 @@ def _baseline_from_observations(
         if store is not None:
             last_seen_store_name = store.name
 
-    cutoff = _as_naive_utc(now - BASELINE_WINDOW)
-    in_dim_window: list[float] = []
-    for obs in observations:
-        obs_def = units.find_unit(obs.unit)
-        if obs_def is None or obs_def.dimension != active_dim:
-            continue
-        if _as_naive_utc(obs.observed_at) < cutoff:
-            continue
-        pu = per_unit_in_canonical(
-            total_price=obs.total_price,
-            total_measure=obs.total_measure,
-            unit=obs.unit,
-        )
-        if pu is not None:
-            in_dim_window.append(pu[0])
+    in_dim_window = window_unit_prices(observations, basis, now=now)
 
     sample_count = len(in_dim_window)
     baseline: float | None = None
     above: bool = False
+    below: bool = False
     if sample_count >= MIN_SAMPLES:
         baseline = statistics.median(in_dim_window)
         # "Strictly greater" per the C2 edge-case test (current == baseline*1.15
@@ -224,8 +251,14 @@ def _baseline_from_observations(
         # ties.
         if current_value is not None:
             above = current_value > baseline * ABOVE_THRESHOLD
+            below = current_value <= baseline * BELOW_THRESHOLD
 
-    offers = sidecar(canonical_unit, display_unit, display_factor) if sidecar else []
+    # Shelf offers are priced per sized pack, so they can't sit beside prices
+    # per pack of unknown size.
+    offers = (
+        sidecar(canonical_unit, display_unit, display_factor)
+        if sidecar and not basis.sizeless else []
+    )
 
     # Internal compute stays in canonical units; only the DTO is shifted.
     display_baseline = baseline / display_factor if baseline is not None else None
@@ -240,7 +273,13 @@ def _baseline_from_observations(
         baseline_unit=display_unit if display_current is not None else None,
         current=display_current,
         above_baseline=above,
+        below_baseline=below,
         sample_count=sample_count,
+        rough=baseline is not None and sample_count < STEADY_SAMPLES,
+        left_out_count=sum(
+            1 for o in observations
+            if observation_basis(o) is not None and not basis.holds(o)
+        ),
         last_observed_at=latest.observed_at,
         last_seen_store_name=last_seen_store_name,
         offers_sidecar=offers,
@@ -330,7 +369,7 @@ def display_denominator_for_series(
     observations: list[StockItemPriceObservation],
     products: list[Product],
     *,
-    active_dim: str,
+    basis: PriceBasis,
     canonical_unit: str,
     system: str = units.METRIC,
 ) -> tuple[str, float]:
@@ -350,11 +389,9 @@ def display_denominator_for_series(
     fall back to the first usable linked-product size so the chart axis
     still picks an appropriate denominator.
     """
+    active_dim = basis.dimension
     measure_in_canonical = 0.0
-    in_dim = [
-        o for o in observations
-        if (d := units.find_unit(o.unit)) is not None and d.dimension == active_dim
-    ]
+    in_dim = [o for o in observations if basis.holds(o)]
     if in_dim:
         latest = max(in_dim, key=lambda o: o.observed_at)
         measure_in_canonical = units.convert(
@@ -375,47 +412,68 @@ def display_denominator_for_series(
     return units.display_denominator_for(active_dim, measure_in_canonical, system=system)
 
 
-def active_price_dimension(
+@dataclass(frozen=True, slots=True)
+class PriceBasis:
+    """What an item's prices are compared on: a price dimension, and for
+    counts whether the count is of packs of unknown size (FU-983). "1 ea" off
+    a sizeless line is one carton; "12 ea" off a sized one is twelve eggs.
+    Both are `ea`, and only the flag keeps them off one scale."""
+    dimension: str
+    sizeless: bool
+
+    def holds(self, obs: StockItemPriceObservation) -> bool:
+        return observation_basis(obs) == self
+
+
+def observation_basis(obs: StockItemPriceObservation) -> PriceBasis | None:
+    """The basis one observation is priced on; None outside a price dimension."""
+    obs_def = units.find_unit(obs.unit)
+    if obs_def is None or obs_def.dimension not in units.PRICE_DIMENSIONS:
+        return None
+    sizeless = obs_def.dimension == units.COUNT and bool(obs.is_sizeless)
+    return PriceBasis(obs_def.dimension, sizeless)
+
+
+def active_price_basis(
     observations: list[StockItemPriceObservation],
-) -> str | None:
-    """The dimension most of an item's price observations are in (FU-876),
-    the most recent of the tied ones on a tie. None when no observation is in
-    a price dimension.
+) -> PriceBasis | None:
+    """The basis most of an item's price observations are on (FU-876), the
+    most recent of the tied ones on a tie. None when no observation is in a
+    price dimension.
 
     It used to be the latest observation's dimension, so nine prices in `kg`
     and one stray `ea` logged last gave a baseline from the one. Public for
     the same reason as `per_unit_in_canonical`: an item's "usual" and its
     reported movement must not disagree about which unit they are about."""
-    counts: Counter[str] = Counter()
-    latest_by_dim: dict[str, datetime] = {}
+    counts: Counter[PriceBasis] = Counter()
+    latest_by_basis: dict[PriceBasis, datetime] = {}
     for obs in observations:
-        obs_def = units.find_unit(obs.unit)
-        if obs_def is None or obs_def.dimension not in units.PRICE_DIMENSIONS:
+        basis = observation_basis(obs)
+        if basis is None:
             continue
-        counts[obs_def.dimension] += 1
-        seen = latest_by_dim.get(obs_def.dimension)
+        counts[basis] += 1
+        seen = latest_by_basis.get(basis)
         if seen is None or obs.observed_at > seen:
-            latest_by_dim[obs_def.dimension] = obs.observed_at
+            latest_by_basis[basis] = obs.observed_at
     if not counts:
         return None
     top = max(counts.values())
     return max(
-        (dim for dim, count in counts.items() if count == top),
-        key=lambda dim: latest_by_dim[dim],
+        (basis for basis, count in counts.items() if count == top),
+        key=lambda basis: latest_by_basis[basis],
     )
 
 
 def _observation_points(
     observations: list[StockItemPriceObservation],
     *,
-    active_dim: str,
+    basis: PriceBasis,
     store_names: dict[UUID, str],
 ) -> list[PriceSeriesPoint]:
-    """Normalise the in-dimension observations to per-canonical-unit points."""
+    """Normalise the observations on the active basis to per-canonical-unit points."""
     points: list[PriceSeriesPoint] = []
     for obs in observations:
-        obs_def = units.find_unit(obs.unit)
-        if obs_def is None or obs_def.dimension != active_dim:
+        if not basis.holds(obs):
             continue
         pu = per_unit_in_canonical(
             total_price=obs.total_price,
@@ -543,23 +601,28 @@ def build_stock_item_price_series(
     )
     products = _linked_products(repo, stock_item_id)
 
-    active_dim = active_price_dimension(observations) or _first_product_price_dim(products)
-    if active_dim is None:
-        return None, []
-    canonical_unit = units.CANONICAL_PRICE_UNIT[active_dim]
+    basis = active_price_basis(observations)
+    if basis is None:
+        fallback_dim = _first_product_price_dim(products)
+        if fallback_dim is None:
+            return None, []
+        basis = PriceBasis(fallback_dim, sizeless=False)
+    canonical_unit = units.CANONICAL_PRICE_UNIT[basis.dimension]
 
     # Display factor sourced from the latest **observation** when one exists
     # (the user's most-recent buy is the strongest signal for "what size are
     # we shopping in?"); falls back to the cheapest linked offer's size so
     # the chart axis still flips sensibly for an offer-only item.
     display_unit, display_factor = display_denominator_for_series(
-        observations, products, active_dim=active_dim,
+        observations, products, basis=basis,
         canonical_unit=canonical_unit, system=_system,
     )
 
     store_names = _resolve_store_names(repo, (o.store_id for o in observations))
-    points = _observation_points(observations, active_dim=active_dim, store_names=store_names)
-    points += _offer_points_from_products(products, active_dim=active_dim, canonical_unit=canonical_unit)
+    points = _observation_points(observations, basis=basis, store_names=store_names)
+    if not basis.sizeless:
+        points += _offer_points_from_products(
+            products, active_dim=basis.dimension, canonical_unit=canonical_unit)
     if display_factor != 1.0:
         points = [
             PriceSeriesPoint(
@@ -608,17 +671,17 @@ def build_product_observation_series(
             StockItemPriceObservation.Fields.STOCK_ITEM_ID,
         ).in_(stock_item_ids)
     )
-    active_dim = active_price_dimension(observations)
-    if active_dim is None:
+    basis = active_price_basis(observations)
+    if basis is None:
         return None, []
-    canonical_unit = units.CANONICAL_PRICE_UNIT[active_dim]
+    canonical_unit = units.CANONICAL_PRICE_UNIT[basis.dimension]
     _system = system or measurement_system_from_repo(repo)
     display_unit, display_factor = display_denominator_for_series(
-        observations, [], active_dim=active_dim,
+        observations, [], basis=basis,
         canonical_unit=canonical_unit, system=_system,
     )
     store_names = _resolve_store_names(repo, (o.store_id for o in observations))
-    points = _observation_points(observations, active_dim=active_dim, store_names=store_names)
+    points = _observation_points(observations, basis=basis, store_names=store_names)
     if display_factor != 1.0:
         points = [
             PriceSeriesPoint(

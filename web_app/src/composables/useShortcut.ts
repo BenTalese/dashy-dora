@@ -18,6 +18,14 @@ export interface ShortcutDef {
     handler: (event: KeyboardEvent) => void;
     /** When true the shortcut also fires while typing in an input/textarea. */
     allowInInput?: boolean;
+    /** When present and false, the shortcut is neither fired nor listed in
+     *  the cheatsheet, for a key that only means something in one state of
+     *  the page (FU-808: the shopping list's tick keys off the run face). */
+    enabled?: () => boolean;
+}
+
+export function shortcutActive(s: ShortcutDef): boolean {
+    return s.enabled === undefined || s.enabled();
 }
 
 interface RegisteredShortcut extends ShortcutDef {
@@ -72,7 +80,7 @@ function findMatch(keys: string, typing: boolean): RegisteredShortcut | null {
     // wins over a global with the same keys.
     for (let i = registry.length - 1; i >= 0; i--) {
         const s = registry[i]!;
-        if (s.keys === keys && (s.allowInInput || !typing)) return s;
+        if (s.keys === keys && (s.allowInInput || !typing) && shortcutActive(s)) return s;
     }
     return null;
 }
@@ -118,7 +126,7 @@ function handleKeydown(event: KeyboardEvent): void {
     }
 
     // Not a full match — is this token the first half of a known sequence?
-    if (!seqPrefix && registry.some((s) => s.keys.startsWith(`${token} `) && (s.allowInInput || !typing))) {
+    if (!seqPrefix && registry.some((s) => s.keys.startsWith(`${token} `) && (s.allowInInput || !typing) && shortcutActive(s))) {
         seqPrefix = token;
         seqTimer = setTimeout(clearSequence, 1000);
         event.preventDefault();

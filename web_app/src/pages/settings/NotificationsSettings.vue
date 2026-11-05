@@ -1,7 +1,7 @@
 <template>
     <!-- The router guard owns "signed in"; this only waits for the user row. -->
     <div v-if="currentUser" class="settings-page">
-        <SettingsPageHeader title="Notifications" :icon="ICONS.notifications" />
+        <SettingsPageHeader title="Notifications" />
 
         <!--
             Owner restructure 2026-08-29 — the page was a flat run of four
@@ -28,6 +28,7 @@
                     </InfoTip>
                 </template>
                 <BaseSelect
+                    aria-label="Discard alerts after"
                     :model-value="currentUser.alert_discard_after_days"
                     :options="discardOptions"
                     option-value="value"
@@ -215,6 +216,7 @@
                 <template v-if="currentUser.deals_email_enabled">
                     <SettingsRow inline label="Send on">
                         <BaseSelect
+                            aria-label="Send on"
                             v-model="sendDealsOnDay"
                             :options="dayOptions"
                             option-value="value"

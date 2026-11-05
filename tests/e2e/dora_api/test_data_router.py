@@ -369,7 +369,7 @@ def test__get_backup__never_exports_password_hashes(api):
         assert "password_hash" not in row, "password_hash must never round-trip"
 
 
-def test__backup__assistant_providers__round_trip_without_keys(api):
+def test__backup__assistant_providers__round_trip_without_keys(api, secret_encryption_key):
     """FU-625 / 18-D5 — provider settings (base URL, model) ride along with
     the account; the API key and the verified flag never do. Restoring onto
     an install where the account already has that provider keeps its own."""
@@ -544,6 +544,27 @@ def test__restore_backup__refused_restore_keeps_staged_file_for_retry(api):
     )
     assert retry.status_code == 200, retry.text
     assert not staged_path(upload_id).exists()
+
+
+def test__restore_backup__upload_in_use_is_missing_to_a_second_restore(api):
+    # FU-981 (5): a running restore holds its upload under a claimed name, so
+    # a double-clicked second request can't run it again.
+    import os
+    from dora_api.features.data.uploads import staged_path
+
+    _, backup = _create_backup()
+    upload_id = _upload_via_chunks(backup)
+    staged = staged_path(upload_id)
+    claimed = staged.with_suffix(".restoring")
+    os.rename(staged, claimed)
+    try:
+        second = requests.post(
+            RESTORE_URL,
+            json={"upload_id": upload_id, "selection": {}, "mode": "all_skip_duplicates"},
+        )
+        assert second.status_code == 404
+    finally:
+        os.unlink(claimed)
 
 
 def test__restore_backup__rejects_both_inputs(api):

@@ -3,7 +3,6 @@
         <SettingsPageHeader
             title="Users"
             description="Everyone who can sign in to this install. Deactivate an account to lock someone out without losing their history."
-            :icon="ICONS.group"
         >
             <template #actions>
                 <!-- The refresh button went (owner, 2026-08-17): the list is

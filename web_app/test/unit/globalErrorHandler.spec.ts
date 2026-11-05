@@ -1,14 +1,10 @@
 // @vitest-environment jsdom
 // FU-539 resilience layer — globalErrorHandler boot module. It is the single
 // place that turns a crash (Vue render error, window.onerror, an unhandled
-// promise rejection) into: run the optimistic-rollback registry, tell the user,
-// ship the error to the backend log stream. If executeRollbacks doesn't fire, an
-// optimistic UI update is stranded showing a value the server never accepted.
-//
-// The rollback registry is deliberately REAL — the wiring under test is
-// "a global error → executeRollbacks". The module registers window listeners at
-// import time, so it is imported ONCE at the top (re-importing would stack
-// duplicate listeners on the shared jsdom window).
+// promise rejection) into: tell the user, ship the error to the backend log
+// stream. The module registers window listeners at import time, so it is
+// imported ONCE at the top (re-importing would stack duplicate listeners on
+// the shared jsdom window).
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const h = vi.hoisted(() => ({
@@ -25,16 +21,11 @@ vi.mock('src/composables/useClientLogger', () => ({
 }));
 
 import bootErrorHandler from 'src/boot/globalErrorHandler';
-import {
-    clearRollbacks,
-    registerRollback,
-} from 'src/services/errorHandling/rollbackRegistry';
 
 const originalOnError = window.onerror;
 
 beforeEach(() => {
     vi.clearAllMocks();
-    clearRollbacks();
 });
 
 afterEach(() => {
@@ -42,10 +33,7 @@ afterEach(() => {
 });
 
 describe('globalErrorHandler — unhandledrejection', () => {
-    it('fires the rollback registry exactly once, notifies, and logs origin=promise', () => {
-        const rollback = vi.fn();
-        registerRollback(rollback);
-
+    it('notifies and logs origin=promise', () => {
         window.dispatchEvent(
             new PromiseRejectionEvent('unhandledrejection', {
                 reason: new Error('kaboom'),
@@ -53,7 +41,6 @@ describe('globalErrorHandler — unhandledrejection', () => {
             }),
         );
 
-        expect(rollback).toHaveBeenCalledTimes(1);
         expect(h.notify).toHaveBeenCalledWith({ type: 'oopsie' });
         expect(h.clientError).toHaveBeenCalledWith(
             'kaboom',
@@ -63,13 +50,9 @@ describe('globalErrorHandler — unhandledrejection', () => {
 });
 
 describe('globalErrorHandler — window.onerror', () => {
-    it('runs executeRollbacks and reports origin=window', () => {
-        const rollback = vi.fn();
-        registerRollback(rollback);
-
+    it('notifies and reports origin=window', () => {
         window.onerror!('boom', 'app.js', 1, 2, new Error('boom'));
 
-        expect(rollback).toHaveBeenCalledTimes(1);
         expect(h.notify).toHaveBeenCalledWith({ type: 'oopsie' });
         expect(h.clientError).toHaveBeenCalledWith(
             'boom',
@@ -79,17 +62,13 @@ describe('globalErrorHandler — window.onerror', () => {
 });
 
 describe('globalErrorHandler — Vue app.config.errorHandler', () => {
-    it('installs a handler that runs rollbacks, notifies, and logs origin=vue', () => {
+    it('installs a handler that notifies and logs origin=vue', () => {
         const app = { config: {} as { errorHandler?: (...a: unknown[]) => void } };
         // Default export is the (unwrapped) boot callback.
         (bootErrorHandler as unknown as (ctx: { app: typeof app }) => void)({ app });
 
-        const rollback = vi.fn();
-        registerRollback(rollback);
-
         app.config.errorHandler!(new Error('render fail'), null, 'render');
 
-        expect(rollback).toHaveBeenCalledTimes(1);
         expect(h.notify).toHaveBeenCalledWith({ type: 'oopsie' });
         expect(h.clientError).toHaveBeenCalledWith(
             'render fail',

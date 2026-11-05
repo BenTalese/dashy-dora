@@ -4,7 +4,7 @@ import type { Alert, AlertAction } from 'src/models/alert';
 import AlertApiService from 'src/services/api/alertApiService';
 import { useAlertStore } from 'src/stores/alertStore';
 import { useStockItemStore } from 'src/stores/stockItemStore';
-import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+import { isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
 
 const api = new AlertApiService();
 
@@ -39,11 +39,13 @@ export function useAlertActions() {
             await api.applyActionAsync(alert.alert_id, action);
             await (opts?.refresh ? opts.refresh() : alertStore.refreshAsync());
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not apply.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not apply.',
+                    caption: toastCaption(err),
+                });
+            }
             busyAlertId.value = null;
             return false;
         }

@@ -167,9 +167,9 @@ def test__household_prices_are_converted_to_the_product_canonical_unit():
     product = per_unit_in_canonical(total_price=3.00, total_measure=500, unit="g")
     assert product is not None and product[1] == "kg"
     observations = [
-        SimpleNamespace(total_price=4.00, total_measure=1, unit="kg"),
-        SimpleNamespace(total_price=0.90, total_measure=200, unit="g"),
-        SimpleNamespace(total_price=3.00, total_measure=2, unit="L"),
+        SimpleNamespace(total_price=4.00, total_measure=1, unit="kg", is_sizeless=False),
+        SimpleNamespace(total_price=0.90, total_measure=200, unit="g", is_sizeless=False),
+        SimpleNamespace(total_price=3.00, total_measure=2, unit="L", is_sizeless=False),
     ]
     prices = household_unit_prices_like(product, observations)
     assert sorted(round(p, 2) for p in prices) == [4.00, 4.50]

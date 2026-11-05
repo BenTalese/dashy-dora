@@ -27,7 +27,7 @@
                     active-class="settings-nav-group__link--active"
                     exact-active-class="settings-nav-group__link--active"
                 >
-                    <q-icon :name="entry.icon" size="18px" class="settings-nav-group__icon" />
+                    <q-icon :name="settingsPageIcon(entry.path)" size="18px" class="settings-nav-group__icon" />
                     <span class="settings-nav-group__label">{{ entry.label }}</span>
                     <span v-if="entry.badge" class="settings-nav-group__badge">{{ entry.badge }}</span>
                 </router-link>
@@ -37,6 +37,7 @@
 </template>
 
 <script setup lang="ts">
+    import { settingsPageIcon } from 'src/config/settingsPageIcons';
     import { computed } from 'vue';
 
     // IMPL_PLAN_SETTINGS_REBUILD §2.7 — side-nav group. Drops the card
@@ -53,7 +54,7 @@
     export interface SettingsNavLeaf {
         path: string;
         label: string;
-        icon: string;
+        // The icon is the page's own, from `settingsPageIcon(path)` (FU-672).
         // Optional attention count — renders a soft pill on the right of the
         // link when > 0 (e.g. outstanding unlinked ingredients). Omitted /
         // 0 ⇒ no badge.
@@ -131,6 +132,12 @@
         font-size: 0.875rem;
         line-height: 1.2;
         transition: background-color 0.18s ease, color 0.18s ease;
+    }
+    // D-004 on touch (R-085 / FU-877).
+    @media (pointer: coarse) {
+        .settings-nav-group__link {
+            min-height: 44px;
+        }
     }
     .settings-nav-group__link:hover {
         background: color-mix(in srgb, var(--text-primary) 4%, transparent);

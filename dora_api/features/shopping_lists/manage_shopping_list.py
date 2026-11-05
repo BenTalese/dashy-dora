@@ -28,6 +28,7 @@ from dora_api.features.shopping_lists.manage_shopping_list_lines import \
     snapshot_offer_rrp
 from dora_api.features.shopping_lists._observation_sync import (
     sync_line_observations)
+from dora_api.features.shopping_lists._usual_price import snapshot_usual_prices
 from dora_api.infrastructure.api_response import (business_rule_violation,
                                                   created, no_content,
                                                   not_found, ok)
@@ -268,6 +269,10 @@ class FinishShoppingListHandler:
         # replacement for it.
         for line in ticked_lines:
             snapshot_offer_rrp(self.repository, line)
+        # The household's own usual price, the baseline Reports measures
+        # savings from (FU-831). Before the harvest below, so this shop's
+        # prices aren't part of their own baseline.
+        snapshot_usual_prices(self.repository, ticked_lines, now=now)
 
         # Resolve the restock target once, by status identity, not name.
         all_levels = self.repository.get(StockLevel).all()

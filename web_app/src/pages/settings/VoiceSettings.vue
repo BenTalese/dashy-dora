@@ -3,8 +3,7 @@
     <div v-if="currentUser" class="settings-page">
         <SettingsPageHeader
             title="Voice"
-            :icon="ICONS.record_voice_over"
-            description="Talk to Dora and let her talk back. Speech recognition uses your browser's built-in support, so it only works where the browser supports it and will ask for microphone permission the first time. For Dora's replies you can choose her natural neural voice or your browser's built-in one."
+            description="Talk to Dora and let her talk back. Speech recognition uses your browser's built-in support, or Dora's own server where the browser has none, and asks for microphone permission the first time. For Dora's replies you can choose her natural neural voice or your browser's built-in one."
         />
 
         <SettingsSection>
@@ -33,8 +32,42 @@
                 server-side transcription (FU-788), which is a real feature, not
                 a copy fix.
             -->
+            <!-- FU-788: the server can listen where the browser can't. -->
             <SettingsNotice
-                v-if="!voiceInputAvailable"
+                v-if="voiceProbeInput.viaServer && sttStatus === 'ready'"
+                tone="info"
+                title="Listening through Dora"
+            >
+                This browser has no speech recognition of its own, so Dora's
+                server works out what you say.
+            </SettingsNotice>
+            <SettingsNotice
+                v-else-if="voiceProbeInput.viaServer && sttStatus === 'downloading'"
+                tone="info"
+                title="Setting up speech recognition"
+            >
+                Downloading Dora's speech recognition. Voice input switches on
+                here when it's done.
+            </SettingsNotice>
+            <SettingsNotice
+                v-else-if="voiceProbeInput.viaServer && (sttStatus === 'downloadable' || sttStatus === 'error')"
+                title="Not set up for this browser yet"
+            >
+                This browser has no speech recognition of its own. Dora's server
+                can do it once its speech model is downloaded
+                ({{ formatFileSize(sttModelBytes) }}, shared by everyone on this
+                install).<template v-if="sttStatus === 'error'"> The last download failed.</template>
+                <template #actions>
+                    <BaseButton
+                        variant="secondary"
+                        :icon="ICONS.download"
+                        :label="sttStatus === 'error' ? 'Try again' : 'Download speech recognition'"
+                        @click="onDownloadStt"
+                    />
+                </template>
+            </SettingsNotice>
+            <SettingsNotice
+                v-else-if="!voiceInputAvailable"
                 title="Not available in this browser"
             >
                 Speaking to Dora uses your browser's own speech-recognition
@@ -171,8 +204,10 @@
     import { storeToRefs } from 'pinia';
     import { useAuthStore } from 'src/stores/authStore';
     import { useSpeechOutput } from 'src/composables/useSpeechOutput';
-    import { useVoiceInput } from 'src/composables/useVoiceInput';
+    import { serverSttStatus, useVoiceInput } from 'src/composables/useVoiceInput';
     import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+    import SttApiService, { type SttStatus } from 'src/services/api/sttApiService';
+    import { formatFileSize } from 'src/composables/useMoney';
     import { useSettingsSave } from 'src/composables/useSettingsSave';
     import TtsApiService, { type TtsVoice } from 'src/services/api/ttsApiService';
     import SettingsSection from 'src/components/settings/SettingsSection.vue';
@@ -185,6 +220,7 @@
     const authStore = useAuthStore();
     const { currentUser } = storeToRefs(authStore);
     const ttsApi = new TtsApiService();
+    const sttApi = new SttApiService();
 
     // Decides whether the "no neural voice" card offers the setup page or
     // "ask an admin" — same split ChannelSetupNote makes on Notifications.
@@ -199,8 +235,40 @@
     const anyVoiceReady = computed(() => voices.value.some((v) => v.status === 'ready'));
 
     const voiceProbeInput = useVoiceInput();
+
+    // FU-788 — the server recognizer's state, for a browser with none of its own.
+    const sttStatus = ref<SttStatus>('unavailable');
+    const sttModelBytes = ref(0);
+    let sttPoll: ReturnType<typeof setInterval> | null = null;
+    function stopSttPoll() {
+        if (sttPoll !== null) { clearInterval(sttPoll); sttPoll = null; }
+    }
+    async function refreshStt() {
+        try {
+            const res = await sttApi.getStatusAsync();
+            sttStatus.value = res.status;
+            sttModelBytes.value = res.model_size_bytes;
+        } catch {
+            sttStatus.value = 'unavailable';
+        }
+        if (sttStatus.value !== 'downloading') {
+            stopSttPoll();
+            // The composable asked once per page load; let it hear the news.
+            void serverSttStatus(true);
+        }
+    }
+    async function onDownloadStt() {
+        try {
+            sttStatus.value = (await sttApi.downloadAsync()).status;
+            if (sttPoll === null) sttPoll = setInterval(() => { void refreshStt(); }, 3000);
+        } catch (err) {
+            notifyError('Could not start the download.', err);
+        }
+    }
     const voiceProbeOutput = useSpeechOutput();
-    const voiceInputAvailable = computed(() => voiceProbeInput.available.value);
+    const voiceInputAvailable = computed(
+        () => voiceProbeInput.available.value || sttStatus.value === 'ready',
+    );
     const voiceOutputAvailable = computed(() => voiceProbeOutput.available.value);
     /** Whether the *device* voice specifically can make a sound here — a
      *  separate question from `voiceOutputAvailable`, which is true whenever
@@ -274,6 +342,12 @@
     }
 
     onMounted(async () => {
+        if (voiceProbeInput.viaServer) {
+            await refreshStt();
+            if (sttStatus.value === 'downloading' && sttPoll === null) {
+                sttPoll = setInterval(() => { void refreshStt(); }, 3000);
+            }
+        }
         try {
             await refreshVoices();
             if (voices.value.some((v) => v.status === 'downloading')) ensurePolling();
@@ -287,7 +361,10 @@
         }
     });
 
-    onBeforeUnmount(stopPolling);
+    onBeforeUnmount(() => {
+        stopPolling();
+        stopSttPoll();
+    });
 </script>
 
 <style scoped lang="scss">

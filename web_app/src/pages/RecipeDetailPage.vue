@@ -135,6 +135,7 @@
                              directly below it, so the count restated something
                              the reader can already see. -->
                         <h2 class="rn__sectitle" id="rnMet">Method</h2>
+                        <HelpHint topic="Three ways to write a method" />
                         <BaseSegmented
                             v-if="methodEditing"
                             v-model="form.steps_mode"
@@ -230,9 +231,14 @@
                             <RecipeStepImagesEditor
                                 v-if="methodEditing"
                                 :model-value="form.step_images"
+                                :recipe-id="recipeId"
                                 @update:model-value="onStepImagesChanged"
                             />
-                            <RecipeStepImagesViewer v-else :images="form.step_images" />
+                            <RecipeStepImagesViewer
+                                v-else
+                                :images="form.step_images"
+                                :recipe-id="recipeId"
+                            />
                         </template>
 
                         <!-- Tools. In structured mode they are *derived* from
@@ -318,6 +324,7 @@
 </template>
 
 <script lang="ts" setup>
+    import HelpHint from 'src/components/help/HelpHint.vue';
     import BaseTooltip from 'src/components/BaseTooltip.vue';
     /**
      * The recipe page — the 2026-08-20 redesign, and since 2026-08-26 the only
@@ -399,7 +406,7 @@
 
     import { ICONS } from 'src/style/icons';
     import { needsCookGuard } from 'src/helpers/cookModeGuard';
-    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+    import { isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { useRecipeExport } from 'src/composables/useRecipeExport';
     import { hydrateRecipeForm } from 'src/composables/useRecipeEditor';
     import { provideRecipeDetail } from 'src/composables/useRecipeDetail';
@@ -536,7 +543,9 @@
             await recipeStore.toggleFavouriteAsync(recipe.value);
             await loadRecipe();
         } catch (err) {
-            $q.notify({ type: 'negative', message: "Couldn't update favourite.", caption: toastCaption(err) });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({ type: 'negative', message: "Couldn't update favourite.", caption: toastCaption(err) });
+            }
         }
     }
 
@@ -584,7 +593,9 @@
             await recipeStore.deleteRecipeAsync(recipe.value.recipe_id);
             await router.push('/cookbook');
         } catch (err) {
-            $q.notify({ type: 'negative', message: "Couldn't delete.", caption: toastCaption(err) });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({ type: 'negative', message: "Couldn't delete.", caption: toastCaption(err) });
+            }
         }
     }
 

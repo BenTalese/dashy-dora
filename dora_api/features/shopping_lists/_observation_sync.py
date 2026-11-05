@@ -95,7 +95,7 @@ def sync_line_observations(
             products_by_id.get(line.selected_product_id)
             if line.selected_product_id else None
         )
-        total_price, total_measure, unit, pack_count = harvest_observation_fields(
+        total_price, total_measure, unit, pack_count, is_sizeless = harvest_observation_fields(
             unit_price=unit_price,
             quantity=line.quantity,
             size_value=product.size_value if product else None,
@@ -109,6 +109,7 @@ def sync_line_observations(
             existing.unit = unit
             existing.store_id = line.purchased_store_id
             existing.pack_count = pack_count
+            existing.is_sizeless = is_sizeless
             # `observed_at` deliberately keeps its original value: the user is
             # correcting *when they recorded it wrong*, not buying it again.
             continue
@@ -123,4 +124,5 @@ def sync_line_observations(
             shopping_list_line_id=line.id,
             created_at=now,
             pack_count=pack_count,
+            is_sizeless=is_sizeless,
         ))

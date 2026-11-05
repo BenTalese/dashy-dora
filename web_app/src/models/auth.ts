@@ -122,6 +122,8 @@ export type AuthenticatedUser = {
     // dashboard to seed card order/visibility; persisted via PATCH /auth/me so
     // it survives a cache clear and follows the user across devices.
     dashboard_layout: string | null;
+    // The Reports page's layout JSON, the same contract (FU-832).
+    reports_layout: string | null;
     // per-user assistant config. `llm_enabled` is the AI-mode opt-in and
     // `llm_provider` the active provider (or null for Basic). Per-provider
     // details live in the `UserLlmProvider` table, read/edited via the

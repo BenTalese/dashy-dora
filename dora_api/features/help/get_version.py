@@ -5,9 +5,14 @@ never has to deal with CORS and the call can be cached cheaply. If the
 network call fails (offline, rate-limited, repo not public), we return the
 current version with `latest_version` = null so the UI can still say
 "you're on x.y.z" without claiming an update status it doesn't know.
+
+`DORA_UPDATE_CHECK=false` turns the GitHub call off for an install that must
+never reach out (air-gapped, or an operator who'd rather not); the endpoint
+then reports the running version only (FU-626).
 """
 import json
 import logging
+import os
 from dataclasses import dataclass
 from time import time
 from typing import Optional
@@ -37,6 +42,7 @@ class VersionInfoDto:
     update_available: bool
     release_url: Optional[str]
     error: Optional[str]
+    update_check_enabled: bool
 
 
 def _fetch_latest_release() -> tuple[Optional[str], Optional[str], Optional[str]]:
@@ -84,9 +90,16 @@ def _is_newer(latest: str, current: str) -> bool:
         return False
 
 
+def update_check_enabled() -> bool:
+    """On unless `DORA_UPDATE_CHECK` says otherwise (R-005: env-only config)."""
+    raw = os.environ.get("DORA_UPDATE_CHECK", "").strip().lower()
+    return raw not in {"0", "false", "no", "off"}
+
+
 @HELP_ROUTER.route("/version", methods=["GET"])
 def get_version():
-    latest, release_url, error = _fetch_latest_release()
+    enabled = update_check_enabled()
+    latest, release_url, error = _fetch_latest_release() if enabled else (None, None, None)
     update_available = bool(latest) and _is_newer(latest, CURRENT_VERSION)
     _LOGGER.debug(
         "version=%s latest=%s update=%s err=%s",
@@ -98,4 +111,5 @@ def get_version():
         update_available = update_available,
         release_url = release_url,
         error = error,
+        update_check_enabled = enabled,
     ))

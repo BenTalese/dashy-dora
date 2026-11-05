@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import List
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from dora_api.domain.entities.category import Category
 from dora_api.domain.entities.cuisine import Cuisine
@@ -103,6 +103,13 @@ class CreateRecipeRequest(BaseModel):
     # `section_client_id`. Unreferenced sections still get created (empty
     # group) so the user can type the name first, then drop rows into it.
     sections: List[RecipeSectionRequest] = Field(default_factory = list)
+
+    # FU-575: stripped before the length check, as stock-item names are, so
+    # "   " is refused and " Soup " is stored as "Soup".
+    @field_validator("name", mode="before")
+    @classmethod
+    def _strip_name(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
 
 
 @dataclass(slots=True)

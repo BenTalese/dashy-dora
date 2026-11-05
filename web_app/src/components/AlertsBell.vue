@@ -118,7 +118,7 @@
     import { useStockItemStore } from 'src/stores/stockItemStore';
     import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
     import { useQuasar } from 'quasar';
-    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+    import { isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { useRoute, useRouter } from 'vue-router';
 
     // The bell is the whole alerts surface (owner 2026-10-15: the Alerts page
@@ -186,11 +186,13 @@
                 stock_level_id: levelId,
             });
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not update.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not update.',
+                    caption: toastCaption(err),
+                });
+            }
             return;
         }
         await alertStore.refreshAsync();
@@ -228,11 +230,13 @@
         try {
             await alertStore.dismissAllAsync();
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: "Couldn't dismiss the alerts.",
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: "Couldn't dismiss the alerts.",
+                    caption: toastCaption(err),
+                });
+            }
         } finally {
             dismissingAll.value = false;
         }

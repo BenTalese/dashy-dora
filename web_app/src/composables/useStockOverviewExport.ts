@@ -5,7 +5,7 @@
  */
 import { Notify } from 'quasar';
 import AxiosHttpClient from 'src/services/api/axiosHttpClient';
-import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+import { isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
 import {
     describeQrFailure,
     openQrSheetAsync,
@@ -33,11 +33,13 @@ export function useStockOverviewExport() {
                 : await http.getFile('/stock-items/export?format=csv');
             triggerSave(blob, filename ?? 'stock-overview.csv');
         } catch (err) {
-            Notify.create({
-                type: 'negative',
-                message: "Couldn't export the stock overview.",
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                Notify.create({
+                    type: 'negative',
+                    message: "Couldn't export the stock overview.",
+                    caption: toastCaption(err),
+                });
+            }
         }
     }
 

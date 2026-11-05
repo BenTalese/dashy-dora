@@ -18,7 +18,10 @@ const http = new AxiosHttpClient();
  * yields null. The object URL lives until the path changes or the component
  * unmounts, so a long-lived avatar never points at a revoked URL.
  */
-export function useAuthedImage(path: () => string | null): Ref<string | null> {
+export function useAuthedImage(
+    path: () => string | null,
+    options: { onError?: () => void } = {},
+): Ref<string | null> {
     const src = ref<string | null>(null);
     // The path whose fetch is in flight, so a row recycled onto a different
     // record can't paint the previous record's image when a slower response lands.
@@ -41,7 +44,9 @@ export function useAuthedImage(path: () => string | null): Ref<string | null> {
             release();
             src.value = URL.createObjectURL(blob);
         } catch {
-            // A missing image is not worth a toast; the caller's fallback shows.
+            // A missing image is not worth a toast; the caller's fallback
+            // shows, and a caller that words the failure is told.
+            if (inFlightFor === target) options.onError?.();
         }
     }
 

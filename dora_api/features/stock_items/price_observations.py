@@ -34,7 +34,10 @@ from dora_api.infrastructure.ports import Repository
 _LOGGER = logging.getLogger(__name__)
 
 
-class AddPriceObservationRequest(BaseModel):
+class PriceObservationRequest(BaseModel):
+    """One shape for logging a price and for correcting one (FU-706): an edit
+    replaces every field, so a fat-fingered 1250 is fixed in place rather than
+    deleted and retyped."""
     model_config = ConfigDict(extra="forbid")
 
     total_price: float = Field(gt=0)
@@ -61,22 +64,37 @@ class PriceObservationHandler:
     def __init__(self, repository: Repository) -> None:
         self.repository = repository
 
-    def add(self, stock_item_id: UUID, request: AddPriceObservationRequest) -> PriceObservationMutationResponse:
-        if not self.repository.get(StockItem).exists(stock_item_id):
-            return PriceObservationMutationResponse(stock_item_not_found=True)
-
+    def _validate(self, request: PriceObservationRequest) -> tuple[units.UnitDef | None, PriceObservationMutationResponse | None]:
         # unit must be on the supported price list (volume / mass / count).
         # Normalised via the chunk-1 domain helper so "L", " L ", "litre" all
         # land. Rejected units include kJ, °C, mm — those are recipe-side, not
         # price-side (R-001-equivalent: one validation source).
         unit_def = units.find_unit(request.unit)
         if unit_def is None or unit_def.dimension not in units.PRICE_DIMENSIONS:
-            return PriceObservationMutationResponse(invalid_unit=request.unit)
+            return None, PriceObservationMutationResponse(invalid_unit=request.unit)
 
         # A2 — optional store. If supplied, validate it exists (FK would also
         # reject, but a friendly 400 beats a 500).
         if request.store_id is not None and not self.repository.get(Store).exists(request.store_id):
-            return PriceObservationMutationResponse(store_not_found=True)
+            return None, PriceObservationMutationResponse(store_not_found=True)
+        return unit_def, None
+
+    def _find(self, stock_item_id: UUID, observation_id: UUID) -> StockItemPriceObservation | None:
+        return self.repository.get(StockItemPriceObservation).one(
+            EntityField(StockItemPriceObservation, "id").eq(observation_id)
+            & EntityField(
+                StockItemPriceObservation,
+                StockItemPriceObservation.Fields.STOCK_ITEM_ID,
+            ).eq(stock_item_id)
+        )
+
+    def add(self, stock_item_id: UUID, request: PriceObservationRequest) -> PriceObservationMutationResponse:
+        if not self.repository.get(StockItem).exists(stock_item_id):
+            return PriceObservationMutationResponse(stock_item_not_found=True)
+
+        unit_def, failure = self._validate(request)
+        if failure is not None:
+            return failure
 
         self.repository.add(StockItemPriceObservation(
             stock_item_id=stock_item_id,
@@ -92,14 +110,30 @@ class PriceObservationHandler:
         self.repository.save_changes()
         return PriceObservationMutationResponse()
 
+    def update(
+        self, stock_item_id: UUID, observation_id: UUID, request: PriceObservationRequest,
+    ) -> PriceObservationMutationResponse:
+        match = self._find(stock_item_id, observation_id)
+        if match is None:
+            return PriceObservationMutationResponse(observation_not_found=True)
+
+        unit_def, failure = self._validate(request)
+        if failure is not None:
+            return failure
+
+        match.total_price = float(request.total_price)
+        match.total_measure = float(request.total_measure)
+        match.unit = unit_def.canonical
+        # Omitted keeps the original date; the receipt was still that day.
+        if request.observed_at is not None:
+            match.observed_at = request.observed_at
+        match.store_id = request.store_id
+        match.pack_count = request.pack_count
+        self.repository.save_changes()
+        return PriceObservationMutationResponse()
+
     def delete(self, stock_item_id: UUID, observation_id: UUID) -> PriceObservationMutationResponse:
-        match = self.repository.get(StockItemPriceObservation).one(
-            EntityField(StockItemPriceObservation, "id").eq(observation_id)
-            & EntityField(
-                StockItemPriceObservation,
-                StockItemPriceObservation.Fields.STOCK_ITEM_ID,
-            ).eq(stock_item_id)
-        )
+        match = self._find(stock_item_id, observation_id)
         if match is None:
             return PriceObservationMutationResponse(observation_not_found=True)
         self.repository.remove(match)
@@ -108,21 +142,43 @@ class PriceObservationHandler:
 
 
 @STOCK_ITEM_ROUTER.route("<uuid:stock_item_id>/price-observations", methods=["POST"])
-@has_request_body(AddPriceObservationRequest)
+@has_request_body(PriceObservationRequest)
 def add_price_observation(stock_item_id: UUID):
     _Handler = PriceObservationHandler(SqlAlchemyRepository())
-    _Request: AddPriceObservationRequest = get_request_body()
+    _Request: PriceObservationRequest = get_request_body()
     _Response = _Handler.add(stock_item_id, _Request)
     if _Response.stock_item_not_found:
         return not_found(StockItem.__name__, stock_item_id)
-    if _Response.invalid_unit is not None:
+    _Error = _mutation_error(_Response, _Request)
+    if _Error is not None:
+        return _Error
+    _LOGGER.info("Logged a price for stock item %s", stock_item_id)
+    return no_content()
+
+
+def _mutation_error(response: PriceObservationMutationResponse, request: PriceObservationRequest):
+    if response.invalid_unit is not None:
         return bad_request(
-            f"Unit {_Response.invalid_unit!r} is not supported for price entry. "
+            f"Unit {response.invalid_unit!r} is not supported for price entry. "
             f"Use a volume (L, ml, …), mass (kg, g, …) or count (ea, dozen, pack) unit."
         )
-    if _Response.store_not_found:
-        return not_found(Store.__name__, _Request.store_id)
-    _LOGGER.info("Logged a price for stock item %s", stock_item_id)
+    if response.store_not_found:
+        return not_found(Store.__name__, request.store_id)
+    return None
+
+
+@STOCK_ITEM_ROUTER.route("<uuid:stock_item_id>/price-observations/<uuid:observation_id>", methods=["PUT"])
+@has_request_body(PriceObservationRequest)
+def update_price_observation(stock_item_id: UUID, observation_id: UUID):
+    _Handler = PriceObservationHandler(SqlAlchemyRepository())
+    _Request: PriceObservationRequest = get_request_body()
+    _Response = _Handler.update(stock_item_id, observation_id, _Request)
+    if _Response.observation_not_found:
+        return not_found(StockItemPriceObservation.__name__, observation_id)
+    _Error = _mutation_error(_Response, _Request)
+    if _Error is not None:
+        return _Error
+    _LOGGER.info("Corrected a logged price on stock item %s", stock_item_id)
     return no_content()
 
 

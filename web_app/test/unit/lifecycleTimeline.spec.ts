@@ -12,7 +12,12 @@
 // that import the http client (and so Quasar's client bundle), hence jsdom.
 import { describe, expect, it } from 'vitest';
 
-import { buildLifecycleTimeline, eventTime } from 'src/helpers/lifecycleTimeline';
+import {
+    buildLifecycleTimeline,
+    eventTime,
+    groupLifecycleEvents,
+    type LifecycleEvent,
+} from 'src/helpers/lifecycleTimeline';
 import { LOW_STOCK_SEQUENCE, STOCKED_SEQUENCE } from 'src/helpers/stockStatus';
 import type { StockItemDetail } from 'src/models/stockItemDetail';
 
@@ -98,5 +103,34 @@ describe('buildLifecycleTimeline', () => {
         }));
         expect(pushed!.title).toBe('Pushed expiry +7 days');
         expect(pushed!.color).toBe('lifecycle-expiry-changed');
+    });
+});
+
+function ev(id: string, runKey: string, at: string): LifecycleEvent {
+    return { id, kind: 'expiry', runKey, runTitle: 'Moved expiry', at, title: id, icon: '', color: '' };
+}
+
+describe('groupLifecycleEvents (DR-13)', () => {
+    it('collapses three or more neighbours with the same key into one run', () => {
+        const rows = groupLifecycleEvents([
+            ev('a', 'expiry-pushed', '2026-03-04'),
+            ev('b', 'expiry-pushed', '2026-03-03'),
+            ev('c', 'expiry-pushed', '2026-03-02'),
+            ev('d', 'bought', '2026-03-01'),
+        ]);
+        expect(rows).toHaveLength(2);
+        expect(rows[0]).toMatchObject({ type: 'run', title: 'Moved expiry' });
+        expect(rows[0]!.type === 'run' && rows[0]!.events.map((e) => e.id)).toEqual(['a', 'b', 'c']);
+        expect(rows[1]).toMatchObject({ type: 'event', event: { id: 'd' } });
+    });
+
+    it('leaves a pair, and runs split by another kind, as single rows', () => {
+        const rows = groupLifecycleEvents([
+            ev('a', 'expiry-pushed', '2026-03-05'),
+            ev('b', 'expiry-pushed', '2026-03-04'),
+            ev('c', 'bought', '2026-03-03'),
+            ev('d', 'expiry-pushed', '2026-03-02'),
+        ]);
+        expect(rows.every((r) => r.type === 'event')).toBe(true);
     });
 });

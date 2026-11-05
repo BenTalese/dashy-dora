@@ -3,7 +3,6 @@
         <SettingsPageHeader
             title="Nutrition"
             description="How much nutrition detail Dora tracks, for the whole household."
-            :icon="ICONS.monitor_heart"
         />
 
         <SettingsSection>
@@ -17,6 +16,7 @@
 
             <SettingsRow label="Nutrition mode">
                 <BaseSegmented
+                    aria-label="Nutrition mode"
                     :model-value="mode"
                     :options="modeOptions"
                     @update:model-value="onModeChange"
@@ -134,6 +134,7 @@
                          one, plus a "switch to complex" banner that could
                          never render — dropped rather than carried forward. -->
                     <BaseSegmented
+                        aria-label="Rating scheme"
                         :model-value="ratingScheme"
                         :options="ratingSchemeOptions"
                         @update:model-value="onRatingSchemeChange"
@@ -180,7 +181,6 @@
                 >
                     <q-toggle
                         :model-value="offLookupEnabled"
-                        :disable="saving"
                         @update:model-value="onOffLookupChange"
                     />
                 </SettingsRow>
@@ -196,7 +196,6 @@
                         type="password"
                         placeholder="Paste a key"
                         style="min-width: 240px"
-                        :disable="saving"
                         @blur="onUsdaKeySave"
                         @keydown.enter.prevent="onUsdaKeySave"
                     />
@@ -210,7 +209,6 @@
     // Nutrition is install-wide (owner call 2026-08-14) — this page replaces
     // the per-user Settings → Nutrition page, which mostly existed to tell you
     // to go ask an admin. Mode + complex-mode source config in one place.
-    import { ICONS } from 'src/style/icons';
     import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
     import { useSettingsSave } from 'src/composables/useSettingsSave';
     import { formatNumber } from 'src/composables/useMoney';
@@ -259,7 +257,6 @@
     const usdaKeyDraft = ref('');
     const savedUsdaKey = ref('');
     const loading = ref(true);
-    const saving = ref(false);
 
     const datasetSources = computed(() =>
         sources.value.filter((s) => s.kind === 'dataset'),
@@ -371,24 +368,19 @@
     // yields `null`), so callers branch on this to roll the control back and
     // skip the follow-ups on failure.
     async function patch(message: string, body: UpdateAppSettingsCommand): Promise<boolean> {
-        saving.value = true;
-        try {
-            const saved = await update(message, () => appSettingsStore.saveAsync(body));
-            if (saved === null) return false;
-            // The mode drives /api/health gates all over the app; refresh the
-            // cached flag map so other surfaces don't run on a stale answer.
-            await refreshFlags();
-            // Refreshing the flags is only half of it. The rating and the whole
-            // complex-mode rollup are *server-computed per request* — the DTO
-            // carries no rating at all while the scheme is 'none' — so a recipe
-            // list fetched before this write stays ratingless even once the flag
-            // says the chip should render. That read as "health stars don't
-            // appear until I refresh the page" (owner 2026-09-09).
-            recipeStore.invalidateRecipes();
-            return true;
-        } finally {
-            saving.value = false;
-        }
+        const saved = await update(message, () => appSettingsStore.saveAsync(body));
+        if (saved === null) return false;
+        // The mode drives /api/health gates all over the app; refresh the
+        // cached flag map so other surfaces don't run on a stale answer.
+        await refreshFlags();
+        // Refreshing the flags is only half of it. The rating and the whole
+        // complex-mode rollup are *server-computed per request* — the DTO
+        // carries no rating at all while the scheme is 'none' — so a recipe
+        // list fetched before this write stays ratingless even once the flag
+        // says the chip should render. That read as "health stars don't
+        // appear until I refresh the page" (owner 2026-09-09).
+        recipeStore.invalidateRecipes();
+        return true;
     }
 
     async function onModeChange(value: NutritionMode) {

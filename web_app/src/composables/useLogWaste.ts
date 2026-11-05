@@ -1,6 +1,6 @@
 import { useQuasar } from 'quasar';
 import WasteApiService, { type WasteReason } from 'src/services/api/wasteApiService';
-import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+import { isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
 import { useStockItemStore } from 'src/stores/stockItemStore';
 
 export type LogWasteTarget = {
@@ -70,11 +70,13 @@ export function useLogWaste(onChanged?: () => void | Promise<void>) {
                                         message: 'Undone.',
                                     });
                                 } catch (err) {
-                                    $q.notify({
-                                        type: 'negative',
-                                        message: 'Could not undo.',
-                                        caption: toastCaption(err),
-                                    });
+                                    if (!isAlreadyNotified(err)) {
+                                        $q.notify({
+                                            type: 'negative',
+                                            message: 'Could not undo.',
+                                            caption: toastCaption(err),
+                                        });
+                                    }
                                 }
                             })();
                         },
@@ -82,11 +84,13 @@ export function useLogWaste(onChanged?: () => void | Promise<void>) {
                 ],
             });
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not log as wasted.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not log as wasted.',
+                    caption: toastCaption(err),
+                });
+            }
         }
     }
 

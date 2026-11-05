@@ -6,6 +6,7 @@ export type VersionInfo = {
     update_available: boolean;
     release_url: string | null;
     error: string | null;
+    update_check_enabled: boolean;
 };
 
 export type FoodFact = { fact: string };

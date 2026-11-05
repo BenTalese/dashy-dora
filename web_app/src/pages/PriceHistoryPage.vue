@@ -3,7 +3,8 @@
          (document-scroll page; no :style-fn). -->
     <q-page class="q-pa-md row q-col-gutter-md">
         <!-- ── Left rail: picker + selected chips ─────────────────── -->
-        <div class="col-12 col-md-3">
+        <!-- On a phone the chart comes first; the picker follows it (FU-708). -->
+        <div class="col-12 col-md-3 ph-rail">
             <q-card flat bordered>
                 <q-card-section>
                     <div class="text-subtitle1">Pick products</div>
@@ -96,6 +97,7 @@
             <PageToolbar title="Price history">
                 <template #actions>
                     <BaseSegmented
+                        aria-label="Date range"
                         v-model="range"
                         :options="rangeOptions"
                         dense
@@ -104,11 +106,11 @@
                         v-if="moneyEnabled"
                         variant="ghost"
                         :icon="ICONS.notifications"
-                        :label="compactToolbar ? undefined : 'Manage alerts'"
-                        aria-label="Manage alerts"
+                        :label="compactToolbar ? undefined : 'Price watches'"
+                        aria-label="Price watches"
                         @click="alertsOpen = true"
                     >
-                        <BaseTooltip v-if="compactToolbar">Manage alerts</BaseTooltip>
+                        <BaseTooltip v-if="compactToolbar">Price watches</BaseTooltip>
                     </BaseButton>
                 </template>
             </PageToolbar>
@@ -124,7 +126,7 @@
                         :width="chartWidth"
                         :height="320"
                         legend
-                        empty-line="Pick one or more products on the left to see their price history."
+                        empty-line="Pick products to compare their price history."
                     />
                 </q-card-section>
             </q-card>
@@ -181,28 +183,23 @@
                                 v-if="s.your_prices?.baseline != null"
                                 class="text-caption dora-text-muted-7 q-mt-xs"
                             >
-                                Your usual:
+                                Usually
                                 <strong>
                                     {{ formatMoney(s.your_prices.baseline)
                                     }}{{ s.your_prices.baseline_unit ? `/${s.your_prices.baseline_unit}` : '' }}
                                 </strong>
                                 <InfoTip label="What your usual price means">
                                     "Usually" is the median of prices you've
-                                    logged for this item. "Above usual" means
-                                    today's shelf price is meaningfully higher
-                                    than that median.
+                                    logged for this item. "More than usual" and
+                                    "Less than usual" mean the latest price is
+                                    meaningfully above or below it.
                                 </InfoTip>
-                                <q-chip
-                                    v-if="s.your_prices.above_baseline"
-                                    dense
-                                    size="sm"
-                                    color="warning"
-                                    text-color="dark"
+                                <YourPriceVerdict
                                     class="q-ml-xs"
-                                    :icon="ICONS.trending_up"
-                                >
-                                    above usual
-                                </q-chip>
+                                    :above="s.your_prices.above_baseline"
+                                    :below="s.your_prices.below_baseline"
+                                    :rough="s.your_prices.rough"
+                                />
                             </div>
                         </q-card-section>
                         <q-card-section v-else class="text-caption dora-text-muted-5">
@@ -227,10 +224,15 @@
             </div>
         </div>
 
-        <!-- ── Alerts modal ──────────────────────────────────────── -->
-        <BaseDialog v-model="alertsOpen" title="Price alerts" closable card-style="min-width: 420px">
+        <!-- ── Price watches ──────────────────────────────────────
+             FU-708: the list you manage. A watch is made from a product's own
+             card ("Watch this price"), where the product is already chosen,
+             so this dialog lists, changes and removes rather than pretending
+             to create. -->
+        <BaseDialog v-model="alertsOpen" title="Price watches" closable card-style="min-width: 420px">
                 <q-card-section v-if="alerts.length === 0" class="dora-text-secondary">
-                    No active alerts yet.
+                    You're not watching any prices yet. Use "Watch this price"
+                    on a product's card to get told when it drops.
                 </q-card-section>
                 <q-list v-else separator>
                     <q-item v-for="a in alerts" :key="a.price_alert_id">
@@ -275,6 +277,7 @@
 </template>
 
 <script lang="ts" setup>
+    import YourPriceVerdict from 'src/components/dora/YourPriceVerdict.vue';
     import { createFrameResizeObserver, type FrameResizeObserver } from 'src/composables/frameResizeObserver';
     import BaseTooltip from 'src/components/BaseTooltip.vue';
     import InfoTip from 'src/components/help/InfoTip.vue';
@@ -301,6 +304,7 @@
     import { useProductStore } from 'src/stores/productStore';
     import { useMoneyEnabled } from 'src/composables/useMoneyEnabled';
     import { storeToRefs } from 'pinia';
+    import { isAlreadyNotified } from 'src/services/errorHandling/apiErrorHandler';
 
     const $q = useQuasar();
     const route = useRoute();
@@ -411,11 +415,13 @@
             if (token === seriesRequest) series.value = result.series;
         } catch (err) {
             if (token !== seriesRequest) return;
-            $q.notify({
-                type: 'negative', 
-                message: "Couldn't load price history.",
-                caption: err instanceof Error ? err.message : String(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative', 
+                    message: "Couldn't load price history.",
+                    caption: err instanceof Error ? err.message : String(err),
+                });
+            }
         }
     }
 
@@ -435,11 +441,13 @@
             await historyApi.deleteAlertAsync(alertId);
             await refreshAlerts();
         } catch (err) {
-            $q.notify({
-                type: 'negative', 
-                message: "Couldn't remove the alert.",
-                caption: err instanceof Error ? err.message : String(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative', 
+                    message: "Couldn't remove the alert.",
+                    caption: err instanceof Error ? err.message : String(err),
+                });
+            }
         }
     }
 
@@ -451,11 +459,13 @@
         try {
             await productStore.getProductsAsync();
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: "Couldn't load your products.",
-                caption: err instanceof Error ? err.message : String(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: "Couldn't load your products.",
+                    caption: err instanceof Error ? err.message : String(err),
+                });
+            }
         }
         // Deep-link: ?product_id=<id> pre-selects; the watch above fetches.
         const preselect = (route.query.product_id as string | undefined) ?? null;
@@ -480,6 +490,11 @@
 </script>
 
 <style scoped>
+    @media (max-width: 1023px) {
+        .ph-rail {
+            order: 2;
+        }
+    }
     .series-swatch {
         width: 12px; height: 12px; border-radius: 3px;
         display: inline-block;

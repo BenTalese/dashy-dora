@@ -50,6 +50,7 @@
                     <BaseTooltip>Exit cook mode</BaseTooltip>
                 </BaseButton>
                 <div class="text-h6 ellipsis cook-header__name">{{ recipe.name }}</div>
+                <HelpHint topic="Cook mode" />
 
                 <div class="cook-header__voice">
                         <!-- Sous Chef. Owner feedback 2026-08-28: *"I prefer the
@@ -496,6 +497,7 @@
 </template>
 
 <script lang="ts" setup>
+    import HelpHint from 'src/components/help/HelpHint.vue';
     import BaseTooltip from 'src/components/BaseTooltip.vue';
     import { ICONS } from 'src/style/icons';
     import AppSpinner from 'src/components/AppSpinner.vue';

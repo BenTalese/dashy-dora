@@ -119,3 +119,18 @@ def test__finish__stamps_completion_and_applies_the_draft(api):
     me = requests.get(f"{BASE}/auth/me").json()
     assert me["theme"] == "blueberry"
     assert me["onboarding_completed_at"] is not None
+
+
+def test__finish__a_later_member_cannot_seed_defaults(api, monkeypatch):
+    """FU-960: seeding defaults is the first account's job; the server refuses
+    it from anyone else instead of trusting the wizard to leave it out."""
+    from dora_api.features.onboarding import onboarding
+
+    monkeypatch.setattr(
+        onboarding.GetOnboardingStateHandler, "handle",
+        lambda self: onboarding.OnboardingStateDto(first_user=False),
+    )
+    for body in ({"seed": {"groups": True}}, {"items": {"items": []}}, {"seed_demo": True}):
+        resp = requests.post(f"{BASE}/onboarding/finish", json=body)
+        assert resp.status_code == 403, (body, resp.text)
+    assert requests.post(f"{BASE}/onboarding/finish", json={}).status_code == 200

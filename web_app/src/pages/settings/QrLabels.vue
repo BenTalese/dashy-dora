@@ -3,7 +3,6 @@
         <SettingsPageHeader
             title="QR labels"
             description="Print Dora's own QR labels. Pick items, choose a sheet layout, and open a printable sheet. Print them to scan for quick actions on your items."
-            :icon="ICONS.qr_code"
         />
 
         <!-- Off-state: install-wide `scanning_enabled` gate. The nav link is

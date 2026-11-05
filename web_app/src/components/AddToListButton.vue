@@ -138,6 +138,7 @@
     import { useShoppingListStore } from 'src/stores/shoppingListStore';
     import { useStockItemStore } from 'src/stores/stockItemStore';
     import { useConfirm } from 'src/composables/useConfirm';
+    import { isAlreadyNotified } from 'src/services/errorHandling/apiErrorHandler';
 
     /**
      * `stockItemId` — single-anchor variants (row / toolbar / menu).
@@ -408,11 +409,13 @@
                     ? 'Already on your list.'
                     : 'Added as product line.',
             });
-        } catch {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not add the product.',
-            });
+        } catch (err) {
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not add the product.',
+                });
+            }
         } finally {
             busy.value = false;
         }

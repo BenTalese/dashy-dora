@@ -28,7 +28,7 @@ from sqlalchemy import insert, select
 
 from dora_api.app import db
 from dora_api.features.auth.admin_gate import require_admin
-from dora_api.features.data.backup import BACKUP_SCHEMA_VERSION
+from dora_api.features.data.backup import schema_version_error
 from dora_api.features.data.uploads import staged_path
 from dora_api.features.data._errors import DataError, invalid, respond_to, rolled_back, upload_missing
 from dora_api.features.data.restore_shared import (
@@ -139,20 +139,41 @@ class RestoreSummary(BaseModel):
 
 class RestoreBackupHandler:
     def handle(self, request: RestoreBackupRequest) -> RestoreSummary | DataError:
-        # ── Resolve the backup document ───────────────────────────────
-        backup, err = self._resolve_backup(request)
-        if err is not None:
-            return err
+        if request.backup is not None and request.upload_id is not None:
+            return invalid("Provide exactly one of 'backup' or 'upload_id'.")
+        if request.backup is not None:
+            return self._restore(request, request.backup)
+        if request.upload_id is None:
+            return invalid("Either 'backup' or 'upload_id' is required.")
+
+        # FU-981 (5): the staged file is claimed by an atomic rename before it
+        # is read, so a double-clicked Restore finds it gone and gets "upload
+        # missing" instead of running the restore twice. Released back under
+        # its own name when the restore doesn't commit, so it can be retried
+        # with the same id (FU-977 (2)); deleted once it has.
+        staged = staged_path(str(request.upload_id))
+        claimed = staged.with_suffix(".restoring")
+        try:
+            os.rename(staged, claimed)
+        except FileNotFoundError:
+            return upload_missing(str(request.upload_id))
+        committed = False
+        try:
+            backup, err = self._read_staged(claimed)
+            if err is not None:
+                return err
+            result = self._restore(request, backup)
+            committed = isinstance(result, RestoreSummary)
+            return result
+        finally:
+            self._release_claim(claimed, staged, committed)
+
+    def _restore(self, request: RestoreBackupRequest, backup: dict) -> RestoreSummary | DataError:
 
         # ── Validate envelope ─────────────────────────────────────────
-        version = backup.get("schema_version")
-        if not isinstance(version, int):
-            return invalid("Backup is missing 'schema_version'.")
-        if version > BACKUP_SCHEMA_VERSION:
-            return invalid(
-                f"Backup schema_version {version} is newer than this server "
-                f"supports ({BACKUP_SCHEMA_VERSION})."
-            )
+        version_error = schema_version_error(backup.get("schema_version"))
+        if version_error is not None:
+            return invalid(version_error)
         if request.mode not in ALLOWED_MODES:
             return invalid(f"Unknown mode '{request.mode}'.")
 
@@ -370,24 +391,10 @@ class RestoreBackupHandler:
             _LOGGER.exception("Restore failed; rolled back.")
             return rolled_back("Restore", exc)
 
-        self._consume_staged_upload(request)
         return RestoreSummary(created=created, skipped=skipped, warnings=warnings)
 
     @staticmethod
-    def _resolve_backup(req: RestoreBackupRequest) -> tuple[dict | None, DataError | None]:
-        """Pull the backup document out of either the inline body or a
-        staged upload. The staged file is left in place; `handle` consumes
-        it after a successful commit.
-        """
-        if req.backup is not None and req.upload_id is not None:
-            return None, invalid("Provide exactly one of 'backup' or 'upload_id'.")
-        if req.backup is not None:
-            return req.backup, None
-        if req.upload_id is None:
-            return None, invalid("Either 'backup' or 'upload_id' is required.")
-        path = staged_path(str(req.upload_id))
-        if not path.exists():
-            return None, upload_missing(str(req.upload_id))
+    def _read_staged(path) -> tuple[dict | None, DataError | None]:
         try:
             with open(path, "rb") as fh:
                 doc = json.load(fh)
@@ -395,24 +402,22 @@ class RestoreBackupHandler:
             return None, invalid(f"Could not parse staged upload as JSON ({exc}).")
         if not isinstance(doc, dict):
             return None, invalid("Staged upload is not a JSON object.")
-        # Not consumed here: `handle` unlinks it only after the restore
-        # commits, so a rolled-back or refused restore can be retried with
-        # the same id (FU-977 (2)); the /start sweep clears abandoned ones.
         return doc, None
 
     @staticmethod
-    def _consume_staged_upload(req: RestoreBackupRequest) -> None:
-        """Delete the staged upload once the restore it fed has committed, so
-        the upload area doesn't keep one .bin per restore (FU-977 (2))."""
-        if req.upload_id is None:
-            return
-        path = staged_path(str(req.upload_id))
+    def _release_claim(claimed, staged, committed: bool) -> None:
+        """Delete a claimed upload once its restore committed, so the upload
+        area doesn't keep one file per restore; otherwise hand it back under
+        its staged name for a retry. The /start sweep clears abandoned ones."""
         try:
-            os.unlink(path)
+            if committed:
+                os.unlink(claimed)
+            else:
+                os.rename(claimed, staged)
         except FileNotFoundError:
             pass
         except OSError as exc:
-            _LOGGER.warning("Could not remove staged upload %s: %s", path, exc)
+            _LOGGER.warning("Could not release staged upload %s: %s", claimed, exc)
 
     @staticmethod
     def _resolve_fk_target(backup_key: str, column: str) -> str | None:

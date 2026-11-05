@@ -40,7 +40,7 @@ export function suppressUnsavedChangesGuard<T>(fn: () => T | Promise<T>): Promis
  */
 export function useUnsavedChangesGuard(
     isDirty: Ref<boolean> | ComputedRef<boolean>,
-): void {
+): { confirmLeave: () => Promise<boolean> } {
     const { confirm } = useConfirm();
 
     const confirmDiscard = (): Promise<boolean> =>
@@ -51,12 +51,17 @@ export function useUnsavedChangesGuard(
             destructive: true,
         });
 
-    onBeforeRouteLeave(async () => bypass || !isDirty.value ? true : await confirmDiscard());
+    // Also handed back for a host that swaps the page's subject without a
+    // route change (the stock overview's peek panel, FU-932).
+    const confirmLeave = async (): Promise<boolean> =>
+        bypass || !isDirty.value ? true : await confirmDiscard();
+
+    onBeforeRouteLeave(confirmLeave);
     // Catches same-component param changes (e.g. clicking a related
     // recipe while editing the current one — both routes match the
     // same `/cookbook/:id` component, so `onBeforeRouteLeave` doesn't
     // fire; `onBeforeRouteUpdate` does).
-    onBeforeRouteUpdate(async () => bypass || !isDirty.value ? true : await confirmDiscard());
+    onBeforeRouteUpdate(confirmLeave);
 
     // Browser-level guard for refresh / close / address-bar nav. The
     // dialog text is ignored on modern browsers — setting `returnValue`
@@ -70,4 +75,5 @@ export function useUnsavedChangesGuard(
     onBeforeUnmount(() => {
         window.removeEventListener('beforeunload', onBeforeUnload);
     });
+    return { confirmLeave };
 }

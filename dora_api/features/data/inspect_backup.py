@@ -21,7 +21,7 @@ import logging
 import os
 import tempfile
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Callable, Iterable, Iterator
 
 import ijson
 from flask import request
@@ -29,7 +29,7 @@ from sqlalchemy import select
 
 from dora_api.app import db
 from dora_api.features.auth.admin_gate import require_admin
-from dora_api.features.data.backup import BACKUP_SCHEMA_VERSION
+from dora_api.features.data.backup import schema_version_error
 from dora_api.features.data._errors import DataError, invalid, respond_to, upload_missing
 from dora_api.features.data.restore_shared import (
     DUPLICATE_KEY_BY_BACKUP_KEY,
@@ -163,43 +163,40 @@ def _row_label(row: dict[str, Any]) -> str:
     return str(row.get("name") or row.get("id") or "<unknown>")
 
 
-def _inspect_streamed(path: Path) -> tuple[dict | None, str | None]:
-    meta = _stream_metadata(path)
-    version = meta.get("schema_version")
-    if not isinstance(version, int):
-        return None, "Backup is missing 'schema_version'."
-    if version > BACKUP_SCHEMA_VERSION:
-        return None, (
-            f"Backup schema_version {version} is newer than this server supports "
-            f"({BACKUP_SCHEMA_VERSION})."
-        )
+def _summarise(
+    meta: dict[str, Any], rows_for: Callable[[str], Iterable[dict[str, Any]] | None],
+) -> tuple[dict | None, str | None]:
+    """Counts, duplicate names and a sample per section, from whichever
+    reader the caller has: a streamed file or an inline document (FU-948 (1)
+    — they were two copies of this). `rows_for` returns None for a section
+    that isn't a list."""
+    version_error = schema_version_error(meta.get("schema_version"))
+    if version_error is not None:
+        return None, version_error
 
     entity_counts: dict[str, int] = {}
     duplicates: dict[str, list[str]] = {}
     samples: dict[str, dict[str, Any]] = {}
 
     for backup_key in TABLE_NAME_BY_BACKUP_KEY:
-        existing_keys: set | None = None
-        if backup_key in DUPLICATE_KEY_BY_BACKUP_KEY:
-            existing_keys = _build_existing_duplicate_keys(backup_key)
-            key_fn = DUPLICATE_KEY_BY_BACKUP_KEY[backup_key]
-        else:
-            key_fn = None
+        rows = rows_for(backup_key)
+        if rows is None:
+            return None, f"Section '{backup_key}' must be a list."
+        key_fn = DUPLICATE_KEY_BY_BACKUP_KEY.get(backup_key)
+        existing_keys = _build_existing_duplicate_keys(backup_key) if key_fn else None
 
         count = 0
         dup_names: list[str] = []
         sample_rows: list[dict[str, Any]] = []
-
-        for row in _iter_section_rows(path, backup_key):
+        for row in rows:
             count += 1
             if len(sample_rows) < PREVIEW_ROW_LIMIT:
                 sample_rows.append({
                     "id": str(row.get("id")) if row.get("id") is not None else f"row-{count}",
                     "name": _row_label(row),
                 })
-            if existing_keys is not None and key_fn is not None:
-                if key_fn(row) in existing_keys:
-                    dup_names.append(_row_label(row))
+            if existing_keys is not None and key_fn(row) in existing_keys:
+                dup_names.append(_row_label(row))
 
         entity_counts[backup_key] = count
         if dup_names:
@@ -210,7 +207,7 @@ def _inspect_streamed(path: Path) -> tuple[dict | None, str | None]:
         }
 
     return {
-        "schema_version": version,
+        "schema_version": meta.get("schema_version"),
         "exported_at": meta.get("exported_at"),
         "exported_by": meta.get("exported_by"),
         "sections": meta.get("sections", []),
@@ -220,59 +217,17 @@ def _inspect_streamed(path: Path) -> tuple[dict | None, str | None]:
     }, None
 
 
+def _inspect_streamed(path: Path) -> tuple[dict | None, str | None]:
+    return _summarise(_stream_metadata(path), lambda key: _iter_section_rows(path, key))
+
+
 def _inspect_inline(payload: dict) -> tuple[dict | None, str | None]:
     """Fallback path for callers that POSTed the doc directly. Memory-bound
-    by definition — kept for backward compatibility with the early SPA and
-    for tests.
-    """
-    version = payload.get("schema_version")
-    if not isinstance(version, int):
-        return None, "Backup is missing 'schema_version'."
-    if version > BACKUP_SCHEMA_VERSION:
-        return None, (
-            f"Backup schema_version {version} is newer than this server supports "
-            f"({BACKUP_SCHEMA_VERSION})."
-        )
-
-    entity_counts: dict[str, int] = {}
-    duplicates: dict[str, list[str]] = {}
-    samples: dict[str, dict[str, Any]] = {}
-
-    for backup_key in TABLE_NAME_BY_BACKUP_KEY:
+    by definition — kept for tests and curl-style inspection."""
+    def rows_for(backup_key: str) -> list[dict[str, Any]] | None:
         rows = payload.get(backup_key, [])
-        if not isinstance(rows, list):
-            return None, f"Section '{backup_key}' must be a list."
-        entity_counts[backup_key] = len(rows)
-
-        sample_rows = [
-            {
-                "id": str(row.get("id")) if row.get("id") is not None else f"row-{i}",
-                "name": _row_label(row),
-            }
-            for i, row in enumerate(rows[:PREVIEW_ROW_LIMIT])
-        ]
-        samples[backup_key] = {
-            "rows": sample_rows,
-            "truncated": len(rows) > PREVIEW_ROW_LIMIT,
-        }
-
-        if backup_key not in DUPLICATE_KEY_BY_BACKUP_KEY:
-            continue
-        existing_keys = _build_existing_duplicate_keys(backup_key)
-        key_fn = DUPLICATE_KEY_BY_BACKUP_KEY[backup_key]
-        dup_names = [_row_label(r) for r in rows if key_fn(r) in existing_keys]
-        if dup_names:
-            duplicates[backup_key] = dup_names
-
-    return {
-        "schema_version": version,
-        "exported_at": payload.get("exported_at"),
-        "exported_by": payload.get("exported_by"),
-        "sections": payload.get("sections", []),
-        "entity_counts": entity_counts,
-        "duplicates": duplicates,
-        "samples": samples,
-    }, None
+        return rows if isinstance(rows, list) else None
+    return _summarise(payload, rows_for)
 
 
 @DATA_ROUTER.route("/backup/inspect", methods=["POST"])

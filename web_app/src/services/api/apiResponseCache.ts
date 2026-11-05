@@ -21,9 +21,11 @@
 // a no-op.
 //
 // R-052's rule is "a cache that holds user content is evicted on sign-out and
-// on 401". Stock-item photos are user content too; only `dora-api` was being
-// cleared (finalisation 17-R7). Product (catalogue) images are shared across
-// the household and stay.
+// on 401". `dora-api` also holds recipe photos, which load through the HTTP
+// client (FU-931). `dora-stock-images` is no longer written (stock items lost
+// their image route), but an install that has one still loses it on sign-out
+// (finalisation 17-R7). Product (catalogue) images are shared across the
+// household and stay.
 const USER_CONTENT_CACHE_FRAGMENTS = ['dora-api', 'dora-stock-images'] as const;
 
 /** Delete the cached API GET responses and stock-item images. Best-effort and

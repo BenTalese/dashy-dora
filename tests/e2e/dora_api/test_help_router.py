@@ -22,6 +22,7 @@ HELP = f"{BASE}/help"
 
 VERSION_KEYS = {
     "current_version", "latest_version", "update_available", "release_url", "error",
+    "update_check_enabled",
 }
 
 
@@ -77,6 +78,23 @@ def test__get_version__Shape__MatchesContractAndCurrentVersion(api):
     if body["error"] is not None:
         assert body["latest_version"] is None
         assert body["update_available"] is False
+
+
+def test__get_version__CheckSwitchedOff__NeverCallsGitHub(api, monkeypatch):
+    """FU-626: `DORA_UPDATE_CHECK=false` keeps an install from reaching out."""
+    from dora_api.features.help import get_version
+
+    def _boom():
+        raise AssertionError("GitHub was called with the update check off")
+
+    monkeypatch.setenv("DORA_UPDATE_CHECK", "false")
+    monkeypatch.setattr(get_version, "_fetch_latest_release", _boom)
+    body = requests.get(f"{HELP}/version").json()
+
+    assert body["update_check_enabled"] is False
+    assert body["latest_version"] is None
+    assert body["update_available"] is False
+    assert body["current_version"] == CURRENT_VERSION
 
 
 #endregion version

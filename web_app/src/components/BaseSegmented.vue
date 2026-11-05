@@ -61,7 +61,7 @@
      * `aria-label`, `class` and `style` fall through to the radiogroup root.
      */
     import type { ComponentPublicInstance } from 'vue';
-    import { computed, ref } from 'vue';
+    import { computed, onMounted, ref, useAttrs } from 'vue';
 
     export interface BaseSegmentedOption<V> {
         label?: string;
@@ -85,6 +85,14 @@
         spread?: boolean;
     }>();
     const emit = defineEmits<{ (e: 'update:modelValue', value: T): void }>();
+
+    // A radiogroup with no name is announced as just "radio group" (FU-980).
+    const attrs = useAttrs();
+    onMounted(() => {
+        if (import.meta.env.DEV && !attrs['aria-label'] && !attrs['aria-labelledby']) {
+            console.warn('BaseSegmented: pass aria-label or aria-labelledby to name the group.');
+        }
+    });
 
     const optEls = ref<(HTMLButtonElement | null)[]>([]);
     function setOptRef(el: Element | ComponentPublicInstance | null, i: number) {

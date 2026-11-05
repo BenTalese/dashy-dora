@@ -2,8 +2,8 @@
     <div class="settings-page">
         <SettingsPageHeader
             title="Region & locale"
+            help="Region and locale (admin)"
             description="Where this household lives. Sets how money and dates are written, which units you measure in, and which day counts as today."
-            :icon="ICONS.language"
         />
 
         <template v-if="!loading">
@@ -49,6 +49,7 @@
                     help="What your prices are in."
                 >
                     <BaseSelect
+                        aria-label="Currency"
                         :model-value="currencyDraft"
                         :options="currencyOptions"
                         use-input
@@ -76,6 +77,7 @@
                     help="Decides symbol placement, decimal marks and date order."
                 >
                     <BaseSelect
+                        aria-label="Language and format"
                         :model-value="localeDraft"
                         :options="localeOptions"
                         use-input
@@ -112,6 +114,7 @@
                     help="Which units the app offers when you enter a quantity or a price."
                 >
                     <BaseSelect
+                        aria-label="Units"
                         :model-value="systemDraft"
                         :options="MEASUREMENT_SYSTEM_CHOICES"
                         emit-value
@@ -128,6 +131,7 @@
                     help="Fixes the &quot;today&quot; boundary, wherever the server runs."
                 >
                     <BaseSelect
+                        aria-label="Timezone"
                         :model-value="timezoneDraft"
                         :options="timezoneOptions"
                         use-input
@@ -146,6 +150,7 @@
 </template>
 
 <script lang="ts" setup>
+    import { localRatingScheme } from 'src/helpers/localRatingScheme';
     // Owner call 2026-08-17 — the page was three stacked essays around four
     // bare text inputs, explaining ISO 4217 and BCP-47 to someone who just
     // wants dollars and DD/MM. Rebuilt around what the settings actually *do*:
@@ -159,7 +164,7 @@
     import BaseSelect from 'src/components/BaseSelect.vue';
     import { useAppSettingsStore } from 'src/stores/appSettingsStore';
     import { computed, onMounted, ref } from 'vue';
-    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+    import { isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import SettingsSection from 'src/components/settings/SettingsSection.vue';
     import SettingsRow from 'src/components/settings/SettingsRow.vue';
     import SettingsPageHeader from 'src/components/settings/SettingsPageHeader.vue';
@@ -358,11 +363,13 @@
             await refreshMoneyPolicy();
         } catch (err) {
             timezoneDraft.value = previous;
-            $q.notify({
-                type: 'negative', 
-                message: 'Could not save the timezone.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative', 
+                    message: 'Could not save the timezone.',
+                    caption: toastCaption(err),
+                });
+            }
         } finally {
             saving.value = false;
         }
@@ -396,11 +403,13 @@
             // do the same) — the error line explains why the pick didn't stick.
             currencyDraft.value = lastSavedCurrency;
             currencyError.value = 'Could not save the currency.';
-            $q.notify({
-                type: 'negative', 
-                message: 'Could not save the currency.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative', 
+                    message: 'Could not save the currency.',
+                    caption: toastCaption(err),
+                });
+            }
         } finally {
             saving.value = false;
             pendingCurrency = null;
@@ -431,11 +440,13 @@
         } catch (err) {
             localeDraft.value = lastSavedLocale;
             localeError.value = 'Could not save the language.';
-            $q.notify({
-                type: 'negative', 
-                message: 'Could not save the language.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative', 
+                    message: 'Could not save the language.',
+                    caption: toastCaption(err),
+                });
+            }
         } finally {
             saving.value = false;
             pendingLocale = null;
@@ -458,11 +469,13 @@
             await reloadMeasurementSystem();
         } catch (err) {
             systemDraft.value = previous;
-            $q.notify({
-                type: 'negative', 
-                message: 'Could not save the unit system.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative', 
+                    message: 'Could not save the unit system.',
+                    caption: toastCaption(err),
+                });
+            }
         } finally {
             saving.value = false;
         }
@@ -564,84 +577,6 @@
         if (ok) await enableRatingScheme(scheme);
     }
 
-    /** The countries currently using Nutri-Score, by BCP-47 region subtag:
-     *  France, Belgium, Germany, the Netherlands, Luxembourg, Spain and
-     *  Switzerland. Kept as an explicit list rather than "Europe" — most of
-     *  Europe has not adopted it, and offering it to an install in Warsaw
-     *  would be exactly the presumption this whole design avoids. */
-    const NUTRI_SCORE_REGIONS = ['FR', 'BE', 'DE', 'NL', 'LU', 'ES', 'CH'];
-
-    /** IANA zones for the same set, for the timezone-first read below. */
-    const NUTRI_SCORE_ZONES = [
-        'Europe/Paris', 'Europe/Brussels', 'Europe/Berlin', 'Europe/Busingen',
-        'Europe/Amsterdam', 'Europe/Luxembourg', 'Europe/Madrid',
-        'Atlantic/Canary', 'Africa/Ceuta', 'Europe/Zurich',
-    ];
-
-    /** Which scheme, if any, this device's region recognises. Null means "no
-     *  local scheme" — most of the world — and nothing is offered. */
-    function localRatingScheme(
-        language: string, zone: string,
-    ): 'health_star' | 'nutri_score' | null {
-        if (isAustralasian(language, zone)) return 'health_star';
-        if (NUTRI_SCORE_ZONES.includes(zone)) return 'nutri_score';
-        if (NUTRI_SCORE_REGIONS.includes(regionOf(language))) return 'nutri_score';
-        return null;
-    }
-
-    /** The BCP-47 region subtag, uppercased, or '' when it can't be read. */
-    function regionOf(language: string): string {
-        if (!language) return '';
-        try {
-            return new Intl.Locale(language).region ?? '';
-        } catch {
-            const parts = language.toUpperCase().split('-');
-            return parts.length > 1 ? (parts[parts.length - 1] ?? '') : '';
-        }
-    }
-
-    /** Is this device in Australia or New Zealand?
-     *
-     *  **Timezone first, language second** — found the hard way while testing
-     *  this: the machine reported `navigator.language === 'en-GB'` with
-     *  `timeZone === 'Australia/Sydney'`. Plenty of Australians run their OS
-     *  in en-GB, so a language-only test would have silently never fired for
-     *  exactly the people the prompt exists for. The timezone is a statement
-     *  about *where the device is*; the language tag is a statement about
-     *  which words it prefers, and only sometimes about geography.
-     *
-     *  Either signal is enough. Over-offering costs one dismissable prompt
-     *  behind a button the user pressed on purpose; under-offering means the
-     *  feature is never found. */
-    function isAustralasian(language: string, zone: string): boolean {
-        return isAustralasianZone(zone) || isAustralasianLanguage(language);
-    }
-
-    /** IANA zone ids are `Area/Location`. Australia has its own area; New
-     *  Zealand sits under `Pacific/` alongside a great many places that are
-     *  not New Zealand, so those are named rather than prefix-matched. */
-    function isAustralasianZone(zone: string): boolean {
-        if (!zone) return false;
-        if (zone.startsWith('Australia/')) return true;
-        return ['Pacific/Auckland', 'Pacific/Chatham'].includes(zone);
-    }
-
-    /** By the BCP-47 tag's *region* subtag, not by a substring match: `en-AU`
-     *  and `mi-NZ` both qualify, and a tag that merely contains those letters
-     *  does not. Falls back to a suffix read when `Intl.Locale` can't parse
-     *  what the browser handed us. */
-    function isAustralasianLanguage(language: string): boolean {
-        if (!language) return false;
-        try {
-            const region = new Intl.Locale(language).region;
-            if (region) return region === 'AU' || region === 'NZ';
-        } catch {
-            // fall through to the textual read below
-        }
-        const upper = language.toUpperCase();
-        return upper.endsWith('-AU') || upper.endsWith('-NZ');
-    }
-
     async function enableRatingScheme(scheme: 'health_star' | 'nutri_score') {
         const name = scheme === 'health_star' ? 'Health Star Ratings' : 'Nutri-Score';
         try {
@@ -658,11 +593,13 @@
                 caption: 'They show on recipes once nutrition is set to complex.',
             });
         } catch (err) {
-            $q.notify({
-                type: 'negative', 
-                message: `Couldn't turn on ${name}.`,
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative', 
+                    message: `Couldn't turn on ${name}.`,
+                    caption: toastCaption(err),
+                });
+            }
         }
     }
 

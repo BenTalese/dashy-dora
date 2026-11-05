@@ -527,6 +527,9 @@
     .chart-tooltip {
         position: absolute;
         background: var(--surface-component);
+        /* Its own ink, from the same theme as its ground: inherited text read
+           dark-on-dark in the dark themes (FU-708 PH7). */
+        color: var(--text-primary);
         border: 1px solid var(--border-default);
         border-radius: var(--radius-md);
         padding: var(--space-2) var(--space-3);

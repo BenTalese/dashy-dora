@@ -7,7 +7,6 @@
         <SettingsPageHeader
             title="Dietary tags"
             description="Dietary / allergen / nutritional tags recipes can be tagged with. Useful for filtering."
-            :icon="ICONS.eco"
         >
             <template #actions>
                 <BaseButton

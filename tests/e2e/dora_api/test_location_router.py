@@ -382,3 +382,17 @@ def test__get_location_tree__ItemCounts__DescendantsRollUpToAncestors(api):
 
 
 #endregion item-count rollups
+
+
+def test__unassigned_count__counts_items_with_no_location(api):
+    # FU-633: items with no location are invisible in the tree, so the
+    # settings page reads their count from here.
+    before = requests.get(f"{LOCATIONS}/unassigned-count").json()["count"]
+    make_stock_item(stock_level_id=_stock_level_id(), name=f"Loose-{uuid4().hex[:6]}")
+    zone = _make(f"Zone-{uuid4().hex[:6]}", "zone")
+    make_stock_item(
+        stock_level_id=_stock_level_id(), name=f"Placed-{uuid4().hex[:6]}",
+        stock_location_id=zone,
+    )
+    after = requests.get(f"{LOCATIONS}/unassigned-count").json()["count"]
+    assert after == before + 1

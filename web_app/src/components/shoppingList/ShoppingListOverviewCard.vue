@@ -59,6 +59,7 @@
                             <q-icon :name="statusIcon" size="14px" />
                             {{ statusLabel }}
                         </span>
+                        <HelpHint topic="One list, three faces" />
                         <!-- Desktop only: on a phone the list picker directly
                              above this card already shows the name. Renaming
                              is draft-only (2026-09-17). -->
@@ -228,6 +229,7 @@
 </template>
 
 <script lang="ts" setup>
+    import HelpHint from 'src/components/help/HelpHint.vue';
     import BaseTooltip from 'src/components/BaseTooltip.vue';
     /**
      * The shopping list's overview card — one component across all three faces.
@@ -502,10 +504,10 @@
                 tone: '',
             });
         }
-        if (face.value === 'receipt' && totals.total_savings > 0) {
+        if (face.value === 'receipt' && totals.savings_vs_shelf_price > 0) {
             figures.push({
-                label: 'You saved',
-                value: formatMoney(totals.total_savings),
+                label: 'Under shelf price',
+                value: formatMoney(totals.savings_vs_shelf_price),
                 tone: 'text-positive',
             });
         }

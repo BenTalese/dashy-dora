@@ -25,9 +25,11 @@ STYLE GUIDE:
 
 // Theme-coloured browser scrollbars. Firefox honours scrollbar-color directly;
 // Chromium 121+ also supports the standard property. Older Chromium falls back
-// to the default OS scrollbar — no extra rules needed.
+// to the default OS scrollbar — no extra rules needed. The semantic tokens,
+// not Quasar's `--q-*`: those are written to <body> and don't inherit up to
+// <html>, so the scrollbar was Quasar's default in every theme (FU-865).
 html {
-    scrollbar-color: var(--q-secondary) var(--q-page);
+    scrollbar-color: var(--brand-secondary) var(--surface-page);
 }
 
 body {

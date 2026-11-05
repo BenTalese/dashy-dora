@@ -25,7 +25,7 @@
  * per-unit cost, history caps) is the server's (R-003), read rather than
  * recomputed.
  */
-import { computed, inject, onMounted, provide, reactive, ref, watch, type InjectionKey } from 'vue';
+import { computed, inject, onMounted, onScopeDispose, provide, reactive, ref, watch, type InjectionKey } from 'vue';
 import { useQuasar } from 'quasar';
 import { useRoute } from 'vue-router';
 
@@ -127,6 +127,13 @@ function createStockItemDetail(idSource: () => string) {
     const qrSrc = ref<string | null>(null);
     const qrLoading = ref(false);
     const qrError = ref<string | null>(null);
+    // The label is a blob object URL: release the old one whenever it's
+    // replaced or dropped, and when the page goes (FU-952).
+    function setQrSrc(next: string | null) {
+        if (qrSrc.value) URL.revokeObjectURL(qrSrc.value);
+        qrSrc.value = next;
+    }
+    onScopeDispose(() => setQrSrc(null));
 
     // Feedback 2026-08-24: the code renders inside the Scanning tab rather than
     // behind a header button + modal, so the fetch is keyed to that tab opening.
@@ -143,7 +150,8 @@ function createStockItemDetail(idSource: () => string) {
         try {
             // size 512 looks crisp on retina; the box clamps to 256.
             const src = await fetchQrImageUrlAsync(stockItemId.value, 512);
-            if (token === qrRequest) qrSrc.value = src;
+            if (token === qrRequest) setQrSrc(src);
+            else URL.revokeObjectURL(src);
         } catch (error) {
             // The reason, not just the fact. This used to be a bare sentence
             // with the error discarded, which is why the reported failure
@@ -242,16 +250,18 @@ function createStockItemDetail(idSource: () => string) {
         );
     });
     // R-020 — deferred-save surface, must wire the unsaved-changes guard.
-    // (Route changes only — a peek swapping items is FU-932.)
-    useUnsavedChangesGuard(isDirty);
+    // `confirmLeave` covers the peek swapping items, which is no route change.
+    const { confirmLeave } = useUnsavedChangesGuard(isDirty);
 
     // Overview view state that outlives the overview tab panel, which
     // unmounts on a tab switch: the nutrition disclosure (feedback 2026-08-16
     // — the full per-100g table is behind it so it can't bury the sections
-    // under it) and a half-typed preferred buy. Page-level before the split,
-    // so kept page-level.
+    // under it), a half-typed preferred buy and an in-progress rename of one
+    // (FU-981 (13)). Page-level before the split, so kept page-level.
     const nutritionExpanded = ref(false);
     const newBuyLabel = ref('');
+    const editingBuyId = ref<string | null>(null);
+    const editingBuyLabel = ref('');
 
     // ── Linked products' sparklines ──────────────────────────────────────
     // Fetched by every detail load (so they're ready whichever tab is open)
@@ -351,7 +361,7 @@ function createStockItemDetail(idSource: () => string) {
         detail.value = null;
         qrRequest++;
         qrLoading.value = false;
-        qrSrc.value = null;
+        setQrSrc(null);
         qrError.value = null;
         if (tab.value === 'scanning') void ensureQrLoadedAsync();
         if (stockItemId.value) void loadDetail();
@@ -427,8 +437,11 @@ function createStockItemDetail(idSource: () => string) {
         openSingleQrSheet,
         form,
         isDirty,
+        confirmLeave,
         nutritionExpanded,
         newBuyLabel,
+        editingBuyId,
+        editingBuyLabel,
         priceHistory,
         notifyErr,
         loadDetail,

@@ -182,6 +182,12 @@
            as the indicator slide so text + bar move together. */
         transition: color 0.42s cubic-bezier(0.65, 0, 0.2, 1);
     }
+    // D-004 on touch (R-085 / FU-877): the 40px row is a desktop density.
+    @media (pointer: coarse) {
+        .dora-tabs__tab {
+            min-height: 44px;
+        }
+    }
 
     /* --accent-ink, not the raw accent: the brand accent is a *fill*
        tone, and in every light family it lands at 1.3–2.0:1 as text — the

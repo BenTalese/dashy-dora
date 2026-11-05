@@ -19,12 +19,14 @@ over. The catch-all route is intentionally LESS SPECIFIC than the
 `/api/...` blueprints, so Werkzeug's routing picks the API ones
 first; the catch-all only ever fires for SPA paths.
 """
+import hashlib
 import logging
 import mimetypes
 import os
+import re
 from pathlib import Path
 
-from flask import Response, abort, send_from_directory
+from flask import Response, abort, request, send_from_directory
 
 from dora_api.features.routers import SPA_ROUTER
 from dora_api.infrastructure.api_response import endpoint_not_found
@@ -74,16 +76,20 @@ def _spa_dir() -> Path | None:
 # nginx serves the build untouched, so the compose path never sees this tag;
 # `backendUrl.ts` reads it (name shared there).
 SAME_ORIGIN_META = '<meta name="dora-api-same-origin" content="1">'
+# `<head>` with or without attributes.
+_HEAD_TAG = re.compile(r"<head(\s[^>]*)?>", re.IGNORECASE)
 
 
 def _index_response(root: Path) -> Response:
     """`index.html`, marked as served by the API itself."""
     html = (root / "index.html").read_text(encoding="utf-8")
-    html = html.replace("<head>", "<head>" + SAME_ORIGIN_META, 1)
+    html = _HEAD_TAG.sub(lambda m: m.group(0) + SAME_ORIGIN_META, html, count=1)
     response = Response(html, mimetype="text/html")
-    # Same as nginx's `location = /index.html`: the shell always revalidates.
+    # Same as nginx's `location = /index.html`: the shell always revalidates,
+    # and the ETag lets that revalidation answer 304.
     response.headers["Cache-Control"] = "no-cache"
-    return response
+    response.set_etag(hashlib.sha256(html.encode("utf-8")).hexdigest()[:32])
+    return response.make_conditional(request)
 
 
 def _serve_file_or_index(requested: str | None):

@@ -302,8 +302,16 @@ def register_routers():
     for _Router in routers:
         app.register_blueprint(_Router)
     app.register_blueprint(MIDDLEWARE)
-    # FU-720's cheapest shape: a deploy that lost a feature directory (FU-717)
-    # shows up as a lower count in the boot log.
+    # FU-720: a router with no routes is always a packaging fault (FU-717's
+    # rsync exclude deleted `features/data/` and the app booted clean), never
+    # a choice, so boot refuses rather than serving 404s for a whole feature.
+    _RoutedBlueprints = {rule.endpoint.split(".")[0] for rule in app.url_map.iter_rules()}
+    _EmptyRouters = sorted(r.name for r in routers if r.name not in _RoutedBlueprints)
+    if _EmptyRouters:
+        raise RuntimeError(
+            f"Router(s) registered with no routes: {', '.join(_EmptyRouters)}. "
+            "A feature directory is missing from this build."
+        )
     _LOGGER.info(
         "Registered %d router(s), %d route(s)",
         len(routers), sum(1 for rule in app.url_map.iter_rules() if rule.rule.startswith("/api/")),

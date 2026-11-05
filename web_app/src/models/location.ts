@@ -8,6 +8,10 @@
 // the backend `features/locations/attention.py` module.
 export type LocationKind = 'zone' | 'area' | 'section';
 
+/** The stock overview's location filter value for items with no location
+ *  (FU-633). Never a real id: location ids are UUIDs. */
+export const NO_LOCATION_FILTER = 'none';
+
 export type LocationItem = {
     stock_item_id: string;
     name: string;

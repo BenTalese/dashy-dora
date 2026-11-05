@@ -23,7 +23,7 @@
                  heading beside it now says. How much of it is still yours to
                  do is the CTA's job, one row below. -->
             <template #badges>
-                <MealPlanRailCount
+                <CountBadge
                     v-for="band in levelBadges"
                     :key="band.key"
                     :count="band.count"
@@ -117,7 +117,7 @@
             class="q-mt-sm"
         >
             <template #badges>
-                <MealPlanRailCount
+                <CountBadge
                     :count="ingredients.length"
                     :label="`${ingredients.length} ingredients this week`"
                 />
@@ -157,7 +157,7 @@
             class="q-mt-sm"
         >
             <template #badges>
-                <MealPlanRailCount
+                <CountBadge
                     :count="unlinked.length"
                     :label="`${unlinked.length} ingredients not linked to your pantry`"
                 />
@@ -245,7 +245,7 @@
     import { formatMoney } from 'src/composables/useMoney';
     import { useMoneyEnabled } from 'src/composables/useMoneyEnabled';
     import MealPlanIngredientRow from 'src/components/MealPlanIngredientRow.vue';
-    import MealPlanRailCount from 'src/components/MealPlanRailCount.vue';
+    import CountBadge from 'src/components/CountBadge.vue';
     import MealPlanRailDisclosure from 'src/components/MealPlanRailDisclosure.vue';
     import { ICONS } from 'src/style/icons';
     import { LOW_STOCK_SEQUENCE, OUT_OF_STOCK_SEQUENCE } from 'src/helpers/stockStatus';

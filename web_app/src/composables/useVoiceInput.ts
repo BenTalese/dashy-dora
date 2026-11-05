@@ -1,5 +1,6 @@
 import { onBeforeUnmount, ref } from 'vue';
 import { currentLocale } from 'src/composables/useMoney';
+import SttApiService, { type SttStatus } from 'src/services/api/sttApiService';
 
 /**
  * P2-13 — Web Speech API wrapper for speech-to-text.
@@ -20,6 +21,11 @@ import { currentLocale } from 'src/composables/useMoney';
  * Permission failures (user denies the mic prompt) are surfaced through
  * `error.value`; the caller can render a friendly message rather than
  * a silent failure.
+ *
+ * FU-788 — where the browser has no recognizer (Firefox), Dora's server can
+ * listen instead when its speech engine is set up (Settings → Voice): the mic
+ * is recorded with `MediaRecorder`, a clip ends after a beat of silence, and
+ * the server's Whisper turns it into text. Same callbacks, no interim text.
  */
 
 type SpeechRecognitionLike = {
@@ -88,6 +94,37 @@ export type UseVoiceInputOptions = {
 const RESTART_DEFER_MAX_MS = 10_000;
 const RESTART_DEFER_POLL_MS = 150;
 
+// ── Server recognizer (FU-788) ───────────────────────────────────────────
+const sttApi = new SttApiService();
+let sttStatusPromise: Promise<SttStatus> | null = null;
+
+/** Whether this server can transcribe, asked once per page load. `refresh`
+ *  re-asks (Settings → Voice after a model download). */
+export function serverSttStatus(refresh = false): Promise<SttStatus> {
+    if (refresh || !sttStatusPromise) {
+        sttStatusPromise = sttApi.getStatusAsync()
+            .then((r) => r.status)
+            .catch(() => 'unavailable' as const);
+    }
+    return sttStatusPromise;
+}
+
+function canRecord(): boolean {
+    return typeof window !== 'undefined'
+        && typeof window.MediaRecorder !== 'undefined'
+        && !!navigator.mediaDevices?.getUserMedia;
+}
+
+/** Loudness (RMS of the waveform, 0–1) above which the mic counts as speech. */
+const SPEECH_RMS = 0.02;
+/** Quiet after speech that ends a clip. */
+const CLIP_END_SILENCE_MS = 1200;
+/** A clip is cut here even mid-sentence; a spoken command is a few seconds. */
+const CLIP_MAX_MS = 15_000;
+/** Push-to-talk gives up when nothing is said for this long. */
+const NO_SPEECH_TIMEOUT_MS = 8_000;
+const MONITOR_MS = 100;
+
 export function useVoiceInput(options: UseVoiceInputOptions = {}) {
     const continuous = options.continuous ?? false;
     // default the recognition locale from the install-
@@ -101,6 +138,11 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
 
     const ctor = getRecognitionCtor();
     const available = ref<boolean>(ctor !== null);
+    // No recognizer in this browser: the server can listen if it's set up.
+    const useServer = ctor === null && canRecord();
+    if (useServer) {
+        void serverSttStatus().then((status) => { available.value = status === 'ready'; });
+    }
     const listening = ref<boolean>(false);
     const transcript = ref<string>('');
     const error = ref<string | null>(null);
@@ -208,7 +250,138 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
         return r;
     }
 
+    // ── Server recognizer: record, cut on silence, transcribe ──────────
+    let stream: MediaStream | null = null;
+    let recorder: MediaRecorder | null = null;
+    let audioCtx: AudioContext | null = null;
+    let monitor: ReturnType<typeof setInterval> | null = null;
+
+    function stopMonitor() {
+        if (monitor !== null) { clearInterval(monitor); monitor = null; }
+    }
+
+    function releaseMic() {
+        stopMonitor();
+        stream?.getTracks().forEach((t) => t.stop());
+        stream = null;
+        void audioCtx?.close().catch(() => undefined);
+        audioCtx = null;
+        recorder = null;
+    }
+
+    function beginClip() {
+        if (!stream || !audioCtx) return;
+        const chunks: Blob[] = [];
+        const rec = new MediaRecorder(stream);
+        recorder = rec;
+        const analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 1024;
+        audioCtx.createMediaStreamSource(stream).connect(analyser);
+        const samples = new Float32Array(analyser.fftSize);
+        const startedAt = Date.now();
+        let heard = false;
+        let quietSince: number | null = null;
+
+        rec.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+        rec.onstop = () => {
+            stopMonitor();
+            void finishClip(heard ? new Blob(chunks, { type: rec.mimeType }) : null);
+        };
+        rec.start();
+        monitor = setInterval(() => {
+            analyser.getFloatTimeDomainData(samples);
+            let sum = 0;
+            for (const v of samples) sum += v * v;
+            const rms = Math.sqrt(sum / samples.length);
+            const now = Date.now();
+            if (rms > SPEECH_RMS) {
+                heard = true;
+                quietSince = null;
+            } else if (heard) {
+                quietSince ??= now;
+            }
+            const spokeThenPaused = heard && quietSince !== null && now - quietSince >= CLIP_END_SILENCE_MS;
+            const tooLong = now - startedAt >= CLIP_MAX_MS;
+            // Continuous mode keeps an idle mic open; push-to-talk gives up.
+            const nothingSaid = !heard && !continuous && now - startedAt >= NO_SPEECH_TIMEOUT_MS;
+            // `tooLong` also rolls an idle continuous-mode clip over, so a long
+            // silence never grows one huge recording.
+            if (spokeThenPaused || tooLong || nothingSaid) {
+                stopMonitor();
+                if (rec.state !== 'inactive') rec.stop();
+            }
+        }, MONITOR_MS);
+    }
+
+    async function finishClip(clip: Blob | null) {
+        if (clip && clip.size > 0) {
+            try {
+                const text = (await sttApi.transcribeAsync(clip)).trim();
+                if (text) {
+                    transcript.value = text;
+                    options.onFinal?.(text);
+                }
+            } catch {
+                error.value = 'transcription-failed';
+            }
+        }
+        if (continuous && listening.value && !intentionalStop) {
+            nextClipWhenClear();
+            return;
+        }
+        listening.value = false;
+        intentionalStop = false;
+        releaseMic();
+    }
+
+    /** Continuous mode: open the next clip, waiting out Dora's own speech
+     *  (`deferRestartWhile`) so she isn't transcribed back at herself. */
+    function nextClipWhenClear(waitedMs = 0) {
+        clearRestartTimer();
+        if (!options.deferRestartWhile?.() || waitedMs >= RESTART_DEFER_MAX_MS) {
+            beginClip();
+            return;
+        }
+        restartTimer = setTimeout(() => {
+            restartTimer = null;
+            if (intentionalStop || !listening.value) return;
+            nextClipWhenClear(waitedMs + RESTART_DEFER_POLL_MS);
+        }, RESTART_DEFER_POLL_MS);
+    }
+
+    async function startServer() {
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        } catch (e) {
+            error.value = e instanceof DOMException && e.name === 'NotAllowedError'
+                ? 'not-allowed' : 'audio-capture';
+            listening.value = false;
+            return;
+        }
+        audioCtx = new AudioContext();
+        beginClip();
+    }
+
+    function stopServer() {
+        clearRestartTimer();
+        if (recorder && recorder.state !== 'inactive') {
+            // `onstop` sends what was said so far, then releases the mic.
+            recorder.stop();
+        } else {
+            releaseMic();
+        }
+    }
+
     function start() {
+        if (useServer) {
+            if (!available.value || listening.value) return;
+            error.value = null;
+            transcript.value = '';
+            intentionalStop = false;
+            listening.value = true;
+            void startServer();
+            return;
+        }
         if (!ctor) return;
         if (listening.value) return;
         error.value = null;
@@ -239,6 +412,11 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
         // Kill any pending deferred restart, or the mic would reopen moments
         // after the user asked it to stop.
         clearRestartTimer();
+        if (useServer) {
+            stopServer();
+            listening.value = false;
+            return;
+        }
         if (recognition) {
             try {
                 recognition.stop();
@@ -260,11 +438,14 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
     onBeforeUnmount(() => {
         if (listening.value) stop();
         clearRestartTimer();
+        releaseMic();
         recognition = null;
     });
 
     return {
         available,
+        /** True when this browser's voice input goes through Dora's server. */
+        viaServer: useServer,
         listening,
         transcript,
         error,

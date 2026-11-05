@@ -6,10 +6,9 @@ contact_links:
   - name: 🔒 Security vulnerability
     url: https://github.com/BenTalese/dashy-dora/security/advisories/new
     about: Please report security issues PRIVATELY here, not as a public issue (see SECURITY.md).
-  # Uncomment once GitHub Discussions is enabled on the repo (FU-608):
-  # - name: 💬 Question or general discussion
-  #   url: https://github.com/BenTalese/dashy-dora/discussions
-  #   about: Not sure it's a bug? Ask here — questions and half-formed ideas welcome.
+  - name: 💬 Question or general discussion
+    url: https://github.com/BenTalese/dashy-dora/discussions
+    about: Not sure it's a bug? Ask here — questions and half-formed ideas welcome.
   - name: 💗 Support Dora
-    url: https://example.com/PLACEHOLDER-see-FU-608
+    url: https://www.paypal.com/donate/?business=BBEWWLKS6MY2G&no_recurring=1&currency_code=AUD
     about: Dora is free & open-source. If it's useful, you can chip in — always optional.

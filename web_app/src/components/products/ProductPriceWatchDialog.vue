@@ -54,7 +54,7 @@
     import MoneyInput from 'src/components/MoneyInput.vue';
     import { formatMoney } from 'src/composables/useMoney';
     import PriceHistoryApiService, { type PriceAlert } from 'src/services/api/priceHistoryApiService';
-    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+    import { isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { useAlertStore } from 'src/stores/alertStore';
     import type { Product } from 'src/models/product';
 
@@ -97,11 +97,13 @@
             emit('update:modelValue', false);
             void alertStore.refreshAsync();
         } catch (err) {
-            $q.notify({
-                type: 'negative', 
-                message: "Couldn't save the price watch.",
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative', 
+                    message: "Couldn't save the price watch.",
+                    caption: toastCaption(err),
+                });
+            }
         } finally {
             busy.value = false;
         }
@@ -115,11 +117,13 @@
             emit('saved');
             emit('update:modelValue', false);
         } catch (err) {
-            $q.notify({
-                type: 'negative', 
-                message: "Couldn't remove the price watch.",
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative', 
+                    message: "Couldn't remove the price watch.",
+                    caption: toastCaption(err),
+                });
+            }
         } finally {
             busy.value = false;
         }

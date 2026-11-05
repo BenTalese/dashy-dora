@@ -51,6 +51,9 @@ def ingest_list_stores():
     stamp_used(source)
     SqlAlchemyRepository().save_changes()
 
+    # R-005 carve-out: `image IS NOT NULL` in SQL, so the deferred logo blobs
+    # are never loaded just to say whether one exists (the same projection
+    # `product_links.has_image_by_product` uses).
     store_table = db.metadata.tables["Store"]
     rows = db.session.execute(
         select(

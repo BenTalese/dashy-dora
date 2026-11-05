@@ -249,7 +249,7 @@
     import BaseSelect from 'src/components/BaseSelect.vue';
     import type { BaseSelectExposed } from 'src/components/baseSelectTypes';
     import { ICONS } from 'src/style/icons';
-    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+    import { isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { useUnitOptions } from 'src/composables/useUnitOptions';
     import { useFeatureFlags } from 'src/composables/useFeatureFlags';
     import StockItemApiService from 'src/services/api/stockItemApiService';
@@ -552,11 +552,13 @@
                 });
             }
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not create the pantry item.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not create the pantry item.',
+                    caption: toastCaption(err),
+                });
+            }
         } finally {
             creating.value = false;
         }

@@ -13,7 +13,9 @@
 // views of the same recipe. The per-section counts ("6 total") are gone
 // with them: the list is right there, and the number was the only thing
 // making the three headers different shapes.
-.cook-section__head {
+// `header-class` lands on QExpansionItem's own header element, which a scoped
+// selector can't reach without `:deep()`.
+:deep(.cook-section__head) {
     font-size: var(--font-size-md);
     font-weight: 600;
 }

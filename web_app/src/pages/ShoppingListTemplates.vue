@@ -310,7 +310,7 @@
     import { useStockItemStore } from 'src/stores/stockItemStore';
     import { computed, onMounted, ref } from 'vue';
     import { useRouter } from 'vue-router';
-    import { describeApiError, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+    import { describeApiError, isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { useConfirm } from 'src/composables/useConfirm';
 
     const $q = useQuasar();
@@ -388,11 +388,13 @@
             const created = templates.value.find((t) => t.template_id === template_id);
             if (created) await openEditor(created);
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not create template.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not create template.',
+                    caption: toastCaption(err),
+                });
+            }
         }
     }
 
@@ -411,11 +413,13 @@
             await api.updateAsync(template.template_id, { name: next });
             await load();
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not rename.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not rename.',
+                    caption: toastCaption(err),
+                });
+            }
         } finally {
             editingId.value = null;
         }
@@ -433,11 +437,13 @@
             await api.deleteAsync(template.template_id);
             await load();
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not delete.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not delete.',
+                    caption: toastCaption(err),
+                });
+            }
         }
     }
 
@@ -462,11 +468,13 @@
                 void router.push(`/shopping-lists/${result.shopping_list_id}`);
             }
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not create list.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not create list.',
+                    caption: toastCaption(err),
+                });
+            }
         } finally {
             using.value = false;
             usingId.value = null;
@@ -486,11 +494,13 @@
             if (isCurrent()) previewDetail.value = detail;
         } catch (err) {
             if (!isCurrent()) return;
-            $q.notify({
-                type: 'negative',
-                message: 'Could not load template.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not load template.',
+                    caption: toastCaption(err),
+                });
+            }
             previewOpen.value = false;
         }
     }
@@ -535,11 +545,13 @@
         } catch (err) {
             line.selected_product_id = previous.product;
             line.preferred_buy_id = previous.preferredBuy;
-            $q.notify({
-                type: 'negative',
-                message: 'Could not update the item.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not update the item.',
+                    caption: toastCaption(err),
+                });
+            }
         }
     }
 
@@ -556,11 +568,13 @@
             if (editorTemplateId === template.template_id) editingDetail.value = detail;
         } catch (err) {
             if (editorTemplateId !== template.template_id) return;
-            $q.notify({
-                type: 'negative',
-                message: 'Could not load template.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not load template.',
+                    caption: toastCaption(err),
+                });
+            }
             editorOpen.value = false;
         }
     }
@@ -586,11 +600,13 @@
                 load(),
             ]);
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not add item.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not add item.',
+                    caption: toastCaption(err),
+                });
+            }
         }
     }
 
@@ -604,11 +620,13 @@
             });
         } catch (err) {
             line.quantity = previous;
-            $q.notify({
-                type: 'negative',
-                message: 'Could not update quantity.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not update quantity.',
+                    caption: toastCaption(err),
+                });
+            }
         }
     }
 
@@ -650,11 +668,13 @@
                 load(),
             ]);
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not remove item.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not remove item.',
+                    caption: toastCaption(err),
+                });
+            }
         }
     }
 

@@ -416,6 +416,7 @@
     import { useRoute, useRouter } from 'vue-router';
     import { openProductSearch } from 'src/composables/useProductSearchUrl';
     import { describeApiError } from 'src/services/errorHandling/apiErrorHandler';
+    import { NormalisedApiError } from 'src/services/api/axiosHttpClient';
 
     type Message = {
         from: 'user' | 'dora';
@@ -590,7 +591,8 @@
     const scrollThumbStyle = {
         right: '2px',
         borderRadius: '4px',
-        background: 'var(--q-secondary)',
+        // D-020: a mark against the chat surface, so the indicator tone.
+        background: 'var(--brand-secondary-strong)',
         width: '6px',
         opacity: '0.6',
     } as const;
@@ -906,6 +908,10 @@
         return everyAmbiguousResolved && commitItems(message).length > 0;
     }
 
+    function isRetryable(err: unknown): boolean {
+        return !(err instanceof NormalisedApiError) || err.isNetworkError || err.status >= 500;
+    }
+
     async function commitAction(message: Message) {
         const action = message.action;
         if (!isAddAction(action) || !action.shopping_list || !canCommit(message)) return;
@@ -919,7 +925,9 @@
             swallow(shoppingListStore.refreshAsync());
             items.forEach((item) => invalidateBuyVerdict(item.stock_item_id));
         } catch (err) {
-            message.done = false;
+            // A refusal (a finished list's 422) won't go through on a retry,
+            // so the card stays closed; a dropped connection or a 5xx might.
+            message.done = !isRetryable(err);
             pushDoraMessage({
                 text: `I couldn't update the list. ${describeApiError(err)}`,
                 mood: 'sad',

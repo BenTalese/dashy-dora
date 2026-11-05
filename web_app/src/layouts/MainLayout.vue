@@ -79,7 +79,8 @@
                 <BaseButton
                     v-if="currentUser"
                     variant="icon"
-                    aria-label="Account settings"
+                    :aria-label="releaseNudge ? `Account settings. Dora ${releaseInfo?.latest_version} is out` : 'Account settings'"
+                    :attention="releaseNudge"
                     to="/settings/account"
                 >
                     <!-- Settings rebuild Phase 4: profile picture when set,
@@ -99,7 +100,9 @@
                             :username="currentUser.username"
                         />
                     </span>
-                    <BaseTooltip>{{ currentUser.username }}</BaseTooltip>
+                    <BaseTooltip>
+                        {{ currentUser.username }}<template v-if="releaseNudge"> · Dora {{ releaseInfo?.latest_version }} is out</template>
+                    </BaseTooltip>
                 </BaseButton>
             </q-toolbar>
         </q-header>
@@ -186,16 +189,23 @@
     import type { MenuButtonProps } from 'src/components/menu/menuButtonProps';
     import { useFeatureFlags } from 'src/composables/useFeatureFlags';
     import { useProductSearchUrl } from 'src/composables/useProductSearchUrl';
+    import { useReleaseUpdate } from 'src/composables/useReleaseUpdate';
     import { useShortcut, useShortcutRegistry } from 'src/composables/useShortcut';
     import { useAuthStore } from 'src/stores/authStore';
-    import { computed, ref } from 'vue';
+    import { computed, ref, watch } from 'vue';
     import { useRoute, useRouter } from 'vue-router';
 
     const $q = useQuasar();
     const route = useRoute();
     const router = useRouter();
     const authStore = useAuthStore();
-    const { currentUser } = storeToRefs(authStore);
+    const { currentUser, isAdmin } = storeToRefs(authStore);
+
+    // FU-626: an admin's account button glows while a newer release is out,
+    // leading them to the notice at the top of Settings.
+    const { info: releaseInfo, available: releaseAvailable, ensureReleaseInfo } = useReleaseUpdate();
+    watch(isAdmin, (admin) => { if (admin) void ensureReleaseInfo(); }, { immediate: true });
+    const releaseNudge = computed(() => isAdmin.value && releaseAvailable.value);
 
     // ── Global keyboard shortcuts (S5) ──────────────────────────────────
     const { openCheatsheet } = useShortcutRegistry();

@@ -74,7 +74,8 @@ class SpendLine:
     quantity: float
     # The actual→picked ladder; None when the line carries no price.
     unit_price: float | None
-    list_price_at_pick: float | None
+    # The household's usual price for one, frozen at finish (FU-831).
+    usual_price_at_pick: float | None
     purchased_store_id: UUID | None
     planned_store_id: UUID | None
 
@@ -108,7 +109,7 @@ def spend_lines(
             ShoppingListLine.quantity,
             ShoppingListLine.actual_unit_price,
             ShoppingListLine.picked_offer_price,
-            ShoppingListLine.list_price_at_pick,
+            ShoppingListLine.usual_price_at_pick,
             ShoppingListLine.purchased_store_id,
             ShoppingListLine.planned_store_id,
         )
@@ -128,7 +129,7 @@ def spend_lines(
     out: list[SpendLine] = []
     for (
         list_id, completed_at, stock_item_id, product_id, quantity,
-        actual, picked, rrp, purchased_store_id, planned_store_id,
+        actual, picked, usual, purchased_store_id, planned_store_id,
     ) in session.execute(stmt).all():
         paid = actual if actual is not None else picked
         out.append(SpendLine(
@@ -138,7 +139,7 @@ def spend_lines(
             selected_product_id=product_id,
             quantity=float(quantity) if quantity is not None else 1.0,
             unit_price=float(paid) if paid is not None else None,
-            list_price_at_pick=float(rrp) if rrp is not None else None,
+            usual_price_at_pick=float(usual) if usual is not None else None,
             purchased_store_id=purchased_store_id,
             planned_store_id=planned_store_id,
         ))
@@ -245,10 +246,10 @@ def harvest_observation_fields(
     size_value: float | None,
     size_unit: str | None,
     product_pack_count: int | None = None,
-) -> tuple[float, float, str, int | None]:
+) -> tuple[float, float, str, int | None, bool]:
     """Fold a finished line's price into one observation's
-    ``(total_price, total_measure, unit, pack_count)`` (A1 / E4 + FU-227
-    multipack follow-up).
+    ``(total_price, total_measure, unit, pack_count, is_sizeless)`` (A1 / E4 +
+    FU-227 multipack follow-up; FU-983).
 
     ``unit_price`` is per *item* (one bottle, one pack); ``quantity`` is how
     many items the line bought. ``total_price`` is therefore always
@@ -264,7 +265,9 @@ def harvest_observation_fields(
       normalises to the dimension's canonical denominator for the median.
     * **Sizeless / unsupported unit** — a *count* observation: one ``ea`` per
       item (``total_measure = quantity``, ``unit = "ea"``). Covers the
-      "$9 for 3 punnets" case and product-less lines.
+      "$9 for 3 punnets" case and product-less lines. ``is_sizeless`` is True
+      for this branch only, so a reader can keep "1 ea" (one pack of unknown
+      size) apart from a count-sized "12 ea".
 
     The returned ``pack_count`` carries the multipack context: when the
     product has ``pack_count`` set (e.g. ``4`` for "125g × 4 pack"), the obs
@@ -280,8 +283,8 @@ def harvest_observation_fields(
     if size_value and float(size_value) > 0 and size_unit:
         udef = units.find_unit(size_unit)
         if udef is not None and udef.dimension in units.PRICE_DIMENSIONS:
-            return total_price, float(size_value) * qty, udef.canonical, pack_count
-    return total_price, float(qty), "ea", pack_count
+            return total_price, float(size_value) * qty, udef.canonical, pack_count, False
+    return total_price, float(qty), "ea", pack_count, True
 
 
 def resolve_store_id(

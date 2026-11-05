@@ -3,7 +3,6 @@
         <SettingsPageHeader
             title="Email"
             description="How this install connects to a mail server. Dora sends email once an SMTP username is set."
-            :icon="ICONS.mark_email_read"
         />
 
         <template v-if="ready">

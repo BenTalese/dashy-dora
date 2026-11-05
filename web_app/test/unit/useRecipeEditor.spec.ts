@@ -13,8 +13,8 @@ describe('buildUpdateCommand step_images', () => {
     it('sends saved images by id and new uploads by data URL, in order', () => {
         const form = emptyRecipeForm();
         form.step_images = [
-            { client_id: 'saved-1', existing_image_id: 'saved-1', preview_url: '/x', data_url: '' },
-            { client_id: 'new-1', existing_image_id: null, preview_url: 'data:image/jpeg;base64,AAA', data_url: 'data:image/jpeg;base64,AAA' },
+            { client_id: 'saved-1', existing_image_id: 'saved-1', data_url: '' },
+            { client_id: 'new-1', existing_image_id: null, data_url: 'data:image/jpeg;base64,AAA' },
         ];
         const cmd = buildUpdateCommand(form, src, { image: false, stepImages: true });
         expect(cmd.step_images).toEqual(['saved-1', 'data:image/jpeg;base64,AAA']);

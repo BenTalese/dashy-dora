@@ -99,19 +99,20 @@ QR_SHEET_CELL_SIZE = 180
 # Hence the bump from _M (~15%) below — _M leaves too little headroom once a
 # real-world label is also scuffed, printed slightly off, or read at an angle.
 #
-# The asset is `assets/dora_qr_mark.png`: the same monochrome wordmark the SPA
-# ships as its Safari pinned-tab icon, rasterised once and cropped to its ink
-# so the sizing below is about the glyph rather than the SVG's viewBox padding.
+# The asset is `assets/dora_qr_mark.png`: Dora's burger (the app's own mark,
+# `assets/dora_qr_mark.svg`), rasterised once and cropped to its ink so the
+# sizing below is about the glyph rather than the SVG's viewBox padding
+# (FU-779; it replaced a 2.5:1 wordmark that read as small text on the code).
 # Rasterised rather than rendered from SVG at runtime because Pillow has no
 # SVG support and the alternative is a new native dependency (cairo) in the
 # container for one static image.
 _MARK_PATH = Path(__file__).resolve().parents[2] / "assets" / "dora_qr_mark.png"
 
-# Mark width as a fraction of the QR's edge. The mark is ~2.5:1, so 0.26 wide
-# is ~0.105 tall — together with the quiet ring below that is ~5% of the
+# Mark width as a fraction of the QR's edge. The burger is ~10:9, so 0.18 wide
+# is ~0.16 tall — together with the quiet ring below that is ~5% of the
 # code's area against H's ~30% budget. Deliberately conservative: the budget
 # is shared with whatever damage the physical label picks up later.
-_MARK_WIDTH_RATIO = 0.26
+_MARK_WIDTH_RATIO = 0.18
 # White ring around the mark, as a fraction of the QR's edge. Without it the
 # glyph merges into any dark module it happens to abut and the decoder sees
 # one large blob rather than a clean erasure.
@@ -127,7 +128,7 @@ def _qr_payload_for_item(stock_item_id: UUID) -> str:
 
 @lru_cache(maxsize=1)
 def _mark_image():
-    """The D/D mark as RGBA, loaded once. Returns None if the asset is
+    """The mark as RGBA, loaded once. Returns None if the asset is
     missing so a packaging slip degrades to a plain QR rather than a 500 —
     the code still scans; it just isn't branded."""
     from PIL import Image
@@ -158,7 +159,7 @@ def _scaled_mark(size: int):
 
 
 def _paste_centre_mark(pil, size: int) -> None:
-    """Composite the D/D wordmark into the middle of a QR image, in place."""
+    """Composite Dora's mark into the middle of a QR image, in place."""
     from PIL import ImageDraw
 
     scaled_and_pad = _scaled_mark(size)

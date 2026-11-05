@@ -21,9 +21,12 @@
 // list the user owns end to end, and the grid parity maths runs once over the
 // whole list rather than per band.
 //
+// The row shape is shared with Reports' table (`helpers/cardCatalogue`, FU-832).
+//
 // Pure data + types only. No component logic, no reactivity — the page still
 // owns visibility state, ordering, persistence and rendering.
 
+import type { CardDef } from 'src/helpers/cardCatalogue';
 import { ICONS } from 'src/style/icons';
 
 export type CardId =
@@ -90,21 +93,6 @@ export const RETIRED_CARD_IDS: readonly string[] = [
     'savings',            // 2026-09-08 rename
 ];
 
-export type CardGate = 'money' | 'products';
-
-export type CardDef = {
-    id: CardId;
-    label: string;
-    icon: string;
-    /** Opt-in-by-default cards (Anti-creep, §2.2) start hidden. */
-    defaultHidden?: boolean;
-    /** Feature gate: the card is unavailable (hidden from the dashboard AND the
-     *  Cards menu) unless its gate is on. `money` → `useMoneyEnabled` (any
-     *  dollar surface, ADR-005); `products` → the products feature flag (§2.4 —
-     *  don't offer product widgets to an install that has products off). */
-    gate?: CardGate;
-};
-
 /**
  * The default order (and the Cards-menu order). A user's saved order overrides
  * it, and — since zones went — that saved order spans the whole list.
@@ -122,7 +110,7 @@ export type CardDef = {
  * up), then the week, then restock, then the standing stock view, then money.
  * No band labels — the order itself is the gradient now.
  */
-export const CARD_DEFS: CardDef[] = [
+export const CARD_DEFS: CardDef<CardId>[] = [
     { id: 'dora_score', label: 'Kitchen health', icon: ICONS.favorite },
     { id: 'next_to_cook', label: 'Next to cook', icon: ICONS.restaurant_menu },
     { id: 'use_it_up', label: 'Use it up', icon: ICONS.expiry },

@@ -40,6 +40,11 @@
     --semantic-positive-soft: hsl(140 50% 92%);
     --semantic-warning: hsl(33 95% 55%);
     --semantic-warning-soft: hsl(40 95% 92%);
+    /* Warning as text or a glyph. The fill sits at 1.7:1 on a light
+       ground; this tier holds the hue at the 4.5:1 floor on every light
+       surface and the warning soft ground (D-002, FU-986). The dark themes'
+       own warning is already light enough to read, so it passes through. */
+    --semantic-warning-ink: light-dark(hsl(30 100% 29%), var(--semantic-warning));
     --semantic-negative: hsl(7 75% 56%);
     --semantic-negative-soft: hsl(7 75% 94%);
     --semantic-info: hsl(218 76% 56%);
@@ -237,6 +242,7 @@
        an alert. Used by grabby-not-critical affordances: the AddToList
        "on multiple lists" hint, the stock-item lifecycle "Opened" entry. */
     --severity-attention: light-dark(hsl(26 100% 50%), hsl(26 90% 62%));    /* was amber-9 */
+    --severity-attention-ink: light-dark(hsl(26 100% 31%), hsl(26 90% 62%)); /* as text: 4.8:1 min on the light grounds */
 
     /* The per-kind alert accents went with the alerts page's summary boxes
        (2026-10-15); rows colour by severity. */

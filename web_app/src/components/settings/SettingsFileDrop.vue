@@ -131,7 +131,11 @@
         take(event.dataTransfer?.files?.[0] ?? null);
     }
 
-    function onClear() {
+    function onClear(event: MouseEvent) {
+        // The click swaps this button out of the DOM, and Chrome then treats
+        // it as a click on the label itself and opens the picker (FU-576).
+        // Cancelling it stops the label's activation.
+        event.preventDefault();
         emit('update:modelValue', null);
         emit('clear');
     }

@@ -63,7 +63,7 @@ describe('productSeriesToChart', () => {
             observation_points: [{ date: '2026-08-02', unit_price: 4.2, store_name: 'Aldi' }],
             your_prices: {
                 baseline: 4, baseline_unit: 'kg', current: 4.2,
-                above_baseline: true, sample_count: 5,
+                above_baseline: true, below_baseline: false, sample_count: 5, rough: false,
             },
         })]);
         expect(s!.points).toEqual([{ date: '2026-08-02', value: 4.2 }]);
@@ -79,7 +79,7 @@ describe('productSeriesToChart', () => {
             observation_points: [{ date: '2026-08-02', unit_price: 4.2, store_name: null }],
             your_prices: {
                 baseline: 4, baseline_unit: 'kg', current: 4.2,
-                above_baseline: true, sample_count: 5,
+                above_baseline: true, below_baseline: false, sample_count: 5, rough: false,
             },
         })]);
         expect(s!.points).toEqual([{ date: '2026-08-01', value: 3, marked: false }]);
@@ -92,7 +92,7 @@ describe('productSeriesToChart', () => {
             observation_points: [{ date: '2026-08-02', unit_price: 4.2, store_name: null }],
             your_prices: {
                 baseline: 4, baseline_unit: 'kg', current: 4.2,
-                above_baseline: true, sample_count: 5,
+                above_baseline: true, below_baseline: false, sample_count: 5, rough: false,
             },
         })], { offersAsContext: true });
         expect(s!.points).toEqual([{ date: '2026-08-02', value: 4.2 }]);
@@ -120,6 +120,8 @@ describe('stockItemHistoryToChart', () => {
         baseline_unit: 'kg',
         current: 4,
         above_baseline: true,
+        below_baseline: false,
+        rough: false,
         sample_count: 4,
         points: [
             { observed_at: '2026-08-01', unit_price: 3.4, source: 'observation', store_name: 'Aldi' },

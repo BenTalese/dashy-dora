@@ -3,7 +3,6 @@
         <SettingsPageHeader
             title="Push notifications"
             description="Web-push (VAPID) keys the browser needs to sign notification subscriptions. The private key is stored encrypted-at-rest (Fernet, wrapped by DORA_SECRET_ENCRYPTION_KEY)."
-            :icon="ICONS.notifications_active"
         />
 
         <template v-if="ready">
@@ -81,7 +80,6 @@
 </template>
 
 <script lang="ts" setup>
-    import { ICONS } from 'src/style/icons';
     import { useAppSettingDrafts } from 'src/composables/useAppSettingDrafts';
     import SettingsSection from 'src/components/settings/SettingsSection.vue';
     import SettingsRow from 'src/components/settings/SettingsRow.vue';

@@ -86,6 +86,10 @@ class SeedBuilders:
         # into observations by harvest_price_observations() exactly as
         # POST /finish would. Populated by make_line().
         self.harvest_jobs: list[tuple] = []
+        # Every observation seeded so far, per stock item, so a finished line
+        # can freeze the usual price the household had *before* it (FU-831),
+        # as POST /finish does, without a flush per line.
+        self.observations_by_item: dict = {}
         # Populated by seed_vocabularies(); recipes + tag/tool links read these.
         self.cuisines: dict[str, Cuisine] = {}
         self.categories: dict[str, Category] = {}
@@ -167,7 +171,7 @@ class SeedBuilders:
     # ── Price observations ──────────────────────────────────────────────
     def price_obs(self, item, *, total_price, total_measure, unit, days_ago,
                   store=None, pack_count=None):
-        self.repo.add(StockItemPriceObservation(
+        self._add_observation(StockItemPriceObservation(
             stock_item_id=item.id,
             total_price=float(total_price),
             total_measure=float(total_measure),
@@ -178,6 +182,10 @@ class SeedBuilders:
             created_at=self.now - timedelta(days=days_ago),
             pack_count=pack_count,
         ))
+
+    def _add_observation(self, obs) -> None:
+        self.repo.add(obs)
+        self.observations_by_item.setdefault(obs.stock_item_id, []).append(obs)
 
     # ── Recipes ─────────────────────────────────────────────────────────
     def ingredient(self, item, qty, unit, notes=None):
@@ -296,26 +304,39 @@ class SeedBuilders:
         timestamp; lines on other lists fall back to ``now``."""
         from dora_api.features.shopping_lists._line_price import (
             harvest_observation_fields, line_paid_unit_price)
+        from dora_api.features.shopping_lists._usual_price import \
+            usual_price_for_one
         # Drain the queue so a later batch of lines (e.g. the QA-fixture
         # block) can harvest again without re-processing — and duplicating —
         # everything harvested here.
         jobs, self.harvest_jobs = self.harvest_jobs, []
+        # Oldest shop first, so each line's usual price is built only from the
+        # shops before it.
+        # The seeds mix naive (UTC) and aware completion times.
+        def _shop_time(job) -> datetime:
+            at = completed_at.get(job[0].shopping_list_id, self.now)
+            return at if at.tzinfo is not None else at.replace(tzinfo=UTC)
+        jobs.sort(key=_shop_time)
         for sl_line, product, store in jobs:
             unit_price = line_paid_unit_price(sl_line)
             if unit_price is None:
                 continue
-            _tp, _tm, _unit, _pc = harvest_observation_fields(
+            _at = completed_at.get(sl_line.shopping_list_id, self.now)
+            if sl_line.actual_unit_price is not None:
+                sl_line.usual_price_at_pick = usual_price_for_one(
+                    self.observations_by_item.get(sl_line.stock_item_id, []), product, now=_at,
+                )
+            _tp, _tm, _unit, _pc, _sizeless = harvest_observation_fields(
                 unit_price=unit_price,
                 quantity=sl_line.quantity,
                 size_value=product.size_value if product else None,
                 size_unit=product.size_unit if product else None,
                 product_pack_count=product.pack_count if product else None,
             )
-            _at = completed_at.get(sl_line.shopping_list_id, self.now)
-            self.repo.add(StockItemPriceObservation(
+            self._add_observation(StockItemPriceObservation(
                 stock_item_id=sl_line.stock_item_id,
                 total_price=_tp, total_measure=_tm, unit=_unit,
                 observed_at=_at, store_id=(store.id if store else None),
                 shopping_list_line_id=sl_line.id, created_at=_at,
-                pack_count=_pc,
+                pack_count=_pc, is_sizeless=_sizeless,
             ))

@@ -170,6 +170,7 @@
                     <div class="welcome-font">
                         <div class="welcome-font__label">Font</div>
                         <BaseSegmented
+                            aria-label="Font"
                             :model-value="form.fontFamily"
                             :options="FONT_OPTIONS"
                             @update:model-value="(v) => (form.fontFamily = v)"
@@ -223,6 +224,7 @@
                         <label class="household-field household-field--grow">
                             <span class="household-field__label">Timezone</span>
                             <BaseSelect
+                                aria-label="Timezone"
                                 dark
                                 v-model="household.timezone"
                                 :options="timezoneOptions"
@@ -238,6 +240,7 @@
                         <label class="household-field household-field--grow">
                             <span class="household-field__label">Language &amp; format</span>
                             <BaseSelect
+                                aria-label="Language and format"
                                 dark
                                 v-model="household.locale"
                                 :options="localeOptions"
@@ -251,6 +254,7 @@
                     <div class="welcome-font household-units">
                         <div class="welcome-font__label">Units</div>
                         <BaseSegmented
+                            aria-label="Units"
                             :model-value="household.measurementSystem"
                             :options="UNIT_OPTIONS"
                             :disabled="!featuresLoaded"

@@ -27,6 +27,16 @@ top-to-bottom.
 - [ ] Recipe page: Change and Remove photo on a recipe that has one.
 - [ ] Cookbook: the Ingredients filter's sort toggle and the recipe method's step-style switch (both now the new segmented control).
 
+## Touch sizes (2026-11-05) — origin FU-877
+- [ ] On a phone: stock-item tabs, Settings nav and a multi-pick select (recipe tools) are comfortable to tap and the rows around them still look balanced.
+
+## Voice from Firefox (2026-11-05) — origin FU-788
+- [ ] After deploying: the Docker build installs faster-whisper, and Settings → Voice in Firefox offers "Download speech recognition".
+- [ ] In Firefox on a phone or laptop: after the download, speak to Dora in the chat and say "next" in cook mode; both are heard.
+
+## CI back on (2026-11-05) — origin FU-721
+- [ ] When Actions is switched on: the first CI run on main goes green, and a Release dry run (Actions → Release, `dry_run` ticked) builds the image.
+
 ## Follow-up batch 2026-10-22
 - [ ] My products ⋮ → Set items in pack: save 12, the menu then reads "Items in pack: 12"; Clear removes it.
 - [ ] Add a custom product with Items in the pack set; a recipe's "3 eggs" linked to it is priced.
@@ -2597,11 +2607,11 @@ _(Needs a destructive re-seed to load the "Belief: …" demo items — restart t
 - [ ] Settings → System → Features (products ON): type a URL in **Product search → Search URL**, blur → toast confirms; the main-menu **Product Search** entry appears and opens the URL in a new tab. Clear it and blur → the entry disappears again.
 
 ## Donation buttons + restored support links (FU-608) — origin FU-608
-- [ ] **Menu bar (logged in):** the pink **Support Dora** heart shows in the header cluster (next to the alerts bell / help / avatar), gently pulses, and reads well against the toolbar colour on each theme; clicking opens the popover with all 3 platforms. *(Auth-shell floating button + the shared popover already verified live 2026-07-31 — this is the header trigger, which needs login.)*
+- [ ] **Menu bar (logged in):** the pink **Support Dora** heart shows in the header cluster (next to the alerts bell / help / avatar), gently pulses, and reads well against the toolbar colour on each theme; clicking opens the popover with PayPal and GitHub Sponsors. *(Auth-shell floating button + the shared popover already verified live 2026-07-31 — this is the header trigger, which needs login.)*
 - [ ] **Settings (logged in):** the **Support Dora** pink pill sits beside **Sign out** in the Settings header; opens the same popover.
 - [ ] **Pulse feel:** confirm the pulse "pops" without feeling naggy across the menu-bar + floating buttons; with OS reduced-motion on, the pulse is off (static button).
 - [ ] **Settings → About:** the **Project & source** section shows Source-code (→ github.com/BenTalese/dashy-dora), **Report a bug** (only when a support channel is set), and **Support Dora** rows.
-- [ ] **After the repo is public + FU-608 placeholders swapped:** the donation links open the real pages; Help "Report an issue", the full-page-error "Report this", and DoraBot's report link all reach the live issue tracker; the issue templates resolve.
+- [ ] The PayPal and GitHub Sponsors rows open their pages in a new tab; the repo's Sponsor button lists both; Help "Report an issue", the full-page-error "Report this", and DoraBot's report link all reach the live issue tracker; the issue templates resolve.
 
 ## Shopping-list / dashboard quick fixes (FU-573, FU-585)
 - [ ] **FU-573 remove-count:** put a stock item on exactly **one** open list, then use the buy-verdict card's "remove from list" (or the multi-list popover's "remove from all") → the toast says **"Removed from 1 list."**, not an inflated count. Remove again with it on none → "It was already off your lists." *(Server contract is backend-test-pinned; this is the toast-wording eyeball.)*

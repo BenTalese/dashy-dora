@@ -138,7 +138,7 @@
     import { lineChoicesFromRecipe, rowsFromRecipe, unlinkedFromRecipe } from 'src/helpers/addToListRows';
     import { formatDate } from 'src/composables/useDateFormat';
     import { formatMoney } from 'src/composables/useMoney';
-    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+    import { isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { useBatchEnabled } from 'src/composables/useBatchEnabled';
     import { useMoneyEnabled } from 'src/composables/useMoneyEnabled';
     import { useShoppingListActions } from 'src/composables/useShoppingListActions';
@@ -267,7 +267,9 @@
             await recipeStore.adjustMealsAsync(recipe.value.recipe_id, delta);
             await loadRecipe();
         } catch (err) {
-            $q.notify({ type: 'negative', message: 'Could not update meals.', caption: toastCaption(err) });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({ type: 'negative', message: 'Could not update meals.', caption: toastCaption(err) });
+            }
         } finally {
             adjusting.value = false;
         }

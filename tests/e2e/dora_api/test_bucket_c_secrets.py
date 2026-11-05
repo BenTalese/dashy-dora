@@ -14,7 +14,6 @@ missing-key behaviour override it locally with `monkeypatch`.
 from __future__ import annotations
 
 import base64
-import os
 
 import pytest
 import requests
@@ -32,27 +31,7 @@ BASE = "http://localhost:5170/api"
 APP_SETTINGS = f"{BASE}/app-settings"
 
 
-@pytest.fixture(scope="session", autouse=True)
-def _wrapping_key():
-    """Provision `DORA_SECRET_ENCRYPTION_KEY` for the whole module. Every
-    test here writes a secret through `PATCH /api/app-settings`, which
-    requires the wrapping key to be configured — without this fixture
-    every write fails with a 400. Uses a fresh Fernet key generated
-    once per session; the `secret_encryption._fernet` lru_cache is
-    cleared so the change is observed after the env is populated."""
-    from dora_api.infrastructure.security import secret_encryption
-
-    previous = os.environ.get("DORA_SECRET_ENCRYPTION_KEY")
-    os.environ["DORA_SECRET_ENCRYPTION_KEY"] = Fernet.generate_key().decode("ascii")
-    secret_encryption._fernet.cache_clear()
-    try:
-        yield
-    finally:
-        if previous is None:
-            os.environ.pop("DORA_SECRET_ENCRYPTION_KEY", None)
-        else:
-            os.environ["DORA_SECRET_ENCRYPTION_KEY"] = previous
-        secret_encryption._fernet.cache_clear()
+pytestmark = pytest.mark.usefixtures("secret_encryption_key")
 
 
 @pytest.fixture(autouse=True)

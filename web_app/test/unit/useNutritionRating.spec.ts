@@ -21,6 +21,7 @@
  * `tests/test_nutri_score.py` / `tests/test_health_star_rating.py`.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as ModuleUnderTest from 'src/composables/useNutritionRating';
 import { ref, type Ref } from 'vue';
 
 let scheme: Ref<string>;
@@ -33,7 +34,7 @@ vi.mock('src/composables/useNutritionMode', () => ({
     useNutritionMode: () => ({ isComplex: complex }),
 }));
 
-type Mod = typeof import('src/composables/useNutritionRating');
+type Mod = typeof ModuleUnderTest;
 
 async function load(): Promise<Mod> {
     vi.resetModules();

@@ -1,13 +1,13 @@
 import { isOutOfStockSequence } from 'src/helpers/stockStatus';
 import { colourForSequence } from 'src/helpers/stockLevelLogic';
-import { useLocationOptions } from 'src/composables/useLocationOptions';
+import { locationPathOptions, useLocationOptions } from 'src/composables/useLocationOptions';
 import { nameCollator } from 'src/composables/useMoney';
 import type { PageCount } from 'src/components/PageCountsFooter.vue';
 import { cartStateFor, type CartState, type Membership } from 'src/models/shoppingList';
 import type { Recipe } from 'src/models/recipe';
 import type { StockGroup } from 'src/models/stockGroup';
 import type { StockItem } from 'src/models/stockItem';
-import type { LocationNode } from 'src/models/location';
+import { NO_LOCATION_FILTER, type LocationNode } from 'src/models/location';
 import type { StockLevel } from 'src/models/stockLevel';
 import { computed, ref, type DeepReadonly, type Ref } from 'vue';
 import { useListState } from 'src/composables/useListState';
@@ -151,9 +151,9 @@ export function useStockFilters(sources: {
             essentialsOnly: ref(false),
             openOnly: ref(false),
             hasAlertOnly: ref(false),
-            // "Expiring soon or already expired" — the Dora Score freshness
+            // "Use soon": expiring soon or already expired. The Dora Score freshness
             // action deep-links here via ?expiring=1 (FU-583).
-            expiringSoonOnly: ref(false),
+            useSoonOnly: ref(false),
             cartFilter: ref<StockCartFilter>('all'),
             // Deep-link from stock-item detail page's "Recipes using this".
             recipeFilter: ref<string | null>(null),
@@ -169,7 +169,7 @@ export function useStockFilters(sources: {
             essentialsOnly: ref(false),
             openOnly: ref(false),
             hasAlertOnly: ref(false),
-            expiringSoonOnly: ref(false),
+            useSoonOnly: ref(false),
             cartFilter: ref<StockCartFilter>('all'),
             recipeFilter: ref<string | null>(null),
             // D-9 — "Needs attention" is the default axis (was Name).
@@ -178,7 +178,7 @@ export function useStockFilters(sources: {
         };
     const {
         searchText, levelFilter, locationFilter, groupFilter, essentialsOnly,
-        openOnly, hasAlertOnly, expiringSoonOnly, cartFilter,
+        openOnly, hasAlertOnly, useSoonOnly, cartFilter,
         recipeFilter, sortBy, sortDir,
     } = state;
     if (options.persistScope) {
@@ -229,20 +229,24 @@ export function useStockFilters(sources: {
     function hasAlert(item: StockItem): boolean {
         return item.needs_attention === true;
     }
-    /** Expired or expiring-soon, as the server judged it against the
-     *  household's configured window. */
-    function isExpiryFlagged(item: StockItem): boolean {
-        const kinds = item.attention_kinds ?? [];
-        return kinds.includes('expired') || kinds.includes('expiring_soon');
+    /** Expired or expiring soon, as the server judged it against the
+     *  household's window. A fact about the item, not the user's alert
+     *  settings (FU-702): muting expiry notifications leaves this filter alone. */
+    function isUseSoon(item: StockItem): boolean {
+        return item.use_soon === true;
     }
 
     // ── Dropdown option lists ───────────────────────────────────────────
     // Full-path location labels ("Pantry › Middle shelf › Left side"), built
-    // once from the tree. `allLocationOptions` is the canonical full list
-    // (consumers that need the unfiltered set — e.g. the bulk-move dialog —
-    // read this); `locationOptions` is the narrowing ref bound to the
-    // searchable q-select via `filterLocations` (same UX as the detail page).
-    const { allLocationOptions, locationOptions, filterLocations } = useLocationOptions(sources.locationTree);
+    // once from the tree. `locationOptions` is the narrowing ref bound to the
+    // searchable filter via `filterLocations` (same UX as the detail page),
+    // led by "Not stored anywhere" (FU-633); `moveTargetOptions` is the real
+    // locations only, for the bulk-move dialog.
+    const { locationOptions, filterLocations } = useLocationOptions(
+        sources.locationTree,
+        [{ label: 'Not stored anywhere', value: NO_LOCATION_FILTER }],
+    );
+    const moveTargetOptions = computed(() => locationPathOptions(sources.locationTree()));
     const groupOptions = computed(() =>
         sources.stockGroups().map((g) => ({
             label: g.name,
@@ -280,14 +284,17 @@ export function useStockFilters(sources: {
             // truthiness, which would break if a default were ever non-null.)
             if (levelFilter.value !== null && item.stock_level_id !== levelFilter.value)
                 return false;
-            if (locationFilter.value !== null && item.stock_location_id !== locationFilter.value)
+            if (locationFilter.value === NO_LOCATION_FILTER) {
+                if (item.stock_location_id) return false;
+            } else if (locationFilter.value !== null && item.stock_location_id !== locationFilter.value) {
                 return false;
+            }
             if (groupFilter.value !== null && item.stock_group_id !== groupFilter.value)
                 return false;
             if (essentialsOnly.value && !item.is_essential) return false;
             if (openOnly.value && !item.is_open) return false;
             if (hasAlertOnly.value && !hasAlert(item)) return false;
-            if (expiringSoonOnly.value && !isExpiryFlagged(item)) return false;
+            if (useSoonOnly.value && !isUseSoon(item)) return false;
             if (tokens.length > 0) {
                 // Every word must match ("full cream" is one search, not two):
                 // `some` made a two-word query wider than either word alone.
@@ -406,7 +413,7 @@ export function useStockFilters(sources: {
         if (essentialsOnly.value) n++;
         if (openOnly.value) n++;
         if (hasAlertOnly.value) n++;
-        if (expiringSoonOnly.value) n++;
+        if (useSoonOnly.value) n++;
         if (cartFilter.value !== 'all') n++;
         if (recipeFilter.value !== null) n++;
         return n;
@@ -492,7 +499,7 @@ export function useStockFilters(sources: {
         essentialsOnly.value = false;
         openOnly.value = false;
         hasAlertOnly.value = false;
-        expiringSoonOnly.value = false;
+        useSoonOnly.value = false;
         cartFilter.value = 'all';
         recipeFilter.value = null;
     }
@@ -506,7 +513,7 @@ export function useStockFilters(sources: {
         essentialsOnly,
         openOnly,
         hasAlertOnly,
-        expiringSoonOnly,
+        useSoonOnly,
         cartFilter,
         recipeFilter,
         recipeFilterContext,
@@ -514,7 +521,7 @@ export function useStockFilters(sources: {
         sortDir,
         // option lists
         locationOptions,
-        allLocationOptions,
+        moveTargetOptions,
         filterLocations,
         groupOptions,
         // derived

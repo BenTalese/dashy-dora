@@ -160,7 +160,7 @@
     import { useStockItemDetail } from 'src/composables/useStockItemDetail';
     import { NormalisedApiError } from 'src/services/api/axiosHttpClient';
     import BarcodeApiService from 'src/services/api/barcodeApiService';
-    import { describeApiError, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+    import { describeApiError, isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { ICONS } from 'src/style/icons';
 
     // The QR label's state lives on the page context (so the fetched code
@@ -240,11 +240,13 @@
                 message: 'Barcode removed.',
             });
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not remove barcode.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not remove barcode.',
+                    caption: toastCaption(err),
+                });
+            }
         }
     }
 </script>

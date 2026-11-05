@@ -26,6 +26,9 @@ export type StockItem = {
     needs_attention?: boolean;
     attention_severity?: 'high' | 'medium' | 'low' | null;
     attention_kinds?: readonly string[];
+    /** Expired, or expiring inside the household's window, with no
+     *  notification preference applied (FU-702): the "Use soon" chip. */
+    use_soon?: boolean;
     /** Urgency ORDER inside the outlined band, most urgent first:
      *  0 expired · 1 essential-out · 2 expiring-soon · 3 essential-low ·
      *  9 nothing fired. Severity can't order these — expired and

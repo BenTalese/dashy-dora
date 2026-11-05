@@ -633,7 +633,7 @@
     import { useListState } from 'src/composables/useListState';
     import { computed, onMounted, ref, useTemplateRef, watch } from 'vue';
     import { useRouter } from 'vue-router';
-    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+    import { isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { useConfirm } from 'src/composables/useConfirm';
 
     const router = useRouter();
@@ -712,11 +712,13 @@
                 message: 'Shopping started.',
             });
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not start shopping.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not start shopping.',
+                    caption: toastCaption(err),
+                });
+            }
         } finally {
             togglingProgress.value = false;
         }
@@ -772,11 +774,13 @@
             await refreshAllQuietly();
             plannedDateOpen.value = false;
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not save shop day.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not save shop day.',
+                    caption: toastCaption(err),
+                });
+            }
         }
     }
 
@@ -787,11 +791,13 @@
             await refreshAllQuietly();
             plannedDateOpen.value = false;
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not clear shop day.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not clear shop day.',
+                    caption: toastCaption(err),
+                });
+            }
         }
     }
 
@@ -900,11 +906,13 @@
                 message: 'List deleted.',
             });
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not delete.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not delete.',
+                    caption: toastCaption(err),
+                });
+            }
         }
     }
 
@@ -953,11 +961,13 @@
             await api.updateAsync(listId.value, { name: next === '' ? null : next });
             await refreshAllQuietly();
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not rename.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not rename.',
+                    caption: toastCaption(err),
+                });
+            }
         } finally {
             editingName.value = false;
         }
@@ -1007,8 +1017,9 @@
 
     useShortcut([
         { keys: 'n', scope: 'Shopping list', description: 'Add an item', handler: onOpenQuickAdd },
-        { keys: 'space', scope: 'Shopping list', description: 'Tick / untick the focused line', handler: tickFocusedLine },
-        { keys: 'u', scope: 'Shopping list', description: 'Untick the last item you ticked', handler: untickLastTicked },
+        // Ticking is the run face's (FU-808), so the two keys are off elsewhere.
+        { keys: 'space', scope: 'Shopping list', description: 'Tick / untick the focused line', handler: tickFocusedLine, enabled: () => detail.value?.status === 'shopping' },
+        { keys: 'u', scope: 'Shopping list', description: 'Untick the last item you ticked', handler: untickLastTicked, enabled: () => detail.value?.status === 'shopping' },
         { keys: 'arrowdown', scope: 'Shopping list', description: 'Focus next line', handler: () => moveLineFocus(1) },
         { keys: 'arrowup', scope: 'Shopping list', description: 'Focus previous line', handler: () => moveLineFocus(-1) },
     ]);
@@ -1062,12 +1073,20 @@
             await refreshDetailQuietly();
             return true;
         } catch (err) {
-            if (forListId === listId.value) await load();
-            $q.notify({
-                type: 'negative',
-                message: 'Could not update line.',
-                caption: toastCaption(err),
-            });
+            // Undo the optimistic flip, then re-read quietly: a full `load()`
+            // flashed the skeleton over the list being shopped (FU-953, R-084).
+            if (forListId === listId.value) {
+                if (line) line.is_ticked = !value;
+                if (value) recentTickStack.value = recentTickStack.value.filter((id) => id !== lineId);
+                await refreshDetailQuietly();
+            }
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not update line.',
+                    caption: toastCaption(err),
+                });
+            }
             return false;
         }
     }
@@ -1078,7 +1097,7 @@
      *  the same untick path as the `u` shortcut rather than a second one.
      *
      *  It waits for the tick to land before offering the undo: on a failure
-     *  `onToggleTicked` reloads and says so, and a cheerful "Picked X · UNDO"
+     *  `onToggleTicked` undoes the flip and says so, and a cheerful "Picked X · UNDO"
      *  sitting next to "Could not update line" would be offering to undo
      *  something that never happened. */
     async function onRunTick(line: ShoppingListLine) {
@@ -1152,11 +1171,13 @@
             await api.backToDraftAsync(listId.value);
             await refreshAllQuietly();
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not go back to draft.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not go back to draft.',
+                    caption: toastCaption(err),
+                });
+            }
         } finally {
             togglingProgress.value = false;
         }
@@ -1179,11 +1200,13 @@
                 message: `Cleared ${result.removed_count} line${result.removed_count === 1 ? '' : 's'}.`,
             });
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not clear.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not clear.',
+                    caption: toastCaption(err),
+                });
+            }
         }
     }
 
@@ -1229,11 +1252,13 @@
                 ],
             });
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not save template.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not save template.',
+                    caption: toastCaption(err),
+                });
+            }
         }
     }
 

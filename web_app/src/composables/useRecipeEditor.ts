@@ -20,7 +20,6 @@
 // and this is the only copy of these rules.
 
 import { reactive } from 'vue';
-import { recipeStepImageUrl } from 'src/services/api/recipeApiService';
 import type { EditableStepImage } from 'src/components/recipes/recipeStepImageEditorTypes';
 import type { EditableStep as EditableRecipeStep } from 'src/components/recipes/recipeStepEditorTypes';
 import type { Recipe, RecipeStepsMode } from 'src/models/recipe';
@@ -184,7 +183,6 @@ export function hydrateRecipeForm(form: RecipeForm, source: Recipe): void {
         step_images: (source.step_images ?? []).map((img) => ({
             client_id: img.image_id,
             existing_image_id: img.image_id,
-            preview_url: recipeStepImageUrl(source.recipe_id, img.image_id),
             data_url: '',
         })),
         kcal: source.kcal,

@@ -40,6 +40,7 @@ from sqlalchemy import select
 
 from dora_api.app import db
 from dora_api.domain.entities.ingestion_source import IngestionSource
+from dora_api.domain.entities.store import Store
 from dora_api.domain.entities.ingestion_store_mapping import \
     IngestionStoreMapping
 from dora_api.features.routers import INGEST_ROUTER
@@ -78,14 +79,12 @@ class GetIngestableProductsHandler:
         self, source: IngestionSource, *, limit: int, offset: int,
     ) -> list[_IngestableProduct]:
         external_by_store = self._external_names_for(source)
-        store_table = db.metadata.tables["Store"]
         dora_name_by_store: dict[UUID, str] = {
-            row["id"]: row["name"]
-            for row in db.session.execute(
-                select(store_table.c.id, store_table.c.name)
-            ).mappings().all()
+            store.id: store.name for store in self.repository.get(Store).all()
         }
 
+        # R-005 carve-out: a column projection, paged in SQL, so a large
+        # catalogue never hydrates every Product row to read eight fields.
         product_table = db.metadata.tables["Product"]
         rows = db.session.execute(
             select(

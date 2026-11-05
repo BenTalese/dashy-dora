@@ -332,9 +332,14 @@ the week pane to that day's card.
 its own calendar, plus the reports charts noted in the mapping table. Only the
 meal-plans mini-month is settled.
 
-### DR-13 · History timeline grouping (D-012, D-006) — P3
+### DR-13 · History timeline grouping (D-012, D-006) — ✅ DONE 2026-11-05
 Collapse repeated kinds ("Pushed expiry ×50 over 3 months"), per-kind filter
 chips, one date format via the DR-14 formatter. **Refs:** FU-578 #32.
+**Shipped (owner: build it):** three or more neighbouring events of the same kind
+collapse into one "Moved expiry ×50" row with its date span and a Show all /
+Hide toggle (`groupLifecycleEvents`, pinned in `lifecycleTimeline.spec.ts`);
+kind chips (Bought / Used / Levels / Expiry / Lists / Waste) appear when an item
+has more than one kind. Dates already went through the DR-14 formatter.
 
 ### DR-14 · Locale/format authority (D-006) — ➗ DONE-with-carve-outs 2026-08-13
 Single date/currency formatter module (household locale+tz); replace direct
@@ -426,12 +431,14 @@ the shopping-list detail and the planner rail don't render in the verify pane
 (route transitions wedge there, and the rail is behind the pane's forced-mobile
 `$q.screen` branch).
 
-### DR-16 · Onboarding activation step — P3, needs owner product call
+### DR-16 · Onboarding activation step — SKIPPED (owner, 2026-11-05)
 A "get food in" step (add first items / import / start with the starter list)
 in SETUP, and drop Price history from the all-set hub for data-empty accounts
 (R-012/R-014 tension — reveal-and-disable may prefer a "collects as you shop"
 caption instead of removal). Register-form eager validation fix (#37) rides
 along. **Refs:** FU-578 #37/39.
+**Skipped (owner, 2026-11-05):** the wizard's "Your stock" step and the money-gated
+Price history tile already cover the intent; no separate activation step.
 
 ---
 

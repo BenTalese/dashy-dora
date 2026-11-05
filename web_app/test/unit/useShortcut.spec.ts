@@ -5,15 +5,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { defineComponent, h } from 'vue';
 import { mount, type VueWrapper } from '@vue/test-utils';
-import { useShortcut } from 'src/composables/useShortcut';
+import { shortcutActive, useShortcut, useShortcutRegistry } from 'src/composables/useShortcut';
 
 let wrapper: VueWrapper | null = null;
 
-function register(keys: string): ReturnType<typeof vi.fn> {
+function register(keys: string, enabled?: () => boolean): ReturnType<typeof vi.fn> {
     const handler = vi.fn();
     wrapper = mount(defineComponent({
         setup() {
-            useShortcut({ keys, scope: 'Test', description: 'test', handler });
+            useShortcut({ keys, scope: 'Test', description: 'test', handler, ...(enabled ? { enabled } : {}) });
             return () => h('div');
         },
     }), { attachTo: document.body });
@@ -67,5 +67,16 @@ describe('useShortcut', () => {
         document.body.appendChild(el);
         press('n', el);
         expect(handler).not.toHaveBeenCalled();
+    });
+
+    it('neither fires nor lists a shortcut whose enabled() is false (FU-808)', () => {
+        let on = false;
+        const handler = register('u', () => on);
+        press('u');
+        expect(handler).not.toHaveBeenCalled();
+        expect(useShortcutRegistry().shortcuts.filter(shortcutActive)).toHaveLength(0);
+        on = true;
+        press('u');
+        expect(handler).toHaveBeenCalledTimes(1);
     });
 });

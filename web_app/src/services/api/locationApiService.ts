@@ -20,6 +20,10 @@ export default class LocationApiService {
     getTreeAsync = async (): Promise<LocationNode[]> =>
         await this.httpClient.get<LocationNode[]>('/locations');
 
+    /** Stock items with no location, which the tree can't show (FU-633). */
+    getUnassignedCountAsync = async (): Promise<number> =>
+        (await this.httpClient.get<{ count: number }>('/locations/unassigned-count')).count;
+
     createAsync = async (command: CreateLocationCommand): Promise<CreatedResponse> =>
         await this.httpClient.post<CreatedResponse>('/locations', command);
 

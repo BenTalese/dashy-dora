@@ -32,6 +32,9 @@
 // These helpers cover the rest: muted/secondary text, surface tints,
 // soft semantic backgrounds, and on-toolbar text. Prefixed `dora-` to
 // avoid colliding with Quasar's own `text-secondary` (brand secondary).
+// Quasar's `text-warning` paints the warning *fill* (`--q-warning`), which
+// is under the floor as ink on a light ground; send it to the ink tier.
+.text-warning          { color: var(--semantic-warning-ink) !important; }
 .dora-text-muted       { color: var(--text-muted) !important; }
 .dora-text-secondary   { color: var(--text-secondary) !important; }
 .dora-text-on-toolbar  { color: var(--text-on-toolbar) !important; }
@@ -42,6 +45,8 @@
 // light family. Use this wherever accent-coloured words or glyphs sit on
 // a light surface — see --accent-ink in tokens.scss (owner, 2026-09-01).
 .dora-text-accent      { color: var(--accent-ink) !important; }
+/* D-020: `secondary` painting a mark against the page (FU-652). */
+.dora-text-secondary-mark { color: var(--brand-secondary-strong) !important; }
 
 .dora-bg-page          { background-color: var(--surface-page) !important; }
 .dora-bg-sunken        { background-color: var(--surface-sunken) !important; }
@@ -79,7 +84,7 @@
 .text-severity-high     { color: var(--severity-high) !important; }
 .text-severity-medium   { color: var(--severity-medium) !important; }
 .text-severity-low      { color: var(--severity-low) !important; }
-.text-severity-attention { color: var(--severity-attention) !important; }
+.text-severity-attention { color: var(--severity-attention-ink) !important; }
 .text-savings-accent               { color: var(--savings-accent) !important; }
 .text-lifecycle-bought         { color: var(--lifecycle-bought) !important; }
 .text-lifecycle-expiry-changed { color: var(--lifecycle-expiry-changed) !important; }
@@ -176,7 +181,7 @@
     background: var(--semantic-warning-soft);
     border-color: var(--semantic-warning);
 
-    .q-icon { color: var(--semantic-warning); }
+    .q-icon { color: var(--semantic-warning-ink); }
 }
 
 .dora-chip--tint-positive {

@@ -274,7 +274,7 @@
     } from 'src/helpers/recipeVocabulary';
     import { computed, onMounted, ref, watch } from 'vue';
     import { useRoute, useRouter } from 'vue-router';
-    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+    import { isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { useNutritionMode } from 'src/composables/useNutritionMode';
     import { useNutritionRating } from 'src/composables/useNutritionRating';
     import { newClientId } from 'src/helpers/clientId';
@@ -753,11 +753,13 @@
             expiringByRecipeId.value = next;
             expiringLoaded.value = true;
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not load expiring-ingredient recipes.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not load expiring-ingredient recipes.',
+                    caption: toastCaption(err),
+                });
+            }
             expiringOnly.value = false;
         } finally {
             expiringFetchInFlight.value = false;
@@ -869,11 +871,13 @@
             }
             if (newId) void router.push(`/cookbook/${newId}`);
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not create the imported recipe.',
-                caption: err instanceof Error ? err.message : String(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not create the imported recipe.',
+                    caption: err instanceof Error ? err.message : String(err),
+                });
+            }
         }
     }
 

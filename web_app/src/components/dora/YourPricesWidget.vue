@@ -54,16 +54,11 @@
                         > / {{ yourPrices.baseline_unit }}</span>
                     </div>
                 </div>
-                <span
-                    class="dora-your-prices__verdict"
-                    :class="yourPrices.above_baseline ? 'is-above' : 'is-usual'"
-                >
-                    <q-icon
-                        :name="yourPrices.above_baseline ? ICONS.trending_up : ICONS.check"
-                        size="14px"
-                    />
-                    {{ yourPrices.above_baseline ? 'Paying more than usual' : 'About average' }}
-                </span>
+                <YourPriceVerdict
+                    :above="yourPrices.above_baseline"
+                    :below="yourPrices.below_baseline"
+                    :rough="yourPrices.rough"
+                />
             </template>
 
             <div v-if="yourPrices?.current != null" class="dora-your-prices__meta">
@@ -77,8 +72,11 @@
                     · {{ yourPrices.last_seen_store_name }}
                 </span>
                 <span v-if="yourPrices.baseline != null">
-                    · based on {{ yourPrices.sample_count }}
+                    · from {{ yourPrices.sample_count }}
                     {{ yourPrices.sample_count === 1 ? 'price' : 'prices' }}
+                </span>
+                <span v-if="yourPrices.left_out_count > 0">
+                    ({{ yourPrices.left_out_count }} in another unit not counted)
                 </span>
             </div>
 
@@ -146,11 +144,13 @@
     import BaseTooltip from 'src/components/BaseTooltip.vue';
     import PriceEntry from 'src/components/dora/PriceEntry.vue';
     import PriceHistoryBottomSheet from 'src/components/dora/PriceHistoryBottomSheet.vue';
+    import YourPriceVerdict from 'src/components/dora/YourPriceVerdict.vue';
     import { ICONS } from 'src/style/icons';
     import { relativeTime } from 'src/helpers/relativeTime';
     import { formatMoney } from 'src/composables/useMoney';
     import type {
         PriceEntryPrefill,
+        PriceEntryValue,
         YourPrices,
     } from 'src/models/stockItemDetail';
     import type { Store } from 'src/models/store';
@@ -173,13 +173,7 @@
     );
 
     const emit = defineEmits<{
-        (e: 'submit', value: {
-            total_price: number;
-            total_measure: number;
-            unit: string;
-            store_id: string | null;
-            pack_count: number | null;
-        }, done: () => void): void;
+        (e: 'submit', value: PriceEntryValue, done: () => void): void;
     }>();
 
     const dialogOpen = ref(false);
@@ -193,13 +187,7 @@
         return 'Not enough price data yet.';
     });
 
-    function onSubmit(value: {
-        total_price: number;
-        total_measure: number;
-        unit: string;
-        store_id: string | null;
-        pack_count: number | null;
-    }) {
+    function onSubmit(value: PriceEntryValue) {
         // The parent calls `done` once the save resolves, so a failed save
         // leaves the dialog open with the typed values intact.
         emit('submit', value, () => { dialogOpen.value = false; });
@@ -258,23 +246,6 @@
         font-size: var(--font-size-sm);
         font-weight: 500;
         color: var(--text-secondary);
-    }
-    .dora-your-prices__verdict {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--space-1);
-        padding: var(--space-1) var(--space-3);
-        border-radius: var(--radius-pill);
-        font-size: var(--font-size-sm);
-        font-weight: 600;
-    }
-    .dora-your-prices__verdict.is-above {
-        background: var(--semantic-warning-soft);
-        color: var(--text-primary);
-    }
-    .dora-your-prices__verdict.is-usual {
-        background: var(--semantic-positive-soft);
-        color: var(--text-primary);
     }
     .dora-your-prices__meta {
         flex: 1 1 100%;

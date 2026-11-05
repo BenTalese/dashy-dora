@@ -379,6 +379,13 @@ def test__dashboard_layout__set_and_clear(api):
     assert cleared.status_code == 200, cleared.text
     assert cleared.json()["dashboard_layout"] is None
 
+    # Reports keeps its own layout beside it, untouched by the dashboard's (FU-832).
+    reports = '{"order":["waste","spend"],"hidden":["kitchen_memory"]}'
+    patched = s.patch(f"{BASE}/me", json={"reports_layout": reports})
+    assert patched.status_code == 200, patched.text
+    assert patched.json()["reports_layout"] == reports
+    assert patched.json()["dashboard_layout"] is None
+
 
 def test__login__OverRateLimit__Returns429WithRetryAfter(api):
     # Start from empty buckets so the burst below is the only traffic counted.

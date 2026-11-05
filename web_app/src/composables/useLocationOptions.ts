@@ -24,8 +24,13 @@ export function locationPathOptions(tree: ReadList<TreeNode>): LocationOption[] 
     return out.sort((a, b) => a.label.localeCompare(b.label));
 }
 
-export function useLocationOptions(tree: () => ReadList<TreeNode>) {
-    const allLocationOptions = computed(() => locationPathOptions(tree()));
+/** `leading` options sit above the tree's paths (the stock filter's "Not
+ *  stored anywhere"); pickers that assign a location pass none. */
+export function useLocationOptions(
+    tree: () => ReadList<TreeNode>,
+    leading: readonly LocationOption[] = [],
+) {
+    const allLocationOptions = computed(() => [...leading, ...locationPathOptions(tree())]);
     // The bound list narrows on type and resets to the full set when the
     // query is cleared.
     const locationOptions = ref<LocationOption[]>([]);

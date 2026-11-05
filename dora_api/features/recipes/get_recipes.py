@@ -61,6 +61,7 @@ from dora_api.features.stock_items.inference_overlay import (
 from dora_api.features.routers import RECIPE_ROUTER
 from dora_api.infrastructure.api_response import bad_request, not_found, ok, paginated
 from dora_api.infrastructure.query_options import (InvalidQueryParameter,
+                                                   QueryOptions,
                                                    parse_query_options)
 from dora_api.persistence.field import EntityField
 from dora_api.persistence.page import Page
@@ -1525,6 +1526,22 @@ class GetRecipesHandler:
         items = self._hydrate_inference(items)
         items = self._hydrate_estimated_cost(items)
         return dataclasses.replace(page, items=items)
+
+    def handle_candidates(self, limit: int) -> list[RecipeDto]:
+        """Every recipe for the planners that score the whole cookbook at once
+        (build my week, rail suggestions, budget and lighter swaps). FU-935:
+        they ran all ten passes above to read the fields `from_entity` already
+        sets plus two passes' worth: the plan counts and staleness
+        (`_hydrate_unallocated`) and the kcal figure (`_hydrate_nutrition`).
+        Same base query and the same two passes, so the cookbook and the
+        planners can't disagree about a recipe; cost they each price
+        themselves with `estimate_costs_for`."""
+        page = self._base_query().paginate(
+            QueryOptions(page=1, limit=limit), RecipeDto.from_entity, field_map=_FIELD_MAP,
+        )
+        items = self._hydrate_unallocated(page.items)
+        items = self._hydrate_nutrition(items)
+        return items
 
     def handle_by_id(self, recipe_id: UUID) -> RecipeDto | None:
         entity = self._base_query().by_id(recipe_id)

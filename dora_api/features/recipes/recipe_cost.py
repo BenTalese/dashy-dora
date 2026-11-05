@@ -382,9 +382,9 @@ def _price_line(
             return converted * price.amount, None
         return None, _measured_gap(ing_def, price)
 
-    # "1 pack" is the whole pack, not one item from it (QA2-18): a 12-egg
-    # carton at $6.00 is $6.00 a pack and $0.50 an egg.
-    if (ing_def is not None and ing_def.canonical == units.WHOLE_PACK_UNIT
+    # "1 pack" (or packet, box, carton) is the whole pack, not one item from
+    # it (QA2-18): a 12-egg carton at $6.00 is $6.00 a pack and $0.50 an egg.
+    if (ing_def is not None and ing_def.canonical in units.WHOLE_PACK_UNITS
             and price.whole_pack_amount is not None):
         return qty * price.whole_pack_amount, None
 

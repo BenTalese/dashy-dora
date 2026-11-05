@@ -204,10 +204,8 @@ export const useStockItemStore = defineStore('stockItem', () => {
         try {
             result = await stockItemApiService.updateAsync(stockItemToUpdate);
         } catch (err) {
-            // Revert here rather than via the global rollback registry: most
-            // callers catch the rejection themselves, so a registry-only undo
-            // would never run. Re-look-up by id — the array may have changed
-            // during the await.
+            // Revert here, in place. Re-look-up by id — the array may have
+            // changed during the await.
             const current = stockItems.value[findIndex()];
             if (current) Object.assign(current, original);
             throw err;

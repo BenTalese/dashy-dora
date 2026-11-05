@@ -65,6 +65,7 @@
     import { useRoute } from 'vue-router';
     import AuthApiService, { } from 'src/services/api/authApiService';
     import { NormalisedApiError } from 'src/services/api/axiosHttpClient';
+    import { isAlreadyNotified } from 'src/services/errorHandling/apiErrorHandler';
 
     const $q = useQuasar();
     const route = useRoute();
@@ -90,13 +91,17 @@
                 if (fieldMsg) {
                     fieldError.value = fieldMsg;
                 } else {
-                    $q.notify({
-                        type: 'negative',
-                        message: err.message || 'Reset failed.',
-                    });
+                    if (!isAlreadyNotified(err)) {
+                        $q.notify({
+                            type: 'negative',
+                            message: err.message || 'Reset failed.',
+                        });
+                    }
                 }
             } else {
-                $q.notify({ type: 'negative', message: String(err) });
+                if (!isAlreadyNotified(err)) {
+                    $q.notify({ type: 'negative', message: String(err) });
+                }
             }
         } finally {
             submitting.value = false;

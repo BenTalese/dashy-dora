@@ -32,6 +32,19 @@ from dora_api.infrastructure.ports import Repository
 BACKUP_SCHEMA_VERSION = 1
 
 
+def schema_version_error(version: Any) -> str | None:
+    """Why a backup's `schema_version` can't be read here, or None. One check
+    for inspect and restore (FU-948 (1))."""
+    if not isinstance(version, int):
+        return "Backup is missing 'schema_version'."
+    if version > BACKUP_SCHEMA_VERSION:
+        return (
+            f"Backup schema_version {version} is newer than this server supports "
+            f"({BACKUP_SCHEMA_VERSION})."
+        )
+    return None
+
+
 def resolve_selected_sections(
     requested: list[str] | None,
 ) -> tuple[frozenset[str] | None, str | None]:

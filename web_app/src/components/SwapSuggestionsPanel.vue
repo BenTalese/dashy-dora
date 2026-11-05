@@ -150,7 +150,7 @@
     import { formatDate as formatLocaleDate } from 'src/composables/useDateFormat';
     import { formatMoney } from 'src/composables/useMoney';
     import { useMoneyEnabled } from 'src/composables/useMoneyEnabled';
-    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+    import { isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import BaseButton from 'src/components/BaseButton.vue';
     import MealPlanApiService, {
         type RecipeSwapCandidate,
@@ -233,10 +233,12 @@
             emit('changed');
             await load();
         } catch (err) {
-            $q.notify({
-                type: 'negative', 
-                message: 'Could not apply the swap.', caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative', 
+                    message: 'Could not apply the swap.', caption: toastCaption(err),
+                });
+            }
         } finally {
             busy.value = false;
         }
@@ -252,10 +254,12 @@
             emit('changed');
             await load();
         } catch (err) {
-            $q.notify({
-                type: 'negative', 
-                message: 'Could not undo the swap.', caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative', 
+                    message: 'Could not undo the swap.', caption: toastCaption(err),
+                });
+            }
         } finally {
             busy.value = false;
         }
@@ -300,7 +304,7 @@
         outline: 2px solid var(--brand-primary);
         outline-offset: -2px;
     }
-    .swap-panel__warn { color: var(--semantic-warning); }
+    .swap-panel__warn { color: var(--semantic-warning-ink); }
     .swap-panel__headline {
         flex: 1 1 auto;
         font-size: var(--font-size-md);

@@ -8,7 +8,6 @@
     <TaxonomyManagerPage
         title="Stock groups"
         description="Tag your stock items so they're easier to filter on the overview."
-        :icon="ICONS.tag_multiple"
         noun="stock group"
         noun-plural="stock groups"
         usage-label="item"
@@ -22,7 +21,6 @@
 </template>
 
 <script lang="ts" setup>
-    import { ICONS } from 'src/style/icons';
     import TaxonomyManagerPage, { type VocabItem } from 'src/components/settings/TaxonomyManagerPage.vue';
     import { useStockGroupStore } from 'src/stores/stockGroupStore';
 

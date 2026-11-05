@@ -11,6 +11,7 @@
                  (R-055), so the rail wears it too. -->
             <div class="rn__sechead">
                 <h2 class="rn__sectitle" id="rnIng">Ingredients</h2>
+                <HelpHint topic="Ingredients and the pantry" />
                 <span class="rn__seccount">{{ form.ingredients.length }}</span>
                 <BaseButton
                     class="rn__secedit"
@@ -305,6 +306,7 @@
 </template>
 
 <script lang="ts" setup>
+    import HelpHint from 'src/components/help/HelpHint.vue';
     /**
      * The recipe page's ingredient rail: the list, grouped into section
      * cards, with one pencil that flips it between reading (tap a row to

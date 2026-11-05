@@ -79,7 +79,7 @@
     import { useQuickAdd } from 'src/composables/useQuickAdd';
     import { useShoppingListActions } from 'src/composables/useShoppingListActions';
     import { useStockItemActions } from 'src/composables/useStockItemActions';
-    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+    import { isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { useQuasar } from 'quasar';
     import type { StockItem } from 'src/models/stockItem';
     import ShoppingListApiService, {
@@ -245,11 +245,13 @@
         try {
             await Promise.all(loads);
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: "Couldn't load your items and lists.",
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: "Couldn't load your items and lists.",
+                    caption: toastCaption(err),
+                });
+            }
             return;
         }
 

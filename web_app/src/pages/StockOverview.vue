@@ -204,7 +204,7 @@
                  row scrolls horizontally (`FilterRow`) instead of
                  wrapping to four lines — an open filter panel used to eat
                  half the screen.
-                 The (?) info icons that trailed Expiring soon / Essential /
+                 The (?) info icons that trailed Use soon / Essential /
                  Open are gone: each chip says what it does,
                  and the tooltips were repeating the label back at the user.
                  The one genuinely non-obvious rule — what the row colours
@@ -217,8 +217,8 @@
                     Needs attention
                 </FilterChip>
 
-                <FilterChip v-model="filters.expiringSoonOnly.value" :icon="ICONS.expiry" active-color="warning">
-                    Expiring soon
+                <FilterChip v-model="filters.useSoonOnly.value" :icon="ICONS.expiry" active-color="warning">
+                    Use soon
                 </FilterChip>
 
                 <FilterChip v-model="filters.essentialsOnly.value" :icon="ICONS.flag" active-color="secondary">
@@ -226,7 +226,7 @@
                 </FilterChip>
 
                 <FilterChip v-model="filters.openOnly.value" :icon="ICONS.lock_open" active-color="secondary">
-                    Open / in-use
+                    Opened
                 </FilterChip>
 
                 <!-- The "Needs check" chip was retired 2026-08-21 (owner call).
@@ -560,10 +560,11 @@
             <template #after>
                 <div v-if="peekId" class="stock-peek">
                     <StockItemDetailPage
+                        ref="peekPage"
                         :id-override="peekId"
                         embedded
-                        @close="peekId = null"
-                        @open-detail="peekId = $event"
+                        @close="void setPeek(null)"
+                        @open-detail="void setPeek($event)"
                     />
                 </div>
             </template>
@@ -580,7 +581,7 @@
         <BulkMoveLocationDialog
             v-model="moveDialogOpen"
             :count="bulkSelection.size"
-            :location-options="filters.allLocationOptions.value"
+            :location-options="filters.moveTargetOptions.value"
             :busy="bulkBusy"
             @confirm="bulkMove"
         />
@@ -915,6 +916,15 @@
     // the list side). Drag-range clamped to [40, 70] while peeking,
     // [40, 100] when closed (so the list can take the full width).
     const peekId = ref<string | null>(null);
+    const peekPage = ref<{ confirmLeave: () => Promise<boolean> } | null>(null);
+
+    /** FU-932: swapping or closing the peek replaces the page's subject
+     *  without a route change, so the unsaved-draft prompt is asked here. */
+    async function setPeek(stockItemId: string | null) {
+        if (stockItemId === peekId.value) return;
+        if (peekPage.value && !(await peekPage.value.confirmLeave())) return;
+        peekId.value = stockItemId;
+    }
     const splitPct = ref(100);
     const splitterLimits = computed<[number, number]>(() =>
         peekId.value ? [40, 70] : [40, 100],
@@ -939,7 +949,7 @@
             void router.push(`/stock/${stockItemId}`);
             return;
         }
-        peekId.value = peekId.value === stockItemId ? null : stockItemId;
+        void setPeek(peekId.value === stockItemId ? null : stockItemId);
     }
 
     // L72 — long-press on a stock row (mobile) enters bulk-select with
@@ -1108,7 +1118,7 @@
         }
         // The Dora Score freshness action narrows to expiring-soon / expired.
         if (isTruthyFlag(q.expiring)) {
-            filters.expiringSoonOnly.value = true;
+            filters.useSoonOnly.value = true;
         }
         const next = { ...q };
         DEEP_LINK_FILTER_KEYS.forEach((key) => delete next[key]);

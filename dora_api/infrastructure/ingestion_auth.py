@@ -15,11 +15,11 @@ import secrets
 from datetime import datetime, timezone
 
 from flask import request
-from sqlalchemy import select
 
 from dora_api.infrastructure.api_response import unauthorized
-from dora_api.app import db
 from dora_api.domain.entities.ingestion_source import IngestionSource
+from dora_api.persistence.field import EntityField
+from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 
 
 def hash_ingestion_key(raw: str) -> str:
@@ -41,14 +41,13 @@ def find_ingestion_source(raw_key: str) -> IngestionSource | None:
     """
     if not raw_key:
         return None
-    table = db.metadata.tables["IngestionSource"]
     candidate_hash = hash_ingestion_key(raw_key)
-    rows = db.session.execute(
-        select(table).where(table.c.enabled.is_(True))
-    ).mappings().all()
-    for row in rows:
-        if hmac.compare_digest(row["key_hash"], candidate_hash):
-            return db.session.get(IngestionSource, row["id"])
+    sources = SqlAlchemyRepository().get(IngestionSource).all(
+        EntityField(IngestionSource, IngestionSource.Fields.ENABLED).eq(True)
+    )
+    for source in sources:
+        if hmac.compare_digest(source.key_hash, candidate_hash):
+            return source
     return None
 
 

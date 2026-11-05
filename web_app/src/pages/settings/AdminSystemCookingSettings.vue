@@ -3,7 +3,6 @@
         <SettingsPageHeader
             title="Cooking"
             description="How many people you usually cook for, and whether the meal planner shows batch-cooking tools. Shared by everyone."
-            :icon="ICONS.restaurant"
         />
 
         <template v-if="ready">
@@ -50,6 +49,7 @@
 
                 <SettingsRow label="Cooking style">
                     <BaseSegmented
+                        aria-label="Cooking style"
                         :model-value="draft.batch_features_enabled ? 'batch' : 'fresh'"
                         :options="cookingStyleOptions"
                         @update:model-value="onCookingStyleChange"
@@ -61,7 +61,6 @@
 </template>
 
 <script lang="ts" setup>
-    import { ICONS } from 'src/style/icons';
     import { useAppSettingDrafts } from 'src/composables/useAppSettingDrafts';
     import SettingsSection from 'src/components/settings/SettingsSection.vue';
     import SettingsRow from 'src/components/settings/SettingsRow.vue';

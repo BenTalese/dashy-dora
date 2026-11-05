@@ -35,6 +35,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # still runs and falls back to the browser voice.
 RUN pip install --no-cache-dir piper-tts==1.2.0
 
+# Whisper speech-to-text, the input-side twin of Piper (FU-788): lets browsers
+# with no Web Speech API (Firefox) talk to Dora. Same optional shape: not in
+# requirements.txt, and the model downloads on demand from Settings → Voice.
+RUN pip install --no-cache-dir faster-whisper==1.2.1
+
 # ── Frontend deps. Critical: install inside /app/web_app so `quasar build`
 #    can find node_modules there. We copy the WHOLE frontend project (not just
 #    package*.json) before `npm install` because @quasar/app-vite runs

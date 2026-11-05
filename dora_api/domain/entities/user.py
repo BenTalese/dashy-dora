@@ -275,6 +275,10 @@ class User(BaseEntity):
     # presentation belongs to the client) — we persist it verbatim so it
     # survives a cache clear and follows the user across devices.
     dashboard_layout: str | None = None
+    # The Reports page's card order + hidden set, same shape and same opacity
+    # as `dashboard_layout` (FU-832). Its own column so the two surfaces'
+    # layouts can never collide.
+    reports_layout: str | None = None
     # per-user assistant config. `llm_enabled` is the user's own opt-in and
     # the sole gate on AI mode — there is no install-wide master switch
     # (removed 2026-08-12). `llm_provider` names the *active* provider
@@ -349,6 +353,7 @@ class User(BaseEntity):
         INFERENCE_MEAL_PLAN_ENABLED = "inference_meal_plan_enabled"
         IMAGE = "image"
         DASHBOARD_LAYOUT = "dashboard_layout"
+        REPORTS_LAYOUT = "reports_layout"
         LLM_ENABLED = "llm_enabled"
         LLM_PROVIDER = "llm_provider"
         SHOW_ASSISTANT = "show_assistant"

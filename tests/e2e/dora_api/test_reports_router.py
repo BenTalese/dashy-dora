@@ -197,18 +197,43 @@ def test__most_bought_items__UntickedLineOnArchivedList__DoesNotCount(api):
 #region ---------------- savings captured ----------------
 
 
-def test__savings_captured__PickedBelowRrpSnapshot__SavingsIsDelta(api):
-    # picked_offer_price=4.5 / list_price_at_pick=10.5 snapshotted at add time.
-    seeded = seed_purchase(price_now=4.5, price_was=10.5)
+def _savings() -> dict:
+    return requests.get(f"{REPORTS}/savings-captured", params={"range": "all"}).json()
 
-    body = requests.get(
-        f"{REPORTS}/savings-captured", params={"range": "all"},
-    ).json()
 
-    assert set(body.keys()) == {"total_savings", "total_spent", "range"}
-    assert seeded["shopping_list_id"]
-    assert body["total_savings"] >= 6.0
-    assert body["total_spent"] >= 4.5
+def test__savings_captured__Shape__NamesItsBaseline(api):
+    body = _savings()
+    assert set(body.keys()) == {
+        "total_spent", "savings_vs_usual_price", "counted", "total", "range",
+    }
+
+
+def test__savings_captured__BelowYourUsualPrice__CountsTheDifference(api):
+    """FU-831: three shops at $5 a litre make $5 the usual price, frozen onto
+    the fourth line at finish; paying $3 there saves $2 against it."""
+    first = seed_purchase(price_now=5.0, price_was=9.0)
+    for _ in range(2):
+        seed_purchase(price_now=5.0, price_was=9.0, stock_item_id=first["stock_item_id"])
+    before = _savings()
+
+    seed_purchase(price_now=3.0, price_was=9.0, stock_item_id=first["stock_item_id"])
+    after = _savings()
+
+    assert after["savings_vs_usual_price"] - before["savings_vs_usual_price"] == pytest.approx(2.0)
+    assert after["counted"] - before["counted"] == 1
+    assert after["total"] - before["total"] == 1
+
+
+def test__savings_captured__NoPriceHistory__IsAGapNotAZero(api):
+    """R-041: a first purchase has no usual price; it counts toward the
+    total but not the covered lines, and adds nothing to the figure."""
+    before = _savings()
+    seed_purchase(price_now=4.0, price_was=9.0)
+    after = _savings()
+
+    assert after["total"] - before["total"] == 1
+    assert after["counted"] == before["counted"]
+    assert after["savings_vs_usual_price"] == pytest.approx(before["savings_vs_usual_price"])
 
 
 #endregion savings captured

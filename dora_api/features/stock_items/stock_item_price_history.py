@@ -51,7 +51,9 @@ class StockItemPriceHistoryDto:
     baseline_unit: str | None
     current: float | None
     above_baseline: bool
+    below_baseline: bool
     sample_count: int
+    rough: bool
     points: list[StockItemPriceHistoryPointDto]
 
 
@@ -77,7 +79,9 @@ class StockItemPriceHistoryHandler:
             baseline_unit=yp.baseline_unit,
             current=yp.current,
             above_baseline=yp.above_baseline,
+            below_baseline=yp.below_baseline,
             sample_count=yp.sample_count,
+            rough=yp.rough,
             points=[
                 StockItemPriceHistoryPointDto(
                     observed_at=p.observed_at,

@@ -31,7 +31,7 @@ import ShoppingListApiService, {
     type TrimToBudgetResult,
 } from 'src/services/api/shoppingListApiService';
 import { useShoppingListStore } from 'src/stores/shoppingListStore';
-import { describeApiError, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+import { describeApiError, isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
 
 function createShoppingListDetail() {
     const route = useRoute();
@@ -171,10 +171,12 @@ function createShoppingListDetail() {
             applyTrimResult(result);
             trimState.state = 'previewed';
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: describeApiError(err) ?? 'Could not preview the trim.',
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: describeApiError(err) ?? 'Could not preview the trim.',
+                });
+            }
         } finally {
             trimState.busy = false;
         }
@@ -198,10 +200,12 @@ function createShoppingListDetail() {
             // ("still over" fallback vs. done).
             await refreshTrimStatus();
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: describeApiError(err) ?? 'Could not trim to fit.',
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: describeApiError(err) ?? 'Could not trim to fit.',
+                });
+            }
         } finally {
             trimState.busy = false;
         }
@@ -323,11 +327,13 @@ function createShoppingListDetail() {
             await api.updateLineAsync(listId.value, line.line_id, { quantity: next });
         } catch (err) {
             line.quantity = previous;
-            $q.notify({
-                type: 'negative',
-                message: 'Could not update quantity.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not update quantity.',
+                    caption: toastCaption(err),
+                });
+            }
         }
     }
 
@@ -341,10 +347,17 @@ function createShoppingListDetail() {
         if (receiptFace.value) await refreshDetailQuietly();
     }
 
+    // In-flight row actions on the plan face, kept here rather than in the
+    // face so a face switch mid-save doesn't re-enable the button (FU-981 (13)).
+    const addingBackLineIds = ref<Set<string>>(new Set());
+    const addingSuggestionId = ref<string | null>(null);
+
     return {
         api,
         listId,
         detail,
+        addingBackLineIds,
+        addingSuggestionId,
         planFace,
         runFace,
         receiptFace,

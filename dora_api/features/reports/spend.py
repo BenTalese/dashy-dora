@@ -7,13 +7,13 @@ budget agree on a total (finalisation 12-R10). Money endpoints refuse when the
 install has money off (R-058, FU-816).
 
   GET /api/reports/spend-by-store?range=...
-  GET /api/reports/savings-captured?range=...
+  GET /api/reports/savings-captured?range=...  (spend + savings vs your usual price)
   GET /api/reports/spend-by-category?range=...
   GET /api/reports/spend-year-over-year?range=...   (bounded ranges only)
 """
 
 from dataclasses import asdict, dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from typing import Dict, List
 from uuid import UUID
 
@@ -24,6 +24,7 @@ from dora_api.domain.entities.store import Store
 from dora_api.domain.entities.product import Product
 from dora_api.domain.entities.stock_item import StockItem
 from dora_api.features.shopping_lists._line_price import resolve_store_id, spend_lines
+from dora_api.features._ranges import range_start
 from dora_api.features.routers import REPORTS_ROUTER
 from dora_api.infrastructure.api_response import bad_request, forbidden, ok
 from dora_api.persistence.field import EntityField
@@ -191,45 +192,40 @@ def spend_by_store():
 # ───── 6. Savings captured ────────────────────────────────────────────────
 
 class SavingsCapturedHandler:
-    """Aggregate savings = list_price_at_pick − what the user actually paid,
-    per archived list with snapshot data.
+    """What the household spent, and how that compares with what it usually
+    pays (FU-831 / ADR-068): the retrospective saving is measured against the
+    household's own usual price for each item, frozen on the line at finish
+    (`usual_price_at_pick`), not the shop's shelf price. Paying more than usual
+    makes it negative; the figure says so rather than hiding it.
 
-    The paid side was `picked_offer_price` — the chosen offer's price, frozen
-    at finish — until 2026-09-17, when offers stopped setting prices anywhere
-    in the app. It reads `actual_unit_price` now, which means this report says
-    something stronger than it used to: a saving is measured against a price
-    the user typed, not against another number the shop supplied. Lines with no
-    entered price contribute nothing here, exactly as they contribute nothing
-    to spend-by-store. Legacy rows keep their old snapshot and still count,
-    which is why the paid side coalesces rather than switching outright."""
+    R-041: a line whose item had too little history for a usual price has no
+    baseline, which is a gap, not a zero. ``counted`` of ``total`` priced lines
+    carry one, and the card states that coverage beside the figure. Lines with
+    no entered price count toward neither, as they count toward no spend."""
 
     def __init__(self, repository: Repository) -> None:
         self.repository = repository
 
     def handle(self, since: datetime | None) -> dict:
-        picked_by_list: Dict[UUID, float] = {}
-        list_total_by_list: Dict[UUID, float] = {}
+        total_spent = 0.0
+        savings = 0.0
+        counted = 0
+        total = 0
         for line in spend_lines(self.repository.session, since):
             if line.unit_price is None or line.quantity <= 0:
                 continue
-            lst_id = line.shopping_list_id
-            picked_by_list[lst_id] = picked_by_list.get(lst_id, 0.0) + line.spent
-            # When the RRP snapshot is missing the list price falls back
-            # to the paid price (so this line contributes 0 savings,
-            # not negative).
-            rrp = line.list_price_at_pick if line.list_price_at_pick is not None else line.unit_price
-            list_total_by_list[lst_id] = list_total_by_list.get(lst_id, 0.0) + rrp * line.quantity
-        # Per list, then summed: a list whose paid total rounds to nothing
-        # adds no savings. The per-list breakdown had no reader (FU-947).
-        total_savings = 0.0
-        total_spent = 0.0
-        for list_id, picked in picked_by_list.items():
-            picked_total = round(picked, 2)
-            if picked_total == 0.0:
+            total += 1
+            total_spent += line.spent
+            if line.usual_price_at_pick is None:
                 continue
-            total_savings += round(list_total_by_list.get(list_id, 0.0), 2) - picked_total
-            total_spent += picked_total
-        return {"total_savings": round(total_savings, 2), "total_spent": round(total_spent, 2)}
+            counted += 1
+            savings += (line.usual_price_at_pick - line.unit_price) * line.quantity
+        return {
+            "total_spent": round(total_spent, 2),
+            "savings_vs_usual_price": round(savings, 2),
+            "counted": counted,
+            "total": total,
+        }
 
 
 @REPORTS_ROUTER.route("/savings-captured", methods=["GET"])
@@ -416,11 +412,13 @@ def spend_year_over_year():
     days = range_days(raw)
     if days is None:
         return bad_request("range=all is not supported for spend-year-over-year. Pick a bounded window.")
-    now = datetime.now(timezone.utc)
-    current_since = now - timedelta(days=days)
-    previous_since = now - timedelta(days=days * 2)
+    # Both windows start at household midnight, like every other spend
+    # window (12-R3; FU-947 (4)).
+    repository = SqlAlchemyRepository()
+    current_since = range_start(days, repository)
+    previous_since = range_start(days * 2, repository)
     previous_until = current_since
-    payload = SpendYoYHandler(SqlAlchemyRepository()).handle(
+    payload = SpendYoYHandler(repository).handle(
         current_since, previous_since, previous_until,
     )
     return ok({

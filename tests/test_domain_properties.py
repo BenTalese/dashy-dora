@@ -10,7 +10,9 @@ float round-trips) that examples miss.
 Determinism: no wall-clock reads anywhere — the datetime strategy is bounded
 to a pinned 2024–2026 window and values are only compared among themselves.
 All strategies are bounded (small pools / bounded floats) so shrinking stays
-fast; default Hypothesis profile, no deadline overrides.
+fast. No per-example deadline (FU-781 / FU-926): these are pure functions, and
+the default 200ms wall-clock limit only ever tripped under a loaded full-suite
+run, where it failed a property that holds and then passed on the rerun.
 
 Pure Python: imports only ``dora_api.domain.*``, stdlib, and hypothesis —
 no DB, no HTTP, no Flask app.
@@ -22,7 +24,7 @@ from datetime import datetime
 from types import SimpleNamespace
 
 import pytest
-from hypothesis import assume, given
+from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
 from dora_api.domain import units
@@ -39,6 +41,10 @@ from dora_api.domain.stock_status import (EXPIRING_SOON_WINDOW_DAYS,
                                           is_low_stock, is_missing,
                                           is_out_of_stock, level_for_status,
                                           needs_restock, status_for)
+
+# No per-example deadline; see the module docstring (FU-781 / FU-926).
+settings.register_profile("dora_properties", deadline=None)
+settings.load_profile("dora_properties")
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Shared strategies — duck-typed stubs mirroring the entity shapes the domain
@@ -340,12 +346,17 @@ def test__discount_percent__property__defined_iff_genuinely_cheaper(now, was):
     assert (result is not None) == (now < was)
 
 
-@given(_positive_prices, _positive_prices, _positive_prices)
-def test__discount_percent__property__lower_price_never_ranks_worse(now_a, now_b, was):
+_below_one = st.floats(min_value=0.01, max_value=0.99, allow_nan=False)
+
+
+@given(_positive_prices, _below_one, _below_one)
+def test__discount_percent__property__lower_price_never_ranks_worse(was, frac_a, frac_b):
     """Monotone in price_now: against the same RRP, the cheaper offer's
-    discount percent is never smaller — the best-deals ranking can't invert."""
-    assume(now_a < was and now_b < was)
-    lo, hi = sorted((now_a, now_b))
+    discount percent is never smaller — the best-deals ranking can't invert.
+    Both prices are built below `was` rather than filtered to it (FU-781: the
+    old `assume` discarded about five inputs in six, near Hypothesis's
+    filter-too-much health check)."""
+    lo, hi = sorted((was * frac_a, was * frac_b))
     assert discount_percent(lo, was) >= discount_percent(hi, was)
 
 

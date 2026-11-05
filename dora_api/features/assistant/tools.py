@@ -1364,6 +1364,17 @@ def convert_measurement(args: dict) -> list[dict]:
     if not src or not dst:
         return [{"error": f"unknown unit(s): {from_unit!r} or {to_unit!r}"}]
 
+    # A food-specific unit ("stick" is 113 g of butter, nothing else) only
+    # converts for a food it belongs to; for anything else the honest answer
+    # is to ask (FU-900), the same guard recipe costing and nutrition use.
+    for unit in (from_unit, to_unit):
+        if not _units.food_specific_mass_applies(unit, ingredient):
+            record = _units.food_specific_mass(unit)
+            return [{
+                "error": f"a {unit} is only a fixed weight for {', '.join(sorted(record.owners))}; "
+                         f"say which food to convert",
+            }]
+
     # Same dimension: linear conversion via the domain helper.
     if src.dimension == dst.dimension:
         result = _units.convert(amount, from_unit, to_unit)

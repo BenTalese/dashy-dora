@@ -28,7 +28,7 @@
     color: var(--text-secondary);
 }
 .dora-signal-card.is-positive .dora-signal-card__icon { color: var(--semantic-positive); }
-.dora-signal-card.is-warning .dora-signal-card__icon { color: var(--semantic-warning); }
+.dora-signal-card.is-warning .dora-signal-card__icon { color: var(--semantic-warning-ink); }
 .dora-signal-card.is-negative .dora-signal-card__icon { color: var(--semantic-negative); }
 /* D-004: the summary row is the tap target that opens the card. */
 .dora-signal-card__summary {

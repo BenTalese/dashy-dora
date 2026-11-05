@@ -1,164 +1,175 @@
-# name: Release
+name: Release
 
-# # D4 — manual release. NEVER runs automatically. You trigger it from
-# # the GitHub Actions UI (Actions → Release → Run workflow) and supply
-# # a version string like `v0.3.0`.
-# #
-# # What it does:
-# #   1. Validates the version is a clean `vMAJOR.MINOR.PATCH` (optional
-# #      pre-release suffix accepted: `v0.3.0-rc.1`).
-# #   2. Builds the monolithic Docker image (multi-arch: linux/amd64).
-# #   3. Pushes to ghcr.io tagged BOTH `vX.Y.Z` AND `latest` so
-# #      pin-this-version deploys + self-hosters tracking latest both
-# #      work.
-# #   4. Cuts a GitHub Release with the matching tag and auto-generated
-# #      release notes — the [Unreleased] section of CHANGELOG.md gets
-# #      pulled into the body.
-# #
-# # Required permissions:
-# #   - contents: write   → create the git tag + GitHub Release
-# #   - packages: write   → push to ghcr.io
+# D4 — manual release. NEVER runs automatically. You trigger it from
+# the GitHub Actions UI (Actions → Release → Run workflow) and supply
+# a version string like `v0.3.0`.
+#
+# What it does:
+#   1. Validates the version is a clean `vMAJOR.MINOR.PATCH` (optional
+#      pre-release suffix accepted: `v0.3.0-rc.1`).
+#   2. Builds the monolithic Docker image (multi-arch: linux/amd64).
+#   3. Pushes to ghcr.io tagged BOTH `vX.Y.Z` AND `latest` so
+#      pin-this-version deploys + self-hosters tracking latest both
+#      work.
+#   4. Cuts a GitHub Release with the matching tag and auto-generated
+#      release notes — the [Unreleased] section of CHANGELOG.md gets
+#      pulled into the body.
+#
+# Required permissions:
+#   - contents: write   → create the git tag + GitHub Release
+#   - packages: write   → push to ghcr.io
 
-# on:
-#     workflow_dispatch:
-#         inputs:
-#             version:
-#                 description: "Release version (e.g. v0.3.0). Must match v<major>.<minor>.<patch>[-<pre>]."
-#                 required: true
-#                 type: string
-#             dry_run:
-#                 description: "Build + tag but don't push to ghcr.io or create the GitHub Release."
-#                 required: false
-#                 default: false
-#                 type: boolean
+on:
+    workflow_dispatch:
+        inputs:
+            version:
+                description: "Release version (e.g. v0.3.0). Must match v<major>.<minor>.<patch>[-<pre>]."
+                required: true
+                type: string
+            dry_run:
+                description: "Build + tag but don't push to ghcr.io or create the GitHub Release."
+                required: false
+                default: false
+                type: boolean
 
-# permissions:
-#     contents: write
-#     packages: write
+permissions:
+    contents: write
+    packages: write
 
-# concurrency:
-#     # One release at a time. Newer triggers wait rather than cancel
-#     # so we don't half-publish an image.
-#     group: release-${{ github.workflow }}
-#     cancel-in-progress: false
+concurrency:
+    # One release at a time. Newer triggers wait rather than cancel
+    # so we don't half-publish an image.
+    group: release-${{ github.workflow }}
+    cancel-in-progress: false
 
-# jobs:
-#     release:
-#         name: Build + publish ${{ inputs.version }}
-#         runs-on: ubuntu-latest
-#         steps:
-#             - uses: actions/checkout@v4
-#               with:
-#                   fetch-depth: 0
+jobs:
+    release:
+        name: Build + publish ${{ inputs.version }}
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
 
-#             # ── 1. Validate the version input ─────────────────────────
-#             # Reject anything that isn't `vMAJOR.MINOR.PATCH` (with
-#             # optional pre-release suffix). Catches typos before we do
-#             # any work that costs time.
-#             - name: Validate version
-#               id: version
-#               run: |
-#                   set -e
-#                   VERSION="${{ inputs.version }}"
-#                   if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]]; then
-#                       echo "::error::Version '$VERSION' isn't a clean vX.Y.Z. Use e.g. v0.3.0 or v0.3.0-rc.1."
-#                       exit 1
-#                   fi
-#                   # Lowercase the image name (ghcr is case-sensitive).
-#                   IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}"
-#                   echo "version=$VERSION" >> $GITHUB_OUTPUT
-#                   echo "image=$IMAGE" >> $GITHUB_OUTPUT
-#                   echo "Releasing $IMAGE:$VERSION"
+            # ── 1. Validate the version input ─────────────────────────
+            # Reject anything that isn't `vMAJOR.MINOR.PATCH` (with
+            # optional pre-release suffix). Catches typos before we do
+            # any work that costs time.
+            - name: Validate version
+              id: version
+              run: |
+                  set -e
+                  VERSION="${{ inputs.version }}"
+                  if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]]; then
+                      echo "::error::Version '$VERSION' isn't a clean vX.Y.Z. Use e.g. v0.3.0 or v0.3.0-rc.1."
+                      exit 1
+                  fi
+                  # Lowercase the image name (ghcr is case-sensitive).
+                  IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}"
+                  echo "version=$VERSION" >> $GITHUB_OUTPUT
+                  echo "image=$IMAGE" >> $GITHUB_OUTPUT
+                  echo "Releasing $IMAGE:$VERSION"
 
-#             # ── 2. Refuse to release a version that's already published ─
-#             - name: Refuse duplicate tag
-#               if: ${{ !inputs.dry_run }}
-#               run: |
-#                   if git rev-parse "refs/tags/${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
-#                       echo "::error::Tag ${{ steps.version.outputs.version }} already exists. Pick a new version."
-#                       exit 1
-#                   fi
+            # ── 2. Refuse to release a version that's already published ─
+            - name: Refuse duplicate tag
+              if: ${{ !inputs.dry_run }}
+              run: |
+                  if git rev-parse "refs/tags/${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+                      echo "::error::Tag ${{ steps.version.outputs.version }} already exists. Pick a new version."
+                      exit 1
+                  fi
 
-#             # ── 3. Docker build setup ────────────────────────────────
-#             - name: Set up Docker Buildx
-#               uses: docker/setup-buildx-action@v3
+            # ── 3. Docker build setup ────────────────────────────────
+            - name: Set up Docker Buildx
+              uses: docker/setup-buildx-action@v3
 
-#             - name: Log in to GHCR
-#               if: ${{ !inputs.dry_run }}
-#               uses: docker/login-action@v3
-#               with:
-#                   registry: ghcr.io
-#                   username: ${{ github.actor }}
-#                   password: ${{ secrets.GITHUB_TOKEN }}
+            - name: Log in to GHCR
+              if: ${{ !inputs.dry_run }}
+              uses: docker/login-action@v3
+              with:
+                  registry: ghcr.io
+                  username: ${{ github.actor }}
+                  password: ${{ secrets.GITHUB_TOKEN }}
 
-#             # ── 4. Build (+ optional push) ───────────────────────────
-#             # Single-platform for now; bump to multi-arch when we have
-#             # a real ARM target. GHA's docker buildx cache keeps repeat
-#             # builds reasonably fast.
-#             - name: Build + push image
-#               uses: docker/build-push-action@v6
-#               with:
-#                   context: .
-#                   file: Dockerfile
-#                   push: ${{ !inputs.dry_run }}
-#                   tags: |
-#                       ${{ steps.version.outputs.image }}:${{ steps.version.outputs.version }}
-#                       ${{ steps.version.outputs.image }}:latest
-#                   cache-from: type=gha
-#                   cache-to: type=gha,mode=max
-#                   labels: |
-#                       org.opencontainers.image.title=DashyDora
-#                       org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-#                       org.opencontainers.image.version=${{ steps.version.outputs.version }}
-#                       org.opencontainers.image.revision=${{ github.sha }}
+            # ── 4. Build (+ optional push) ───────────────────────────
+            # Single-platform for now; bump to multi-arch when we have
+            # a real ARM target. GHA's docker buildx cache keeps repeat
+            # builds reasonably fast.
+            - name: Build + push image
+              uses: docker/build-push-action@v6
+              with:
+                  context: .
+                  file: Dockerfile
+                  push: ${{ !inputs.dry_run }}
+                  tags: |
+                      ${{ steps.version.outputs.image }}:${{ steps.version.outputs.version }}
+                      ${{ steps.version.outputs.image }}:latest
+                  build-args: |
+                      DORA_BUILD_ID=${{ github.sha }}
+                  cache-from: type=gha
+                  cache-to: type=gha,mode=max
+                  labels: |
+                      org.opencontainers.image.title=DashyDora
+                      org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+                      org.opencontainers.image.version=${{ steps.version.outputs.version }}
+                      org.opencontainers.image.revision=${{ github.sha }}
 
-#             # ── 5. Extract the [Unreleased] CHANGELOG section ────────
-#             # Used as the GitHub Release body. We slice from the
-#             # `## [Unreleased]` heading to the next `## ` heading so
-#             # the release notes show whatever you wrote this cycle.
-#             - name: Extract release notes from CHANGELOG
-#               id: notes
-#               run: |
-#                   set -e
-#                   if [ ! -f CHANGELOG.md ]; then
-#                       echo "body=No CHANGELOG.md found." >> $GITHUB_OUTPUT
-#                       exit 0
-#                   fi
-#                   awk '
-#                       /^## \[Unreleased\]/ { in_block=1; next }
-#                       /^## / && in_block   { exit }
-#                       in_block             { print }
-#                   ' CHANGELOG.md > /tmp/release-notes.md
-#                   if [ ! -s /tmp/release-notes.md ]; then
-#                       echo "No [Unreleased] section found; using a stub." > /tmp/release-notes.md
-#                   fi
-#                   {
-#                       echo 'body<<RELEASE_NOTES_EOF'
-#                       cat /tmp/release-notes.md
-#                       echo 'RELEASE_NOTES_EOF'
-#                   } >> $GITHUB_OUTPUT
+            # ── 5. Extract this version's CHANGELOG section ──────────
+            # The release steps rename `## [Unreleased]` to `## [X.Y.Z] - <date>`
+            # before running this, so the notes are that section: from its
+            # heading to the next `## ` heading. Falls back to [Unreleased]
+            # when no section names the version yet.
+            - name: Extract release notes from CHANGELOG
+              id: notes
+              run: |
+                  set -e
+                  if [ ! -f CHANGELOG.md ]; then
+                      echo "body=No CHANGELOG.md found." >> $GITHUB_OUTPUT
+                      exit 0
+                  fi
+                  PLAIN="${{ steps.version.outputs.version }}"
+                  PLAIN="${PLAIN#v}"
+                  extract() {
+                      awk -v head="$1" '
+                          index($0, head) == 1 { in_block=1; next }
+                          /^## / && in_block   { exit }
+                          in_block             { print }
+                      ' CHANGELOG.md
+                  }
+                  extract "## [$PLAIN]" > /tmp/release-notes.md
+                  if [ ! -s /tmp/release-notes.md ]; then
+                      extract "## [Unreleased]" > /tmp/release-notes.md
+                  fi
+                  if [ ! -s /tmp/release-notes.md ]; then
+                      echo "No CHANGELOG section for $PLAIN; using a stub." > /tmp/release-notes.md
+                  fi
+                  {
+                      echo 'body<<RELEASE_NOTES_EOF'
+                      cat /tmp/release-notes.md
+                      echo 'RELEASE_NOTES_EOF'
+                  } >> $GITHUB_OUTPUT
 
-#             # ── 6. Cut the GitHub Release ────────────────────────────
-#             # `softprops/action-gh-release` creates the tag for us, so
-#             # we don't need a separate `git tag && git push` step.
-#             - name: Create GitHub Release
-#               if: ${{ !inputs.dry_run }}
-#               uses: softprops/action-gh-release@v2
-#               with:
-#                   tag_name: ${{ steps.version.outputs.version }}
-#                   name: ${{ steps.version.outputs.version }}
-#                   body: ${{ steps.notes.outputs.body }}
-#                   draft: false
-#                   prerelease: ${{ contains(steps.version.outputs.version, '-') }}
+            # ── 6. Cut the GitHub Release ────────────────────────────
+            # `softprops/action-gh-release` creates the tag for us, so
+            # we don't need a separate `git tag && git push` step.
+            - name: Create GitHub Release
+              if: ${{ !inputs.dry_run }}
+              uses: softprops/action-gh-release@v2
+              with:
+                  tag_name: ${{ steps.version.outputs.version }}
+                  name: ${{ steps.version.outputs.version }}
+                  body: ${{ steps.notes.outputs.body }}
+                  draft: false
+                  prerelease: ${{ contains(steps.version.outputs.version, '-') }}
 
-#             # ── 7. Summary ───────────────────────────────────────────
-#             - name: Summary
-#               run: |
-#                   echo "### Release ${{ steps.version.outputs.version }} ${{ inputs.dry_run && '(DRY RUN)' || '' }}" >> $GITHUB_STEP_SUMMARY
-#                   echo "" >> $GITHUB_STEP_SUMMARY
-#                   echo "Image: \`${{ steps.version.outputs.image }}:${{ steps.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
-#                   if [ "${{ inputs.dry_run }}" = "true" ]; then
-#                       echo "_Dry run — nothing was pushed and no GitHub Release was cut._" >> $GITHUB_STEP_SUMMARY
-#                   else
-#                       echo "Pull with: \`docker pull ${{ steps.version.outputs.image }}:${{ steps.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
-#                   fi
+            # ── 7. Summary ───────────────────────────────────────────
+            - name: Summary
+              run: |
+                  echo "### Release ${{ steps.version.outputs.version }} ${{ inputs.dry_run && '(DRY RUN)' || '' }}" >> $GITHUB_STEP_SUMMARY
+                  echo "" >> $GITHUB_STEP_SUMMARY
+                  echo "Image: \`${{ steps.version.outputs.image }}:${{ steps.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+                  if [ "${{ inputs.dry_run }}" = "true" ]; then
+                      echo "_Dry run — nothing was pushed and no GitHub Release was cut._" >> $GITHUB_STEP_SUMMARY
+                  else
+                      echo "Pull with: \`docker pull ${{ steps.version.outputs.image }}:${{ steps.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+                  fi

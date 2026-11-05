@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from typing import List
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from dora_api.domain.entities.category import Category
 from dora_api.domain.entities.cuisine import Cuisine
@@ -106,6 +106,13 @@ class UpdateRecipeRequest(BaseModel):
     # `data:image/...` data URL or the id of one of this recipe's saved step
     # images (kept, in its new position).
     step_images: List[str] | None = None
+
+    # FU-575: stripped before the length check, as stock-item names are, so
+    # "   " is refused and " Soup " is stored as "Soup".
+    @field_validator("name", mode="before")
+    @classmethod
+    def _strip_name(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
 
 
 @dataclass(slots=True)

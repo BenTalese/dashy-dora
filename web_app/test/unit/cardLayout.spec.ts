@@ -6,14 +6,14 @@
 import { describe, expect, it } from 'vitest';
 
 import { CARD_DEFS } from 'src/helpers/dashboardCards';
-import { defaultOrder, insertMissingAtRegistryPosition, parseLayout } from 'src/helpers/dashboardLayout';
+import { defaultOrder, insertMissingAtRegistryPosition, parseLayout } from 'src/helpers/cardLayout';
 
 const ids = () => CARD_DEFS.map((c) => c.id);
 
 describe('parseLayout', () => {
     it('returns the registry order and default-hidden set with no stored layout', () => {
-        const layout = parseLayout(null);
-        expect(layout.order).toEqual(defaultOrder());
+        const layout = parseLayout(null, CARD_DEFS);
+        expect(layout.order).toEqual(defaultOrder(CARD_DEFS));
         expect(new Set(layout.hidden)).toEqual(
             new Set(CARD_DEFS.filter((c) => c.defaultHidden).map((c) => c.id)),
         );
@@ -26,7 +26,7 @@ describe('parseLayout', () => {
         const missing = all[1]!;
         const saved = all.filter((id) => id !== missing);
 
-        const { order } = parseLayout(JSON.stringify({ order: saved, hidden: [] }));
+        const { order } = parseLayout(JSON.stringify({ order: saved, hidden: [] }), CARD_DEFS);
 
         expect(order).toEqual(all);
         expect(order.indexOf(missing)).toBe(1);
@@ -39,7 +39,7 @@ describe('parseLayout', () => {
         // after the registry card that precedes it.
         const saved = [all[all.length - 1]!, ...all.slice(0, -1).filter((id) => id !== missing)];
 
-        const order = insertMissingAtRegistryPosition([...saved]);
+        const order = insertMissingAtRegistryPosition([...saved], CARD_DEFS);
 
         expect(order.indexOf(missing)).toBe(order.indexOf(all[1]!) + 1);
         expect(order[0]).toBe(all[all.length - 1]);
@@ -48,7 +48,7 @@ describe('parseLayout', () => {
 
     it('puts a missing first registry card at the front', () => {
         const all = ids();
-        const order = insertMissingAtRegistryPosition(all.slice(1));
+        const order = insertMissingAtRegistryPosition(all.slice(1), CARD_DEFS);
         expect(order).toEqual(all);
     });
 
@@ -56,7 +56,7 @@ describe('parseLayout', () => {
         const optIn = CARD_DEFS.find((c) => c.defaultHidden);
         const seen = ids().filter((id) => id !== optIn?.id);
 
-        const layout = parseLayout(JSON.stringify({ order: ['attention', 'calendar', ...seen], hidden: ['savings'] }));
+        const layout = parseLayout(JSON.stringify({ order: ['attention', 'calendar', ...seen], hidden: ['savings'] }), CARD_DEFS);
 
         expect(layout.order).not.toContain('attention');
         expect(layout.hidden).not.toContain('savings');
@@ -64,6 +64,6 @@ describe('parseLayout', () => {
     });
 
     it('falls back to defaults on malformed JSON', () => {
-        expect(parseLayout('{not json').order).toEqual(defaultOrder());
+        expect(parseLayout('{not json', CARD_DEFS).order).toEqual(defaultOrder(CARD_DEFS));
     });
 });

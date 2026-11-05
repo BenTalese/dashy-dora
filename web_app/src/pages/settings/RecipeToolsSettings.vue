@@ -2,7 +2,6 @@
     <TaxonomyManagerPage
         title="Tools"
         description="Kitchen tools recipes can require. Useful for filtering."
-        :icon="ICONS.blender"
         noun="tool"
         noun-plural="tools"
         :load="load"
@@ -13,7 +12,6 @@
 </template>
 
 <script lang="ts" setup>
-    import { ICONS } from 'src/style/icons';
     import TaxonomyManagerPage, { type VocabItem } from 'src/components/settings/TaxonomyManagerPage.vue';
     import ToolApiService from 'src/services/api/toolApiService';
 

@@ -584,7 +584,7 @@
     import type { StockItem } from 'src/models/stockItem';
     import ProductApiService from 'src/services/api/productApiService';
     import StockItemApiService from 'src/services/api/stockItemApiService';
-    import { describeApiError, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+    import { describeApiError, isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { useAuthStore } from 'src/stores/authStore';
     import { useProductStore } from 'src/stores/productStore';
     import { useShoppingListStore } from 'src/stores/shoppingListStore';
@@ -958,11 +958,13 @@
             });
             exitBulkMode();
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not unlink everything.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not unlink everything.',
+                    caption: toastCaption(err),
+                });
+            }
         } finally {
             bulkBusy.value = false;
         }
@@ -992,11 +994,13 @@
             });
             exitBulkMode();
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not update.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not update.',
+                    caption: toastCaption(err),
+                });
+            }
         } finally {
             bulkBusy.value = false;
         }
@@ -1024,11 +1028,13 @@
                 type: 'positive', message: 'Product deleted.',
             });
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not delete the product.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not delete the product.',
+                    caption: toastCaption(err),
+                });
+            }
         }
     }
 
@@ -1052,11 +1058,13 @@
             });
             exitBulkMode();
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not delete everything.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not delete everything.',
+                    caption: toastCaption(err),
+                });
+            }
         } finally {
             bulkBusy.value = false;
         }
@@ -1072,11 +1080,13 @@
             await refreshLinks([product.linked_stock_item_id]);
             $q.notify({ type: 'positive', message: 'Unlinked.' });
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not unlink.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not unlink.',
+                    caption: toastCaption(err),
+                });
+            }
         }
     }
 
@@ -1086,11 +1096,13 @@
                 product_id: product.product_id, is_active: !product.is_active,
             });
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not update.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not update.',
+                    caption: toastCaption(err),
+                });
+            }
         }
     }
 
@@ -1167,11 +1179,13 @@
                 type: 'positive', message: 'Product linked.',
             });
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not link the product.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not link the product.',
+                    caption: toastCaption(err),
+                });
+            }
         } finally {
             linkBusy.value = false;
         }

@@ -3,7 +3,6 @@
         <SettingsPageHeader
             title="Stocktake"
             description="How often Dora asks you to check each item, and whether she self-tunes that per item from how fast it actually moves."
-            :icon="ICONS.fact_check"
         />
 
         <template v-if="ready">
@@ -53,6 +52,7 @@
 
                 <SettingsRow label="Cadence">
                     <BaseSegmented
+                        aria-label="Cadence"
                         :model-value="draft.stocktake_default_cadence_band"
                         :options="BAND_OPTIONS"
                         @update:model-value="onBandChange"
@@ -82,7 +82,6 @@
 </template>
 
 <script lang="ts" setup>
-    import { ICONS } from 'src/style/icons';
     import { useAppSettingDrafts } from 'src/composables/useAppSettingDrafts';
     import SettingsSection from 'src/components/settings/SettingsSection.vue';
     import SettingsRow from 'src/components/settings/SettingsRow.vue';

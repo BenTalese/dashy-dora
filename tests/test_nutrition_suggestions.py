@@ -150,3 +150,29 @@ def test__best__Suggestion__CarriesItsSourceLabel():
     assert _best("Bananas", [_Food("Bananas, raw")]).source_label == "USDA SR Legacy"
 
 #endregion
+
+
+#region regional vocabulary (FU-643)
+
+@pytest.mark.parametrize("item,food", [
+    ("Tinned tomatoes", "Tomatoes, red, ripe, canned, packed in tomato juice"),
+    ("Capsicum", "Peppers, sweet, red, raw"),
+    ("Aubergine", "Eggplant, raw"),
+    ("Beef mince", "Beef, ground, 85% lean meat / 15% fat, raw"),
+    ("Prawns", "Crustaceans, shrimp, raw"),
+    ("Coriander", "Coriander (cilantro) leaves, raw"),
+    ("Plain flour", "Wheat flour, white, all-purpose, enriched, bleached"),
+    ("Icing sugar", "Sugars, powdered"),
+])
+def test__best__AuUkNames__FindTheUsCatalogueRow(item, food):
+    """An Australian pantry name meets the US catalogue's word for it."""
+    suggestion = _best(item, [_Food(food), _Food("Toilet"), _Food("Soup, chicken noodle")])
+    assert suggestion is not None and suggestion.name == food
+
+
+def test__best__UsNames__AreUnchanged():
+    """A name already in the catalogue's words scores exactly as before."""
+    assert _best("Bananas", [_Food("Bananas, raw")]).confidence == pytest.approx(
+        _score_of("Bananas", "Bananas, raw"), abs=1e-3)
+
+#endregion

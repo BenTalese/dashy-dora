@@ -130,6 +130,7 @@
     import { useStockItemStore } from 'src/stores/stockItemStore';
     import type { LocationNode } from 'src/models/location';
     import type { ShoppingListLine } from 'src/models/shoppingList';
+    import { isAlreadyNotified } from 'src/services/errorHandling/apiErrorHandler';
 
     const props = defineProps<{
         modelValue: boolean;
@@ -275,11 +276,13 @@
             $q.notify({ type: 'positive', message: `Sorted ${target.stock_item_name}` });
             assignOpen.value = false;
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Couldn\'t save the location. Try again.',
-                caption: String(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Couldn\'t save the location. Try again.',
+                    caption: String(err),
+                });
+            }
         } finally {
             assignSaving.value = false;
             delete assigning[target.line_id];

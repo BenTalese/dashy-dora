@@ -27,9 +27,12 @@
                 <!-- Owner 2026-09-12: was "Guide". You are setting the week's
                      parameters here, not being guided through anything. -->
                 <q-step :name="1" title="Setup" :icon="ICONS.dora_voice" :done="step > 1">
-                    <div class="text-caption dora-text-muted q-mb-md">
-                        Tell Dora what you're after and she'll build a plan. You can
-                        tweak everything before it's saved.
+                    <div class="row items-center no-wrap q-mb-md">
+                        <div class="text-caption dora-text-muted">
+                            Tell Dora what you're after and she'll build a plan. You can
+                            tweak everything before it's saved.
+                        </div>
+                        <HelpHint topic="Build my week" />
                     </div>
 
                     <div class="builder-field">
@@ -61,7 +64,7 @@
 
                     <div class="builder-field">
                         <div class="builder-field__label">Emphasis</div>
-                        <BaseSegmented v-model="emphasis" :options="emphasisOptions" dense />
+                        <BaseSegmented aria-label="Emphasis" v-model="emphasis" :options="emphasisOptions" dense />
                         <div class="text-caption dora-text-muted q-mt-xs">
                             {{ emphasisHint }}
                         </div>
@@ -292,6 +295,7 @@
                                 </div>
                                 <div class="builder-row__controls">
                                     <BaseSelect
+                                        aria-label="Day"
                                         v-if="dayOptions.length > 1"
                                         v-model="entry.scheduled_for"
                                         options-dense emit-value map-options
@@ -301,6 +305,7 @@
                                         <BaseTooltip>Move to another day</BaseTooltip>
                                     </BaseSelect>
                                     <BaseSelect
+                                        aria-label="Meal slot"
                                         v-model="entry.slot"
                                         options-dense
                                         class="builder-slot-select"
@@ -494,6 +499,7 @@
 </template>
 
 <script lang="ts" setup>
+    import HelpHint from 'src/components/help/HelpHint.vue';
     import BaseTooltip from 'src/components/BaseTooltip.vue';
     import { ICONS } from 'src/style/icons';
     import BaseButton from 'src/components/BaseButton.vue';
@@ -513,7 +519,7 @@
     import type { MealPlanEntryCommand } from 'src/services/api/mealPlanApiService';
     import type { Recipe } from 'src/models/recipe';
     import MealPlanApiService from 'src/services/api/mealPlanApiService';
-    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+    import { isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { useQuasar } from 'quasar';
     import { computed, ref, watch } from 'vue';
 
@@ -744,11 +750,13 @@
             // Its own failure, not the build's: the plan is built and editable;
             // only the buy-list preview beside it is missing.
             if (req !== previewSeq) return;
-            $q.notify({
-                type: 'negative',
-                message: "Couldn't work out the shopping for this plan.",
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: "Couldn't work out the shopping for this plan.",
+                    caption: toastCaption(err),
+                });
+            }
         } finally {
             if (req === previewSeq) previewLoading.value = false;
         }
@@ -798,13 +806,15 @@
                 : null;
             step.value = 2;
             built = true;
-        } catch {
+        } catch (err) {
             // Stay on the Guide step; the axios layer already normalised the
             // error — surface a friendly toast rather than crashing the dialog.
-            $q.notify({
-                type: 'negative',
-                message: "Couldn't build a plan. Try again.",
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: "Couldn't build a plan. Try again.",
+                });
+            }
         } finally {
             generatingProposal.value = false;
         }

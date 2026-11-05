@@ -303,7 +303,10 @@
         tab,
         notifyErr,
         withBusyReload,
+        confirmLeave,
     } = provideStockItemDetail(() => props.idOverride ?? (route.params.id as string));
+    // The peek host asks before swapping `idOverride` under an unsaved draft.
+    defineExpose({ confirmLeave });
 
     const stockItemStore = useStockItemStore();
     const recipeStore = useRecipeStore();

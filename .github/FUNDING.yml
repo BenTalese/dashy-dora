@@ -1,8 +1,4 @@
 # GitHub reads this to show a "Sponsor" button at the top of the repo.
-# Each line is a PLACEHOLDER — uncomment it and replace the value once the
-# matching account exists, so no button ever points at a dead page.
-# Owner setup checklist: DORA_FOLLOWUPS.md → FU-608.
 
-# github: [BenTalese]                  # github.com/sponsors/BenTalese (needs approval + payout setup)
-# buy_me_a_coffee: your-handle         # buymeacoffee.com/your-handle
-# custom: ["https://paypal.me/your-handle"]   # universal catch-all
+github: [BenTalese]
+custom: ["https://www.paypal.com/donate/?business=BBEWWLKS6MY2G&no_recurring=1&currency_code=AUD"]

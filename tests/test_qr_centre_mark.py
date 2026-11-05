@@ -1,4 +1,4 @@
-"""The D/D wordmark in the middle of Dora's own QR labels.
+"""Dora's burger mark in the middle of her own QR labels (FU-779).
 
 Pinned here rather than left to browser-verify because the failure mode is
 invisible by eye: a QR with too much of its centre knocked out still *looks*
@@ -13,7 +13,9 @@ assertion is a poor trade. Decoding was verified out-of-band on 2026-08-28
 across sizes 120/180/256/512/1024 and three payloads, plus a degradation sweep
 (blur, gaussian noise, rotation) run twice — once marked, once with the mark
 suppressed. Marked and unmarked outcomes were identical in all 16 trials, i.e.
-the mark costs no measurable error-correction headroom. What that sweep can't
+the mark costs no measurable error-correction headroom. Re-run for the burger mark
+on 2026-11-05 (FU-779) at 0.18 width, 160 trials per arm with OpenCV: marked
+10 misses, unmarked 9, i.e. the reader's own noise, not the mark. What that sweep can't
 protect against is someone widening `_MARK_WIDTH_RATIO` later, so the ratios
 themselves are pinned below.
 """
@@ -72,7 +74,7 @@ def test__the_mark_sits_on_a_clean_white_ring():
     img = _render(512)
     size = img.width
     mark_w = round(size * bc._MARK_WIDTH_RATIO)
-    mark_h = round(mark_w * 544 / 1350)          # the asset's aspect
+    mark_h = round(mark_w * 1080 / 1200)          # the asset's aspect
     pad = round(size * bc._MARK_PAD_RATIO)
     # Sample the ring just outside the glyph but inside the knockout box.
     top = (size - (mark_h + pad * 2)) // 2
@@ -87,7 +89,7 @@ def test__small_codes_are_left_unbranded():
         """A sliver of the row where the knockout's top edge would fall."""
         size = img.width
         pad = max(1, round(size * bc._MARK_PAD_RATIO))
-        mark_h = round(size * bc._MARK_WIDTH_RATIO * 544 / 1350)
+        mark_h = round(size * bc._MARK_WIDTH_RATIO * 1080 / 1200)
         top = (size - (mark_h + pad * 2)) // 2
         return img.crop((size // 2 - 2, top + 1, size // 2 + 2, top + pad))
 
@@ -101,7 +103,7 @@ def test__the_mark_stays_a_small_fraction_of_the_code():
     """The guard against someone 'making the logo a bit bigger'. H recovers
     ~30% of codewords and that budget is shared with print damage, so the
     knockout is held to a few percent of the code's area."""
-    aspect = 544 / 1350
+    aspect = 1080 / 1200
     box_w = bc._MARK_WIDTH_RATIO + bc._MARK_PAD_RATIO * 2
     box_h = bc._MARK_WIDTH_RATIO * aspect + bc._MARK_PAD_RATIO * 2
     assert box_w * box_h < 0.08, "centre knockout is eating the error-correction budget"

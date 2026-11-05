@@ -3,6 +3,7 @@ import type {
     LinkedProduct,
     PreferredBuy,
     PriceEntryPrefill,
+    PriceEntryValue,
     StockItemDetail,
     Substitute,
 } from 'src/models/stockItemDetail';
@@ -222,14 +223,7 @@ export default class StockItemApiService {
     // server-side (chunk 5), not by this manual endpoint. Money-gated at UI.
     addPriceObservationAsync = async (
         stockItemID: string,
-        observation: {
-            total_price: number;
-            total_measure: number;
-            unit: string;
-            observed_at?: string;
-            store_id?: string | null;
-            pack_count?: number | null;
-        },
+        observation: PriceEntryValue,
     ): Promise<void> =>
         await this.httpClient.post<void>(
             `/stock-items/${stockItemID}/price-observations`, observation,
@@ -243,6 +237,20 @@ export default class StockItemApiService {
         await this.httpClient.get<RecentlyPricedItem[]>(
             `/stock-items/recently-priced?limit=${limit}`,
         );
+
+    /** Replaces a logged price in place (FU-706). An omitted `observed_at`
+     *  keeps the original date. */
+    updatePriceObservationAsync = async (
+        stockItemID: string,
+        observationID: string,
+        observation: PriceEntryValue,
+    ): Promise<void> => {
+        const { observed_at, ...fields } = observation;
+        await this.httpClient.put<void>(
+            `/stock-items/${stockItemID}/price-observations/${observationID}`,
+            observed_at ? { ...fields, observed_at } : fields,
+        );
+    };
 
     deletePriceObservationAsync = async (stockItemID: string, observationID: string): Promise<void> =>
         await this.httpClient.delete<void>(

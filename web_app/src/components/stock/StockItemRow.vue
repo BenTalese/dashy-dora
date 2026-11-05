@@ -286,11 +286,11 @@
                 :icon="item.is_open ? ICONS.opened : ICONS.sealed"
                 :color="item.is_open ? 'primary' : undefined"
                 :loading="openBusy"
-                :aria-label="item.is_open ? 'Mark as sealed' : 'Mark as open / in-use'"
+                :aria-label="item.is_open ? 'Mark as sealed' : 'Mark as opened'"
                 @click.stop="onToggleOpen"
             >
                 <BaseTooltip>
-                    {{ item.is_open ? 'Mark as sealed' : 'Mark as open / in-use' }}
+                    {{ item.is_open ? 'Mark as sealed' : 'Mark as opened' }}
                 </BaseTooltip>
             </RowActionButton>
 
@@ -337,7 +337,7 @@
     import { formatDate } from 'src/composables/useDateFormat';
     import { isOutOfStockSequence } from 'src/helpers/stockStatus';
     import type { StockItem } from 'src/models/stockItem';
-    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+    import { isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { useStockItemStore } from 'src/stores/stockItemStore';
     import { useStockLevelStore } from 'src/stores/stockLevelStore';
     import { useLocationStore } from 'src/stores/locationStore';
@@ -549,11 +549,13 @@
                 message: `Expiry set to ${formatDate(value)}.`,
             });
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not set expiry.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not set expiry.',
+                    caption: toastCaption(err),
+                });
+            }
         }
     }
 
@@ -565,11 +567,13 @@
             });
             $q.notify({ type: 'positive', message: 'Expiry cleared.' });
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not clear expiry.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not clear expiry.',
+                    caption: toastCaption(err),
+                });
+            }
         }
     }
 
@@ -599,11 +603,13 @@
                     : `Marked "${props.item.name}" as sealed.`,
             });
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not update.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not update.',
+                    caption: toastCaption(err),
+                });
+            }
         } finally {
             openBusy.value = false;
         }
@@ -623,11 +629,13 @@
                 stock_level_id: stockLevelId,
             });
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not update.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not update.',
+                    caption: toastCaption(err),
+                });
+            }
         }
     }
 

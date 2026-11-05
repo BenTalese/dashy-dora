@@ -99,10 +99,15 @@ export interface PriceDropsResponse {
     rows: PriceDropRow[];
 }
 
+/** Spend, and how it compares with what the household usually pays (FU-831 /
+ *  ADR-068). `savings_vs_usual_price` is negative when you paid more than
+ *  usual; `counted` of `total` priced lines had a usual price to compare. */
 export interface SavingsCapturedResponse {
     range: ReportRange;
-    total_savings: number;
     total_spent: number;
+    savings_vs_usual_price: number;
+    counted: number;
+    total: number;
 }
 
 // culinary memory. Three new report shapes that back the new

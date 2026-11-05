@@ -20,6 +20,7 @@ from dora_api.domain.entities.stock_item import StockItem
 from dora_api.domain.entities.stock_location import StockLocation
 from dora_api.features.routers import LOCATION_ROUTER
 from dora_api.infrastructure.api_response import ok
+from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 
@@ -61,8 +62,8 @@ class GetLocationTreeHandler:
             .all()
         )
 
-        # Bucket items by their location_id (None = unassigned, surfaced
-        # separately in the UI).
+        # Bucket items by their location_id (None = unassigned, counted by
+        # `/locations/unassigned-count` below).
         items_by_location: dict[UUID, List[StockItem]] = {}
         for item in items:
             if item.stock_location is None:
@@ -121,3 +122,19 @@ def get_location_tree():
     _Tree = GetLocationTreeHandler(SqlAlchemyRepository()).handle()
     _LOGGER.info(f"Returning location tree with {len(_Tree)} root zones.")
     return ok(_Tree)
+
+
+@dataclass
+class UnassignedItemCountDto:
+    count: int
+
+
+# FU-633: items with no location fall out of the tree entirely (a deleted
+# location unassigns its items), so the settings page shows a row for them.
+# A separate call because `/locations` is a bare list two pickers read.
+@LOCATION_ROUTER.route("/unassigned-count", methods=["GET"])
+def get_unassigned_item_count():
+    _Count = SqlAlchemyRepository().get(StockItem).count(
+        EntityField(StockItem, "_stock_location_id").is_null()
+    )
+    return ok(UnassignedItemCountDto(count = _Count))

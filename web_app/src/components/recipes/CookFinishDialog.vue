@@ -135,7 +135,7 @@
     import { useCookingPolicy } from 'src/composables/useCookingPolicy';
     import type { Recipe } from 'src/models/recipe';
     import RecipeApiService from 'src/services/api/recipeApiService';
-    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+    import { isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { useRecipeStore } from 'src/stores/recipeStore';
     import { useStockItemStore } from 'src/stores/stockItemStore';
     import { useStockLevelStore } from 'src/stores/stockLevelStore';
@@ -285,11 +285,13 @@
                 try {
                     cooked = await recipeApiService.cookAsync(recipe.recipe_id, mealsCooked);
                 } catch (err) {
-                    $q.notify({
-                        type: 'negative',
-                        message: "Couldn't record this cook.",
-                        caption: toastCaption(err) || 'Try again in a moment.',
-                    });
+                    if (!isAlreadyNotified(err)) {
+                        $q.notify({
+                            type: 'negative',
+                            message: "Couldn't record this cook.",
+                            caption: toastCaption(err) || 'Try again in a moment.',
+                        });
+                    }
                     return;
                 }
                 recipeStore.setAvailableMeals(recipe.recipe_id, cooked.available_meals);

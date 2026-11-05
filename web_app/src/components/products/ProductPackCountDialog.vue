@@ -52,7 +52,7 @@
     import BaseButton from 'src/components/BaseButton.vue';
     import BaseDialog from 'src/components/BaseDialog.vue';
     import ProductApiService from 'src/services/api/productApiService';
-    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+    import { isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import type { Product } from 'src/models/product';
     import { PACK_COUNT_RULE, parsePackCount } from 'src/helpers/packCount';
 
@@ -100,11 +100,13 @@
             emit('saved');
             emit('update:modelValue', false);
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not save the pack count.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not save the pack count.',
+                    caption: toastCaption(err),
+                });
+            }
         } finally {
             busy.value = false;
         }

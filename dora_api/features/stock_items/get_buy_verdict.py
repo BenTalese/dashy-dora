@@ -773,14 +773,14 @@ def comparable_price_samples(
     """
     folded: list[tuple[float, tuple[str, bool], float, datetime]] = []
     for price, at, size_value, size_unit in raw:
-        total, measure, unit, _ = harvest_observation_fields(
+        total, measure, unit, _, is_sizeless = harvest_observation_fields(
             unit_price=price, quantity=1, size_value=size_value, size_unit=size_unit,
         )
         per_unit = per_unit_in_canonical(
             total_price=total, total_measure=measure, unit=unit)
         if per_unit is None:
             continue
-        canonical = (per_unit[1], bool(size_value and size_unit))
+        canonical = (per_unit[1], not is_sizeless)
         measure_in_canonical = units.convert(measure, unit, canonical[0])
         if not measure_in_canonical:
             continue
@@ -944,12 +944,11 @@ def _items_with_fake_markdown(
 ) -> set[UUID]:
     """FU-450 — the subset of these items with a linked product running an
     inflated markdown right now. Delegates the per-product judgement to the
-    shared `deal_quality` signal (R-003 — one definition of "fake"); the
-    per-product answer is memoised because one product can be linked to
-    several stock items."""
+    shared `deal_quality` signal (R-003 — one definition of "fake"), gathered
+    for every linked product at once (FU-950 (2))."""
     from sqlalchemy import select
     from dora_api.app import db
-    from dora_api.features.deals.deal_quality import get_deal_quality
+    from dora_api.features.deals.deal_quality import gather_deal_quality_for_products
 
     if not stock_item_ids:
         return set()
@@ -961,15 +960,13 @@ def _items_with_fake_markdown(
         )
     ).all()
 
-    fake_by_product: dict[UUID, bool] = {}
-    out: set[UUID] = set()
-    for stock_item_id, product_id in rows:
-        if product_id not in fake_by_product:
-            dq = get_deal_quality(product_id, repository)
-            fake_by_product[product_id] = dq is not None and dq.fake_markdown
-        if fake_by_product[product_id]:
-            out.add(stock_item_id)
-    return out
+    quality = gather_deal_quality_for_products(
+        list({product_id for _, product_id in rows}), repository,
+    )
+    return {
+        stock_item_id for stock_item_id, product_id in rows
+        if (dq := quality.get(product_id)) is not None and dq.fake_markdown
+    }
 
 
 # ── Endpoint ───────────────────────────────────────────────────────────

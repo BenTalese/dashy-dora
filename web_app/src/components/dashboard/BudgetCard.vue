@@ -68,7 +68,13 @@
              parallel with the summary the grid waits on) but not an impossible
              one, and a card with nothing in it reads as broken rather than as
              loading. -->
-        <div v-else class="dora-text-muted text-caption">Loading…</div>
+        <div v-else class="budget-skeleton" aria-busy="true" aria-label="Loading your budget">
+            <!-- The shape of the loaded card (figure, bar, line), like the
+                 other cards' skeletons, not the word "Loading" (FU-578 #15). -->
+            <AppSkeleton type="line" width="45%" height="1.8em" />
+            <AppSkeleton type="rect" height="10px" />
+            <AppSkeleton type="line" width="70%" />
+        </div>
     </DashboardCard>
 </template>
 
@@ -111,6 +117,7 @@
     import { formatMoney } from 'src/composables/useMoney';
     import DashboardCard from 'src/components/dashboard/DashboardCard.vue';
     import CardLoadError from 'src/components/dashboard/CardLoadError.vue';
+    import AppSkeleton from 'src/components/AppSkeleton.vue';
     import type { BudgetStatus } from 'src/services/api/budgetApiService';
     import type { BudgetPeriod } from 'src/models/auth';
 
@@ -130,6 +137,11 @@
 </script>
 
 <style scoped lang="scss">
+    .budget-skeleton {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+    }
     /* Moved with the card (R-027). Was on the page's `--c-*` aliases, which are
        declared on `.dora-dash` and resolve to nothing from a component (R-060);
        on the real tokens now.

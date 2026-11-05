@@ -3,7 +3,6 @@
         <SettingsPageHeader
             title="Stores"
             description="The retail stores you actually shop at. Upload a logo so each store is recognisable on cards and lines."
-            :icon="ICONS.store"
         >
             <template #actions>
                 <BaseButton

@@ -153,7 +153,7 @@ export const HELP_TOPICS: HelpTopic[] = [
             {
                 slug: 'finding-things',
                 title: 'Finding things',
-                summary: 'Search by name, quick chips (Needs attention, Expiring soon, Essential, Open), filters for level, location and group, and a sort.',
+                summary: 'Search by name, quick chips (Needs attention, Use soon, Essential, Open), filters for level, location and group, and a sort.',
                 note: 'Filters survive leaving and returning, not a reload.',
             },
             {
@@ -223,7 +223,7 @@ export const HELP_TOPICS: HelpTopic[] = [
                 slug: 'your-prices',
                 title: 'Your prices',
                 summary: 'Your own price record: prices you log plus prices from finished shops. Usually is the median of the last year, shown once there are three.',
-                note: 'Paying more than usual means 15% over that median. Shelf prices of linked products never count.',
+                note: 'More than usual means 15% over that median, less than usual 15% under it, and a usual price from fewer than six prices is marked a rough guide. Shelf prices of linked products never count.',
             },
             {
                 slug: 'price-chart',

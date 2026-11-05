@@ -45,8 +45,8 @@ from dora_api.features.app_settings.update_app_settings import (
 from dora_api.features.auth.admin_gate import require_admin
 from dora_api.features.auth.update_me import UpdateMeHandler, UpdateMeRequest
 from dora_api.infrastructure.api_response import (business_rule_violation,
-                                                  no_content, not_found, ok,
-                                                  unauthorized)
+                                                  forbidden, no_content,
+                                                  not_found, ok, unauthorized)
 from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.utils import get_request_body
 from dora_api.persistence.field import EntityField
@@ -809,6 +809,12 @@ def finish_onboarding():
     repo = SqlAlchemyRepository()
     if repo.get(User).by_id(user_id) is None:
         return not_found("User", user_id)
+    # Default groups, locations, starter items and the demo are the first
+    # user's setup (FU-960). A later member's wizard never sends them, so a
+    # stale client can't re-create defaults the admin has since deleted.
+    seeds = _Request.seed is not None or _Request.items is not None or _Request.seed_demo
+    if seeds and not GetOnboardingStateHandler(repo).handle().first_user:
+        return forbidden("Only the first account can seed the household's defaults.")
     try:
         result, error = FinishOnboardingHandler(repo).handle(_Request, user_id)
     except Exception:

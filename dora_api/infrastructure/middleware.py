@@ -84,6 +84,29 @@ def _request_id(incoming: str | None) -> str:
     return candidate if _REQUEST_ID.fullmatch(candidate) else uuid4().hex
 
 
+def _carries_nul(value) -> bool:
+    if isinstance(value, str):
+        return "\x00" in value
+    if isinstance(value, dict):
+        return any(_carries_nul(k) or _carries_nul(v) for k, v in value.items())
+    if isinstance(value, list):
+        return any(_carries_nul(v) for v in value)
+    return False
+
+
+def reject_nul_bytes():
+    """FU-888: Postgres refuses a NUL byte in a text value that SQLite stores
+    happily, so the same garbage input was a 400 on one backend and a 500 on
+    the other. Refused once here, for the path, the query and a JSON body."""
+    if "\x00" in request.path or any(
+        _carries_nul(k) or _carries_nul(v) for k, v in request.args.items(multi=True)
+    ):
+        return bad_request("Malformed request.", "The request contains a NUL character.")
+    if request_is_mutating() and request.is_json and _carries_nul(request.get_json(silent=True)):
+        return bad_request("Malformed request.", "The request contains a NUL character.")
+    return None
+
+
 @MIDDLEWARE.before_app_request
 def handle_incoming_request():
     # ── Logging context ──────────────────────────────────────────────
@@ -115,6 +138,10 @@ def handle_incoming_request():
         return endpoint_not_found()
 
     _EndpointName = request.endpoint.split(".")[-1]
+
+    _NulFailure = reject_nul_bytes()
+    if _NulFailure is not None:
+        return _NulFailure
 
     # Auth gate runs before body deserialisation so unauthenticated callers
     # don't waste cycles having their payloads parsed.

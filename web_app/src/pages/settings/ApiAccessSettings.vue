@@ -2,8 +2,8 @@
     <div class="settings-page">
         <SettingsPageHeader
             title="API access"
+            help="Create an API key"
             description="Bearer keys for authenticated sources that push data into Dora."
-            :icon="ICONS.key"
         >
             <template #actions>
                 <BaseButton
@@ -332,7 +332,7 @@
     import StoresApiService from 'src/services/api/storesApiService';
     import type { Store } from 'src/models/store';
     import { computed, onMounted, ref } from 'vue';
-    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+    import { isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { useConfirm } from 'src/composables/useConfirm';
 
     const $q = useQuasar();
@@ -379,7 +379,9 @@
             const items = await api.listMappingsAsync(sourceId);
             mappingsBySource.value = { ...mappingsBySource.value, [sourceId]: items };
         } catch (e) {
-            $q.notify({ type: 'negative', message: "Couldn't load mappings.", caption: toastCaption(e) });
+            if (!isAlreadyNotified(e)) {
+                $q.notify({ type: 'negative', message: "Couldn't load mappings.", caption: toastCaption(e) });
+            }
         }
     }
 
@@ -400,7 +402,9 @@
                 )
             };
         } catch (e) {
-            $q.notify({ type: 'negative', message: "Couldn't update the mapping.", caption: toastCaption(e) });
+            if (!isAlreadyNotified(e)) {
+                $q.notify({ type: 'negative', message: "Couldn't update the mapping.", caption: toastCaption(e) });
+            }
         }
     }
 
@@ -422,7 +426,9 @@
                 )
             };
         } catch (e) {
-            $q.notify({ type: 'negative', message: "Couldn't drop the mapping.", caption: toastCaption(e) });
+            if (!isAlreadyNotified(e)) {
+                $q.notify({ type: 'negative', message: "Couldn't drop the mapping.", caption: toastCaption(e) });
+            }
         }
     }
 
@@ -432,7 +438,9 @@
             // 16-R23 — this page carried a second client + row type for it).
             stores.value = await storesApi.listAllAsync();
         } catch (e) {
-            $q.notify({ type: 'negative', message: "Couldn't load stores.", caption: toastCaption(e) });
+            if (!isAlreadyNotified(e)) {
+                $q.notify({ type: 'negative', message: "Couldn't load stores.", caption: toastCaption(e) });
+            }
         }
     }
 
@@ -462,7 +470,9 @@
             createOpen.value = false;
             revealOpen.value = true;
         } catch (e) {
-            $q.notify({ type: 'negative', message: "Couldn't create the API key.", caption: toastCaption(e) });
+            if (!isAlreadyNotified(e)) {
+                $q.notify({ type: 'negative', message: "Couldn't create the API key.", caption: toastCaption(e) });
+            }
         } finally {
             creating.value = false;
         }
@@ -493,7 +503,9 @@
             sources.value = sources.value.map(s => (s.id === updated.id ? updated : s));
             renameOpen.value = false;
         } catch (e) {
-            $q.notify({ type: 'negative', message: "Couldn't rename the API key.", caption: toastCaption(e) });
+            if (!isAlreadyNotified(e)) {
+                $q.notify({ type: 'negative', message: "Couldn't rename the API key.", caption: toastCaption(e) });
+            }
         } finally {
             renaming.value = false;
         }
@@ -505,7 +517,9 @@
             const updated = await api.updateAsync(src.id, { enabled: !src.enabled });
             sources.value = sources.value.map(s => (s.id === updated.id ? updated : s));
         } catch (e) {
-            $q.notify({ type: 'negative', message: "Couldn't toggle the API key.", caption: toastCaption(e) });
+            if (!isAlreadyNotified(e)) {
+                $q.notify({ type: 'negative', message: "Couldn't toggle the API key.", caption: toastCaption(e) });
+            }
         } finally {
             togglingId.value = null;
         }
@@ -525,7 +539,9 @@
             await api.deleteAsync(src.id);
             sources.value = sources.value.filter(s => s.id !== src.id);
         } catch (e) {
-            $q.notify({ type: 'negative', message: "Couldn't revoke the API key.", caption: toastCaption(e) });
+            if (!isAlreadyNotified(e)) {
+                $q.notify({ type: 'negative', message: "Couldn't revoke the API key.", caption: toastCaption(e) });
+            }
         } finally {
             revokingId.value = null;
         }

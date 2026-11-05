@@ -20,6 +20,7 @@ const options = [
 function mountSeg(modelValue: string, extra: Record<string, unknown> = {}) {
     return mount(BaseSegmented, {
         props: { modelValue, options, ...extra },
+        attrs: { 'aria-label': 'Pick' },
         global: { plugins: [Quasar], components: { QIcon } },
         attachTo: document.body,
     });

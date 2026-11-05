@@ -50,6 +50,12 @@ class StockItemPriceObservation(BaseEntity):
     # total_measure. The one reader of pack_count is recipe costing, which
     # needs the price of one item to bill a bare "3 eggs" (FU-856).
     pack_count: int | None = None
+    # True when the measure is only "how many items" because nothing said how
+    # big one was (a finished line with no sized product: one `ea` per item).
+    # A count-sized line also lands in `ea` ("12 ea" for a dozen eggs), so
+    # without this a $6 carton logged loose and the same carton logged sized
+    # read as $6 and $0.50 an egg on one scale (FU-983).
+    is_sizeless: bool = False
 
     class Fields(BaseEntity.Fields):
         STOCK_ITEM_ID = "stock_item_id"
@@ -61,3 +67,4 @@ class StockItemPriceObservation(BaseEntity):
         SHOPPING_LIST_LINE_ID = "shopping_list_line_id"
         CREATED_AT = "created_at"
         PACK_COUNT = "pack_count"
+        IS_SIZELESS = "is_sizeless"

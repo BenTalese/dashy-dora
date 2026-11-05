@@ -1,4 +1,5 @@
 import io
+import os
 import shutil
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -333,3 +334,26 @@ class _TestClientSession:
 
     def delete(self, url, **kwargs):
         return _adapt(self._client, "delete")(url, **kwargs)
+
+
+@pytest.fixture(scope="session")
+def secret_encryption_key():
+    """Provision `DORA_SECRET_ENCRYPTION_KEY` for any test that stores a
+    secret (SMTP password, VAPID key, an assistant API key); without it the
+    write fails with a 400. A fresh Fernet key once per session; the
+    `secret_encryption._fernet` lru_cache is cleared so the change is seen."""
+    from cryptography.fernet import Fernet
+
+    from dora_api.infrastructure.security import secret_encryption
+
+    previous = os.environ.get("DORA_SECRET_ENCRYPTION_KEY")
+    os.environ["DORA_SECRET_ENCRYPTION_KEY"] = Fernet.generate_key().decode("ascii")
+    secret_encryption._fernet.cache_clear()
+    try:
+        yield
+    finally:
+        if previous is None:
+            os.environ.pop("DORA_SECRET_ENCRYPTION_KEY", None)
+        else:
+            os.environ["DORA_SECRET_ENCRYPTION_KEY"] = previous
+        secret_encryption._fernet.cache_clear()

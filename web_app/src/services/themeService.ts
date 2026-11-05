@@ -394,6 +394,13 @@ export function coalesceFontFamily(f: FontFamilyPreference | undefined): FontFam
     return f === undefined || f === 'nunito' ? 'default' : f;
 }
 
+/** Any "follow the OS" choice: the legacy bare `system` or a family's
+ *  `system-<family>` key. */
+function isSystemPref(pref: ThemePreference): boolean {
+    const key = currentThemeKey(pref);
+    return key === 'system' || key.startsWith('system-');
+}
+
 let mediaQuery: MediaQueryList | null = null;
 let mediaQueryListener: ((event: MediaQueryListEvent) => void) | null = null;
 let cachedThemePref: ThemePreference = 'system';
@@ -457,9 +464,14 @@ function attachSystemListener() {
     if (typeof window === 'undefined' || !window.matchMedia) return;
     detachSystemListener();
     mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    // FU-632 (2) / FU-578 #7b: re-resolve whatever System choice is saved.
+    // This used to check for the legacy bare `system` only, so a family's
+    // `system-<family>` (what the picker stores) never followed the OS until a
+    // reload, and the page stayed on the old scheme while the browser's own
+    // chrome had already flipped.
     mediaQueryListener = () => {
-        if (cachedThemePref === 'system') {
-            applyThemeKey(resolveThemeKey('system'));
+        if (isSystemPref(cachedThemePref)) {
+            applyThemeKey(resolveThemeKey(cachedThemePref));
         }
     };
     mediaQuery.addEventListener('change', mediaQueryListener);
@@ -506,7 +518,7 @@ export default class ThemeService {
     ) => {
         cachedThemePref = theme;
         applyThemeKey(resolveThemeKey(theme));
-        if (theme === 'system') attachSystemListener();
+        if (isSystemPref(theme)) attachSystemListener();
         else detachSystemListener();
 
         if (typeof document !== 'undefined') {

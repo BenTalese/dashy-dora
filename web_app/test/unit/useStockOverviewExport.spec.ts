@@ -44,8 +44,6 @@ vi.mock('quasar', () => ({ Notify: { create: m.notify } }));
 import { useStockOverviewExport } from 'src/composables/useStockOverviewExport';
 import { openQrSheetAsync } from 'src/composables/useQrLabels';
 
-const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
-
 describe('stock overview + QR sheet — selection travels in the body', () => {
     let target: { opener: unknown; document: { write: () => void; close: () => void }; location: { replace: ReturnType<typeof vi.fn> }; close: ReturnType<typeof vi.fn> };
     let openSpy: MockInstance<typeof window.open>;

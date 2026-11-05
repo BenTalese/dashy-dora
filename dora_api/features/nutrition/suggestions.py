@@ -34,6 +34,7 @@ from dora_api.domain.entities.nutrition_food import (
     NUTRITION_SOURCE_LABELS, NutritionFood,
 )
 from dora_api.domain.entities.stock_item import StockItem
+from dora_api.features.nutrition.catalogue_vocabulary import in_catalogue_words
 from dora_api.features.nutrition.text_matching import normalised, tokens
 from dora_api.infrastructure.ports import Repository
 from dora_api.persistence.bool_operation import Or
@@ -151,6 +152,8 @@ def _best(item_name: str, candidates: Iterable[NutritionFood]) -> FoodSuggestion
     nothing to a recipe rollup, so suggesting it would be asking the user to
     confirm a link that changes no number on any screen.
     """
+    # The catalogue's words for an AU/UK name (FU-643).
+    item_name = in_catalogue_words(item_name)
     item_tokens = tokens(item_name)
     item_normalised = normalised(item_name)
     if not item_tokens:
@@ -185,7 +188,8 @@ def suggest_for_name(repository: Repository, item_name: str) -> FoodSuggestion |
     single item.
     """
     search_tokens = sorted(
-        (token for token in tokens(item_name) if len(token) >= _MIN_CANDIDATE_TOKEN),
+        (token for token in tokens(in_catalogue_words(item_name))
+         if len(token) >= _MIN_CANDIDATE_TOKEN),
         key=len, reverse=True,
     )
     if not search_tokens:
@@ -233,7 +237,7 @@ def unmatched_items(repository: Repository) -> List[UnmatchedStockItem]:
     results: List[UnmatchedStockItem] = []
     for item in items:
         candidates: dict[UUID, NutritionFood] = {}
-        for token in tokens(item.name):
+        for token in tokens(in_catalogue_words(item.name)):
             for food in by_token.get(token, ()):
                 candidates[food.id] = food
         results.append(UnmatchedStockItem(

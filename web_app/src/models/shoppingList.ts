@@ -198,7 +198,7 @@ export type ShoppingListTotals = {
     remaining_price: number;
     /** Price of the ticked lines only — what's in the trolley. */
     picked_price: number;
-    total_savings: number;
+    savings_vs_shelf_price: number;
     unticked_count: number;
     ticked_count: number;
     line_count: number;

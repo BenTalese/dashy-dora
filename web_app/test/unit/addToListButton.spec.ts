@@ -39,7 +39,7 @@ const m = vi.hoisted(() => ({
 // ("unhandled error from a timer"), so swap only `useQuasar` for a spy and
 // keep the real components.
 vi.mock('quasar', async (importOriginal) => ({
-    ...(await importOriginal<typeof import('quasar')>()),
+    ...(await importOriginal<Record<string, unknown>>()),
     useQuasar: () => ({ notify: m.notify }),
 }));
 vi.mock('src/composables/useStockItemActions', () => ({

@@ -25,7 +25,7 @@ import { useQuasar } from 'quasar';
 import { ICONS } from 'src/style/icons';
 import { ingredientDisplayName } from 'src/helpers/recipeIngredientLabel';
 import { formatDate } from 'src/composables/useDateFormat';
-import { correlationSuffix, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+import { correlationSuffix, isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
 import { NormalisedApiError } from 'src/services/api/axiosHttpClient';
 import {
     buildUpdateCommand,
@@ -411,17 +411,25 @@ function createRecipeDetail() {
         if (!recipe.value) return;
         newVersionLoading.value = true;
         try {
+            // The copy starts with no favourite, pool or cook date; those are
+            // the household's history with a recipe, not part of it (FU-741).
+            // Said when it would otherwise read as a lost favourite.
+            const wasFavourite = recipe.value.is_favourite;
             const created = await recipeApi.createNewVersionAsync(recipe.value.recipe_id);
             const newId = created.recipe_id;
             await recipeStore.getRecipesAsync();
             $q.notify({
                 type: 'positive',
                 message: 'New version created.',
-                caption: 'Pick either one when planning.',
+                caption: wasFavourite
+                    ? "Pick either one when planning. The new one isn't a favourite yet."
+                    : 'Pick either one when planning.',
             });
             if (newId) void router.push(`/cookbook/${newId}`);
         } catch (err) {
-            $q.notify({ type: 'negative', message: "Couldn't create a new version.", caption: toastCaption(err) });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({ type: 'negative', message: "Couldn't create a new version.", caption: toastCaption(err) });
+            }
         } finally {
             newVersionLoading.value = false;
         }

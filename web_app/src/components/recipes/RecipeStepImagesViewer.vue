@@ -14,9 +14,8 @@
         is the *form's* list rather than the last-loaded recipe's: photos picked
         in this edit session have a `data:` preview and no saved id yet, and
         showing nothing until Save was the "image steps are not showing" bug.
-        The old hardcoded `/api/recipes/…` src went with it — the row already
-        carries a `preview_url` built by `recipeStepImageUrl`, which is the one
-        place that knows the configured backend base (R-003).
+        Each photo renders through `RecipeStepPhoto`, which fetches a saved
+        one through the HTTP client (R-045, FU-931).
     -->
     <div v-if="images.length === 0" class="rsiv__empty">
         {{ NO_STEP_IMAGES_COPY }}
@@ -31,7 +30,13 @@
                     :aria-label="`Open step photo ${index + 1} full size`"
                     @click="openAt(index)"
                 >
-                    <img :src="image.preview_url" :alt="`Step photo ${index + 1}`" class="rsiv__img" />
+                    <RecipeStepPhoto
+                        :recipe-id="recipeId"
+                        :image-id="image.existing_image_id"
+                        :data-url="image.data_url"
+                        :alt="`Step photo ${index + 1}`"
+                        class="rsiv__img"
+                    />
                     <span class="rsiv__veil"><q-icon :name="ICONS.zoom_in" size="26px" /></span>
                 </button>
                 <span class="rsiv__num">{{ index + 1 }}</span>
@@ -48,9 +53,11 @@
             maximized
         >
             <q-card-section class="rsiv__preview">
-                <img
+                <RecipeStepPhoto
                     v-if="previewImage"
-                    :src="previewImage.preview_url"
+                    :recipe-id="recipeId"
+                    :image-id="previewImage.existing_image_id"
+                    :data-url="previewImage.data_url"
                     :alt="`Step photo ${previewIndex + 1}`"
                     class="rsiv__previewimg"
                 />
@@ -76,6 +83,7 @@
 </template>
 
 <script setup lang="ts">
+    import RecipeStepPhoto from 'src/components/recipes/RecipeStepPhoto.vue';
     import { computed, ref } from 'vue';
 
     import BaseButton from 'src/components/BaseButton.vue';
@@ -86,6 +94,7 @@
 
     const props = defineProps<{
         images: EditableStepImage[];
+        recipeId: string;
     }>();
 
     const previewOpen = ref(false);

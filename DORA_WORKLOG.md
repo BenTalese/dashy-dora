@@ -41,6 +41,229 @@ next.
 
 ---
 
+## 2026-11-05 (later): **Donation links live: PayPal + GitHub Sponsors, FU-608 resolved (uncommitted)**
+
+**Done:** owner sent the PayPal donate link and set up GitHub Sponsors (`BenTalese`); Buy Me a Coffee dropped (owner
+decision after weighing more channels vs choice paralysis). `web_app/src/config/donationLinks.ts` lists PayPal
+(primary) + Sponsors; the placeholder sentinel, its filter and the unused `DONATIONS_CONFIGURED` are gone, as is the
+now-unused `ICONS.coffee`. README donate section and `.github/FUNDING.yml` (`github:` + `custom:`) carry both; the
+issue chooser's Support Dora link points at PayPal. FU-608 resolved. Also drafted the BMC About copy in chat (moot now).
+
+**Gates:** vue-tsc + eslint clean; not walked live (same menu component, two rows). **Close-gate:** R-003 (one
+source). No new rule.
+
+## 2026-11-05 (overnight): **Leftovers sweep 2: ~50 FUs worked (uncommitted); ledgers NOT yet moved**
+
+**Stopped mid-sweep (usage limit).** Code is done and gated for everything below, but `DORA_FOLLOWUPS.md` →
+`DORA_FOLLOWUPS_RESOLVED.md` moves, CHANGELOG, DORA_VERIFY lines and PROJECT_STATE refresh were NOT done. Next
+session: move each FU named below to the resolved archive with its note, add the verify lines, update CHANGELOG.
+
+**Resolution notes (per FU):**
+FU-888: middleware.reject_nul_bytes refuses NUL in path/query/JSON body with a 400 before any handler; fuzz case split + pin test.
+FU-655: already closed by SEC-4 (resolve_session_user on every protected route; test__deactivated_user__CookieRejectedOnEveryRoute). No change.
+FU-575: (2) recipe create/update strip name before length check (test). (1) DB unique index won't-do: case-insensitive expression index would fail the deploy migration on any existing case-variant duplicate in a live DB (R-095 forbids dropping/renaming data to make it pass), and the race is two tabs creating the same name in the same instant on a one-household install; the app-level check stays the authority.
+FU-757: NewListDialog counts free-text ingredients on the recipe + meal-plan branches and names them in the toast caption ("N ingredients aren't linked to your pantry, so they were left off.").
+FU-932: useUnsavedChangesGuard returns confirmLeave; StockItemDetailPage exposes it; StockOverview.setPeek awaits it before swapping/closing the peek.
+FU-706: PUT /stock-items/<id>/price-observations/<obs> replaces a logged price (shared PriceObservationRequest; omitted date keeps the original); DTO carries store_id; detail page has Edit (PriceEntry in edit mode, "Save") and a confirm before Remove; Recent prices capped at 5 with "Show all N"; PriceEntry has a Date field so a receipt from yesterday can be entered (sent as that day's midday UTC). Tests: put corrects in place; put across items 404.
+FU-704: size + pack count use inputmode decimal/numeric; no-stores case says where to add stores instead of silently dropping the field; the hover-only help it named is gone since the 2026-08 rework (no tooltips left in the form). One PriceEntryValue type replaces five inline copies.
+FU-633: GET /locations/unassigned-count (test); Settings → Locations shows a 'Not stored anywhere · N items · Review' row; the stock filter leads with 'Not stored anywhere' (value 'none', NO_LOCATION_FILTER), bulk move reads a separate real-locations list; spec covers both.
+FU-627: moot. The install-wide `deals_email_enabled` AppSetting was removed 2026-10-15 (app_setting.py note; health sends no `deals_email`), so the per-user opt-in gated on products + SMTP is the whole rule.
+FU-720: register_routers refuses to boot when any *_ROUTER has no routes (names them), so FU-717's lost-directory deploy fails loudly at startup; the per-boot route count log stays.
+FU-981: closed. (5) restore claims its staged upload by an atomic rename to `<id>.restoring` before reading it, so a second (double-clicked) restore gets 404 upload-missing; released back to `<id>.bin` when the restore doesn't commit (retry still works), deleted when it does; test. (10) fixed by the same claim: an abort's unlink of `<id>.bin` can't touch the file a restore is reading. (13) the in-progress preferred-buy rename lives in the stock-item context and the plan face's add-back/suggestion in-flight state in the shopping-list context, so a tab/face switch keeps them; the receipt zoom is a modal, which blocks a face switch, so nothing to keep. Closed without change: (4) owner's call was "hide them" (2026-11-04); (11) a path-prefixed deploy can't load the SPA at all (Quasar builds with publicPath '/'), so the API URL alone isn't the gap; Dora is deployed at a host root or subdomain.
+FU-959: closed. (2) on each return to the foreground (at most hourly) the app asks its service worker registration to update, and a new controller resets the banner's dismissal so a second release in one session shows again. (3) already done by 17-D2: the API's NetworkFirst has no network timeout, cache only on network failure. (1)/(4) done 11-05.
+FU-953: closed. remove, change-cook-days, separate and fresh/pool toggles now run on the same planner mutation queue as add/adjust, each re-reading its entry from the plan when it runs (adjust-to-zero calls the un-queued removeEntryNow inside its own step). A failed run-face tick undoes its optimistic flip and re-reads quietly; a failed plan-face reorder re-reads quietly (no skeleton, R-084). The stepper busy prop is no longer needed: with every write serialised, each tap lands in order, and the menu resyncs on open. Template apply stays a server-side whole-week write, not an entry-list rebuild.
+FU-937: dropped MealPlanDto.day_cost and day_nutrition (DTOs, builders, SPA types); tests now pin the per-entry figures and the week total, which are what the planner reads.
+FU-947: closed. (4) spend-year-over-year's two windows start at household midnight via _ranges.range_start, like the other spend windows. (1) won't-do: every entity maps its FK columns as `_<name>_id` (`_store_id`, `_stock_location_id`, ...) and features read them that way; a public `product_id` on the two offer tables alone would be the one-off exception R-019 rules out. (2)/(3) closed 11-04.
+FU-950: closed. (1) CollapsibleCard has an `actions` slot between the lead and the caret; BuyVerdictCard is now a CollapsibleCard (header-toggles, action in the slot), its hand-rolled summary button, caret and their styles gone. (2) deal_quality.gather_deal_quality_for_products loads products+offers, links and paid prices in three queries; get_deal_quality delegates to it and _items_with_fake_markdown calls it once for the whole list.
+FU-948: closed. (1) inspect's streamed and inline paths share one `_summarise(meta, rows_for)`; the schema-version check is one `backup.schema_version_error` read by inspect and restore. (2) AdminDataBackupRestore (1,197 lines) is now the page (library calls + library settings, 353 lines) over BackupLibraryList, BackupCreateDialog, BackupRestorePanel and RestoreReportDialog (components/settings/backup/), with shared display helpers in helpers/backupSections.ts. (3) ImportResultDialog.vue holds the import's result list, chips and error CSV; SpreadsheetImportResult type in dataApiService. SettingsFileDrop read: found FU-576's cause (below).
+FU-576: real bug, fixed. SettingsFileDrop's Remove button sits inside the <label>; the click swaps the button out of the DOM and Chrome then runs the label's activation and opens the file picker. Reproduced with a two-case Playwright page (without preventDefault: 1 filechooser; with: 0). onClear now calls preventDefault. The uploads.spec.ts pin itself went with the 2026-07-20 feature-spec deletion.
+FU-951: closed. SettingsPageHeader and SettingsSection take a `help` prop that puts the (?) beside the title; placed on Backup & restore, Import, API access, Region & locale, Stock locations and About → Install as an app; HelpHints beside the recipe page's Ingredients, Method, Nutrition and Version information headings (the drawer ones stop the click so they don't toggle), the planner's Recipes rail head, Build my week's setup line, the cook mode header and the shopping list's status pill. All 14 titles pinned in helpContent.spec. Left out on purpose: the masthead pencil, Meals prepared stepper and Estimated cost cell, which sit in the masthead's dense fact grid where a fourth glyph per row crowds a phone; their guides are one hop from the Ingredients/Method chips.
+FU-935: closed. GetRecipesHandler.handle_candidates runs the same base query with only the two passes the planners' rankers read (plan counts/staleness and nutrition); load_all_recipe_dtos (build my week, rail suggestions, budget swaps, lighter swaps) uses it instead of the full ten-pass list pipeline. Planner/recipe suites green (589).
+FU-931: closed. Recipe photos (cookbook card, masthead, planner rich card) and step photos (read view, editor, cook mode incl. zoom) load through useAuthedImage; recipeApiService builds API paths (recipeImagePath / recipeStepImagePath) instead of base-prefixed URLs; RecipeStepPhoto renders a fresh pick's data URL or fetches a saved one (EditableStepImage lost its preview_url); useAuthedImage takes an onError so cook mode keeps its 'couldn't be loaded' state. Cache story: the authed GETs fall under the existing `dora-api` NetworkFirst rule, which sign-out already evicts; the dead `/stock-items/<id>/image` CacheFirst rule went.
+FU-781 + FU-926: closed. The property file loads a no-deadline Hypothesis profile (pure functions; the 200ms per-example clock only tripped under a loaded full suite), and lower_price_never_ranks_worse builds both prices below `was` instead of filtering with assume (it discarded ~5/6 of inputs, near filter_too_much). FU-926: no counterexample exists — brute-forced every code point alone and beside '°', space and a letter, plus 200k random strings; normalise_unit is idempotent.
+FU-778: doesn't reproduce: two full vitest runs (2026-11-05) end with no 'Errors' line and no teardown 'document is not defined' from the portal timer.
+FU-772: measured from the theme tokens (pill = brand-primary-soft wash composited over page/component/elevated surfaces): the score text clears 4.8:1 (Blueberry Dark) to 9.0:1 in every dark theme; the star glyph fell to 2.8:1 on Pesto Dark (D-002 3:1 graphic tier). The glyph now takes --text-primary, which clears every dark theme.
+FU-865: html scrollbar-color reads --brand-secondary / --surface-page (on :root) instead of Quasar's --q-* (written to <body>, never inherited up), so the scrollbar follows the theme.
+FU-652: closed. Marks against the page take --brand-secondary-strong via a new .dora-text-secondary-mark (ProductCard's "Custom" outline chip, AttentionRulesDialog's essential flag) and DoraChat's scroll thumb; the cook-mode swap chip is a fill, so it stays surface-grade (comment says why). The RecipeDetailPage / RecipeCookMode / Region icons the FU named no longer paint secondary.
+FU-898: closed (inventory note). FU-831 (resolved 11-05) was the unit it pointed at; savings-captured and the swap call keep their /reports and planner consumers.
+FU-770: closed won't-do. The card's chip and the row's meta-line kcal diverged at the owner's ask; a shared component would only earn its keep at a third surface, and none has appeared.
+FU-871: closed won't-do. parseLayout filters stored ids to the known set, and dashboardCards.spec pins the retired ids as absent so none can be reused; rewriting every user's JSON to drop dead ids changes nothing a user sees.
+FU-868 / FU-800 / FU-742: closed as pure verify items. Each is "look at it" with no fix pending, and its checks already sit in DORA_VERIFY.md (Dashboard money-off lines; "Accent ink + Dora's voice" burger sizes; the recipe phone walk's facts-strip line), which is where the ledger rule puts them.
+FU-731: closed as a pure verify item: the two remaining popups (structured step text, section name) are checked by the DORA_VERIFY recipe-view line 'The two remaining inline q-popup-edits on a phone'; fix only what reproduces there.
+FU-808: ShortcutDef.enabled?() — an off shortcut is neither dispatched (findMatch, sequence prefix) nor listed in the ? cheatsheet; the shopping list's space/u are enabled only while the list is being shopped. Spec added.
+FU-711: one name, "Opened": the stock row's toggle reads "Mark as opened" (aria-label + tooltip), the overview filter chip "Opened", and the attention-rules explainer "the Opened toggle".
+FU-712: already done. The merged recipe page no longer builds "Expired {when}" / "Expires {when}" by hand (no such strings remain); dates there go through the shared helpers.
+FU-741: the new-version toast says "The new one isn't a favourite yet." when the source was a favourite; pool and last-cooked stay uncopied as before (facts about the household's history, commented in new_recipe_version.py).
+FU-746: localRatingScheme / isAustralasian moved to helpers/localRatingScheme.ts (the Region page imports it) and pinned by localRatingScheme.spec (en-GB+Australia/Sydney, en-AU+UTC, mi-NZ, Pacific/Auckland true; Europe/London, Pacific/Fiji false; Nutri-Score adopters vs Warsaw).
+FU-920: MealPlanRailCount renamed CountBadge (git mv; class .count-badge), three importers updated.
+FU-692: restaurant (fork-and-knife) now means only a meal: meal plans, the no-planned-meals alert, meal swaps, the builder's review step. The admin Cooking page (nav + header) and About's 'what you can cook tonight' row take chef_hat (the act of cooking); the Kitchen-features nav group takes kitchen. icons.ts says so beside the entry.
+FU-672: config/settingsPageIcons.ts is the one path->icon map; the sidebar (SettingsNavGroup), the phone nav (SettingsMobileNav) and SettingsPageHeader read it (the header by route path, with an explicit :icon only for a heading that isn't a page's own). Nav entries, 36 page headers, TaxonomyManagerPage and VocabListEditor no longer declare an icon.
+FU-734: Quasar 2.18's QSelect already names its combobox from `label` (aria-label on role=combobox), so every labelled BaseSelect, the masthead's five included, has a name. The 15 that had no label (their name drawn beside them in a SettingsRow, an inline-edit row or the wizard) now pass aria-label, which QSelect lets override; BaseSelect warns in dev when a use has neither.
+FU-732: already resolved by the 2026-09-13 shelf-denominator batch: server-rendered per-unit prices (YourPrices, offers sidecar, chart axis, reports) are quoted per 100g/100ml/kg/each by units.display_denominator_for, and the two client-side quotes (PriceEntry preview, RecipeCostDialog) go through helpers/unitPriceDisplay (requoteUnitPrice); no per-gram render remains (the list rows' estimated_unit_price is per pack/each).
+FU-753: closed, by design. PRICE_PICKER_CANONICAL_UNITS has one reader, supported_price_units(), which only feeds scripts/dump_units.py's build-time units_table.ts. That table is compiled before any install has a measurement system, so it has to be the union; PriceEntry narrows it at runtime with useMeasurementSystem().offeredUnits (from units_for_system via /health). There is one filter, not two.
+FU-680: resolved by FU-874 (2026-09-09): _price_line passes the stock item's name to units.convert, so a mass-vs-volume pair the density table knows is priced, and a measured portion row (resolve_grams) is preferred over the modelled density. Not flagged per line: the whole breakdown is already titled and worded as an estimate, so a per-line 'density-derived' mark would add a second, finer hedge nobody asked for.
+FU-900: the assistant's convert_measurement applies food_specific_mass_applies to both units, so '2 sticks' converts to 226 g only for butter/margarine and otherwise asks which food (test). The other two convert callers can't meet it: recipe costing and nutrition were already guarded, and price sizes come from the price picker, which doesn't offer stick, or from product sizes in g/ml/ea. UNIT_TABLE keeps stick (a US household's butter conversions are right).
+
+**Verify lines to add to DORA_VERIFY.md:**
+- Stock item, Recent prices: Edit a price (change amount, date, pack count), Remove asks first, Show all appears past 5.
+- Log a price at 375px: the Date field fits the pack-count/store row; the no-stores hint links to Settings.
+- Stock overview peek: type a name change, click another row, the discard prompt appears.
+- Settings → Locations: 'Not stored anywhere' row shows with an unplaced item; Review opens the stock list filtered to it.
+- Stock item: the buy verdict card's caret lines up with the Dora-thinks card's above it; the cart/skip action sits just left of the caret and doesn't toggle the card.
+- Settings → Backup & restore after the split: library list, New backup dialog (sensitive banner), restore from a file (inspect tree, restore, report dialog) and library settings all behave as before; Remove on a picked file doesn't reopen the picker.
+- The new (?) chips at 375px: planner rail head, cook mode header, shopping list status row and the recipe headings don't wrap or crowd.
+- Recipe photos after FU-931: cookbook cards, recipe hero, planner rich cards, step photos (read view, editor, cook mode + zoom) all render; a broken step photo still says it couldn't be loaded.
+
+**Not started / still open:** FU-916 (was mid-read: nightly prune of AlertInteraction rows whose key no longer
+matches a live alert and older than the longest discard window; GetAlertsHandler.handle(user_id) derives keys),
+917/911, 909, 901/771, 895, 890, 863, 858, 857, 851, 847, 846, 844, 843, 837, 802/791, 799, 798, 795, 793, 792,
+784, 750/645, 749, 744, 735, 730, 714, 713, 705, 700, 694, 693, 691, 684, 671, 669, 668, 667, 664, 662, 657, 656,
+647, 646, 636, 623, 579, 363, companion 886/887/891/924/960(2); FU-608 is owner-only.
+
+**Gates:** last full pytest 2777 passed + 2 that failed only from a concurrent run (both pass alone); planner/recipe
+589 green after FU-935; vitest 926 green; vue-tsc + eslint clean at last check. DTO snapshot regenerated (day_cost /
+day_nutrition dropped). A clean full pytest run is still owed after the later edits (FU-900 test, convert tool,
+properties profile).
+
+---
+
+## 2026-11-05 (late night): **Leftovers sweep 1: double toasts, a11y names, push on sign-out, onboarding gate, test lint (uncommitted)**
+
+**Done:** FU-980 names on every unnamed `BaseSegmented` + a dev warning when a use has none. FU-984 the 141 catch
+blocks that toast their own failure now skip it when `isAlreadyNotified(err)` (codemod; the two clipboard catches
+put back). FU-952/889 `rollbackRegistry` retired (it had no registrants; the global handler ran an empty stack and
+was the only thing FU-889 worried about); QR object URLs revoked. FU-923 two ingestion lookups through the
+repository, two projections kept with R-005 carve-out comments. FU-756/743/673 `npm run lint` covers `test/`, 7
+errors fixed. FU-981 (1)(2)(3)(6)(7)(12) done, (8)(9) closed with reasons, (4)(5)(10)(11)(13) left. FU-960 (1)
+`/onboarding/finish` refuses seeding from anyone but the first account (test). FU-959 (1) sign-out drops the push
+subscription, (4) the expiry redirect keeps the query. Already done, closed: FU-985, FU-650, FU-873.
+Resolved 11 (980, 985, 984, 952, 889, 923, 756, 743, 673, 650, 873). 108 open.
+
+**Not seen live:** the cook-mode section heading (`:deep` now reaches it, so it really does turn 600 weight / md
+size), the chat refusal and the push teardown (needs a VAPID-configured install).
+
+**Gates:** pytest 2774 passed, vitest 916 (the retired registry spec took 8), vue-tsc + eslint (now src + test) clean. **Close-gate:** R-005 (two lookups repository-routed, two projections commented), D-019 (no
+`saving` disable), R-001 (one `isAlreadyNotified` gate everywhere). No new rule.
+
+**Next up:** keep sweeping the leftovers in batches.
+
+---
+
+## 2026-11-05 (night): **Owner batch 4: FU-578 closed out, FU-643, FU-632 (2), open-source tidy (uncommitted)**
+
+**Owner answers:** FU-578 #15 swap to a skeleton; #18 leave; #27 relabel "Change level"; #41/FU-624 do it if it's
+the standard way; #7b fix; #15b shrink only if it's an issue; FU-643 build; FU-787 keep and close; FU-608/406 act on
+what I can (donation links later).
+
+**Done:** BudgetCard skeleton; stocktake "Change level / Now X"; theme System listener covers `system-<family>`
+(`themeSystemFollow.spec.ts`); `nutrition/catalogue_vocabulary.py` AU/UK → US table on both suggestion paths
+(tests); Discussions link in the issue chooser + README; `release.yml` notes now read the released version's
+CHANGELOG section (the README told you to rename [Unreleased] while the workflow only read [Unreleased]); README
+image name and CI wording corrected. FU-624 closed without the migration: toasts are transient by design
+(Material/GitHub), placement is already central and no timeout is persistent. #15b measured fine at 375px.
+Closed: FU-578, 624, 632, 631, 643, 787, 406. FU-608 is now donation links only. 120 FUs open.
+
+**Not seen live:** the budget skeleton (budget data beats the grid on the scratch seed) and the runner label (the
+stocktake page opens on its start screen); both are small template changes, type-checked.
+
+**Gates:** pytest 2771 passed, vitest 924, vue-tsc + eslint clean. **Close-gate:** R-003 (vocabulary in one
+server table), D-004 (no shrink below 44px), D-009 (toast lifetime). No new rule.
+
+**Next up:** the remaining 120 FUs are agent-alone leftovers; work them in batches, asking only on real decisions.
+Donation links from the owner close FU-608.
+
+---
+
+## 2026-11-05 (evening): **Owner batch 3 built; FU-578 triaged for approval (uncommitted)**
+
+**Owner answers:** FU-701/702 "Use soon", not tied to notifications; FU-707 yes; FU-708 my rec; FU-913, FU-877 sure;
+FU-870 leave; close as accepted FU-855/859/867/760/697/520/404/405; FU-557 support → the dashy-dora repo (public
+now); FU-779 make a mark (Dora logo vector or the burger icon); FU-648/638 investigate and fix; FU-578 triage
+but ask before changing; FU-224/010 close.
+
+**Built:** `use_soon` on the stock DTO + "Use soon" chip; `below_baseline`/`rough`/`left_out_count` +
+`YourPriceVerdict.vue` on three surfaces; Price watches rename, phone order, chart tooltip ink (PH7 found real in a
+dark-theme drive); one essentials control in New list; 44px touch tier for tabs/nav/chip select; burger QR mark
+(`dora_qr_mark.svg` → png, ratio 0.18, OpenCV sweep marked 10 vs unmarked 9 misses of 160). FU-557: the default
+support URL already points at the public repo's issue chooser. FU-648/638 confirmed fine in a real Chromium.
+Closed: 855/859/867/760/697/520/404/405/870/224/010/557/701/702/707/708/913/877/779/648/638. 127 FUs open.
+
+**FU-578 triage** (in the FU): almost everything fixed by the DR units; six left for the owner's yes (15, 18, 27,
+41/FU-624, 7b/FU-632, 15b/FU-631).
+
+**Gates:** pytest 2762 passed, vitest 922, vue-tsc + eslint clean; DTO snapshot refreshed (`use_soon`).
+**Standards close-gate:** R-003 (use_soon and the verdict thresholds server-side), R-001 (one verdict component),
+R-085 (touch tier), D-001 (no warning tone for a price rise). No new rule.
+
+**Next up:** the owner's answers on direction list 3.
+
+---
+
+## 2026-11-05 (later): **Owner batch 2 built: DR-13, FU-983, FU-626, FU-832, FU-831, FU-788 (uncommitted)**
+
+**Owner answers:** DR-13 build, DR-16 skip, FU-983 fix, FU-831 build, FU-832 build, FU-845 skip, FU-849 skip,
+FU-683 happy as is (it was August's; its bugs were fixed then), FU-670 recipe detail view only (already so),
+FU-626 build, FU-788 build, FU-630 skip, FU-740 no, FU-748 skip; FU-643 asked "what does this achieve?".
+Items 15-27 of the first direction list are still unanswered.
+
+**Built:** DR-13 history grouping + kind chips. FU-983 `is_sizeless` + `PriceBasis` (R-105 / ADR-102, migration
+`e7b2d4f9a1c6`). FU-626 release nudge (`useReleaseUpdate`, `DORA_UPDATE_CHECK`). FU-832 shared card table,
+generic `useCardLayout`/`cardLayout`, `CardsMenu.vue`, Reports layout on `User.reports_layout` (`f3c8a1e6b4d2`).
+FU-831 `usual_price_at_pick` (`a4d9e2b7c5f1`), savings vs usual price with coverage, `savings_vs_shelf_price`
+rename, seeds freeze it. FU-788 `features/stt` (faster-whisper) + MediaRecorder fallback + Settings download;
+Docker installs it. Closed without code: FU-683/670/845/849/630/740/748, DR-16. Alembic head `a4d9e2b7c5f1`.
+
+**Verified:** full pytest green (2760 incl. new tests), vitest 921, vue-tsc + eslint clean. Driven live on the
+:5171/:5174 scratch pair with Playwright: dashboard + Reports Cards menus, Reports hide/widen/persist, savings
+line, history grouping and chips, release notice + glow, warning ink rgb(148,74,0), Voice settings download flow,
+and the recorder path (fake mic, silence cut, upload, text back) with the browser recognizer removed. The real
+Whisper engine was run in a scratchpad venv: download via Dora's code, webm/Opus clip transcribed in 0.7 s. The
+live boot caught a naive/aware datetime sort in the seed (fixed) and the fuzz test a 503 before input validation
+(fixed).
+
+**Standards close-gate:** R-003 (one usual-price definition, gates in the card table), R-005 (env-only config),
+R-018 (optional engine in Docker only; FU-787 notes STT shares the packaging gap), R-041, R-071 all held. New
+R-105 / ADR-102; ADR-068 marked built.
+
+**Direction list 2 (open):** FU-643 synonym table (explained: auto-match AU names to the US nutrition data);
+FU-701/702 rename "Expiring soon" + decouple from notification prefs; FU-707 good-news chip + confidence on Your
+prices; FU-708 Manage alerts create-or-rename; FU-913 merge the two essentials options; FU-877 lift 36-40px controls
+to 44px on touch; FU-870 trend arrow wording; accept-and-close FU-855/859/867/760/697/520/404/405; FU-787 keep
+Piper + Whisper Docker-only; FU-557 + FU-608/406 (is launch = repo public?); FU-779 QR mark asset or drop;
+FU-648/638 confirm on Altair; FU-578 agent triage; FU-224/010 colour board counts as the review.
+
+**Next up:** the owner answers direction list 2; then the agent-alone bucket.
+
+---
+
+## 2026-11-05: **Old tag gone, CI back in the repo, warning ink (FU-986), whole-pack words (FU-983 (1)) (uncommitted)**
+
+**Owner answers:** the old `1.0.0` tag (a 2023 README commit) should not exist; Dora and the companion are
+already deployed to Altair; uncomment the workflows (Actions are off in GitHub until the owner turns them on);
+FU-986 do the recommended fix; FU-983 (1) yes; resolve every FU before launch, batch by batch, with a
+direction list after each batch.
+
+**Done:** `1.0.0` tag deleted locally and on GitHub (the companion had no tags). FU-721: both workflows
+uncommented, CI Node 20 -> 22, `package.json` engines drop 18/20, release stamps `DORA_BUILD_ID`. FU-986:
+`--semantic-warning-ink` / `--severity-attention-ink` (light-dark; 4.9:1 / 4.8:1 worst case on every light
+sunken ground and the warning soft ground), `text-warning` routed to the ink, text and glyph uses moved, the scan
+overlay kept on the fill (dark scrim), theme card hover/active border fixed, style guide A1 updated. FU-983 (1):
+`packet`/`box`/`carton` canonicals + `WHOLE_PACK_UNITS`, units table regenerated, parametrised test.
+FU-983 (2)/(3) stay open as a schema call (stored observations can't tell sizeless from count-sized `ea`).
+
+**DR-13 / DR-16 (explained to the owner):** DR-13 is still unbuilt (collapse repeated history events, per-kind
+filter). DR-16 is mostly covered already: the wizard has the "Your stock" step and hides Price history when
+money is off; the register-form eager validation bit (#37) was not checked.
+
+**Gates:** vue-tsc + eslint clean, vitest 916/916; full pytest 2751 passed, 1 skipped, 1
+xfailed. **Standards close-gate:** D-002 fixed (the FU's subject); no new rule (the ink tier repeats the
+`--accent-ink` pattern, recorded in A1). Memory: CI policy updated.
+
+**Next up:** the owner answers the direction list given at the end of this session; then work the "agent can
+do alone" bucket of the 160 open FUs.
+
+---
+
 ## 2026-11-04 (later): **Owner's direction list answered; the whole "work I can do alone" backlog built (uncommitted)**
 
 **Owner answers:** FU-965 and FU-918 not worried (closed). FU-897 hide them. FU-763 keep, wrap if long (already

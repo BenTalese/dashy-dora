@@ -65,6 +65,8 @@ export type UpdateMeCommand = {
      *  hidden set). A string sets it; `null` clears it back to the default
      *  layout. Omitting it leaves it untouched. */
     dashboard_layout?: string | null;
+    /** The Reports page's layout JSON, the same contract (FU-832). */
+    reports_layout?: string | null;
     /** Per-user assistant Mode. `llm_provider` selects the active provider
      *  (or null for Basic); `llm_enabled` is the AI opt-in. Per-provider
      *  details are edited via AssistantApiService (`/assistant/providers`),

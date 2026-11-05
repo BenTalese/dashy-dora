@@ -3,7 +3,6 @@
         <SettingsPageHeader
             title="Image quality"
             description="How Dora encodes photos you upload. Applies to new uploads only."
-            :icon="ICONS.image"
         />
 
         <template v-if="ready">
@@ -72,7 +71,6 @@
     // page, rather than behind a Save/Discard pair. The pair existed so a
     // slider drag wouldn't PATCH per pixel; `@change` is the seam for that,
     // since Quasar fires it on release, not on every step.
-    import { ICONS } from 'src/style/icons';
     import { useAppSettingDrafts } from 'src/composables/useAppSettingDrafts';
     import SettingsSection from 'src/components/settings/SettingsSection.vue';
     import SettingsRow from 'src/components/settings/SettingsRow.vue';

@@ -306,6 +306,18 @@ class DoraConfig:
         path.mkdir(parents=True, exist_ok=True)
         return path
 
+    def get_stt_models_dir(self) -> Path:
+        """Where the speech-to-text (Whisper) model is stored, downloaded on
+        demand like the Piper voices (FU-788). `DORA_STT_MODEL_DIR` overrides
+        the location for operators who stage the model elsewhere."""
+        override = _env("DORA_STT_MODEL_DIR")
+        if override:
+            path = Path(override).expanduser().resolve()
+        else:
+            path = self.get_data_dir() / "stt"
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
     def get_log_dir(self) -> Path:
         """Where logging_setup.py drops rotated log files. Defaults to
         `<DATA_DIR>/logs/dapi` so logs sit next to other runtime

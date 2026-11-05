@@ -5,14 +5,9 @@
 // cover went with the queue — offline is read-only as of 2026-08-23.)
 //
 // Mock boundary: the API service class, the shopping-list
-// store, and Quasar's Notify. The rollback registry is REAL so the tests can
-// prove a level write leaves nothing in it for a later global-handler sweep.
+// store, and Quasar's Notify.
 import { createPinia, setActivePinia } from 'pinia';
 import type { StockItem } from 'src/models/stockItem';
-import {
-    clearRollbacks,
-    executeRollbacks,
-} from 'src/services/errorHandling/rollbackRegistry';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useStockItemStore } from 'src/stores/stockItemStore';
@@ -78,7 +73,6 @@ const levelOf = (store: ReturnType<typeof useStockItemStore>, id: string) =>
 beforeEach(() => {
     setActivePinia(createPinia());
     vi.clearAllMocks();
-    clearRollbacks(); // real module-global registry — isolate tests
     m.slSummaries.length = 0;
     m.getAllPagesAsync.mockResolvedValue([]);
     m.updateAsync.mockResolvedValue({});
@@ -194,9 +188,6 @@ describe('stockItemStore — updateStockLevelAsync (optimistic + rollback)', () 
 
         expect(m.getAsync).toHaveBeenCalledWith('SI-1');
         expect(store.stockItems[0]?.stock_level_last_updated).toBe('2026-07-11T00:00:00Z');
-        // Nothing is left in the global rollback registry to revert the
-        // committed level on a later, unrelated error.
-        executeRollbacks();
         expect(levelOf(store, 'SI-1')).toBe('LVL-low');
     });
 

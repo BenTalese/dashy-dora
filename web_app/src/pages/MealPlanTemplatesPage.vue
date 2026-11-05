@@ -188,7 +188,7 @@
     import { storeToRefs } from 'pinia';
     import { useQuasar } from 'quasar';
     import MealPlanTemplateSetApiService from 'src/services/api/mealPlanTemplateSetApiService';
-    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+    import { isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { useMealPlanTemplateStore } from 'src/stores/mealPlanTemplateStore';
     import { useMealPlanTemplateSetStore } from 'src/stores/mealPlanTemplateSetStore';
     import { computed, onMounted, ref } from 'vue';
@@ -240,11 +240,13 @@
             cancelRename();
             $q.notify({ type: 'positive', message: 'Renamed.' });
         } catch (err) {
-            $q.notify({
-                type: 'negative', 
-                message: "Couldn't rename that template.",
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative', 
+                    message: "Couldn't rename that template.",
+                    caption: toastCaption(err),
+                });
+            }
         } finally {
             renaming.value = false;
         }
@@ -281,11 +283,13 @@
                 setTemplateIds.value = detail.items.map((i) => i.template_id);
             } catch (err) {
                 if (editingSetId.value !== setId) return;
-                $q.notify({
-                    type: 'negative',
-                    message: "Couldn't open that set.",
-                    caption: toastCaption(err),
-                });
+                if (!isAlreadyNotified(err)) {
+                    $q.notify({
+                        type: 'negative',
+                        message: "Couldn't open that set.",
+                        caption: toastCaption(err),
+                    });
+                }
                 return;
             }
         } else {
@@ -324,11 +328,13 @@
             setEditorOpen.value = false;
             $q.notify({ type: 'positive', message: 'Set saved.' });
         } catch (err) {
-            $q.notify({
-                type: 'negative', 
-                message: 'Could not save the set.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative', 
+                    message: 'Could not save the set.',
+                    caption: toastCaption(err),
+                });
+            }
         } finally {
             savingSet.value = false;
         }
@@ -350,11 +356,13 @@
                 $q.notify({ type: 'positive', message: successMessage });
             }
         } catch (err) {
-            $q.notify({
-                type: 'negative', 
-                message: 'Something went wrong.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative', 
+                    message: 'Something went wrong.',
+                    caption: toastCaption(err),
+                });
+            }
         }
     }
 

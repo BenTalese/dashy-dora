@@ -20,7 +20,7 @@ import { useShoppingListActions } from 'src/composables/useShoppingListActions';
 import { cartStateFor, type Membership } from 'src/models/shoppingList';
 import BudgetApiService, { type BudgetStatus } from 'src/services/api/budgetApiService';
 import type { MealPlanEntryCommand } from 'src/services/api/mealPlanApiService';
-import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+import { isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
 import { NormalisedApiError } from 'src/services/api/axiosHttpClient';
 import { useMealPlanStore } from 'src/stores/mealPlanStore';
 import { useMealPlanTemplateStore } from 'src/stores/mealPlanTemplateStore';
@@ -495,7 +495,7 @@ export function useMealPlanner() {
         // (owner 2026-09-03 — dropping a multi-day cook below 0 servings used
         // to return a bare "Could not update the plan").
         if (next < 1) {
-            await removeEntry(entry);
+            await removeEntryNow(week, entryId);
             return;
         }
         const cmds = plan.entries
@@ -518,9 +518,18 @@ export function useMealPlanner() {
      * shorter, and `dissolveOrphanCookKeys` turns a batch of one back into a
      * plain meal.
      */
-    async function removeEntry(entry: MealPlanEntry) {
+    function removeEntry(entry: MealPlanEntry): Promise<void> {
+        const week = focusedMonday.value;
+        return queuePlanMutation(() => removeEntryNow(week, entry.meal_plan_entry_id));
+    }
+
+    // FU-953: every write that rebuilds the entry list goes through the queue,
+    // and each step re-reads its entry from the plan as it is when it runs.
+    async function removeEntryNow(week: string, entryId: string) {
+        if (focusedMonday.value !== week) return;
         const plan = focusedPlan.value;
-        if (!plan) return;
+        const entry = plan?.entries.find((e) => e.meal_plan_entry_id === entryId);
+        if (!plan || !entry) return;
 
         const batchIds = new Set<string>([entry.meal_plan_entry_id]);
         if (batchEnabled.value && entry.cook_batch_id && entry.is_cook_day) {
@@ -581,13 +590,27 @@ export function useMealPlanner() {
      * days option is used."* `'separate'` (the menu's "Separate this cook")
      * keeps every day's meal and only breaks the link between them.
      */
-    async function setCookDays(
+    function setCookDays(
         entry: MealPlanEntry,
         selectedDayIsos: string[],
         mode: 'redefine' | 'separate' = 'redefine',
+    ): Promise<void> {
+        const week = focusedMonday.value;
+        return queuePlanMutation(
+            () => setCookDaysNow(week, entry.meal_plan_entry_id, selectedDayIsos, mode),
+        );
+    }
+
+    async function setCookDaysNow(
+        week: string,
+        entryId: string,
+        selectedDayIsos: string[],
+        mode: 'redefine' | 'separate',
     ) {
+        if (focusedMonday.value !== week) return;
         const plan = focusedPlan.value;
-        if (!plan) return;
+        const entry = plan?.entries.find((e) => e.meal_plan_entry_id === entryId);
+        if (!plan || !entry) return;
         const selected = new Set(selectedDayIsos.filter((iso) => !isPastDay(iso)));
         const oldKey = entry.cook_batch_id ?? undefined;
         // A separate keeps every day but links none of them: minting a key
@@ -645,15 +668,21 @@ export function useMealPlanner() {
     /** "Separate this cook" — every day the batch covered keeps its meal, they
      *  just stop being one cook. The counterpart to a `redefine`, and the case
      *  the owner explicitly wanted a copy left behind for. */
-    async function separateCook(entry: MealPlanEntry) {
-        const plan = focusedPlan.value;
-        if (!plan) return;
-        const days = entry.cook_batch_id
-            ? plan.entries
-                .filter((e) => e.cook_batch_id === entry.cook_batch_id)
-                .map((e) => toIso(e.scheduled_for))
-            : [toIso(entry.scheduled_for)];
-        await setCookDays(entry, days, 'separate');
+    function separateCook(entry: MealPlanEntry): Promise<void> {
+        const week = focusedMonday.value;
+        const entryId = entry.meal_plan_entry_id;
+        return queuePlanMutation(async () => {
+            if (focusedMonday.value !== week) return;
+            const plan = focusedPlan.value;
+            const current = plan?.entries.find((e) => e.meal_plan_entry_id === entryId);
+            if (!plan || !current) return;
+            const days = current.cook_batch_id
+                ? plan.entries
+                    .filter((e) => e.cook_batch_id === current.cook_batch_id)
+                    .map((e) => toIso(e.scheduled_for))
+                : [toIso(current.scheduled_for)];
+            await setCookDaysNow(week, entryId, days, 'separate');
+        });
     }
 
     /**
@@ -670,9 +699,16 @@ export function useMealPlanner() {
      * than silently written — the menu hides the control in both cases, but
      * this is the one that has to hold.
      */
-    async function toggleCookFresh(entry: MealPlanEntry) {
+    function toggleCookFresh(entry: MealPlanEntry): Promise<void> {
+        const week = focusedMonday.value;
+        return queuePlanMutation(() => toggleCookFreshNow(week, entry.meal_plan_entry_id));
+    }
+
+    async function toggleCookFreshNow(week: string, entryId: string) {
+        if (focusedMonday.value !== week) return;
         const plan = focusedPlan.value;
-        if (!plan || !batchEnabled.value || entry.cook_batch_id) return;
+        const entry = plan?.entries.find((e) => e.meal_plan_entry_id === entryId);
+        if (!plan || !entry || !batchEnabled.value || entry.cook_batch_id) return;
         const next = !entry.cook_fresh;
         const cmds = plan.entries
             .filter(isForwardEditable)
@@ -840,11 +876,13 @@ export function useMealPlanner() {
                 mealPlanStore.getMealPlansAsync(),
             ]);
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not update meals.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not update meals.',
+                    caption: toastCaption(err),
+                });
+            }
         }
     }
     // `logPaletteCook` lived here and backed the rail row's "Log a cook…"
@@ -958,11 +996,13 @@ export function useMealPlanner() {
             // "Could not update the plan" when only this follow-up read failed.
             ingredients.value = [];
             unlinkedIngredients.value = [];
-            $q.notify({
-                type: 'negative',
-                message: "Couldn't load this week's ingredients.",
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: "Couldn't load this week's ingredients.",
+                    caption: toastCaption(err),
+                });
+            }
         } finally {
             if (req === ingredientsSeq) ingredientsLoading.value = false;
         }
@@ -996,11 +1036,13 @@ export function useMealPlanner() {
             $q.notify({ type: 'positive', message: 'Saved this week as a template.' });
             return true;
         } catch (err) {
-            $q.notify({
-                type: 'negative', 
-                message: 'Could not save the template.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative', 
+                    message: 'Could not save the template.',
+                    caption: toastCaption(err),
+                });
+            }
             return false;
         }
     }
@@ -1041,11 +1083,13 @@ export function useMealPlanner() {
             }
             $q.notify({ type: 'positive', message });
         } catch (err) {
-            $q.notify({
-                type: 'negative', 
-                message: 'Could not apply the template.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative', 
+                    message: 'Could not apply the template.',
+                    caption: toastCaption(err),
+                });
+            }
         }
     }
 
@@ -1084,11 +1128,13 @@ export function useMealPlanner() {
             if (result.first_meal_plan_id) focusedMonday.value = mondayOf(args.startMonday);
             return true;
         } catch (err) {
-            $q.notify({
-                type: 'negative', 
-                message: 'Could not apply the recurring plan.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative', 
+                    message: 'Could not apply the recurring plan.',
+                    caption: toastCaption(err),
+                });
+            }
             return false;
         }
     }

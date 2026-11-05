@@ -35,3 +35,20 @@ def test__static_files_are_sent_untouched(tmp_path, monkeypatch):
         response = _serve_file_or_index("app.js")
         response.direct_passthrough = False
         assert SAME_ORIGIN_META not in response.get_data(as_text=True)
+
+
+def test__a_head_tag_with_attributes_still_gets_the_mark(tmp_path, monkeypatch):
+    monkeypatch.setenv("DORA_SPA_DIR", str(tmp_path))
+    (tmp_path / "index.html").write_text(
+        '<!doctype html><html><head lang="en"><title>Dora</title></head></html>', encoding="utf-8")
+    with app.test_request_context("/"):
+        body = _serve_file_or_index(None).get_data(as_text=True)
+    assert '<head lang="en">' + SAME_ORIGIN_META in body
+
+
+def test__index_revalidation_answers_304_on_a_matching_etag(tmp_path, monkeypatch):
+    _spa(tmp_path, monkeypatch)
+    with app.test_request_context("/"):
+        etag = _serve_file_or_index(None).headers["ETag"]
+    with app.test_request_context("/", headers={"If-None-Match": etag}):
+        assert _serve_file_or_index(None).status_code == 304

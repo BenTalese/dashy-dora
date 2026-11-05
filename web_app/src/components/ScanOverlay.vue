@@ -508,7 +508,7 @@
     .scan-warning {
         margin-top: 4px;
         font-size: 12px;
-        color: var(--semantic-warning);
+        color: var(--semantic-warning); /* on the dark camera scrim: the fill reads, the ink would not */
     }
     .scan-error { color: #ffb4ab; }
     .scan-actions { display: flex; gap: 4px; }

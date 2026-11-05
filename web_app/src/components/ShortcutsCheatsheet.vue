@@ -6,7 +6,7 @@
             </template>
 
             <q-card-section style="max-height: 70vh; overflow-y: auto">
-                <div v-if="shortcuts.length === 0" class="dora-text-muted">
+                <div v-if="groups.length === 0" class="dora-text-muted">
                     No shortcuts are active on this screen.
                 </div>
                 <div v-for="group in groups" :key="group.scope" class="q-mb-md">
@@ -31,7 +31,7 @@
 <script lang="ts" setup>
     import { ICONS } from 'src/style/icons';
     import BaseDialog from 'src/components/BaseDialog.vue';
-    import { useShortcutRegistry } from 'src/composables/useShortcut';
+    import { shortcutActive, useShortcutRegistry } from 'src/composables/useShortcut';
     import { computed } from 'vue';
 
     const { shortcuts, cheatsheetOpen } = useShortcutRegistry();
@@ -40,6 +40,7 @@
     const groups = computed(() => {
         const byScope = new Map<string, typeof shortcuts>();
         for (const s of shortcuts) {
+            if (!shortcutActive(s)) continue;
             const list = byScope.get(s.scope) ?? [];
             (list as unknown as typeof s[]).push(s);
             byScope.set(s.scope, list);

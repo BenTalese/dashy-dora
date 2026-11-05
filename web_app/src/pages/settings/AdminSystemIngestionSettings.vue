@@ -3,7 +3,6 @@
         <SettingsPageHeader
             title="Product data ingestion"
             description="Where the outside tool that pushes product and offer data into Dora lives. Access itself is controlled by the keys you mint on the API access page."
-            :icon="ICONS.cloud_upload"
         />
 
         <template v-if="ready">
@@ -43,7 +42,6 @@
     // Features page. Renamed to what it is (any external source, not just the
     // Dora companion) and moved to Data & access, where the rest of "data
     // entering and leaving this install" lives.
-    import { ICONS } from 'src/style/icons';
     import { useAppSettingDrafts } from 'src/composables/useAppSettingDrafts';
     import SettingsSection from 'src/components/settings/SettingsSection.vue';
     import SettingsRow from 'src/components/settings/SettingsRow.vue';

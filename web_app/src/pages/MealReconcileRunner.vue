@@ -205,7 +205,7 @@
         ReconcileVerb,
         ReconcileVerbCommand,
     } from 'src/services/api/mealPlanApiService';
-    import { toastCaption } from 'src/services/errorHandling/apiErrorHandler';
+    import { isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
 
     const $q = useQuasar();
     const { entries, total, hasMore, loading, submitVerb, fetchNextPage, reload } = useReconcileQueue();
@@ -323,11 +323,13 @@
             else if (command.verb === 'skip') summary.skipped += 1;
             index.value += 1;
         } catch (err: unknown) {
-            $q.notify({
-                type: 'negative',
-                message: 'Could not save that.',
-                caption: toastCaption(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not save that.',
+                    caption: toastCaption(err),
+                });
+            }
         } finally {
             busy.value = false;
         }

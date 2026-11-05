@@ -188,22 +188,25 @@
                              One button now, the chevron pinned left and the
                              label centred in the column, wearing the
                              disclosure's own label size. -->
-                        <button
-                            type="button"
-                            class="rail-head"
-                            aria-label="Hide recipes"
-                            :aria-expanded="true"
-                            @click="railOpen = false"
-                        >
-                            <q-icon :name="ICONS.chevron_left" size="20px" class="rail-head__chevron" />
-                            <span class="rail-head__label">Recipes</span>
-                            <MealPlanRailCount
-                                class="rail-head__count"
-                                :count="planner.recipes.value.length"
-                                :label="`${planner.recipes.value.length} recipes`"
-                            />
-                            <BaseTooltip>Hide recipes</BaseTooltip>
-                        </button>
+                        <div class="rail-head-row">
+                            <button
+                                type="button"
+                                class="rail-head"
+                                aria-label="Hide recipes"
+                                :aria-expanded="true"
+                                @click="railOpen = false"
+                            >
+                                <q-icon :name="ICONS.chevron_left" size="20px" class="rail-head__chevron" />
+                                <span class="rail-head__label">Recipes</span>
+                                <CountBadge
+                                    class="rail-head__count"
+                                    :count="planner.recipes.value.length"
+                                    :label="`${planner.recipes.value.length} recipes`"
+                                />
+                                <BaseTooltip>Hide recipes</BaseTooltip>
+                            </button>
+                            <HelpHint topic="Plan a week" />
+                        </div>
                         <MealPlanRecipePicker
                             v-model:recipe-search="planner.recipeSearch.value"
                             class="planner-pane__fill"
@@ -647,6 +650,7 @@
 </template>
 
 <script lang="ts" setup>
+    import HelpHint from 'src/components/help/HelpHint.vue';
     import { appShellStyleFn } from 'src/helpers/appShell';
     import BaseTooltip from 'src/components/BaseTooltip.vue';
     import { ICONS } from 'src/style/icons';
@@ -656,7 +660,7 @@
     import MealPlanFirstRun from 'src/components/MealPlanFirstRun.vue';
     import MealPlanMobileFocus from 'src/components/MealPlanMobileFocus.vue';
     import MealPlanPickerSheet from 'src/components/MealPlanPickerSheet.vue';
-    import MealPlanRailCount from 'src/components/MealPlanRailCount.vue';
+    import CountBadge from 'src/components/CountBadge.vue';
     import MealPlanRecipePicker from 'src/components/MealPlanRecipePicker.vue';
     import MealPlanShoppingSummary from 'src/components/MealPlanShoppingSummary.vue';
     import AddToListDialog from 'src/components/shoppingList/AddToListDialog.vue';
@@ -1216,6 +1220,15 @@
 
     /* The whole header is the collapse control (owner 2026-09-12), so it wears
        the same 44px floor and hover the rail's disclosure headers do. */
+    .rail-head-row {
+        display: flex;
+        align-items: center;
+        flex: 0 0 auto;
+    }
+    .rail-head-row .rail-head {
+        flex: 1 1 auto;
+        width: auto;
+    }
     .rail-head {
         position: relative;
         display: flex;

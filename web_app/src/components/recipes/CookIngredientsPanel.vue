@@ -65,8 +65,9 @@
                                     <span class="ingredient-name">{{ row.ingredient.raw_text ?? 'Unlinked ingredient' }}</span>
                                 </template>
                                 <template v-else-if="sessionSwaps.has(row.ingredient.stock_item_id)">
-                                    <!-- R-002: no --text-on-secondary token yet, so
-                                         this chip keeps white ink; FU-671 / FU-652. -->
+                                    <!-- A filled chip, so the surface-grade secondary
+                                         (D-020 is for marks, FU-652); white ink
+                                         until a --text-on-secondary token exists (FU-671). -->
                                     <q-chip
                                         dense
                                         color="secondary"

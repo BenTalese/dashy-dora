@@ -13,9 +13,8 @@ from dora_api.persistence.aware import as_utc
 from dora_api.domain.entities.stock_item import StockItem
 from dora_api.domain.entities.stock_item_price_observation import (
     StockItemPriceObservation)
-from dora_api.domain import units
 from dora_api.features.stock_items.your_prices import (
-    active_price_dimension, display_denominator_for_series,
+    active_price_basis, display_denominator_for_series,
     measurement_system_from_repo, per_unit_in_canonical)
 from dora_api.features.routers import REPORTS_ROUTER
 from dora_api.infrastructure.api_response import forbidden, ok
@@ -132,16 +131,15 @@ class ItemPriceMoversHandler:
             # same chokepoint rule `build_your_prices_for_item` applies, so an
             # item's "usual" and its movement never disagree about which unit
             # they are talking about.
-            active_dim = active_price_dimension(observations)
-            if active_dim is None:
+            basis = active_price_basis(observations)
+            if basis is None:
                 continue
 
             priced: List[tuple[datetime, float]] = []
             skipped_dimension = False
             unit: str | None = None
             for observed_at, obs in bucket["points"]:
-                obs_def = units.find_unit(obs.unit)
-                if obs_def is None or obs_def.dimension != active_dim:
+                if not basis.holds(obs):
                     skipped_dimension = True
                     continue
                 per_unit = per_unit_in_canonical(
@@ -175,7 +173,7 @@ class ItemPriceMoversHandler:
             # chart, one click away, said "$2.40/100ml": one price, two
             # languages (R-003; found by driving it).
             display_unit, display_factor = display_denominator_for_series(
-                observations, [], active_dim=active_dim,
+                observations, [], basis=basis,
                 canonical_unit=unit, system=system,
             )
             if display_factor != 1.0:

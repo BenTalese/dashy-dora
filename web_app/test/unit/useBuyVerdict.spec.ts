@@ -13,6 +13,7 @@
  * and the enabled-flag composable are mocked at the module boundary.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as ModuleUnderTest from 'src/composables/useBuyVerdict';
 import { nextTick, ref, type Ref } from 'vue';
 
 const h = vi.hoisted(() => ({ getAsync: vi.fn() }));
@@ -31,7 +32,7 @@ vi.mock('src/composables/useBuyVerdictEnabled', () => ({
     }),
 }));
 
-type Mod = typeof import('src/composables/useBuyVerdict');
+type Mod = typeof ModuleUnderTest;
 
 function verdictNamed(label: string) {
     return {

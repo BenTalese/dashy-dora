@@ -27,13 +27,15 @@
             <CookStepProgress :current="index" :total="images.length" noun="Photo" class="q-mb-md" />
 
             <div class="cook-image-view__frame">
-                <img
+                <RecipeStepPhoto
                     v-if="currentImage && !failed.has(currentImage.image_id)"
-                    :src="srcFor(currentImage)"
+                    :recipe-id="recipeId"
+                    :image-id="currentImage.image_id"
+                    data-url=""
                     :alt="`Step ${index + 1}`"
                     class="cook-image-view__image"
                     @click="openZoom()"
-                    @error="markFailed(currentImage.image_id)"
+                    @failed="markFailed(currentImage.image_id)"
                 />
                 <!-- A broken <img> renders its alt text, which here reads as a
                      plain "Step 1" line and is indistinguishable from a recipe
@@ -92,14 +94,16 @@
                      dragging on touch and scrolling on desktop without any
                      gesture code of our own. -->
                 <div class="cook-image-view__zoom-body">
-                    <img
+                    <RecipeStepPhoto
                         v-if="currentImage && !failed.has(currentImage.image_id)"
-                        :src="srcFor(currentImage)"
+                        :recipe-id="recipeId"
+                        :image-id="currentImage.image_id"
+                        data-url=""
                         :alt="`Step ${index + 1}`"
                         class="cook-image-view__zoom-image"
                         :class="{ 'cook-image-view__zoom-image--magnified': magnified }"
                         @click="magnified = !magnified"
-                        @error="markFailed(currentImage.image_id)"
+                        @failed="markFailed(currentImage.image_id)"
                     />
                     <div v-else class="dora-text-muted text-center q-pa-xl">
                         <q-icon :name="ICONS.image_not_supported" size="48px" />
@@ -129,7 +133,7 @@
     import BaseButton from 'src/components/BaseButton.vue';
     import CookNavRow from 'src/components/recipes/CookNavRow.vue';
     import CookStepProgress from 'src/components/recipes/CookStepProgress.vue';
-    import { recipeStepImageUrl } from 'src/services/api/recipeApiService';
+    import RecipeStepPhoto from 'src/components/recipes/RecipeStepPhoto.vue';
     import { ICONS } from 'src/style/icons';
     import type { RecipeStepImage } from 'src/models/recipe';
 
@@ -172,18 +176,6 @@
     watch(zoomOpen, (open) => {
         if (!open) magnified.value = false;
     });
-
-    /** R-003 — the step-image URL has one builder, `recipeStepImageUrl`, which
-     *  prefixes `resolveBaseURL()`. This component hand-rolled the path as a
-     *  literal `/api/...`, which only resolves when the SPA is served from the
-     *  same origin as the API. Anywhere else — the dev server, the desktop
-     *  bundle, a reverse-proxied self-host on a sub-path — every step image
-     *  404'd and the browser fell back to the `alt` text, which is exactly the
-     *  reported *"photo steps don't appear, it's just text like 'step 1', and
-     *  tapping it shows a broken modal"* (owner feedback 2026-08-27). */
-    function srcFor(image: RecipeStepImage): string {
-        return recipeStepImageUrl(props.recipeId, image.image_id);
-    }
 
     function markFailed(imageId: string) {
         failed.add(imageId);

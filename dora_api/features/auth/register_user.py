@@ -112,6 +112,8 @@ class AuthenticatedUserDto:
     # hidden set), or None when the user hasn't customised. The SPA parses it
     # to seed the dashboard; the backend treats it as an opaque string.
     dashboard_layout: str | None
+    # The Reports page's layout JSON, the same contract (FU-832).
+    reports_layout: str | None
     # per-user assistant config. `llm_enabled` is the AI-mode opt-in and
     # `llm_provider` the active provider (or None for Basic mode). The
     # per-provider details live in `UserLlmProvider` and are read/edited via
@@ -163,6 +165,7 @@ class AuthenticatedUserDto:
             inference_meal_plan_enabled=bool(user.inference_meal_plan_enabled),
             has_image=user.image is not None,
             dashboard_layout=user.dashboard_layout,
+            reports_layout=user.reports_layout,
             llm_enabled=bool(user.llm_enabled),
             llm_provider=user.llm_provider,
             assistant_ready=bool(active_provider is not None and active_provider.verified),

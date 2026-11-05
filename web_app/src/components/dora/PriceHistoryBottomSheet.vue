@@ -25,21 +25,19 @@
             </div>
 
             <template v-else-if="hasPoints">
-                <!-- The "above usual" chip stays here: it is a verdict about
+                <!-- The verdict stays here: it is a verdict about
                      the item, not a key to the chart. The legend itself moved
                      *into* `PriceHistoryChart` (FU-833) — it named the two
                      series and the baseline, which are the chart's own facts,
                      and two other consumers needed the same thing. -->
                 <div class="row items-center q-mb-sm">
                     <q-space />
-                    <q-chip
-                        v-if="history?.above_baseline"
-                        dense
-                        class="dora-chip--tint-warning"
-                        :icon="ICONS.trending_up"
-                    >
-                        above usual
-                    </q-chip>
+                    <YourPriceVerdict
+                        v-if="history?.baseline != null"
+                        :above="history.above_baseline"
+                        :below="history.below_baseline"
+                        :rough="history.rough"
+                    />
                 </div>
 
                 <PriceHistoryChart
@@ -65,8 +63,8 @@
     import AppSpinner from 'src/components/AppSpinner.vue';
     import BaseDialog from 'src/components/BaseDialog.vue';
     import PriceHistoryChart from 'src/components/PriceHistoryChart.vue';
+    import YourPriceVerdict from 'src/components/dora/YourPriceVerdict.vue';
     import { stockItemHistoryToChart } from 'src/composables/usePriceChartSeries';
-    import { ICONS } from 'src/style/icons';
     import StockItemApiService from 'src/services/api/stockItemApiService';
     import type { StockItemPriceHistory } from 'src/services/api/priceHistoryApiService';
 

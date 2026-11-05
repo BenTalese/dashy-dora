@@ -17,7 +17,6 @@
 import { computed, type ComputedRef } from 'vue';
 import { storeToRefs } from 'pinia';
 import type { Recipe } from 'src/models/recipe';
-import { recipeImageUrl } from 'src/services/api/recipeApiService';
 import { inferenceTooltip as hintTooltip } from 'src/helpers/inferenceHint';
 import { totalMinutes } from 'src/helpers/recipeTime';
 import { formatUnitPrice } from 'src/composables/useMoney';
@@ -62,7 +61,6 @@ export interface RecipeDisplay {
     /** Fallback glyph + colour for a recipe with no photo. */
     initial: ComputedRef<string>;
     mediaStyle: ComputedRef<{ background: string }>;
-    imageUrl: ComputedRef<string>;
 }
 
 export function useRecipeDisplay(recipe: () => Recipe): RecipeDisplay {
@@ -212,7 +210,6 @@ export function useRecipeDisplay(recipe: () => Recipe): RecipeDisplay {
         for (const ch of recipe().name) hash = (hash * 31 + ch.charCodeAt(0)) % 360;
         return { background: `hsl(${hash}, 45%, 42%)` };
     });
-    const imageUrl = computed(() => recipeImageUrl(recipe().recipe_id));
 
     return {
         totalTime,
@@ -231,6 +228,5 @@ export function useRecipeDisplay(recipe: () => Recipe): RecipeDisplay {
         inferenceTooltip,
         initial,
         mediaStyle,
-        imageUrl,
     };
 }

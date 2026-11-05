@@ -50,7 +50,7 @@
     import StockItemApiService from 'src/services/api/stockItemApiService';
     import { useStockItemStore } from 'src/stores/stockItemStore';
     import { useStoresStore } from 'src/stores/storesStore';
-    import type { PriceEntryPrefill } from 'src/models/stockItemDetail';
+    import type { PriceEntryPrefill, PriceEntryValue } from 'src/models/stockItemDetail';
 
     const props = defineProps<{
         stockItemId: string;
@@ -89,13 +89,7 @@
         }
     }
 
-    async function onSubmit(value: {
-        total_price: number;
-        total_measure: number;
-        unit: string;
-        store_id: string | null;
-        pack_count: number | null;
-    }) {
+    async function onSubmit(value: PriceEntryValue) {
         submitting.value = true;
         try {
             await stockItemApi.addPriceObservationAsync(props.stockItemId, value);

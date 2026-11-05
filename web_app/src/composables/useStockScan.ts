@@ -31,6 +31,7 @@ import BarcodeApiService from 'src/services/api/barcodeApiService';
 import { useStockItemStore } from 'src/stores/stockItemStore';
 import { useStockLevelStore } from 'src/stores/stockLevelStore';
 import { ICONS } from 'src/style/icons';
+import { isAlreadyNotified } from 'src/services/errorHandling/apiErrorHandler';
 
 export interface StockScanDeps {
     stockItems: () => readonly StockItem[];
@@ -186,11 +187,13 @@ export function useStockScan(deps: StockScanDeps) {
             }
             deps.openCreateDialog(prefill);
         } catch (err) {
-            $q.notify({
-                type: 'negative',
-                message: 'Lookup failed.',
-                caption: err instanceof Error ? err.message : String(err),
-            });
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Lookup failed.',
+                    caption: err instanceof Error ? err.message : String(err),
+                });
+            }
         }
     }
 

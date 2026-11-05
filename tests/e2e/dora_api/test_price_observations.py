@@ -158,3 +158,41 @@ def test__price_observation__unknown_store_rejected(api):
         },
     )
     assert resp.status_code == 404, resp.text
+
+
+def test__price_observation__put_corrects_in_place(api):
+    # FU-706: a mistyped price is fixed without delete + retype, and an
+    # omitted date keeps the original one.
+    item = _new_stock_item()
+    requests.post(f"{STOCK_ITEMS}/{item}/price-observations", json={
+        "total_price": 1250.0, "total_measure": 1.0, "unit": "L",
+        "observed_at": "2026-03-01T00:00:00+00:00",
+    })
+    obs = _detail(item)["price_observations"][0]
+
+    resp = requests.put(
+        f"{STOCK_ITEMS}/{item}/price-observations/{obs['observation_id']}",
+        json={"total_price": 12.5, "total_measure": 1.0, "unit": "litre", "pack_count": 2},
+    )
+    assert resp.status_code == 204, resp.text
+    corrected = _detail(item)["price_observations"]
+    assert len(corrected) == 1
+    assert corrected[0]["observation_id"] == obs["observation_id"]
+    assert corrected[0]["total_price"] == 12.5
+    assert corrected[0]["unit"] == "L"
+    assert corrected[0]["pack_count"] == 2
+    assert corrected[0]["observed_at"].startswith("2026-03-01")
+
+
+def test__price_observation__put_on_another_items_observation_is_404(api):
+    item = _new_stock_item()
+    other = _new_stock_item()
+    requests.post(f"{STOCK_ITEMS}/{item}/price-observations", json={
+        "total_price": 3.0, "total_measure": 1.0, "unit": "ea",
+    })
+    obs_id = _detail(item)["price_observations"][0]["observation_id"]
+    resp = requests.put(
+        f"{STOCK_ITEMS}/{other}/price-observations/{obs_id}",
+        json={"total_price": 4.0, "total_measure": 1.0, "unit": "ea"},
+    )
+    assert resp.status_code == 404

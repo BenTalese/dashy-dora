@@ -5,7 +5,18 @@ semver — major bumps signal schema or breaking-config changes.
 
 ## [Unreleased]
 
+### Added
+- **Support Dora links are live (2026-11-05).** The Support Dora buttons and the
+  repo's Sponsor button offer PayPal and GitHub Sponsors; the About page, the
+  README and the issue chooser link to them too. Buy Me a Coffee is no longer
+  listed.
+
 ### Security
+- **Signing out stops this device's push alerts (2026-11-05).** On a shared
+  device the next person to sign in used to keep getting the previous user's
+  notifications. The server also refuses to seed the household's default
+  groups, locations, starter items or demo data for anyone but the first
+  account.
 - **Sign-ups are closed by default (2026-10-30).** The sign-in page no longer
   offers "Need an account?" unless an admin switches on *Let people create their
   own account* on Settings → Users, and the server refuses new sign-ups while it
@@ -21,7 +32,62 @@ semver — major bumps signal schema or breaking-config changes.
   install without a public URL no longer sends those mails (the server log says
   why), and the sign-in page hides "Forgot password?" until it can.
 
+### Added
+- **Talk to Dora from Firefox (2026-11-05).** Where a browser has no speech
+  recognition of its own, Dora's server can listen instead: download speech
+  recognition once from Settings → Voice (about 148 MB, shared by the install)
+  and the mic in the chat and in cook mode works there too. It runs on your
+  server, offline, like Dora's neural voice.
+- **Reports cards can be hidden and reordered** from a Cards menu, the same as
+  the dashboard's, and the layout follows you across devices.
+- **Item history groups repeats.** Fifty expiry pushes in a row show as one
+  "Moved expiry ×50" row you can open, and chips filter the history by kind.
+- **Admins hear about new releases.** When a newer Dora is out, the account
+  button glows and Settings says which version and links its notes. Set
+  `DORA_UPDATE_CHECK=false` to stop Dora checking GitHub at all.
+
 ### Changed
+- **Nutrition suggestions understand Australian and British food names**:
+  capsicum, aubergine, mince, prawns, tinned tomatoes, plain flour, icing
+  sugar and more now find their match in the (American) food database.
+- **A "System" theme follows your device live**: switching the phone or
+  computer between light and dark no longer needs a reload, and the page no
+  longer half-switches.
+- **Stocktake** labels the level button "Change level", with the current level
+  under it. **My budget** shows a placeholder shape while it loads, like the
+  other cards.
+- **"Expiring soon" is now "Use soon"**, and it no longer goes blank when you
+  mute expiry notifications: whether food needs using is a fact about the
+  food, not about your alert settings.
+- **"Your prices" tells good news too.** Paying noticeably less than usual
+  gets its own "Less than usual" chip; paying more reads in a neutral tone
+  rather than a warning; a usual price built on few prices says it's a rough
+  guide; and prices in another unit that weren't counted are mentioned. The
+  same wording on the item page, its history and Price history.
+- **Price history:** "Manage alerts" is now "Price watches"; on a phone the
+  chart comes before the product picker; the chart's hover card is readable in
+  the dark themes.
+- **New list:** one "Your essentials" option (when low or out, or always)
+  replaces two overlapping checkboxes.
+- **Bigger touch targets** for tabs, Settings navigation and multi-pick
+  selects on phones and tablets.
+- **QR labels carry Dora's burger** in the middle instead of the old wordmark.
+- **Savings in Reports are measured against what you usually pay**, not the
+  shop's shelf price: "$11 less than you usually pay, on 9 of 27 items with a
+  usual price". It no longer needs product data. On a shopping list the figure
+  is now labelled "Under shelf price", and the offer picker says "$X off".
+- **"Your prices" keeps loose and boxed purchases apart.** A carton bought with
+  no size and the same carton bought as "12 eggs" no longer average into one
+  number.
+- **Warning text is readable in the light themes (2026-11-05).** Warning words
+  and icons (Low chips, "dearer than usual" notes, warning banners, the Expiring
+  filter when on) use a darker warning shade on light grounds, so they clear the
+  contrast floor; dark themes look the same as before.
+- **"Packet", "box" and "carton" in a recipe price as the whole pack**, the same
+  as "pack": "1 carton eggs" costs the carton, not one egg.
+- **CI and Release workflows are back in the repo** (Node 22). They run once
+  Actions is switched on for the GitHub repo; a release image now carries its
+  commit as the build id on About.
 - **Finish-off sweep (2026-11-04).** Settings → Email has no "Email enabled"
   switch any more (it switched nothing): Dora sends mail once SMTP is set up,
   and the page now warns when SMTP is set but the public URL isn't, since email
@@ -135,6 +201,13 @@ semver — major bumps signal schema or breaking-config changes.
   guide they name directly.
 
 ### Fixed
+- **Follow-up sweep (2026-11-05).** A server error shows one toast everywhere,
+  not the server's plus the page's own. Every segmented control has a name a
+  screen reader can announce. When your session expires, signing back in
+  returns you to the same filtered page, not just the page. Cook mode's
+  Ingredients, Tools and Steps headings get the bolder style they were meant
+  to have. After Dora refuses to add to a finished list, its Add button stays
+  closed instead of inviting a pointless retry.
 - **Finish-off sweep (2026-11-04).** A recipe ingredient of "1 pack" costs the
   whole pack (a $6 carton of 12 eggs is $6.00, not $0.50). The buy verdict
   compares prices per unit, so a smaller pack no longer reads as "cheapest

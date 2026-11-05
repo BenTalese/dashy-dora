@@ -2,7 +2,6 @@
     <div class="settings-page">
         <SettingsPageHeader
             title="Budget"
-            :icon="ICONS.savings"
             description="Set a shared grocery budget for the household. Dora tracks spend across every finished shopping list and surfaces dollar figures on recipes, lists, and the dashboard."
         />
 
@@ -34,6 +33,7 @@
 
             <SettingsRow v-if="budgetActive" label="Period">
                 <BaseSegmented
+                    aria-label="Budget period"
                     :model-value="budgetPeriodDraft"
                     :options="budgetPeriodOptions"
                     @update:model-value="onBudgetPeriodChange"
@@ -53,7 +53,6 @@
     import BudgetApiService from 'src/services/api/budgetApiService';
     import SettingsSection from 'src/components/settings/SettingsSection.vue';
     import SettingsRow from 'src/components/settings/SettingsRow.vue';
-    import { ICONS } from 'src/style/icons';
     import SettingsPageHeader from 'src/components/settings/SettingsPageHeader.vue';
     import BaseSegmented, { type BaseSegmentedOption } from 'src/components/BaseSegmented.vue';
 

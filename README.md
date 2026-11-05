@@ -318,12 +318,12 @@ Auto-detects Apple Silicon vs Intel. Requires Xcode command-line tools. Data per
 
 ### Releasing (manual, push-the-button)
 
-The CI and Release workflows ([.github/workflows/ci.yml](.github/workflows/ci.yml), [release.yml](.github/workflows/release.yml)) are checked in but **commented out** for now (owner policy: GitHub free-tier minutes during rapid development — FU-721). When revived, CI runs frontend lint + typecheck + vitest + build and the `dora_api` pytest suite on every push and PR, and **never publishes anything**. Releases are explicit:
+The CI and Release workflows ([.github/workflows/ci.yml](.github/workflows/ci.yml), [release.yml](.github/workflows/release.yml)) are live in the repo; they run once GitHub Actions is switched on for it. CI runs frontend lint + typecheck + vitest + build and the `dora_api` pytest suite on every push and PR, and **never publishes anything**. Releases are explicit:
 
 1. Land your changes on `main` and confirm CI is green for that SHA.
-2. Bump `CURRENT_VERSION` in `dora_api/features/help/version_info.py` — the one version source; the web app reads it at build time — and `web_app/package.json` to match (a test pins the pair). Rename the `## [Unreleased]` block in `CHANGELOG.md` to `## [X.Y.Z] - <date>`; its text becomes the GitHub Release body.
+2. Bump `CURRENT_VERSION` in `dora_api/features/help/version_info.py` — the one version source; the web app reads it at build time — and `web_app/package.json` to match (a test pins the pair). Rename the `## [Unreleased]` block in `CHANGELOG.md` to `## [X.Y.Z] - <date>`; the workflow uses that section as the GitHub Release body.
 3. Go to **Actions → Release → Run workflow**, type a version like `v0.3.0`, and run it.
-4. The workflow validates the version, builds the Docker image, pushes to `ghcr.io/bentalese/dashydora:vX.Y.Z` **and** `:latest`, then cuts the GitHub Release. Tick **dry_run** to preview without publishing.
+4. The workflow validates the version, builds the Docker image, pushes to `ghcr.io/bentalese/dashy-dora:vX.Y.Z` **and** `:latest`, then cuts the GitHub Release. Tick **dry_run** to preview without publishing.
 5. After the release lands, move the `[Unreleased]` heading down and start a fresh section.
 
 </details>
@@ -336,13 +336,10 @@ Dora is free and open-source, built by one person in their spare time. If it sav
 you time or money, chipping in keeps it alive and caffeinated — but it's always
 optional, and every feature is free for everyone regardless.
 
-<!-- FU-608: replace the PLACEHOLDER links once the accounts are live. -->
-- ☕ **[Buy Me a Coffee](https://example.com/PLACEHOLDER-see-FU-608)** — a one-off thank-you.
-- 💖 **[GitHub Sponsors](https://example.com/PLACEHOLDER-see-FU-608)** — recurring support.
-- 🅿️ **[PayPal](https://example.com/PLACEHOLDER-see-FU-608)** — if that's easier for you.
+- 🅿️ **[Donate with PayPal](https://www.paypal.com/donate/?business=BBEWWLKS6MY2G&no_recurring=1&currency_code=AUD)**, a one-off thank-you.
+- 💖 **[GitHub Sponsors](https://github.com/sponsors/BenTalese)**, recurring support.
 
-> _Links are placeholders while the accounts are being set up — see the in-app
-> **Support Dora** button or the repo's **Sponsor** button once they're live._
+The in-app **Support Dora** button and the repo's **Sponsor** button list the same two.
 
 <br/>
 
@@ -351,6 +348,7 @@ optional, and every feature is free for everyone regardless.
 Please open an issue — bug reports and feature requests are very welcome.
 
 - **[Open an issue](https://github.com/BenTalese/dashy-dora/issues/new/choose)** using one of the templates.
+- **Questions and half-formed ideas** are welcome in [Discussions](https://github.com/BenTalese/dashy-dora/discussions).
 - For **security** issues, please follow [SECURITY.md](SECURITY.md) and report privately rather than opening a public issue.
 
 > 🚧 _Issue templates are being added — see FU-608._

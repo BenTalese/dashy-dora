@@ -12,12 +12,12 @@
     >
         <div class="rich-card__thumb" :class="{ 'rich-card__thumb--mono': !entry.has_image }">
             <img
-                v-if="entry.has_image"
+                v-if="thumbUrl"
                 :src="thumbUrl"
                 :alt="entry.recipe_name"
                 loading="lazy"
             />
-            <span v-else class="rich-card__mono-letter">{{ monogramLetter }}</span>
+            <span v-else-if="!entry.has_image" class="rich-card__mono-letter">{{ monogramLetter }}</span>
         </div>
         <div class="rich-card__body">
             <div class="rich-card__name">{{ entry.recipe_name }}</div>
@@ -89,7 +89,8 @@
     import { ICONS } from 'src/style/icons';
     import MealEntryGlyphs from 'src/components/MealEntryGlyphs.vue';
     import MealPlanEntryMenu from 'src/components/MealPlanEntryMenu.vue';
-    import { recipeImageUrl } from 'src/services/api/recipeApiService';
+    import { recipeImagePath } from 'src/services/api/recipeApiService';
+    import { useAuthedImage } from 'src/composables/useAuthedImage';
     import { useMealEntryPresentation } from 'src/composables/useMealEntryPresentation';
     import type { MealPlanEntry } from 'src/models/mealPlan';
     import { computed } from 'vue';
@@ -118,7 +119,10 @@
         inferenceTooltip, linked, fresh, cookMarkerLabel, status, priceLabel, accessibleLabel,
     } = useMealEntryPresentation(() => props.entry, () => props.shortfall);
 
-    const thumbUrl = computed(() => recipeImageUrl(props.entry.recipe_id));
+    // Through the HTTP client (R-045, FU-931).
+    const thumbUrl = useAuthedImage(() => (
+        props.entry.has_image ? recipeImagePath(props.entry.recipe_id) : null
+    ));
     const monogramLetter = computed(
         () => (props.entry.recipe_name?.trim().charAt(0) || '?').toUpperCase(),
     );

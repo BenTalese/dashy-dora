@@ -78,6 +78,12 @@ class ShoppingListLine(BaseEntity):
     # (`snapshot_offer_rrp`) so a saving can be shown.
     picked_offer_price: float | None = None
     list_price_at_pick: float | None = None
+    # What the household usually pays for one of this line's item, frozen at
+    # finish from its own price history (FU-831 / ADR-068): the baseline the
+    # Reports "less than you usually pay" figure is measured from. A snapshot,
+    # so a past shop's saving doesn't move every time a price is logged. None
+    # when the item has too little history to have a usual price.
+    usual_price_at_pick: float | None = None
     # what the shopper *actually* paid (per unit) and
     # which store they actually bought it from, when those differ from the
     # planned offer. Either may be set independently — a user might confirm
@@ -128,6 +134,7 @@ class ShoppingListLine(BaseEntity):
         ADDED_AT = "added_at"
         PICKED_OFFER_PRICE = "picked_offer_price"
         LIST_PRICE_AT_PICK = "list_price_at_pick"
+        USUAL_PRICE_AT_PICK = "usual_price_at_pick"
         ACTUAL_UNIT_PRICE = "actual_unit_price"
         PURCHASED_STORE_ID = "purchased_store_id"
         PLANNED_STORE_ID = "planned_store_id"

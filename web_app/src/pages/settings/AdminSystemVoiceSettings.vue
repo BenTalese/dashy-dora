@@ -3,7 +3,6 @@
         <SettingsPageHeader
             title="Voice (Piper TTS)"
             description="Where the server finds Piper, the offline engine behind Dora's voice. Desktop and Docker builds set this automatically."
-            :icon="ICONS.record_voice_over"
         />
 
         <template v-if="ready">
@@ -68,7 +67,6 @@
 </template>
 
 <script lang="ts" setup>
-    import { ICONS } from 'src/style/icons';
     import { useAppSettingDrafts } from 'src/composables/useAppSettingDrafts';
     import SettingsSection from 'src/components/settings/SettingsSection.vue';
     import SettingsRow from 'src/components/settings/SettingsRow.vue';

@@ -86,7 +86,7 @@ UNIVERSAL_CANONICAL_UNITS: frozenset[str] = frozenset({
     # 5 ml here, 4.93 ml in the US, 5.9 ml in the UK — nobody measures a
     # teaspoon to 2%. One row, offered everywhere.
     "tsp",
-    "ea", "pack", "dozen", "whole",
+    "ea", "pack", "packet", "box", "carton", "dozen", "whole",
     "kJ", "kcal", "J",
 })
 
@@ -349,7 +349,7 @@ UNIT_TABLE: dict[str, UnitDef] = {
     # ── Count — base ea (new — B1, FU-227) ────────────────────────────
     # "pack" keeps factor 1 against ea for conversions, but a pack is N items
     # once the product records N: recipe costing prices "1 pack" at the whole
-    # shelf price, never one item from it (see WHOLE_PACK_UNIT, QA2-18).
+    # shelf price, never one item from it (see WHOLE_PACK_UNITS, QA2-18).
     "ea": UnitDef(COUNT, 1.0, "ea"),
     "each": UnitDef(COUNT, 1.0, "ea"),
     "unit": UnitDef(COUNT, 1.0, "ea"),
@@ -365,6 +365,15 @@ UNIT_TABLE: dict[str, UnitDef] = {
     "wholes": UnitDef(COUNT, 1.0, "whole"),
     "pack": UnitDef(COUNT, 1.0, "pack"),
     "packs": UnitDef(COUNT, 1.0, "pack"),
+    # The other words for a whole shelf pack. Their own canonicals, like
+    # "whole", so the ingredient list keeps the word the cook reads; all
+    # four price as the whole pack (WHOLE_PACK_UNITS, FU-983).
+    "packet": UnitDef(COUNT, 1.0, "packet"),
+    "packets": UnitDef(COUNT, 1.0, "packet"),
+    "box": UnitDef(COUNT, 1.0, "box"),
+    "boxes": UnitDef(COUNT, 1.0, "box"),
+    "carton": UnitDef(COUNT, 1.0, "carton"),
+    "cartons": UnitDef(COUNT, 1.0, "carton"),
     "dozen": UnitDef(COUNT, 12.0, "dozen"),
     "dozens": UnitDef(COUNT, 12.0, "dozen"),
 
@@ -631,10 +640,10 @@ FOOD_SPECIFIC_MASS_UNITS: dict[str, FoodSpecificMass] = {
 }
 
 
-# The canonical unit that means "the whole shelf pack" in a recipe line. Recipe
+# The canonical units that mean "the whole shelf pack" in a recipe line. Recipe
 # costing bills "1 pack" at the pack's price, not at one countable item from it
-# (a 12-egg carton at $6.00 is $6.00 a pack, $0.50 an egg; QA2-18).
-WHOLE_PACK_UNIT = "pack"
+# (a 12-egg carton at $6.00 is $6.00 a pack, $0.50 an egg; QA2-18, FU-983).
+WHOLE_PACK_UNITS: frozenset[str] = frozenset({"pack", "packet", "box", "carton"})
 
 
 # Words that name a *part of* a shelf item, never the item itself. A recipe

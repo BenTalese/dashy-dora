@@ -55,7 +55,11 @@
                  row only raises the question of what it's per. -->
             <template #header>
                 <q-item-section>
-                    <h2 class="rn__sectitle">Nutrition</h2>
+                    <div class="row items-center no-wrap">
+                        <h2 class="rn__sectitle">Nutrition</h2>
+                        <!-- .stop: a tap on the (?) opens the guide, not the drawer. -->
+                        <span @click.stop><HelpHint topic="Nutrition: off, simple, complex" /></span>
+                    </div>
                 </q-item-section>
             </template>
             <div class="rn__disc">
@@ -100,7 +104,11 @@
         <q-expansion-item v-model="detailOpen.versions" dense-toggle>
             <template #header>
                 <q-item-section>
-                    <h2 class="rn__sectitle">Version information</h2>
+                    <div class="row items-center no-wrap">
+                        <h2 class="rn__sectitle">Version information</h2>
+                        <!-- .stop: a tap on the (?) opens the guide, not the drawer. -->
+                        <span @click.stop><HelpHint topic="Versions of a recipe" /></span>
+                    </div>
                 </q-item-section>
             </template>
             <div class="rn__disc">
@@ -180,6 +188,7 @@
 </template>
 
 <script lang="ts" setup>
+    import HelpHint from 'src/components/help/HelpHint.vue';
     /**
      * The recipe page's details drawers: additional details (dietary tags,
      * source, notes), nutrition (complex mode) or calories (simple mode), and

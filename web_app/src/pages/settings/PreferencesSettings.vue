@@ -1,13 +1,14 @@
 <template>
     <!-- The router guard owns "signed in"; this only waits for the user row. -->
     <div v-if="currentUser" class="settings-page">
-        <SettingsPageHeader title="Appearance" :icon="ICONS.palette" />
+        <SettingsPageHeader title="Appearance" />
 
         <SettingsSection>
             <template #title>Theme mode</template>
 
             <div class="appearance-choice">
                 <BaseSegmented
+                    aria-label="Theme mode"
                     :model-value="modeDraft"
                     :options="modeOptions"
                     @update:model-value="onModeChange"
@@ -58,6 +59,7 @@
 
             <div class="appearance-choice">
                 <BaseSegmented
+                    aria-label="Font family"
                     :model-value="fontFamilyDraft"
                     :options="fontFamilyOptions"
                     @update:model-value="onFontFamilyChange"
@@ -72,6 +74,7 @@
 
             <div class="appearance-choice">
                 <BaseSegmented
+                    aria-label="Text size"
                     :model-value="fontSizeDraft"
                     :options="fontSizeOptions"
                     @update:model-value="onFontSizeChange"
@@ -258,7 +261,7 @@
         gap: 8px;
         cursor: pointer;
     }
-    .theme-card:hover {
+    .theme-card:not(.theme-card--active):hover {
         border-color: var(--border-strong);
     }
     .theme-card--active {

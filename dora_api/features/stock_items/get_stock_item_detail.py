@@ -200,7 +200,9 @@ class PriceObservationDto:
     total_measure: float
     unit: str
     observed_at: datetime
-    # A2 — the store's resolved name for the chip on the detail page.
+    # A2 — the store's resolved name for the chip on the detail page; the id
+    # seeds the edit form (FU-706).
+    store_id: UUID | None
     store_name: str | None
     # A4 revised — provenance (LC-4: provenance only, not a sync link): a
     # small human label resolved server-side ("Wed's shopping list") so the
@@ -248,7 +250,10 @@ class YourPricesDto:
     baseline_unit: str | None
     current: float | None
     above_baseline: bool
+    below_baseline: bool
     sample_count: int
+    rough: bool
+    left_out_count: int
     last_observed_at: datetime | None
     last_seen_store_name: str | None
     offers_sidecar: list[OfferSidecarDto]
@@ -767,6 +772,7 @@ def _price_observations(
             total_measure = o.total_measure,
             unit = o.unit,
             observed_at = o.observed_at,
+            store_id = o.store_id,
             store_name = store_names.get(o.store_id) if o.store_id is not None else None,
             shopping_list_name = (
                 list_name_by_line.get(o.shopping_list_line_id)
@@ -786,7 +792,10 @@ def _your_prices(repository: Repository, stock_item_id: UUID) -> YourPricesDto:
         baseline_unit = raw.baseline_unit,
         current = raw.current,
         above_baseline = raw.above_baseline,
+        below_baseline = raw.below_baseline,
         sample_count = raw.sample_count,
+        rough = raw.rough,
+        left_out_count = raw.left_out_count,
         last_observed_at = raw.last_observed_at,
         last_seen_store_name = raw.last_seen_store_name,
         offers_sidecar = [
