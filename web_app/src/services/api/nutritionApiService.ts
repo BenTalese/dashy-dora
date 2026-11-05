@@ -136,13 +136,13 @@ export default class NutritionApiService {
             { source, source_ref: sourceRef },
         );
 
-    /** Every stock item with no nutrition food, each with its best local
-     *  match. Suggestions are local-catalogue only — this runs across the whole
-     *  pantry, and a live source would mean hundreds of round-trips. */
     /** The settings badge's number, without the matcher's suggestions (FU-858). */
     getUnmatchedItemCountAsync = async (): Promise<number> =>
         (await this.httpClient.get<{ count: number }>('/nutrition/unmatched-items/count')).count;
 
+    /** Every stock item with no nutrition food, each with its best local
+     *  match. Suggestions are local-catalogue only — this runs across the whole
+     *  pantry, and a live source would mean hundreds of round-trips. */
     getUnmatchedItemsAsync = async (
         includeIgnored = false,
     ): Promise<UnmatchedItemsResponse> =>

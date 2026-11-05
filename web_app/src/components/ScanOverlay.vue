@@ -417,6 +417,7 @@
         position: relative;
         width: 100vw;
         height: 100vh;
+        /* R-002 carve-out: a camera viewfinder is black in every theme. */
         background: #000;
         overflow: hidden;
     }

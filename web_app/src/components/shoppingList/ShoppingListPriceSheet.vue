@@ -28,16 +28,13 @@
                  number becomes a price-per-100g observation in the item's
                  history and a measure is unavoidable. Two records, two
                  shapes; the label was the only thing lying about it. -->
-            <q-input
-                v-model.number="priceEditorDraft.price"
+            <!-- FU-890: the shared price field. Not dense here: the sheet
+                 is a focused one-field moment, so it keeps the full height. -->
+            <MoneyInput
+                v-model="priceEditorDraft.price"
+                :dense="false"
                 autofocus
-                outlined
-                type="number"
-                inputmode="decimal"
-                step="0.01"
-                min="0"
                 label="Price each"
-                :prefix="currencySymbol"
                 input-class="sld-price-sheet-input"
                 @keydown.enter.prevent="savePriceSheet"
             />
@@ -141,9 +138,10 @@
     import BaseButton from 'src/components/BaseButton.vue';
     import BaseDialog from 'src/components/BaseDialog.vue';
     import BaseSelect from 'src/components/BaseSelect.vue';
+    import MoneyInput from 'src/components/MoneyInput.vue';
     import StoreLogo from 'src/components/StoreLogo.vue';
     import { ICONS } from 'src/style/icons';
-    import { useMoney, formatMoney } from 'src/composables/useMoney';
+    import { formatMoney } from 'src/composables/useMoney';
     import { useShoppingListDetail } from 'src/composables/useShoppingListDetail';
     import {
         chosenOfferFor,
@@ -157,7 +155,6 @@
     import { computed, reactive, ref } from 'vue';
 
     const $q = useQuasar();
-    const { currencySymbol } = useMoney();
     const {
         api, listId, detail, setLineQuantity, refreshDetailQuietly,
     } = useShoppingListDetail();

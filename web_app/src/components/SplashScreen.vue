@@ -243,7 +243,7 @@
         opacity: 0.85;
     }
     .splash-change-url :deep(.dora-auth-btn--ghost:hover) {
-        background: rgba(255, 255, 255, 0.08);
+        background: color-mix(in srgb, var(--auth-shell-on-canvas) 8%, transparent);
         opacity: 1;
     }
 

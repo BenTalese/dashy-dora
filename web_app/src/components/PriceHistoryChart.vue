@@ -146,7 +146,7 @@
              which (FU-833 step 3). It belongs to the thing that assigns the
              colours. -->
         <ul v-if="legend && renderableSeries.length > 0" class="chart-legend">
-            <li v-for="(s, i) in renderableSeries" :key="`lg-${s.key}`">
+            <li v-for="s in renderableSeries" :key="`lg-${s.key}`">
                 <span class="chart-legend__line" :style="{ background: seriesColour(s.colourSlot) }" />
                 {{ s.name }}
             </li>
@@ -168,7 +168,7 @@
         >
             <div class="chart-tooltip-date">{{ hover.dateLabel }}</div>
             <div
-                v-for="(s, i) in renderableSeries"
+                v-for="s in renderableSeries"
                 :key="`t-${s.key}`"
                 class="chart-tooltip-row"
             >

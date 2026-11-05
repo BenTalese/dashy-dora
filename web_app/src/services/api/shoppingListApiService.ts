@@ -218,8 +218,8 @@ export default class ShoppingListApiService {
 
     /** Add a whole selection in one round-trip. De-duplication is the same
      *  `AddLineHandler` rule the single-line endpoint uses — the server loops
-     *  it — so `already_on_list` counts what was skipped. */
-    /** Every line in the single-add shape, one request (FU-714). */
+     *  it — so `already_on_list` counts what was skipped. Every line is in the
+     *  single-add shape (FU-714). */
     bulkAddLinesAsync = async (
         listId: string,
         lines: AddLineCommand[],

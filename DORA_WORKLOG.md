@@ -41,6 +41,43 @@ next.
 
 ---
 
+## 2026-11-06 (later still): **Leftovers sweep 3: pt2's unlogged FU work audited, gaps fixed, ledgers moved (uncommitted)**
+
+**Why:** commit 91e364a8 ("pt2") moved sweep 2's FUs to the archive, then built code for ~40 more open FUs and ran
+out of budget before logging any of it. This session audited that code FU by FU (four read-only agents over the pt2
+diff + current code) and finished the job.
+
+**Fixed on top of pt2:** PriceHistoryChart's two unused `v-for` indices (lint was red); FU-890 ShoppingListPriceSheet's
+Price each now `MoneyInput` (non-dense); FU-851 `MealPlansOverview.onSwapApplied` invalidates planned demand; FU-791
+`.dora-list-row` radius `8px` -> `var(--radius-lg)` (D-017); FU-798 R-002 carve-out on ScanOverlay's `#000`, SplashScreen
+hover via `color-mix(--auth-shell-on-canvas)`; FU-846 /price-history chips take their colour slot by key; FU-691 last
+literals (page shadows -> `--elevation-3`, masthead/nutrition 1rem/1.5rem -> tokens, 2rem/1.75rem display sizes
+carved out); FU-714 empty pick returns early, `None` dropped from bulk-add `failed_ids`; FU-669 stale UseItUpCard comment;
+three stacked JSDoc blocks (nutrition/recipe/shopping-list api services) and useCookSteps' import above its docblock.
+FU-792: ran `reset_showcase` against a scratch SQLite DB: succeeds (1 structured recipe, 3 steps, 2 step tools).
+
+**Resolved -> archive (35):** 917, 916, 911, 909, 901, 890, 863, 858, 851, 847, 846, 844, 843 (earlier), 802, 798, 795
+(earlier), 793, 791, 784, 750, 749, 744, 714, 713, 700, 693, 691, 669, 668, 662 (superseded, R-052), 656, 647 (earlier),
+646 (earlier), 645, 623 (earlier). Each has a State note in `DORA_FOLLOWUPS_RESOLVED.md`.
+**Progress notes, still open (7):** FU-857 (owner: normalise stored ordinal on save, or display-only?), FU-771 (import
+completion only invalidates while the admin page is mounted), FU-792 (image-mode recipe needs photos), FU-705
+(secondary chart issues), FU-684 (confirm_actions + `missing_stock_item_names_for` still trust `.include()`), FU-671
+(only the tint-vs-solid chip question), FU-579 (confirm `quasar dev` overlay gone).
+**Untouched, still open:** 960/924/891/887/886 (companion), 922, 907, 895, 837, 799, 735, 730, 694, 667, 664, 657, 636,
+363. 25 open in all.
+
+**Known edges noted in the state notes, not fixed:** FU-916 prunes a price-watch dismissal when money is off
+install-wide; FU-909 lost the ± tooltips (aria-labels kept); FU-669's test is weak (hard-codes 14); FU-750's test's True
+half is conditional; FU-858's unlinked count still builds the list.
+
+**Gates:** full pytest 2789 passed / 1 skipped / 1 xfailed (before this session's small edits); bulk + shopping-list
+suites 31 passed after; vue-tsc clean, eslint clean, vitest 935 passed. Nothing walked live; 7 DORA_VERIFY lines added
+("Leftovers sweep 3"). **Close-gate:** R-002/D-017 carve-outs named in place; R-003 (one MoneyInput, one colour slot);
+no new rule; no ADR. PROJECT_STATE dashboard regenerated.
+
+**Next up:** owner calls on FU-857 (a) and FU-671; FU-771 import-poll lift is the next buildable item; the rest of the
+open list is "later"/companion.
+
 ## 2026-11-06 (later): **Low-severity alert colour now info blue (uncommitted)**
 
 **Done:** owner: alert colours too similar on Settings > Notifications. `--severity-medium` (hsl 30) and `--severity-low`

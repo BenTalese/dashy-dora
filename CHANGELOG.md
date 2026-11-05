@@ -12,6 +12,25 @@ semver — major bumps signal schema or breaking-config changes.
   listed.
 
 ### Changed
+- **Price alerts and price history say "price", not "unit price" (2026-11-06).**
+  A watch's threshold and the product chart's points were always the pack's
+  shelf price; the API fields are now `threshold_price` and `price`.
+- **Dismissed alerts tidy themselves up.** Each night Dora forgets a dismissal
+  once its alert is long over, so the table stops growing.
+- **Bulk "add to list" sends one request** with each line's quantity, and bulk
+  level changes save once for the whole set.
+- **The settings badges for unmatched nutrition items and unlinked ingredients
+  load a count**, not the whole list.
+- **Fried potato products no longer count as vegetables** in the Health Star
+  Rating and Nutri-Score.
+- **Settings → Nutrition asks you to import again** when the catalogue was
+  imported before food groups and the newer nutrients were kept.
+- **Existing structured recipes get their tool list rebuilt** from their steps
+  on upgrade.
+- **The password hint comes from the server**, so the length rule lives in one
+  place.
+- **The showcase has a structured recipe** (Spaghetti Aglio e Olio), and the
+  dense seed has substitutes for a missing ingredient.
 - **Logged prices can be corrected (2026-11-05).** A stock item's recent prices
   have Edit (amount, size, store, pack count and the date seen) and Remove asks
   first; the list shows five with "Show all". Logging a price takes a date, so
@@ -37,6 +56,16 @@ semver — major bumps signal schema or breaking-config changes.
   fixed weight only for butter).
 
 ### Fixed
+- Step numbers an author typed ("1.", "Step 2 —", "(3)") are no longer shown
+  twice on the recipe page or in cook mode.
+- The planner's cooked count uses the shared stepper; planned demand refreshes
+  after any plan edit or recipe swap; a cook batch straddling today keeps its
+  last forward day linked.
+- On /price-history a product keeps its colour when another can't be plotted;
+  the chart answers a tap on a phone.
+- The stock list loads every page of stock levels.
+- The shopping list's Price each field and Budget use the shared money field.
+- The stocktake rule in the attention explainer hides when stocktake is off.
 - FYI alerts (shopping day, no planned meals, meals to reconcile) are blue
   instead of amber, so they no longer look like the orange alerts that need you.
 - On a recipe page, the mouse wheel scrolls the page again while hovering the

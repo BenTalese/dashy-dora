@@ -1,4 +1,3 @@
-import { stripLeadingOrdinal } from 'src/helpers/stepOrdinal';
 /**
  * Cook mode's step model (FU-942, split out of `RecipeCookMode.vue`): the
  * flattener that turns a recipe's method into one linear sequence, the
@@ -10,6 +9,7 @@ import { computed, type Ref } from 'vue';
 
 import { formatQuantity } from 'src/helpers/formatQuantity';
 import { scaleQuantity } from 'src/helpers/scaleQuantity';
+import { stripLeadingOrdinal } from 'src/helpers/stepOrdinal';
 import type { Recipe, RecipeIngredient } from 'src/models/recipe';
 
 // step model. Structured recipes (Chunk 4) carry a

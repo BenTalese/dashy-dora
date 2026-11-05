@@ -42,6 +42,8 @@ export function useShoppingListActions() {
         listId: string,
         items: AddLineCommand[],
     ): Promise<{ added: number; already: number }> {
+        // Nothing picked: the bulk endpoint requires at least one line.
+        if (items.length === 0) return { added: 0, already: 0 };
         let added = 0;
         let already = 0;
         let failure: string | null = null;

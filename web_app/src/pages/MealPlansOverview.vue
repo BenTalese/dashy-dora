@@ -674,6 +674,7 @@
     import MealPlanBuilderDialog from 'components/MealPlanBuilderDialog.vue';
     import SwapSuggestionsPanel from 'src/components/SwapSuggestionsPanel.vue';
     import { useMealPlanner } from 'src/composables/useMealPlanner';
+    import { usePlannedDemand } from 'src/composables/usePlannedDemand';
     import { useMealPlanStore } from 'src/stores/mealPlanStore';
     // FU-317 Chunk 5 — reconcile nudge line count.
     import { useReconcileQueue } from 'src/composables/useReconcileQueue';
@@ -723,6 +724,8 @@
     // dedicated endpoint, so reload the plans (week grid) + ingredient demand
     // to reflect it.
     async function onSwapApplied() {
+        // FU-851: a swap bypasses mealPlanStore's writes, so drop the planned-demand cache here too.
+        usePlannedDemand().invalidate();
         await mealPlanStore.getMealPlansAsync();
         await planner.loadIngredients();
     }

@@ -352,6 +352,7 @@
     }
     .rn__backrow { display: flex; align-items: center; gap: var(--space-2); }
     .rn__title {
+        /* D-017 carve-out: the recipe title is a display size above the type scale. */
         font-size: 2rem;
         font-weight: 600;
         line-height: 1.15;
@@ -366,7 +367,7 @@
     }
     /* In edit mode the h1 is a wrapper around an input, so it drops the
        display sizing it uses when it is actually a heading. */
-    .rn__title--edit { font-size: 1rem; font-weight: 400; }
+    .rn__title--edit { font-size: var(--font-size-md); font-weight: 400; }
     .rn__eyebrow {
         display: flex; flex-wrap: wrap; align-items: center;
         /* Wider than the old dot-separated gap — the glyphs are doing the
@@ -393,12 +394,12 @@
     /* The letter-spacing above is set for capitals; on the glyph it just
        pushes it off its word. */
     .rn__factk .q-icon { letter-spacing: normal; }
-    .rn__factv { font-size: 1rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .rn__factv { font-size: var(--font-size-md); font-weight: 600; font-variant-numeric: tabular-nums; }
 
     /* ── Phone ────────────────────────────────────────────────────────── */
     @media (max-width: 1023px) {
         .rn__photo { aspect-ratio: 16 / 9; }
-        .rn__title { font-size: 1.5rem; }
+        .rn__title { font-size: var(--font-size-2xl); }
         /* One line that scrolls, rather than three rows of facts pushing the
            method off the first screen (owner feedback 2026-08-24; D-011 —
            wide content scrolls inside its own container, never the page). */

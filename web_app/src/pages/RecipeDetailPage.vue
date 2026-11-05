@@ -729,7 +729,7 @@
         border-radius: var(--radius-pill);
         background: var(--surface-elevated);
         border: 1px solid var(--border-default);
-        box-shadow: 0 2px 10px var(--overlay-dim);
+        box-shadow: var(--elevation-3);
         font-size: var(--font-size-sm);
         color: var(--text-secondary);
     }
@@ -745,7 +745,7 @@
         border-radius: var(--radius-pill);
         background: var(--surface-elevated);
         border: 1px solid var(--semantic-warning);
-        box-shadow: 0 2px 10px var(--overlay-dim);
+        box-shadow: var(--elevation-3);
         font-size: var(--font-size-sm);
         font-weight: 600;
         color: var(--text-secondary);

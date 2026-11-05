@@ -35,7 +35,7 @@
                     <!-- Owner 2026-09-08 — *"Add a 'see more' button inline with
                          the 'recipes using these' heading."* It lands on the
                          cookbook's own **Uses expiring ingredients** filter,
-                         which already exists (`?expiring_within_days=14`
+                         which already exists (`?uses_expiring=true`, horizon
                          server-side) and simply was not reachable by link — so
                          this is a deep link, not a new filter. The card shows at
                          most three; the filter shows the rest, ranked and

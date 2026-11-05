@@ -39,7 +39,7 @@
                                  independent of the ramp hue. -->
                             <span
                                 class="series-swatch q-mr-xs"
-                                :style="{ background: seriesColour(i) }"
+                                :style="{ background: seriesColour(chartSeries.find((s) => s.key === p.product_id)?.colourSlot ?? i) }"
                             />
                             {{ p.name }}
                         </q-chip>

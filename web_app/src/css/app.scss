@@ -256,7 +256,7 @@ body .q-dialog__inner--bottom > div {
 .dora-list-row {
     position: relative;
     border: 1px solid var(--border-default);
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     background: var(--surface-component);
     overflow: hidden;
     transition:

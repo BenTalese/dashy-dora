@@ -37,6 +37,15 @@ top-to-bottom.
 - [ ] Recipe page: Change and Remove photo on a recipe that has one.
 - [ ] Recipe page (desktop): wheel over ingredients or method scrolls the page once that pane is short or at its end.
 - [ ] Settings > Notifications and the bell: FYI kinds show blue circles, clearly apart from the orange and red ones, in light and dark.
+
+## Leftovers sweep 3 (2026-11-06)
+- [ ] Recipe page after the token sweep: title, section headings, masthead facts and the nutrition card's kcal read at a sensible size on desktop and at 375px; the two floating cards' shadows look right in light and dark.
+- [ ] Stock, cookbook and planner rail rows: same border, radius and accent hover on all three; a stock row needing attention keeps its attention border on hover.
+- [ ] Planner rail: the cooked-count stepper types, steps and commits on blur/Enter, hides until hover on desktop and is 44px on touch.
+- [ ] Shopping list: Price each sheet opens with the money field focused, shows the currency prefix, Enter saves.
+- [ ] Settings → Budget: typing 120.5 settles to 120.50 on blur and saves that.
+- [ ] Price history at 375px: tap a point, the reading stays; drag scrolls the page vertically.
+- [ ] Settings → Nutrition on an install imported before food groups: the 'Import again' line shows; it goes after a re-import.
 - [ ] Cookbook: the Ingredients filter's sort toggle and the recipe method's step-style switch (both now the new segmented control).
 
 ## Touch sizes (2026-11-05) — origin FU-877

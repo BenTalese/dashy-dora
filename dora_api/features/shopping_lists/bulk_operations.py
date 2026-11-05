@@ -111,7 +111,8 @@ def bulk_add_lines(shopping_list_id: UUID):
     return ok({
         "added": _Response.added,
         "already_on_list": _Response.already_on_list,
-        "failed_ids": [str(i) for i in _Response.failed_ids],
+        # A line with no anchor has no id to report; it still counts in the log line.
+        "failed_ids": [str(i) for i in _Response.failed_ids if i is not None],
     })
 
 

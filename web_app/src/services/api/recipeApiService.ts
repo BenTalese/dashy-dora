@@ -264,15 +264,15 @@ export default class RecipeApiService {
             { content, source_url: sourceUrl ?? '' },
         );
 
+    /** The settings badge's number (FU-858). */
+    getUnlinkedIngredientCountAsync = async (): Promise<number> =>
+        (await this.httpClient.get<{ count: number }>('/recipes/unlinked-ingredients/count')).count;
+
     /** IMPL_PLAN_RECIPE_IMPORTER §Chunk 6 — bulk-linker page reads.
      *  Returns every unlinked RecipeIngredient row grouped by
      *  normalised raw_text (server-owned normalisation — see
      *  `normalise_raw_text` in the backend), sorted by count desc /
      *  text asc. */
-    /** The settings badge's number (FU-858). */
-    getUnlinkedIngredientCountAsync = async (): Promise<number> =>
-        (await this.httpClient.get<{ count: number }>('/recipes/unlinked-ingredients/count')).count;
-
     getUnlinkedIngredientsAsync = async (): Promise<UnlinkedIngredients> =>
         await this.httpClient.get<UnlinkedIngredients>('/recipes/unlinked-ingredients');
 

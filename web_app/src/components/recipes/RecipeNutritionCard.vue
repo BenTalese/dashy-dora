@@ -463,6 +463,7 @@
     }
     .rnut__figure { display: flex; align-items: baseline; gap: var(--space-1); }
     .rnut__kcal {
+        /* D-017 carve-out: the headline kcal figure is a display size above the type scale. */
         font-size: 1.75rem;
         font-weight: 700;
         line-height: 1.1;
@@ -503,7 +504,7 @@
     }
     .rnut__v {
         margin: 0;
-        font-size: 1rem;
+        font-size: var(--font-size-md);
         font-weight: 700;
         font-variant-numeric: tabular-nums;
     }
