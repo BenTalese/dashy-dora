@@ -20,9 +20,9 @@ Status key: ✅ done-clean · ➗ done-with-carve-outs · 🟡 active/in-progres
 
 **Dora 1.0.0 is deployed to Altair (Dora and the companion), and every FU is now resolved: 0 open in `DORA_FOLLOWUPS.md`.** On 11-06 (night) your decisions closed the last nine (FU-636 got built: Settings → Nutrition links USDA's downloads page), and the five companion debts (FU-886/887/891/924/960) were fixed in `../dora-companion`. New tonight: a **first-setup demo**. The one-time setup screen can fill Dora with sample data and sign you in as `demo`, a banner says it's a demo, and "Set up Dora" wipes it back to a fresh install. A security review of the first cut found three holes, all fixed before close.
 
-**Commits:** batch 5 is in `5ed675d0`. Tonight's work is **uncommitted in both repos** (Dora and `../dora-companion`). Single Alembic head `c6f9d3b8e4a1`.
+**Commits:** everything through the setup demo is pushed (Dora `873a2ad9`, companion `2e140de`). `CHANGELOG.md` is rewritten as the 1.0.0 release notes (uncommitted). Single Alembic head `c6f9d3b8e4a1`.
 
-**What's left:** commit both repos, deploy, and walk `DORA_VERIFY.md`. No FU is waiting on you.
+**What's left:** commit the changelog, deploy tonight's commits, cut the `v1.0.0` GitHub Release, and walk `DORA_VERIFY.md`. No FU is waiting on you.
 
 ---
 
@@ -75,11 +75,11 @@ Status key: ✅ done-clean · ➗ done-with-carve-outs · 🟡 active/in-progres
 
 **Total open backlog: 0 items in `DORA_FOLLOWUPS.md`.** Nothing blocks the release.
 
-1. 🟢 **Commit both repos.** Dora: tonight's demo, owner batch 6 and the dark-surface fix (batch 5 is already in `5ed675d0`). `../dora-companion`: FU-886/887/891/924/960.
+1. 🟢 **Commit the rewritten `CHANGELOG.md`** (1.0.0 release notes; the old diary is at `873a2ad9`).
 2. 🟢 **Deploy** Dora and the companion to Altair. The setup demo needs nothing new in config.
 3. 🟢 **Walk `DORA_VERIFY.md`, newest sections first:** First-setup demo + owner batch 6, Owner batch 5, Leftovers sweep 3 and 2, Finish-off sweep, Touch sizes, Voice from Firefox.
 4. 🟢 **Changes you'll notice:** dark-theme cards, menus and dialogs use the theme's own surface; the Calories drawer is gone (edit kcal in the recipe's facts grid); favouriting no longer moves "last updated"; the setup screen offers a demo.
-5. 🟢 **CI:** switch Actions on when you want it, then check the first run on main is green and a Release dry run builds.
+5. 🟢 **CI and the release:** switch Actions on when you want it, check the first run on main is green, then run Release with `v1.0.0` (dry run first).
 
 ---
 

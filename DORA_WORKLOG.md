@@ -41,6 +41,25 @@ next.
 
 ---
 
+## 2026-11-06 (night, later): **CHANGELOG rewritten for the 1.0.0 release (uncommitted)**
+
+**Owner:** redo the changelog for 1.0.0; 0.x numbers were test versions, never official.
+
+**Done:** `CHANGELOG.md` went from 10,792 lines (an `[Unreleased]` diary of ~1,300 pre-release bullets plus
+0.1.0..0.7.0) to 138: an empty `[Unreleased]` and a `## [1.0.0] - 2026-11-06` section written as a feature
+overview by area (stock, lists, recipes/cook mode, planning, prices, dashboard/alerts, assistant, setup,
+install/ops). Pre-release fixes to never-released behaviour were dropped; the 0.x sections removed with a note
+that their history is in git. The full old file is at commit `873a2ad9` (`git show 873a2ad9:CHANGELOG.md`).
+Release workflow extraction checked (awk on `## [1.0.0]` yields the section); nothing in code or tests reads the
+file. Claims spot-checked against code (inference is a remark only, never changes a level; report cards).
+`PROJECT_STATE.md` no longer says tonight's work is uncommitted (it was pushed in `873a2ad9` / companion `2e140de`).
+
+**Gates:** docs-only; no code touched, no R-rule surface. No em dashes in the new file.
+
+**Next up:** commit; deploy tonight's commits to Altair; run the Release workflow for `v1.0.0` when Actions is on.
+
+---
+
 ## 2026-11-06 (night): **First-setup demo; owner decisions close the ledger; companion FUs (uncommitted, both repos)**
 
 **Owner:** decisions on the last open FUs; "trust your judgement" on the companion; and a new ask: a demo option on
