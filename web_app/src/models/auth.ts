@@ -136,6 +136,9 @@ export type AuthenticatedUser = {
     // FU-360.6 — whether the Dora helper bubble is mounted at all. Default
     // true; distinct from `llm_enabled` (that switches AI mode only).
     show_assistant: boolean;
+    /** Shopping page mode (owner, 2026-11-07): true = simple, one endless
+     *  list where a tick means bought; false = flow (plan, shop, finish). */
+    shopping_simple_mode: boolean;
     /** Owner call 2026-08-17 — one opt-in evening push (19:00 household time)
      *  summarising tomorrow's meals and any shopping day that's due. Off by
      *  default, and silent on days with nothing to say. */

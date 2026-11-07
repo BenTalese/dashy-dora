@@ -146,6 +146,17 @@ export const useStockItemStore = defineStore('stockItem', () => {
     const refreshIfLoadedAsync = (): Promise<void> =>
         hydrated ? getStockItemsAsync() : Promise.resolve();
 
+    /** Re-read one item after a server-side write that bypassed the store
+     *  (a simple-mode buy restocks it), instead of refetching the pantry. */
+    const refreshItemAsync = async (stockItemId: string): Promise<void> => {
+        invalidateDerivedRecipeFacts();
+        invalidateLevelOverlays(stockItemId);
+        if (!hydrated) return;
+        const fresh = await stockItemApiService.getAsync(stockItemId);
+        const index = stockItems.value.findIndex((si) => si.stock_item_id === stockItemId);
+        if (index >= 0) stockItems.value[index] = fresh;
+    };
+
     const createStockItemAsync = async (
         stockItemToCreate: CreateStockItemCommand,
     ): Promise<StockItem> => {
@@ -279,6 +290,7 @@ export const useStockItemStore = defineStore('stockItem', () => {
         getStockItemsAsync,
         ensureLoadedAsync,
         refreshIfLoadedAsync,
+        refreshItemAsync,
         createStockItemAsync,
         updateStockLevelAsync,
         invalidateLevelOverlays,

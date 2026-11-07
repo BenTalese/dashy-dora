@@ -1212,6 +1212,7 @@ def configure_mappings(db: SQLAlchemy):
         # FU-360.6 — per-user "show the Dora helper bubble" opt-out. Default
         # True; when False the SPA never mounts the assistant launcher.
         Column("show_assistant", Boolean, nullable=False, server_default=true()),
+        Column("shopping_simple_mode", Boolean, nullable=False, server_default=false()),
         Column("daily_brief_enabled", Boolean, nullable=False, server_default=false()),
         Column("alert_discard_after_days", Integer, nullable=True, server_default="14"),
         # Chunk 6 / D-4 — per-user watermark for the stocktake Sweep phase.

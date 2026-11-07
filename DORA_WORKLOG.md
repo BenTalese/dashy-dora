@@ -41,6 +41,56 @@ next.
 
 ---
 
+## 2026-11-07: **Shopping lists: Simple mode; always-visible row controls; wider pickers on desktop; version 2.0.0**
+
+**Owner:** an endless list for top-up shoppers who don't want the flow, as a persisted Simple/Flow toggle on
+the shopping page. Also: the Add item picker is mobile-sized on desktop; draft steppers and up/down arrows
+should always show (they hid on no-hover unless disabled).
+
+**Decisions (owner, this session):** a tick in Simple means bought: restock to Stocked + remove the line, with an
+Undo toast. The mode is per user, stored server-side. Simple is a *view over the same lists* (shared items), not a
+separate endless list.
+
+**Done:**
+- `User.shopping_simple_mode` (migration `d2a7e5c9b1f4`, new single head), on `/auth/me` GET/PATCH.
+- `POST /shopping-lists/<id>/lines/<lid>/buy` (restock + delete, echoes an undo payload) and
+  `POST /shopping-lists/<id>/lines/unbuy` (restores the line and the item's previous level + timestamp; skips the
+  line if the anchor is already back). `features/shopping_lists/buy_line.py`.
+- Restock extracted to `_restock.restock_stock_items` (R-003: one meaning of "bought"); `/finish` now calls it. It
+  also sets `_stock_level_id` (the noload guard `update_stock_item` uses), which finish didn't.
+- SPA: `simpleFace` in `useShoppingListDetail` replaces plan/run faces on any non-done list; done lists stay
+  receipts. `ShoppingListSimpleFace.vue` reuses `ShoppingListRunRow` (new `noPrice` prop). Simple hides the
+  overview card, Shop day, Log price and receipt photos. `BaseSegmented` Simple/Flow in the toolbar (not on a
+  receipt). Wake lock and space/u shortcuts now key on `runFace`. `stockItemStore.refreshItemAsync` re-reads one
+  item after a buy instead of the whole pantry.
+- Plan row: stepper + reorder arrows no longer `opacity: 0` until hover (Quasar's `.disabled` opacity was why only
+  disabled ones showed). Grip still reveals on hover; touch still has no stepper (2026-09-27 call kept).
+- QuickAddSheet: `standard` 720px dialog with `min(60vh, 560px)` results at md+; bottom sheet below. Unfiltered
+  results 12 -> 20 to fill it.
+- Help: new "Simple mode" entry; `help_corpus.json` regenerated.
+
+**Verified:** API round-trip on the :5171 scratch instance (buy removes + restocks, unbuy restores line, quantity,
+level and timestamp; double unbuy doesn't duplicate). Playwright at 1440 and 375: toggle persists across reload,
+tick -> "Bought X" + Undo -> row back, no overview card in Simple, steppers/arrows opacity 1 at rest, dialog 720px
+with 540px list, no overflow at 375. vue-tsc + eslint clean; Vitest 943 pass; pytest 1239 pass.
+
+**Notes:** deferred-by-budget lines show as ordinary rows in Simple (no budget trim there). Neither buy nor finish
+writes a `StockLevelChange` row (parity kept, pre-existing). `LogPriceSheet` has the same 520px bottom-sheet shape
+as QuickAddSheet; owner then asked for it too: same treatment (720px centred at md+, 20 unfiltered rows),
+checked live on /stock (720px, 540px list).
+
+**Version 2.0.0 (owner):** `version_info.CURRENT_VERSION`, `web_app/package.json` (+ lock), the capacitor
+package (+ lock) and Android `versionCode 2` / `versionName "2.0"`; CHANGELOG `[Unreleased]` became
+`## [2.0.0] - 2026-11-07`. No local git tag: the Release workflow creates `vX.Y.Z` itself and refuses an existing
+tag, so cut it there with `v2.0.0`. v1.0.0 was never cut as a GitHub Release.
+
+**Gates:** R-001 (row reused), R-003 (restock server-side, one helper), undo on the new mutation; no new tokens or
+hardcoded colours. No new R-rule. No em dashes in new copy.
+
+**Next up:** deploy; run the Release workflow with `v2.0.0` once Actions is on (dry run first).
+
+---
+
 ## 2026-11-06 (night, later): **CHANGELOG rewritten for the 1.0.0 release (uncommitted)**
 
 **Owner:** redo the changelog for 1.0.0; 0.x numbers were test versions, never official.

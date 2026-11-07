@@ -17,12 +17,10 @@ from dora_api.domain.entities.shopping_list import (
     SHOPPING_LIST_STATUS_DONE, SHOPPING_LIST_STATUS_DRAFT,
     SHOPPING_LIST_STATUS_SHOPPING, SHOPPING_LIST_STATUS_VALUES, ShoppingList,
     ShoppingListLine)
-from dora_api.domain.entities.stock_item import StockItem
-from dora_api.domain.entities.stock_level import StockLevel
-from dora_api.domain.stock_status import StockStatus, level_for_status
 from dora_api.features.routers import SHOPPING_LIST_ROUTER
 from dora_api.features.shopping_lists._line_retention import \
     snapshot_line_display_names
+from dora_api.features.shopping_lists._restock import restock_stock_items
 from dora_api.features.shopping_lists.get_shopping_lists import get_shopping_lists
 from dora_api.features.shopping_lists.manage_shopping_list_lines import \
     snapshot_offer_rrp
@@ -274,20 +272,9 @@ class FinishShoppingListHandler:
         # prices aren't part of their own baseline.
         snapshot_usual_prices(self.repository, ticked_lines, now=now)
 
-        # Resolve the restock target once, by status identity, not name.
-        all_levels = self.repository.get(StockLevel).all()
-        stocked = level_for_status(all_levels, StockStatus.STOCKED)
-
-        updated = 0
-        if ticked_lines and stocked is not None:
-            stock_item_ids = [l.stock_item_id for l in ticked_lines if l.stock_item_id]
-            stock_items = self.repository.get(StockItem).all(
-                EntityField(StockItem, "id").in_(stock_item_ids)
-            ) if stock_item_ids else []
-            for item in stock_items:
-                item.stock_level = stocked
-                item.stock_level_last_updated = now
-                updated += 1
+        updated = restock_stock_items(
+            self.repository, (l.stock_item_id for l in ticked_lines), now=now,
+        )
 
         # harvest a price observation per priced ticked line
         # (the closed loop: confirm what you paid at the till → it feeds "Your

@@ -88,7 +88,7 @@
     import { computed, ref } from 'vue';
 
     const $q = useQuasar();
-    const { api, listId, detail, refreshDetailQuietly } = useShoppingListDetail();
+    const { api, listId, detail, simpleFace, refreshDetailQuietly } = useShoppingListDetail();
 
     // ── Receipt attachments (FU-334) ────────────────────────────────────
     // Pure record-keeping: attach 1..N receipt photos to a `shopping` or
@@ -100,7 +100,7 @@
     const attachmentZoomId = ref<string | null>(null);
 
     const attachmentSectionVisible = computed(
-        () => !!detail.value && detail.value.status !== 'draft',
+        () => !!detail.value && detail.value.status !== 'draft' && !simpleFace.value,
     );
 
     async function onAttachmentPicked(image: ProcessedImage) {

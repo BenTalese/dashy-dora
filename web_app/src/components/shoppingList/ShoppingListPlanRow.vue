@@ -19,10 +19,9 @@
             <BaseTooltip>Drag to reorder</BaseTooltip>
         </div>
 
-        <!-- Quantity. A tile at rest, a stepper on approach where there is a
-             pointer to approach with (owner call 2026-08-31). The stepper
-             buttons are always in the layout and only their opacity changes,
-             so revealing them cannot reflow the row.
+        <!-- Quantity. A tile with a stepper either side where there is a
+             pointer; always visible (owner, 2026-11-07, reversing the
+             2026-08-31 reveal-on-hover).
 
              No stepper on touch (owner, 2026-09-27). The buttons sat either
              side of the tile at `opacity: 0` and were still live, so a tap
@@ -222,9 +221,7 @@
              145px, which wraps it under its own Buy chip — the arrows are the
              least urgent control on the row and the one that can move.
 
-             Revealed on approach where there is a pointer; always present
-             where there isn't, because hover-only is a loss on touch and the
-             arrows are the only reorder path a thumb has. -->
+             Always visible (owner, 2026-11-07). -->
         <div v-if="canReorder" class="sl-row__reorder">
             <BaseButton
                 variant="icon"
@@ -406,10 +403,8 @@
        skeleton (v4 chunk 3). What this block owns is the plan face's own
        track list and its controls.
 
-       The quantity and action cells are sized for their *revealed* state, so
-       a hover reveals opacity and nothing else. Reserving that space is
-       deliberate: a reveal that reflowed the row would put the misalignment
-       back as a motion bug. */
+       The quantity and action cells are fixed-width, so the columns line up
+       down the whole page. */
     /* Four tracks on a desktop: quantity, name, money, actions — and every one
        of them fixed or `1fr`, never content-measured, so the three right-hand
        columns land on the same x down the whole page.
@@ -530,10 +525,6 @@
         align-items: center;
         justify-content: center;
         gap: var(--space-1);
-    }
-    .sl-row__step {
-        opacity: 0;
-        transition: opacity var(--motion-fast, 120ms) var(--motion-ease, ease);
     }
     .sl-row__tile {
         width: 44px;
@@ -661,30 +652,20 @@
         justify-content: flex-end;
         gap: var(--space-1);
     }
-    .sl-row__act {
-        opacity: 0;
-        transition: opacity var(--motion-fast, 120ms) var(--motion-ease, ease);
-    }
-
-    /* Reveal-on-approach, but only where there is something to approach with.
-       On touch the reorder arrows are permanently visible (they are a thumb's
-       only reorder path) and the stepper doesn't exist at all — `display:
-       none`, not `opacity: 0`, because an invisible button is still a live
-       one. */
+    /* The stepper and the reorder arrows are always shown (owner,
+       2026-11-07). They used to fade in on hover, which left a row showing
+       only its *disabled* buttons at rest (Quasar's `.disabled` forces its
+       own opacity), so the one control you could not use was the one you
+       could see. Only the decorative grip still reveals on approach. On touch
+       the stepper doesn't exist at all; a tap on the tile opens the number
+       field instead. */
     @media (hover: hover) {
         .sl-row:hover .sl-row__grip,
-        .sl-row:focus-within .sl-row__grip,
-        .sl-row:hover .sl-row__act,
-        .sl-row:focus-within .sl-row__act,
-        .sl-row:hover .sl-row__step,
-        .sl-row:focus-within .sl-row__step {
+        .sl-row:focus-within .sl-row__grip {
             opacity: 1;
         }
     }
     @media (hover: none) {
-        .sl-row__act {
-            opacity: 1;
-        }
         .sl-row__grip,
         .sl-row__step {
             display: none;
@@ -695,9 +676,7 @@
     }
 
     @media (prefers-reduced-motion: reduce) {
-        .sl-row__grip,
-        .sl-row__act,
-        .sl-row__step {
+        .sl-row__grip {
             transition: none;
         }
     }

@@ -169,6 +169,10 @@ export type BackToDraftResult = {
     unticked_count: number;
 };
 
+/** Simple mode's buy echo: the line and the item's level before the restock.
+ *  Opaque to the client; it goes back verbatim to undo the buy. */
+export type BoughtLine = Record<string, unknown>;
+
 export type ClearListResult = {
     removed_count: number;
 };
@@ -250,6 +254,19 @@ export default class ShoppingListApiService {
 
     deleteLineAsync = async (listId: string, lineId: string): Promise<void> =>
         await this.httpClient.delete<void>(`/shopping-lists/${listId}/lines/${lineId}`);
+
+    /** Simple mode: restock the item and remove the line in one request. */
+    buyLineAsync = async (listId: string, lineId: string): Promise<{ bought: BoughtLine }> =>
+        await this.httpClient.post<{ bought: BoughtLine }, Record<string, never>>(
+            `/shopping-lists/${listId}/lines/${lineId}/buy`,
+            {},
+        );
+
+    unbuyLineAsync = async (listId: string, bought: BoughtLine): Promise<void> =>
+        await this.httpClient.post<void, BoughtLine>(
+            `/shopping-lists/${listId}/lines/unbuy`,
+            bought,
+        );
 
     // FU-573: returns whether a line was actually removed. The endpoint is an
     // idempotent no-op (success) when the item isn't on the list, so callers

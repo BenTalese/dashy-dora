@@ -86,7 +86,7 @@
                          list is part of writing it, not part of shopping it or
                          of reading the receipt afterwards. -->
                     <BaseButton
-                        v-if="planFace"
+                        v-if="planFace || simpleFace"
                         variant="icon"
                         class="sld-picker__rename"
                         :icon="ICONS.edit"
@@ -264,6 +264,19 @@
                             <BaseTooltip>Keep these items as a reusable snapshot</BaseTooltip>
                         </BaseButton>
                     </div>
+                    <!-- Simple or flow (owner, 2026-11-07). Simple is one
+                         endless list where a tick means bought; flow is plan,
+                         shop, finish. Per user, saved on the account. Not on a
+                         receipt: a finished list reads the same either way. -->
+                    <BaseSegmented
+                        v-if="!receiptFace"
+                        class="sld-mode"
+                        dense
+                        aria-label="Shopping mode"
+                        :model-value="simpleMode"
+                        :options="modeOptions"
+                        @update:model-value="onSetSimpleMode"
+                    />
                 </div>
 
                 <q-banner v-if="loadError" class="text-negative q-mb-4 sl-panel sl-panel--error" dense>
@@ -302,6 +315,7 @@
                          action; everything you'd only ask once is behind its
                          caret. See the component for the reasoning. -->
                     <ShoppingListOverviewCard
+                        v-if="!simpleFace"
                         :detail="detail"
                         :lines="baseLines"
                         :mode="groupBy"
@@ -332,8 +346,13 @@
                          the rows with their drag, delete, steppers, buy hints,
                          offers and provenance, and the deferred-to-fit
                          section — and no other face has any of it (FU-780). -->
+                    <ShoppingListSimpleFace
+                        v-if="simpleFace"
+                        :lines="detail.lines"
+                        @buy="onSimpleBuy"
+                    />
                     <ShoppingListPlanFace
-                        v-if="planFace"
+                        v-else-if="planFace"
                         :mode="groupBy"
                         :focused-line-id="focusedLineId"
                     />
@@ -599,6 +618,8 @@
     import BaseDialog from 'src/components/BaseDialog.vue';
     import ShoppingListOverviewCard from 'src/components/shoppingList/ShoppingListOverviewCard.vue';
     import ShoppingListPlanFace from 'src/components/shoppingList/ShoppingListPlanFace.vue';
+    import ShoppingListSimpleFace from 'src/components/shoppingList/ShoppingListSimpleFace.vue';
+    import BaseSegmented from 'src/components/BaseSegmented.vue';
     import ShoppingListRunFace from 'src/components/shoppingList/ShoppingListRunFace.vue';
     import ShoppingListReceiptFace from 'src/components/shoppingList/ShoppingListReceiptFace.vue';
     import ShoppingListReceiptPhotos from 'src/components/shoppingList/ShoppingListReceiptPhotos.vue';
@@ -624,6 +645,8 @@
         type ShoppingListSummary
     } from 'src/models/shoppingList';
     import ShoppingListTemplateApiService from 'src/services/api/shoppingListTemplateApiService';
+    import type { BoughtLine } from 'src/services/api/shoppingListApiService';
+    import { useAuthStore } from 'src/stores/authStore';
     import { useProductStore } from 'src/stores/productStore';
     import { useShoppingListStore } from 'src/stores/shoppingListStore';
     import { useStockItemStore } from 'src/stores/stockItemStore';
@@ -643,13 +666,14 @@
     // The list, its faces, its re-reads and the trim banner's state are shared
     // with the face components below — see `useShoppingListDetail` (FU-780).
     const {
-        api, listId, detail, planFace, runFace, receiptFace, loading, loadError,
+        api, listId, detail, simpleMode, simpleFace, planFace, runFace, receiptFace, loading, loadError,
         baseLines, resetTrim, load, refreshAll, refreshDetailQuietly,
         refreshAllQuietly, onAdjustQuantity,
     } = provideShoppingListDetail();
     const templateApi = new ShoppingListTemplateApiService();
     const store = useShoppingListStore();
     const stockItemStore = useStockItemStore();
+    const authStore = useAuthStore();
     const stockLevelStore = useStockLevelStore();
     const productStore = useProductStore();
     const { moneyEnabled } = useMoneyEnabled();
@@ -663,7 +687,7 @@
     // in 'shopping' status so the phone doesn't blank between aisles. The
     // computed reads `detail.value?.status` so entering / leaving shop
     // mode toggles the lock without any explicit acquire/release call.
-    const shopModeActive = computed(() => detail.value?.status === 'shopping');
+    const shopModeActive = computed(() => runFace.value);
     useWakeLock(shopModeActive);
 
     // Amend is off every time the receipt is opened — a historical record
@@ -999,12 +1023,12 @@
     // them tick a draft line from the keyboard — a back door into the state
     // the plan face no longer has a control for.
     function tickFocusedLine() {
-        if (detail.value?.status !== 'shopping') return;
+        if (!runFace.value) return;
         const line = orderedLines.value.find((l) => l.line_id === focusedLineId.value);
         if (line) void onToggleTicked(line.line_id, !line.is_ticked);
     }
     function untickLastTicked() {
-        if (detail.value?.status !== 'shopping') return;
+        if (!runFace.value) return;
         while (recentTickStack.value.length > 0) {
             const lineId = recentTickStack.value.pop()!;
             const line = detail.value?.lines.find((l) => l.line_id === lineId);
@@ -1018,8 +1042,8 @@
     useShortcut([
         { keys: 'n', scope: 'Shopping list', description: 'Add an item', handler: onOpenQuickAdd },
         // Ticking is the run face's (FU-808), so the two keys are off elsewhere.
-        { keys: 'space', scope: 'Shopping list', description: 'Tick / untick the focused line', handler: tickFocusedLine, enabled: () => detail.value?.status === 'shopping' },
-        { keys: 'u', scope: 'Shopping list', description: 'Untick the last item you ticked', handler: untickLastTicked, enabled: () => detail.value?.status === 'shopping' },
+        { keys: 'space', scope: 'Shopping list', description: 'Tick / untick the focused line', handler: tickFocusedLine, enabled: () => runFace.value },
+        { keys: 'u', scope: 'Shopping list', description: 'Untick the last item you ticked', handler: untickLastTicked, enabled: () => runFace.value },
         { keys: 'arrowdown', scope: 'Shopping list', description: 'Focus next line', handler: () => moveLineFocus(1) },
         { keys: 'arrowup', scope: 'Shopping list', description: 'Focus previous line', handler: () => moveLineFocus(-1) },
     ]);
@@ -1117,6 +1141,88 @@
                 handler: () => { void onToggleTicked(line.line_id, false, id); },
             }],
         });
+    }
+
+    // ── Simple mode ─────────────────────────────────────────────────────
+    const modeOptions = [
+        { label: 'Simple', value: true },
+        { label: 'Flow', value: false },
+    ] as const;
+
+    async function onSetSimpleMode(value: boolean) {
+        if (value === simpleMode.value) return;
+        try {
+            await authStore.updateMeAsync({ shopping_simple_mode: value });
+        } catch (err) {
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not switch mode.',
+                    caption: toastCaption(err),
+                });
+            }
+        }
+    }
+
+    /** Simple-mode tick: bought. The server restocks the item and removes the
+     *  line in one request, and echoes what the undo needs to put both back.
+     *  The row leaves straight away; on a failure the list is re-read. Like
+     *  `onRunTick`, the undo is offered only once the buy has landed, and it
+     *  targets the list the item was bought from. */
+    async function onSimpleBuy(line: ShoppingListLine) {
+        const current = detail.value;
+        if (!current) return;
+        const id = listId.value;
+        current.lines = current.lines.filter((l) => l.line_id !== line.line_id);
+        let bought: BoughtLine;
+        try {
+            ({ bought } = await api.buyLineAsync(id, line.line_id));
+        } catch (err) {
+            await refreshDetailQuietly();
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: `Could not mark ${line.stock_item_name} as bought.`,
+                    caption: toastCaption(err),
+                });
+            }
+            return;
+        }
+        afterSimpleBuy(line.stock_item_id);
+        $q.notify({
+            type: 'positive',
+            timeout: 4000,
+            message: `Bought ${line.stock_item_name}`,
+            actions: [{
+                label: 'Undo',
+                color: 'white',
+                handler: () => { void undoSimpleBuy(id, bought, line.stock_item_id); },
+            }],
+        });
+    }
+
+    async function undoSimpleBuy(id: string, bought: BoughtLine, stockItemId: string | null) {
+        try {
+            await api.unbuyLineAsync(id, bought);
+        } catch (err) {
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not undo.',
+                    caption: toastCaption(err),
+                });
+            }
+            return;
+        }
+        if (id === listId.value) await refreshDetailQuietly();
+        afterSimpleBuy(stockItemId);
+    }
+
+    /** The buy wrote the item's level and the list's membership server-side,
+     *  past the stores that would otherwise know. */
+    function afterSimpleBuy(stockItemId: string | null) {
+        void store.refreshAsync();
+        if (stockItemId) void stockItemStore.refreshItemAsync(stockItemId).catch(() => {});
     }
 
     /** Put a picked line back, from the run face's Picked section. No undo
@@ -1354,6 +1460,10 @@
     }
     .sld-toolbar__actions > * {
         flex: 0 0 auto;
+    }
+    .sld-mode {
+        flex: 0 0 auto;
+        margin-left: auto;
     }
     /* ── The list, v4 chunk 1 ─────────────────────────────────────────
        The rows moved to `ShoppingListPlanRow.vue` and took their layout with

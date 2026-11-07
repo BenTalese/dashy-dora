@@ -10,6 +10,9 @@
         Mounted once in MainLayout; any screen pops it via
         useLogPrice().openLogPrice().
 
+        A bottom sheet on a phone, a centred dialog on a desktop, the same
+        shape as QuickAddSheet (owner, 2026-11-07).
+
         Once an item is picked the title is just its name (owner, 2026-09-17).
         "Log a price ·" was narrating the dialog back to someone who had opened
         it on purpose and already taken a step inside it; the form underneath
@@ -20,8 +23,8 @@
         v-model="open"
         :title="selectedItem ? selectedItem.name : 'Log a price'"
         closable
-        position="bottom"
-        card-style="width: 520px; max-width: 96vw"
+        :position="$q.screen.lt.md ? 'bottom' : 'standard'"
+        :card-style="$q.screen.lt.md ? 'width: 520px; max-width: 96vw' : 'width: 720px; max-width: 90vw'"
         @cancel="onHide"
     >
         <q-card-section>
@@ -179,7 +182,7 @@
         const remaining = items
             .filter((i) => !seen.has(i.stock_item_id))
             .sort((a, b) => levelSequence(b.stock_level_id) - levelSequence(a.stock_level_id));
-        return [...ordered, ...remaining].slice(0, 12);
+        return [...ordered, ...remaining].slice(0, 20);
     });
 
     async function selectItem(item: StockItem) {
@@ -272,5 +275,10 @@
     .log-price-sheet__results {
         max-height: 320px;
         overflow-y: auto;
+    }
+    @media (min-width: 1024px) {
+        .log-price-sheet__results {
+            max-height: min(60vh, 560px);
+        }
     }
 </style>

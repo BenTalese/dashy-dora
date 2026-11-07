@@ -295,6 +295,11 @@ class User(BaseEntity):
     # hides the whole assistant launcher for users who don't want it. When
     # False the SPA doesn't mount the bubble, so Basic *and* AI mode are gone.
     show_assistant: bool = True
+    # The shopping page's mode (owner, 2026-11-07): False is flow mode (plan,
+    # shop, finish), True is simple mode, one endless list where a tick means
+    # bought. Per user, so each household member picks their own and their
+    # devices agree.
+    shopping_simple_mode: bool = False
     # Daily brief push (owner, 2026-08-17). ONE push per day, at
     # DAILY_BRIEF_HOUR household-local, summarising tomorrow's meals and any
     # shopping day that's due. Deliberately *not* a per-slot reminder: five
@@ -357,6 +362,7 @@ class User(BaseEntity):
         LLM_ENABLED = "llm_enabled"
         LLM_PROVIDER = "llm_provider"
         SHOW_ASSISTANT = "show_assistant"
+        SHOPPING_SIMPLE_MODE = "shopping_simple_mode"
         DAILY_BRIEF_ENABLED = "daily_brief_enabled"
         ALERT_DISCARD_AFTER_DAYS = "alert_discard_after_days"
         STOCKTAKE_LAST_SESSION_AT = "stocktake_last_session_at"

@@ -1,5 +1,15 @@
 <template>
-    <BaseDialog v-model="open" title="Add to list" closable position="bottom" card-style="width: 520px; max-width: 96vw" @cancel="onHide">
+    <!-- A bottom sheet on a phone, a centred dialog with room for a real
+         results list on a desktop (owner, 2026-11-07: the 520px sheet with a
+         320px list read as the mobile view stretched onto a monitor). -->
+    <BaseDialog
+        v-model="open"
+        title="Add to list"
+        closable
+        :position="$q.screen.lt.md ? 'bottom' : 'standard'"
+        :card-style="$q.screen.lt.md ? 'width: 520px; max-width: 96vw' : 'width: 720px; max-width: 90vw'"
+        @cancel="onHide"
+    >
         <q-card-section>
             <!-- Target list -->
             <BaseSelect
@@ -183,7 +193,7 @@
             }
             return levelSequence(b.stock_level_id) - levelSequence(a.stock_level_id);
         });
-        return ordered.slice(0, q ? 30 : 12);
+        return ordered.slice(0, q ? 30 : 20);
     });
 
     /** Tap = added. Quantity 1, no offer — the two things the second step used
@@ -272,5 +282,10 @@
     .quick-add-sheet__results {
         max-height: 320px;
         overflow-y: auto;
+    }
+    @media (min-width: 1024px) {
+        .quick-add-sheet__results {
+            max-height: min(60vh, 560px);
+        }
     }
 </style>

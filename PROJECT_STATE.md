@@ -20,9 +20,9 @@ Status key: ✅ done-clean · ➗ done-with-carve-outs · 🟡 active/in-progres
 
 **Dora 1.0.0 is deployed to Altair (Dora and the companion), and every FU is now resolved: 0 open in `DORA_FOLLOWUPS.md`.** On 11-06 (night) your decisions closed the last nine (FU-636 got built: Settings → Nutrition links USDA's downloads page), and the five companion debts (FU-886/887/891/924/960) were fixed in `../dora-companion`. New tonight: a **first-setup demo**. The one-time setup screen can fill Dora with sample data and sign you in as `demo`, a banner says it's a demo, and "Set up Dora" wipes it back to a fresh install. A security review of the first cut found three holes, all fixed before close.
 
-**Commits:** everything through the setup demo is pushed (Dora `873a2ad9`, companion `2e140de`). `CHANGELOG.md` is rewritten as the 1.0.0 release notes (uncommitted). Single Alembic head `c6f9d3b8e4a1`.
+**Commits:** everything through the setup demo is pushed (Dora `873a2ad9`, companion `2e140de`). `CHANGELOG.md` is rewritten as the 1.0.0 release notes (uncommitted). Single Alembic head `d2a7e5c9b1f4`. 11-07: shopping Simple mode shipped and the version is now **2.0.0** (committed, not yet deployed or released).
 
-**What's left:** commit the changelog, deploy tonight's commits, cut the `v1.0.0` GitHub Release, and walk `DORA_VERIFY.md`. No FU is waiting on you.
+**What's left:** deploy, cut the `v2.0.0` GitHub Release (the workflow creates the tag), and walk `DORA_VERIFY.md`. No FU is waiting on you.
 
 ---
 
@@ -55,7 +55,7 @@ Status key: ✅ done-clean · ➗ done-with-carve-outs · 🟡 active/in-progres
 | **Prices surface** | ✅ | Logged prices are editable. Charts say "price", name their unit and tell "usual" lines apart. | [ASSESSMENT](docs/05_investigations/PRICES_SURFACE_UX_ASSESSMENT.md) |
 | **Email & notifications** | ✅ | Release notices to admins, per-user deals opt-in, nightly alert-dismissal prune. | `CHANGELOG [Unreleased]` |
 | **Recipes & cookbook** | ✅ | Costing, units and nutrition each have one source. Nutrition gaps open the ingredient's editor; kcal is edited in the facts grid; "last updated" moves only on content edits. | `recipe_cost.py` · [INVESTIGATION](docs/05_investigations/RECIPE_PRICE_UNIT_MISMATCH.md) |
-| **Shopping lists (v4)** | ✅ | Built end to end. Bulk add and level changes go in one request. | [SHOPPING_LIST_UX_V2](docs/04_proposals/SHOPPING_LIST_UX_V2.md) · R-090 |
+| **Shopping lists (v4)** | ✅ | Built end to end. Bulk add and level changes go in one request. 11-07: Simple mode (one endless list, tick = bought) beside Flow, per user. | [SHOPPING_LIST_UX_V2](docs/04_proposals/SHOPPING_LIST_UX_V2.md) · R-090 |
 | **Dashboard** | ✅ | Nine cards with per-card errors, hide and reorder. Card row-height stretch accepted as fine. | [IMPL_PLAN_DASHBOARD_REBUILD](docs/04_proposals/IMPL_PLAN_DASHBOARD_REBUILD.md) |
 | **Reports** | ✅ | Money-gated; cards hide, widen and reorder; savings against your usual price. | [REVIEW](docs/05_investigations/REPORTS_PAGE_REVIEW.md) |
 | **Shared component anatomy** | ✅ | One segmented control, `BaseSelect`, `MoneyInput`, `CountBadge`, one list-row chrome. Route transitions skipped. | `BaseSegmented.vue` |
@@ -79,7 +79,7 @@ Status key: ✅ done-clean · ➗ done-with-carve-outs · 🟡 active/in-progres
 2. 🟢 **Deploy** Dora and the companion to Altair. The setup demo needs nothing new in config.
 3. 🟢 **Walk `DORA_VERIFY.md`, newest sections first:** First-setup demo + owner batch 6, Owner batch 5, Leftovers sweep 3 and 2, Finish-off sweep, Touch sizes, Voice from Firefox.
 4. 🟢 **Changes you'll notice:** dark-theme cards, menus and dialogs use the theme's own surface; the Calories drawer is gone (edit kcal in the recipe's facts grid); favouriting no longer moves "last updated"; the setup screen offers a demo.
-5. 🟢 **CI and the release:** switch Actions on when you want it, check the first run on main is green, then run Release with `v1.0.0` (dry run first).
+5. 🟢 **CI and the release:** switch Actions on when you want it, check the first run on main is green, then run Release with `v2.0.0` (dry run first).
 
 ---
 

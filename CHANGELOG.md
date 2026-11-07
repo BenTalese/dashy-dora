@@ -5,6 +5,26 @@ bump means a schema or configuration change you need to act on when upgrading.
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-11-07
+
+Upgrading: a database migration adds a per-user setting. It runs on boot like
+every other; nothing to do by hand.
+
+### Added
+
+- Shopping lists have a **Simple** mode beside the usual **Flow**. Simple is one
+  endless list for top-up shopping: add items and tick them off. A tick means
+  bought, so the item goes to Stocked and leaves the list, with Undo. No Shop or
+  Finish step. The switch sits at the top of the list and is saved per person.
+
+### Changed
+
+- On a draft list the quantity steppers and the move up/down arrows are always
+  shown. They used to appear only on hover, which left only the disabled ones
+  visible.
+- Add item and Log price open as a wider centred dialog with a taller results
+  list on desktop. Phones keep the bottom sheet.
+
 ## [1.0.0] - 2026-11-06
 
 The first official release. Dora keeps track of everything edible in the house

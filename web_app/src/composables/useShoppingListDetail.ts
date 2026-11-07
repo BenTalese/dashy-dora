@@ -30,6 +30,7 @@ import type { ShoppingListDetail, ShoppingListLine } from 'src/models/shoppingLi
 import ShoppingListApiService, {
     type TrimToBudgetResult,
 } from 'src/services/api/shoppingListApiService';
+import { useAuthStore } from 'src/stores/authStore';
 import { useShoppingListStore } from 'src/stores/shoppingListStore';
 import { describeApiError, isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
 
@@ -38,6 +39,7 @@ function createShoppingListDetail() {
     const $q = useQuasar();
     const api = new ShoppingListApiService();
     const store = useShoppingListStore();
+    const authStore = useAuthStore();
     const { moneyEnabled } = useMoneyEnabled();
     // Per-user display opt-out (D-12). Gates the bulk verdict prefetch below;
     // `BuyVerdictBadgeInline` checks it again for the render.
@@ -50,8 +52,16 @@ function createShoppingListDetail() {
     // three compositions gate a couple of dozen blocks between them, and
     // `status === 'draft'` scattered through the template reads as an
     // implementation detail where "the plan face" reads as the design.
-    const planFace = computed(() => detail.value?.status === 'draft');
-    const runFace = computed(() => detail.value?.status === 'shopping');
+    //
+    // Simple mode (owner, 2026-11-07) is a fourth face over the same list:
+    // no lifecycle, and a tick means bought. It replaces the plan and run
+    // faces on any list that isn't finished; a done list is still a receipt.
+    const simpleMode = computed(() => authStore.currentUser?.shopping_simple_mode === true);
+    const simpleFace = computed(
+        () => simpleMode.value && !!detail.value && detail.value.status !== 'done',
+    );
+    const planFace = computed(() => !simpleFace.value && detail.value?.status === 'draft');
+    const runFace = computed(() => !simpleFace.value && detail.value?.status === 'shopping');
     const receiptFace = computed(() => detail.value?.status === 'done');
 
     // Starts true: the first painted frame must be the skeleton, never the
@@ -358,6 +368,8 @@ function createShoppingListDetail() {
         detail,
         addingBackLineIds,
         addingSuggestionId,
+        simpleMode,
+        simpleFace,
         planFace,
         runFace,
         receiptFace,

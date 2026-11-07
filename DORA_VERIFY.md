@@ -22,6 +22,10 @@ top-to-bottom.
 
 ---
 
+## Shopping Simple mode (2026-11-07)
+- [ ] On a phone, switch to Simple, tick an item, confirm it leaves the list and shows Stocked on Stock; Undo puts both back.
+- [ ] Flip modes on one device, reload on another: the same mode shows.
+
 ## Leftovers sweep 2 (2026-11-05)
 - [ ] Stock item, Recent prices: Edit a price (change amount, date, pack count), Remove asks first, Show all appears past 5.
 - [ ] Log a price at 375px: the Date field fits the pack-count/store row; the no-stores hint links to Settings.
