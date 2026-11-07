@@ -1,9 +1,10 @@
 <template>
     <!-- Simple mode (owner, 2026-11-07): one endless list for top-up and
-         random shopping. No sections, no lifecycle, no prices: add things,
-         tick them off. A tick means bought, so the row leaves the list and
-         the item restocks; the page owns that mutation and its undo. Rows are
-         the run face's, so the tap target and its keyboard handling are one
+         random shopping. No sections, no lifecycle: add things, tick them
+         off. A tick means bought, so the row leaves the list and the item
+         restocks; the page owns that mutation and its undo. A price entered
+         before the tick becomes price history when it's bought. Rows are the
+         run face's, so the tap target and its keyboard handling are one
          component. -->
     <q-card v-if="lines.length === 0" flat class="sl-panel">
         <q-card-section class="text-center dora-text-muted">
@@ -19,8 +20,8 @@
             :picked="false"
             :nested="false"
             :caption="captionFor(line)"
-            no-price
             @toggle="emit('buy', line)"
+            @capture-price="emit('capture-price', line)"
         />
     </div>
 </template>
@@ -35,6 +36,7 @@
 
     const emit = defineEmits<{
         buy: [line: ShoppingListLine];
+        'capture-price': [line: ShoppingListLine];
     }>();
 
     function captionFor(line: ShoppingListLine): string {

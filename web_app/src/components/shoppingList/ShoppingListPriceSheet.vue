@@ -349,7 +349,7 @@
      *  a record: what a shop is advertising today has nothing to say about a
      *  trip that already happened. */
     const priceSheetOffers = computed(() => {
-        if (!priceSheetLine.value || detail.value?.status !== 'shopping') return [];
+        if (!priceSheetLine.value || detail.value?.status === 'done') return [];
         return priceSheetLine.value.offers.filter((o) => o.price_now != null);
     });
 

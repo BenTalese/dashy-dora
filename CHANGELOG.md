@@ -15,15 +15,17 @@ every other; nothing to do by hand.
 - Shopping lists have a **Simple** mode beside the usual **Flow**. Simple is one
   endless list for top-up shopping: add items and tick them off. A tick means
   bought, so the item goes to Stocked and leaves the list, with Undo. No Shop or
-  Finish step. The switch sits at the top of the list and is saved per person.
+  Finish step. You can still enter what you paid on a row before ticking it, and
+  it becomes price history; Log price is there too. The switch sits at the top
+  of the list and is saved per person.
 
 ### Changed
 
 - On a draft list the quantity steppers and the move up/down arrows are always
   shown. They used to appear only on hover, which left only the disabled ones
   visible.
-- Add item and Log price open as a wider centred dialog with a taller results
-  list on desktop. Phones keep the bottom sheet.
+- The name menu on a list row (offers or preferred buys) is wider on desktop,
+  and names no longer cut off their last letters when there is room for them.
 
 ## [1.0.0] - 2026-11-06
 

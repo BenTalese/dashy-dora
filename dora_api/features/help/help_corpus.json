@@ -732,7 +732,7 @@
       {
         "slug": "simple-mode",
         "title": "Simple mode",
-        "summary": "One endless list for top-up shopping. Add items and tick them off: a tick means bought, so the item goes to Stocked and leaves the list. No Shop or Finish.",
+        "summary": "One endless list for top-up shopping. Add items and tick them off: a tick means bought, so the item goes to Stocked and leaves the list. No Shop or Finish. Tap a row’s price before ticking to record what you paid.",
         "how": null,
         "setting": null,
         "setting_path": null,

@@ -202,7 +202,7 @@
                              finish dialog now demands a decision on. That left
                              a mode whose whole cost was paid for one action
                              available in a better place. -->
-                        <!-- Shop mode only. This is for the price you notice on
+                        <!-- Shop mode and simple mode. This is for the price you notice on
                              the shelf for something that *isn't* on the list —
                              the per-line price capture already covers everything
                              that is. Same `useLogPrice()` sheet Stock overview
@@ -210,7 +210,7 @@
                              than a third (R-003). Money-gated, like every other
                              price surface on this page. -->
                         <BaseButton
-                            v-if="runFace && moneyEnabled"
+                            v-if="(runFace || simpleFace) && moneyEnabled"
                             variant="secondary"
                             :icon="ICONS.cash_plus"
                             :label="compactToolbar ? undefined : 'Log price'"
@@ -350,6 +350,7 @@
                         v-if="simpleFace"
                         :lines="detail.lines"
                         @buy="onSimpleBuy"
+                        @capture-price="openPriceSheet"
                     />
                     <ShoppingListPlanFace
                         v-else-if="planFace"

@@ -37,7 +37,7 @@
             </div>
         </div>
 
-        <div v-if="moneyEnabled && !noPrice" class="sl-row__money">
+        <div v-if="moneyEnabled" class="sl-row__money">
             <!-- Price capture is a deliberate second tap opening a thumb-height
                  sheet — never an inline field a mis-aimed tap on a moving
                  trolley can edit. A picked row shows the figure as type, since
@@ -107,9 +107,6 @@
         /** Built by the face, which knows what the sectioning is already
          *  saying, so the row never repeats its own heading back at itself. */
         caption: string;
-        /** Simple mode: a tick removes the line, so there is no row left to
-         *  hold a captured price. */
-        noPrice?: boolean;
     }>();
 
     const emit = defineEmits<{

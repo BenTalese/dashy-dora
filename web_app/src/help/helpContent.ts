@@ -556,7 +556,7 @@ export const HELP_TOPICS: HelpTopic[] = [
             {
                 slug: 'simple-mode',
                 title: 'Simple mode',
-                summary: 'One endless list for top-up shopping. Add items and tick them off: a tick means bought, so the item goes to Stocked and leaves the list. No Shop or Finish.',
+                summary: 'One endless list for top-up shopping. Add items and tick them off: a tick means bought, so the item goes to Stocked and leaves the list. No Shop or Finish. Tap a row’s price before ticking to record what you paid.',
                 note: 'Switch between Simple and Flow at the top of the list. Each person picks their own.',
                 path: '/shopping-lists',
             },

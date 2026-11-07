@@ -14,7 +14,7 @@
         :disable="disable"
         :label="picked?.label ?? choice.itemName"
     >
-        <q-list style="min-width: 240px">
+        <q-list class="line-choice__menu">
             <q-item
                 v-close-popup
                 clickable
@@ -128,7 +128,11 @@
         color: var(--text-primary);
         min-height: 0;
         padding: 0 2px;
-        margin-left: -2px;
+        /* A visual nudge only. As a negative margin it shrank the flex item
+           by 2px under its own content, so every name ellipsised its last
+           letters ("Coffee Bea…") with the whole row free beside it. */
+        position: relative;
+        left: -2px;
         border-radius: var(--radius-sm);
         max-width: 100%;
         min-width: 0;
@@ -162,6 +166,17 @@
     }
     .line-choice--struck :deep(.block) {
         text-decoration: line-through;
+    }
+    /* Room for an offer's name, size, price, store and saving on one line
+       each (owner, 2026-11-07: at 240px it read as the phone menu on a
+       monitor). The viewport cap keeps it on a phone. */
+    .line-choice__menu {
+        min-width: min(240px, 90vw);
+    }
+    @media (min-width: 1024px) {
+        .line-choice__menu {
+            min-width: 440px;
+        }
     }
     .line-choice__save {
         margin-left: var(--space-1);

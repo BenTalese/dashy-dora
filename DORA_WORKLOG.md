@@ -91,6 +91,33 @@ hardcoded colours. No new R-rule. No em dashes in new copy.
 
 ---
 
+## 2026-11-07 (later): **Simple mode keeps prices; row name menu widened; picker dialogs reverted**
+
+**Owner:** Simple mode should still allow price info and Log price. "The dropdown box" meant the row's
+name/preferred-buy/offer switcher, not the Add item / Log price modals: put those back.
+
+**Done:**
+- `QuickAddSheet.vue` and `LogPriceSheet.vue` restored to `1c3baadf` (bottom sheet, 520px, 12 rows).
+- `LineChoicePicker.vue`: the button's `margin-left: -2px` became `position: relative; left: -2px`. The negative
+  margin made the flex item 2px narrower than its content, so every picker name ellipsised ("Coffee Bea...",
+  "Wedge 20...") with the row empty beside it. Menu `min-width` 240px -> 440px at >=1024px, so an offer's name,
+  price, store and saving sit on one line each.
+- Simple mode prices: the face shows the run row's price button (opens `ShoppingListPriceSheet`); the toolbar's
+  Log price shows on the simple face too. The price sheet now offers "Seen at" offers on any non-done list (was
+  `shopping` only). `/buy` harvests the line's price via `sync_line_observations` (same as `/finish`), unhooks
+  the observation from the line before deleting it, and echoes `observation_id`, `actual_unit_price`,
+  `purchased_store_id`. `/unbuy` deletes that observation (only if same item and unlinked) and restores the
+  price and store on the re-added line. A simple buy records price history but no list spend (the line is gone).
+- `ShoppingListRunRow`'s `noPrice` prop removed again.
+
+**Verified:** scratch :5171: priced line (4.25 x 2) -> buy adds an $8.50 observation -> unbuy removes it and the
+line comes back priced with its store. Playwright 1440: simple face shows Log price + 7 row price buttons, the
+sheet opens with offers; picker names untruncated, menu 440px. vue-tsc, eslint, Vitest, pytest green.
+
+**Next up:** deploy; Release workflow with `v2.0.0`.
+
+---
+
 ## 2026-11-06 (night, later): **CHANGELOG rewritten for the 1.0.0 release (uncommitted)**
 
 **Owner:** redo the changelog for 1.0.0; 0.x numbers were test versions, never official.

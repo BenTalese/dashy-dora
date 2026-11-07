@@ -7,8 +7,13 @@ this", so the item restocks and the line leaves the list in one request.
   POST /api/shopping-lists/<id>/lines/<lid>/buy  restock + remove the line
   POST /api/shopping-lists/<id>/lines/unbuy      undo a buy from its echo
 
-The buy response carries everything the undo needs (the line's fields and the
-item's level before the restock), so the undo puts both back exactly.
+A price entered on the line before the tick becomes price history, the same
+observation `/finish` harvests. The line itself is gone afterwards, so a
+simple-mode buy records a price but no list spend.
+
+The buy response carries everything the undo needs (the line's fields, the
+item's level before the restock and the harvested observation), so the undo
+puts all three back exactly.
 """
 import logging
 from dataclasses import dataclass
@@ -19,8 +24,12 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from dora_api.domain.entities.shopping_list import ShoppingList, ShoppingListLine
 from dora_api.domain.entities.stock_item import StockItem
+from dora_api.domain.entities.stock_item_price_observation import \
+    StockItemPriceObservation
 from dora_api.domain.entities.stock_level import StockLevel
 from dora_api.features.routers import SHOPPING_LIST_ROUTER
+from dora_api.features.shopping_lists._observation_sync import \
+    sync_line_observations
 from dora_api.features.shopping_lists._restock import restock_stock_items
 from dora_api.features.shopping_lists.manage_shopping_list_lines import \
     LIST_DONE_REFUSAL
@@ -47,6 +56,9 @@ class BoughtLine(BaseModel):
     sequence: int = 0
     is_auto_added: bool = False
     added_at: datetime | None = None
+    actual_unit_price: float | None = Field(default=None, ge=0)
+    purchased_store_id: UUID | None = None
+    observation_id: UUID | None = None
     previous_stock_level_id: UUID | None = None
     previous_stock_level_last_updated: datetime | None = None
 
@@ -85,6 +97,19 @@ class BuyLineHandler:
                 previous_level_id = item.stock_level.id if item.stock_level else None
                 previous_updated = item.stock_level_last_updated
 
+        # The harvest keys the observation to the line; the key is cleared
+        # before the line goes so the delete doesn't depend on the FK's
+        # SET NULL landing in the same flush.
+        sync_line_observations(self.repository, [line])
+        observation = self.repository.get(StockItemPriceObservation).one(
+            EntityField(
+                StockItemPriceObservation,
+                StockItemPriceObservation.Fields.SHOPPING_LIST_LINE_ID,
+            ).eq(line.id)
+        )
+        if observation is not None:
+            observation.shopping_list_line_id = None
+
         bought = BoughtLine(
             stock_item_id=line.stock_item_id,
             product_id=line.product_id,
@@ -95,6 +120,9 @@ class BuyLineHandler:
             sequence=line.sequence,
             is_auto_added=line.is_auto_added,
             added_at=line.added_at,
+            actual_unit_price=line.actual_unit_price,
+            purchased_store_id=line.purchased_store_id,
+            observation_id=observation.id if observation is not None else None,
             previous_stock_level_id=previous_level_id,
             previous_stock_level_last_updated=previous_updated,
         )
@@ -154,6 +182,19 @@ class UnbuyLineHandler:
             if request.previous_stock_level_last_updated is not None:
                 item.stock_level_last_updated = request.previous_stock_level_last_updated
 
+        if request.observation_id is not None:
+            observation = self.repository.get(StockItemPriceObservation).by_id(
+                request.observation_id
+            )
+            # Only the buy's own observation: same item, and no longer tied
+            # to any line. The echo can't reach a finished shop's history.
+            if (
+                observation is not None
+                and observation.stock_item_id == request.stock_item_id
+                and observation.shopping_list_line_id is None
+            ):
+                self.repository.remove(observation)
+
         # The same anchor re-added since the buy (another device, a cart tap)
         # already holds the line; a second copy would be a duplicate.
         siblings = self.repository.get(ShoppingListLine).all(
@@ -175,6 +216,8 @@ class UnbuyLineHandler:
                 sequence=request.sequence,
                 is_auto_added=request.is_auto_added,
                 added_at=request.added_at or datetime.now(timezone.utc),
+                actual_unit_price=request.actual_unit_price,
+                purchased_store_id=request.purchased_store_id,
             ))
         self.repository.save_changes()
         return UnbuyLineResponse()
