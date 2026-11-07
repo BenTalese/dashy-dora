@@ -322,9 +322,10 @@ The CI and Release workflows ([.github/workflows/ci.yml](.github/workflows/ci.ym
 
 1. Land your changes on `main` and confirm CI is green for that SHA.
 2. Bump `CURRENT_VERSION` in `dora_api/features/help/version_info.py` — the one version source; the web app reads it at build time — and `web_app/package.json` to match (a test pins the pair). Rename the `## [Unreleased]` block in `CHANGELOG.md` to `## [X.Y.Z] - <date>`; the workflow uses that section as the GitHub Release body.
-3. Go to **Actions → Release → Run workflow**, type a version like `v0.3.0`, and run it.
-4. The workflow validates the version, builds the Docker image, pushes to `ghcr.io/bentalese/dashy-dora:vX.Y.Z` **and** `:latest`, then cuts the GitHub Release. Tick **dry_run** to preview without publishing.
-5. After the release lands, move the `[Unreleased]` heading down and start a fresh section.
+3. Optionally tag the release commit yourself (`git tag -a v0.3.0 && git push origin v0.3.0`); the workflow then builds the tagged commit. Without a tag it builds the commit you run it on and tags that.
+4. Go to **Actions → Release → Run workflow**, type a version like `v0.3.0`, and run it. It refuses only a version that already has a GitHub Release.
+5. The workflow validates the version, builds the Docker image, pushes to `ghcr.io/bentalese/dashy-dora:vX.Y.Z` **and** `:latest`, then cuts the GitHub Release. Tick **dry_run** to preview without publishing.
+6. After the release lands, move the `[Unreleased]` heading down and start a fresh section.
 
 </details>
 

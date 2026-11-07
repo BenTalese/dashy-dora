@@ -15,6 +15,11 @@ name: Release
 #      release notes — the [Unreleased] section of CHANGELOG.md gets
 #      pulled into the body.
 #
+# The tag may already exist (pushed by hand). Then the release is built
+# from the commit the tag points at, whichever branch the run was started
+# from, and only a tag that already has a GitHub Release is refused.
+# Without a tag, the release builds the dispatched commit and tags it.
+#
 # Required permissions:
 #   - contents: write   → create the git tag + GitHub Release
 #   - packages: write   → push to ghcr.io
@@ -70,12 +75,27 @@ jobs:
                   echo "image=$IMAGE" >> $GITHUB_OUTPUT
                   echo "Releasing $IMAGE:$VERSION"
 
-            # ── 2. Refuse to release a version that's already published ─
-            - name: Refuse duplicate tag
-              if: ${{ !inputs.dry_run }}
+            # ── 2. Resolve what to release ──────────────────────────
+            # An existing tag is the release point: check it out so the
+            # image, the notes and the Release all come from that commit.
+            # What counts as "already published" is a GitHub Release for
+            # the tag, not the tag itself.
+            - name: Resolve release commit
+              id: tag
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               run: |
-                  if git rev-parse "refs/tags/${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
-                      echo "::error::Tag ${{ steps.version.outputs.version }} already exists. Pick a new version."
+                  set -e
+                  VERSION="${{ steps.version.outputs.version }}"
+                  if git rev-parse -q --verify "refs/tags/$VERSION" >/dev/null; then
+                      git checkout -q --detach "refs/tags/$VERSION^{commit}"
+                      echo "Tag $VERSION exists; releasing its commit $(git rev-parse --short HEAD)."
+                  else
+                      echo "No tag $VERSION yet; releasing ${GITHUB_SHA::8} and tagging it."
+                  fi
+                  echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+                  if [ "${{ inputs.dry_run }}" != "true" ] && gh release view "$VERSION" >/dev/null 2>&1; then
+                      echo "::error::$VERSION already has a GitHub Release. Pick a new version."
                       exit 1
                   fi
 
@@ -105,14 +125,14 @@ jobs:
                       ${{ steps.version.outputs.image }}:${{ steps.version.outputs.version }}
                       ${{ steps.version.outputs.image }}:latest
                   build-args: |
-                      DORA_BUILD_ID=${{ github.sha }}
+                      DORA_BUILD_ID=${{ steps.tag.outputs.sha }}
                   cache-from: type=gha
                   cache-to: type=gha,mode=max
                   labels: |
                       org.opencontainers.image.title=DashyDora
                       org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
                       org.opencontainers.image.version=${{ steps.version.outputs.version }}
-                      org.opencontainers.image.revision=${{ github.sha }}
+                      org.opencontainers.image.revision=${{ steps.tag.outputs.sha }}
 
             # ── 5. Extract this version's CHANGELOG section ──────────
             # The release steps rename `## [Unreleased]` to `## [X.Y.Z] - <date>`
@@ -150,13 +170,15 @@ jobs:
                   } >> $GITHUB_OUTPUT
 
             # ── 6. Cut the GitHub Release ────────────────────────────
-            # `softprops/action-gh-release` creates the tag for us, so
-            # we don't need a separate `git tag && git push` step.
+            # `softprops/action-gh-release` creates the tag (at the
+            # resolved commit) when it doesn't exist yet, and uses it
+            # as-is when it does.
             - name: Create GitHub Release
               if: ${{ !inputs.dry_run }}
               uses: softprops/action-gh-release@v2
               with:
                   tag_name: ${{ steps.version.outputs.version }}
+                  target_commitish: ${{ steps.tag.outputs.sha }}
                   name: ${{ steps.version.outputs.version }}
                   body: ${{ steps.notes.outputs.body }}
                   draft: false

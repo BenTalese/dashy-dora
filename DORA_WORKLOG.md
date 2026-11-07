@@ -91,6 +91,21 @@ hardcoded colours. No new R-rule. No em dashes in new copy.
 
 ---
 
+## 2026-11-07 (latest): **v2.0.0 tagged by hand; Release workflow accepts an existing tag**
+
+**Owner:** tag `v2.0.0` at `ab3ae700` and push (done, with main); then fix the Release workflow so the hand tag
+doesn't block it.
+
+**Done:** `release.yml` step 2 "Refuse duplicate tag" became "Resolve release commit": an existing tag is checked
+out (detached) and is what gets built, labelled (`DORA_BUILD_ID`, `image.revision`) and released
+(`target_commitish`); with no tag it builds the dispatched commit and softprops tags it. Refuses only a version
+that already has a GitHub Release (`gh release view`, skipped on dry run). README release steps updated. Resolve
+script exercised in a scratch clone for both paths; YAML parses. Not run on GitHub (Actions is off).
+
+**Next up:** switch Actions on, Release with `v2.0.0` (dry run first); deploy.
+
+---
+
 ## 2026-11-07 (later): **Simple mode keeps prices; row name menu widened; picker dialogs reverted**
 
 **Owner:** Simple mode should still allow price info and Log price. "The dropdown box" meant the row's
