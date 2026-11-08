@@ -419,7 +419,7 @@ def configure_mappings(db: SQLAlchemy):
         # replaces the old
         # is_archived / is_in_progress flag pair. "Primary" is inferred from
         # DRAFT-count at read time (Chunk 2), not stored.
-        Column("status", String(16), nullable=False, server_default="draft"),
+        Column("status", String(16), nullable=False, server_default="active"),
         Column("created_at", DateTime(timezone=True), nullable=False),
         Column("completed_at", DateTime(timezone=True), nullable=True),
         # Optional shop day the user is planning this list
@@ -460,6 +460,12 @@ def configure_mappings(db: SQLAlchemy):
         ),
         Column("quantity", Integer, nullable=True),
         Column("is_ticked", Boolean, nullable=False, server_default=false()),
+        # Restock-on-tick record (UX v5 D1). `restock_from_level_id` is a
+        # plain UUID, no FK, for the same SQLite batch reason as
+        # `preferred_buy_id` below.
+        Column("restocked_at", DateTime(timezone=True), nullable=True),
+        Column("restock_from_level_id", UUIDType, nullable=True),
+        Column("restock_from_level_updated_at", DateTime(timezone=True), nullable=True),
         Column("selected_product_id", UUIDType, ForeignKey("Product.id", ondelete="SET NULL"), nullable=True),
         Column("sequence", Integer, nullable=False, server_default="0"),
         Column("is_auto_added", Boolean, nullable=False, server_default=false()),
@@ -499,7 +505,7 @@ def configure_mappings(db: SQLAlchemy):
     )
 
     # receipt-photo record-keeping. One row per attached photo on a
-    # shopping list (status='shopping' or 'done'). Image blob is the same
+    # shopping list. Image blob is the same
     # `data:image/...;base64,...` UTF-8 bytes shape as Recipe.image /
     # RecipeStepImage (so processImageFile → server → bytes endpoint stays
     # identical across upload sites). Deferred at the mapper so detail reads
@@ -1212,7 +1218,6 @@ def configure_mappings(db: SQLAlchemy):
         # FU-360.6 — per-user "show the Dora helper bubble" opt-out. Default
         # True; when False the SPA never mounts the assistant launcher.
         Column("show_assistant", Boolean, nullable=False, server_default=true()),
-        Column("shopping_simple_mode", Boolean, nullable=False, server_default=false()),
         Column("daily_brief_enabled", Boolean, nullable=False, server_default=false()),
         Column("alert_discard_after_days", Integer, nullable=True, server_default="14"),
         # Chunk 6 / D-4 — per-user watermark for the stocktake Sweep phase.

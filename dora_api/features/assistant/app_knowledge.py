@@ -19,8 +19,9 @@ navigation (a bottom bar on a phone) has these areas:
   and price alerts. Only shown once product data has been pushed in.
 - Cookbook: recipes, with cost, ingredients, steps and Cook mode.
 - Meal Plans: the week planner, templates and the auto builder.
-- Shopping Lists: lists with a plan, run and receipt face; templates; the
-  cart button on stock and recipes adds to the draft list.
+- Shopping Lists: one list you build and tick off in the same place (a tick
+  restocks the item), finished into a receipt; templates; the cart button on
+  stock and recipes adds to your open list.
 - Reports: spend, waste and budget over time (money features on).
 - Help & Guides: one page per area, search, common questions.
 - Settings: your own preferences (appearance, account, notifications,

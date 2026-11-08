@@ -2,20 +2,16 @@ import { ICONS } from 'src/style/icons';
 
 // Mirrors DTOs in dora_api/features/shopping_lists/.
 
-// single source of truth for where a list is in the
-// shop loop (mirrors SHOPPING_LIST_STATUS_* on the server). Replaces the old
-// is_archived / is_in_progress boolean pair.
-export type ShoppingListStatus = 'draft' | 'shopping' | 'done';
+// Where a list is in the shop loop (mirrors SHOPPING_LIST_STATUS_* on the
+// server). UX v5 merged draft and shopping into `active`: build, tick and
+// price all happen on the same list until `/finish` makes it `done`.
+export type ShoppingListStatus = 'active' | 'done';
 
 /** The one glyph per list state, shared by the status pill, the rail and the
  *  phone's list picker so the three can't drift (D-013: the state is never
  *  colour alone). */
 export function listStatusIcon(status: ShoppingListStatus): string {
-    switch (status) {
-        case 'shopping': return ICONS.shopping_cart;
-        case 'done': return ICONS.check;
-        default: return ICONS.listDraft;
-    }
+    return status === 'done' ? ICONS.check : ICONS.listDraft;
 }
 
 export type ShoppingListSummary = {
@@ -230,7 +226,7 @@ export type ShoppingListDetail = {
     totals: ShoppingListTotals;
     lines: ShoppingListLine[];
     /** FU-334 — receipt-photo attachments, ordered by sequence. Empty array
-     *  on draft lists or lists with no attachments yet. */
+     *  on lists with no attachments yet. */
     attachments: ShoppingListAttachment[];
     /** FU-653 — items Dora believes you've run out of that aren't on this list.
      *  Suggestions only: nothing is added for you, and the list is the same

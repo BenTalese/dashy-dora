@@ -118,6 +118,7 @@ export const ICONS = {
     link_off: 'mdi-link-off',
     list: 'mdi-format-list-bulleted',
     list_alt: 'mdi-format-list-checkbox',
+    sort_alpha: 'mdi-sort-alphabetical-ascending',
     local_offer: 'mdi-tag',
     tag_multiple: 'mdi-tag-multiple',
     lock_open: 'mdi-lock-open',

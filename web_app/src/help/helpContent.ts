@@ -169,9 +169,9 @@ export const HELP_TOPICS: HelpTopic[] = [
             {
                 slug: 'essentials-auto-add',
                 title: 'Essentials and auto-add',
-                summary: 'An essential is chased as soon as it runs low. With auto-add on, a low or out item lands on your draft list by itself.',
+                summary: 'An essential is chased as soon as it runs low. With auto-add on, a low or out item lands on your open list by itself.',
                 setting: STOCK_ADMIN,
-                note: 'Nothing is auto-added when you have no draft list, or more than one.',
+                note: 'Nothing is auto-added when you have no open list, or more than one.',
             },
             {
                 slug: 'expiry-opened',
@@ -541,29 +541,22 @@ export const HELP_TOPICS: HelpTopic[] = [
     {
         slug: 'shopping',
         title: 'Shopping lists',
-        blurb: 'From a draft to the shop to the receipt.',
+        blurb: 'Build it, tick it off, keep the receipt.',
         icon: ICONS.shopping_cart,
         entries: [
             {
-                slug: 'three-faces',
-                title: 'One list, three faces',
-                summary: 'A draft while you build it, a shop while you are in the store, a receipt once you finish. Shop starts the trip; Finish ends it.',
-                note: 'Finishing is final. Ticked items restock when you finish, never before.',
+                slug: 'one-list',
+                title: 'One list, from first item to receipt',
+                summary: 'Add, edit, price and tick on the same list. Ticking an item sets it to Stocked and moves it to Collected; untick to put it back. Ticking the last one asks if you are done.',
+                note: 'Finish turns the list into a receipt. Use it when you are done with items left over.',
                 path: '/shopping-lists',
                 image: 'shopping-list',
-                imageAlt: 'A shopping list in draft',
-            },
-            {
-                slug: 'simple-mode',
-                title: 'Simple mode',
-                summary: 'One endless list for top-up shopping. Add items and tick them off: a tick means bought, so the item goes to Stocked and leaves the list. No Shop or Finish. Tap a row’s price before ticking to record what you paid.',
-                note: 'Switch between Simple and Flow at the top of the list. Each person picks their own.',
-                path: '/shopping-lists',
+                imageAlt: 'A shopping list',
             },
             {
                 slug: 'which-list',
                 title: 'Which list does the cart button use?',
-                summary: 'Your only draft. With two or more drafts it asks once and remembers for the tab; with none it asks you to create one.',
+                summary: 'Your only open list. With two or more it asks once and remembers for the tab; with none it asks you to create one.',
                 note: 'There is no primary list. Shop day is what orders the rail.',
                 faq: true,
             },
@@ -598,8 +591,8 @@ export const HELP_TOPICS: HelpTopic[] = [
             },
             {
                 slug: 'finish-restock',
-                title: 'Finish and restock',
-                summary: 'Ticked items go to Stocked, priced lines become purchase history, names are frozen. Unticked items go to another list or the bin.',
+                title: 'Finish a shop',
+                summary: 'Priced lines become purchase history and names are frozen into a receipt. Unticked items go to another list or the bin.',
             },
             {
                 slug: 'amend',
@@ -622,7 +615,7 @@ export const HELP_TOPICS: HelpTopic[] = [
             {
                 slug: 'receipt-photos',
                 title: 'Receipt photos',
-                summary: 'Attach up to 20 photos to a shop or a receipt.',
+                summary: 'Attach up to 20 photos to a list once you have ticked something, or to a receipt.',
                 note: 'Record-keeping only. Nothing is read from the image.',
             },
             {
@@ -843,7 +836,7 @@ export const HELP_TOPICS: HelpTopic[] = [
             {
                 slug: 'add-to-list-basic',
                 title: 'Adding to your list by chat',
-                summary: 'Type add milk and eggs. Dora matches the names against your pantry and adds the clear ones to your draft list.',
+                summary: 'Type add milk and eggs. Dora matches the names against your pantry and adds the clear ones to your open list.',
                 note: 'Anything ambiguous she asks about, never guesses.',
             },
             {

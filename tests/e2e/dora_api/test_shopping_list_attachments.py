@@ -26,10 +26,6 @@ def _create_list(name: str) -> str:
     return resp.json()["shopping_list_id"]
 
 
-def _start(list_id: str) -> None:
-    assert requests.post(f"{SHOPPING_LISTS}/{list_id}/start").status_code == 204
-
-
 def _detail(list_id: str) -> dict:
     resp = requests.get(f"{SHOPPING_LISTS}/{list_id}")
     assert resp.status_code == 200, resp.text
@@ -45,14 +41,12 @@ def _add_attachment(list_id: str, data_url: str = PNG_DATA_URL):
 
 def test__detail_payload__exposes_empty_attachments_array_for_shopping_list(api):
     list_id = _create_list(f"FU-334 empty attachments {uuid4()}")
-    _start(list_id)
     detail = _detail(list_id)
     assert detail.get("attachments") == []
 
 
 def test__attach_to_shopping_list__appears_in_detail__bytes_round_trip(api):
     list_id = _create_list(f"FU-334 attach happy {uuid4()}")
-    _start(list_id)
 
     resp = _add_attachment(list_id)
     assert resp.status_code == 200, resp.text
@@ -72,24 +66,22 @@ def test__attach_to_shopping_list__appears_in_detail__bytes_round_trip(api):
     assert bytes_resp.content == _PNG_BYTES
 
 
-def test__attach_to_draft_list__is_rejected(api):
-    list_id = _create_list(f"FU-334 draft rejected {uuid4()}")
-    # Don't /start — list stays in 'draft'.
+def test__attach_to_a_list_with_nothing_ticked__is_allowed(api):
+    # UX v5: no draft state left to refuse; any active list takes a photo.
+    list_id = _create_list(f"FU-334 any list {uuid4()}")
     resp = _add_attachment(list_id)
-    assert resp.status_code in (400, 409, 422), resp.text
-    assert _detail(list_id)["attachments"] == []
+    assert resp.status_code == 200, resp.text
+    assert len(_detail(list_id)["attachments"]) == 1
 
 
 def test__attach__rejects_non_data_url(api):
     list_id = _create_list(f"FU-334 bad payload {uuid4()}")
-    _start(list_id)
     resp = _add_attachment(list_id, "not a data url")
     assert resp.status_code in (400, 409, 422), resp.text
 
 
 def test__multiple_attachments__retain_sequence_order(api):
     list_id = _create_list(f"FU-334 multi {uuid4()}")
-    _start(list_id)
     ids = []
     for _ in range(3):
         resp = _add_attachment(list_id)
@@ -103,7 +95,6 @@ def test__multiple_attachments__retain_sequence_order(api):
 
 def test__delete_attachment__removes_it_from_detail(api):
     list_id = _create_list(f"FU-334 delete {uuid4()}")
-    _start(list_id)
     attachment_id = _add_attachment(list_id).json()["attachment_id"]
 
     del_resp = requests.delete(
@@ -121,7 +112,6 @@ def test__delete_attachment__removes_it_from_detail(api):
 
 def test__delete_list__cascades_to_attachments(api):
     list_id = _create_list(f"FU-334 cascade {uuid4()}")
-    _start(list_id)
     attachment_id = _add_attachment(list_id).json()["attachment_id"]
 
     assert requests.delete(f"{SHOPPING_LISTS}/{list_id}").status_code == 204
@@ -137,7 +127,6 @@ def test__delete_list__cascades_to_attachments(api):
 def test__attachments_survive_finish__on_done_list(api):
     """A finished list keeps its receipts — the whole point is record-keeping."""
     list_id = _create_list(f"FU-334 finish {uuid4()}")
-    _start(list_id)
     attachment_id = _add_attachment(list_id).json()["attachment_id"]
 
     finish_resp = requests.post(f"{SHOPPING_LISTS}/{list_id}/finish")

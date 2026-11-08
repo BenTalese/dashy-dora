@@ -389,10 +389,10 @@ class UpdateStockItemHandler:
         return bool(stock_item.is_essential)
 
     def _try_auto_add(self, stock_item: StockItem) -> tuple[UUID, UUID] | None:
-        """Adds the stock item to the user's one open draft list.
+        """Adds the stock item to the user's one active list.
 
         Returns (line_id, list_id) on a successful add; None when skipped
-        (no unambiguous draft target, already on any active list, etc).
+        (no unambiguous target, already on any active list, etc).
         Imported locally because pulling shopping-list entities at module
         import time creates a cycle.
         """
@@ -415,8 +415,8 @@ class UpdateStockItemHandler:
             if on_any is not None:
                 return None
 
-        # Auto-add only when there's an unambiguous DRAFT target — if the user
-        # has 0 or 2+ drafts, the cart button still does the right thing on the
+        # Auto-add only when there's an unambiguous target: if the user has 0
+        # or 2+ active lists, the cart button still does the right thing on the
         # next manual click; we don't silently pick one.
         from dora_api.features.shopping_lists.quick_add_target_resolver import \
             resolve_quick_add_target

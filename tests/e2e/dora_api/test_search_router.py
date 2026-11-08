@@ -157,7 +157,7 @@ def test__search__Location__SubtitleIsParentPathWithoutSelf(api):
     assert root_hit["subtitle"] is None
 
 
-def test__search__DraftShoppingList__SubtitleIsDraftLabel(api):
+def test__search__ActiveShoppingList__SubtitleIsListLabel(api):
     token = _token()
     created = requests.post(
         f"{BASE}/shopping-lists", json={"name": f"{token} shop"},
@@ -168,7 +168,7 @@ def test__search__DraftShoppingList__SubtitleIsDraftLabel(api):
     results = _search(token, types="shopping_list")
 
     hit = next(r for r in results if r["id"] == list_id)
-    assert hit["subtitle"] == "Draft list"
+    assert hit["subtitle"] == "Shopping list"
 
 
 def test__search__Recipe__FoundWithRecipeType(api):

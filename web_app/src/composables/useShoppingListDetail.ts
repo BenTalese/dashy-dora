@@ -1,10 +1,9 @@
 /**
  * The shopping-list page's shared state (FU-780).
  *
- * `ShoppingListDetail.vue` was one ~3,250-line file. The run and receipt faces
- * were already their own components; the plan face, the line editor sheet, the
- * finish dialog and the receipt photos are now too — and the state those
- * blocks *share* lives here rather than being prop-drilled through a couple of
+ * `ShoppingListDetail.vue` was one ~3,250-line file. The active and receipt
+ * faces, the finish dialog and the receipt photos are their own components,
+ * and the state those blocks *share* lives here rather than being prop-drilled through a couple of
  * dozen handlers: the loaded list, which face it is showing, the quiet and
  * loud re-reads, the trim-to-budget banner (which every re-read refreshes, and
  * which must outlive the plan face being unmounted mid-shop), and the one
@@ -30,7 +29,6 @@ import type { ShoppingListDetail, ShoppingListLine } from 'src/models/shoppingLi
 import ShoppingListApiService, {
     type TrimToBudgetResult,
 } from 'src/services/api/shoppingListApiService';
-import { useAuthStore } from 'src/stores/authStore';
 import { useShoppingListStore } from 'src/stores/shoppingListStore';
 import { describeApiError, isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
 
@@ -39,7 +37,6 @@ function createShoppingListDetail() {
     const $q = useQuasar();
     const api = new ShoppingListApiService();
     const store = useShoppingListStore();
-    const authStore = useAuthStore();
     const { moneyEnabled } = useMoneyEnabled();
     // Per-user display opt-out (D-12). Gates the bulk verdict prefetch below;
     // `BuyVerdictBadgeInline` checks it again for the render.
@@ -48,21 +45,16 @@ function createShoppingListDetail() {
     const listId = computed(() => String(route.params.id ?? ''));
     const detail = ref<ShoppingListDetail | null>(null);
 
-    // Which face is on screen. Named rather than compared inline because the
-    // three compositions gate a couple of dozen blocks between them, and
-    // `status === 'draft'` scattered through the template reads as an
-    // implementation detail where "the plan face" reads as the design.
-    //
-    // Simple mode (owner, 2026-11-07) is a fourth face over the same list:
-    // no lifecycle, and a tick means bought. It replaces the plan and run
-    // faces on any list that isn't finished; a done list is still a receipt.
-    const simpleMode = computed(() => authStore.currentUser?.shopping_simple_mode === true);
-    const simpleFace = computed(
-        () => simpleMode.value && !!detail.value && detail.value.status !== 'done',
-    );
-    const planFace = computed(() => !simpleFace.value && detail.value?.status === 'draft');
-    const runFace = computed(() => !simpleFace.value && detail.value?.status === 'shopping');
+    // Which face is on screen: the active list (build, tick and price in one
+    // place since UX v5) or the receipt.
+    const activeFace = computed(() => detail.value?.status === 'active');
     const receiptFace = computed(() => detail.value?.status === 'done');
+
+    /** At least one line ticked: the signal that you're in the shop. It is
+     *  what turns Estimated cost into Left to spend, brings in the progress
+     *  bar, the Finish action and the receipt photos, holds the wake lock,
+     *  and puts away the planning-only panels (suggestions, trim). */
+    const hasTicks = computed(() => (detail.value?.lines ?? []).some((l) => l.is_ticked));
 
     // Starts true: the first painted frame must be the skeleton, never the
     // "list isn't available" fallback (the S6 flash) — onMounted's load()
@@ -347,17 +339,16 @@ function createShoppingListDetail() {
         }
     }
 
-    async function onAdjustQuantity(line: ShoppingListLine, delta: number) {
-        const current = line.quantity ?? 1;
-        const next = Math.max(1, current + delta);
+    /** A quantity edit on the receipt. There the quantity is part of the
+     *  money: it multiplies the line total, the store split and the harvested
+     *  observation the server has just rewritten, so re-read rather than
+     *  re-derive (R-003). */
+    async function onAmendQuantity(line: ShoppingListLine, next: number) {
         await setLineQuantity(line, next);
-        // On the receipt face the quantity is part of the money: it multiplies
-        // the line total, the store split and the harvested observation the
-        // server has just rewritten. Re-read rather than re-derive (R-003).
-        if (receiptFace.value) await refreshDetailQuietly();
+        await refreshDetailQuietly();
     }
 
-    // In-flight row actions on the plan face, kept here rather than in the
+    // In-flight row actions on the active face, kept here rather than in the
     // face so a face switch mid-save doesn't re-enable the button (FU-981 (13)).
     const addingBackLineIds = ref<Set<string>>(new Set());
     const addingSuggestionId = ref<string | null>(null);
@@ -368,11 +359,9 @@ function createShoppingListDetail() {
         detail,
         addingBackLineIds,
         addingSuggestionId,
-        simpleMode,
-        simpleFace,
-        planFace,
-        runFace,
+        activeFace,
         receiptFace,
+        hasTicks,
         loading,
         loadError,
         baseLines,
@@ -388,7 +377,7 @@ function createShoppingListDetail() {
         refreshAll,
         refreshAllQuietly,
         setLineQuantity,
-        onAdjustQuantity,
+        onAmendQuantity,
     };
 }
 

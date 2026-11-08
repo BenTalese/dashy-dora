@@ -99,7 +99,6 @@ class UpdateMeRequest(BaseModel):
     # FU-360.6 — per-user "show the Dora helper bubble" opt-out. Plain bool;
     # null is ignored (leave untouched). Independent of `llm_enabled`.
     show_assistant: bool | None = None
-    shopping_simple_mode: bool | None = None
     daily_brief_enabled: bool | None = None
     # Days after which this user's alerts are discarded; null turns it off.
     # Validated against ALERT_DISCARD_DAY_OPTIONS in the handler.
@@ -251,9 +250,6 @@ class UpdateMeHandler:
         # FU-360.6 — show/hide the Dora helper bubble. Plain bool; null ignored.
         if "show_assistant" in _SetFields and request.show_assistant is not None:
             _User.show_assistant = request.show_assistant
-
-        if "shopping_simple_mode" in _SetFields and request.shopping_simple_mode is not None:
-            _User.shopping_simple_mode = request.shopping_simple_mode
 
         if "daily_brief_enabled" in _SetFields and request.daily_brief_enabled is not None:
             _User.daily_brief_enabled = request.daily_brief_enabled

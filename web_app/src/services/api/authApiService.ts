@@ -75,8 +75,6 @@ export type UpdateMeCommand = {
     llm_provider?: 'ollama' | 'openai' | 'anthropic' | 'gemini' | null;
     /** FU-360.6 — show/hide the Dora helper bubble for this account. */
     show_assistant?: boolean;
-    /** Shopping page mode: true = simple (one endless list), false = flow. */
-    shopping_simple_mode?: boolean;
     /** Daily brief push opt-in. See AuthenticatedUser. */
     daily_brief_enabled?: boolean;
     /** Days after which alerts are discarded (7 / 14 / 30), or null for never. */

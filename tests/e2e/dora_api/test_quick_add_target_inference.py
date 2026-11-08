@@ -1,16 +1,16 @@
-"""P6-01 Chunk 2 — DRAFT-count primary-target inference.
+"""P6-01 Chunk 2: active-list-count primary-target inference.
 
 Verifies the rules behind POST /api/shopping-lists/quick-add/lines now that the
 stored `is_primary` flag is gone:
 
-  - 0 draft lists  -> result="no_draft"
-  - 1 draft list   -> result="added" (silent quick-add)
-  - 2+ draft lists -> result="ambiguous" with candidates, and the client can
-                      disambiguate by sending `shopping_list_id`
+  - 0 active lists  -> result="no_list"
+  - 1 active list   -> result="added" (silent quick-add)
+  - 2+ active lists -> result="ambiguous" with candidates, and the client can
+                       disambiguate by sending `shopping_list_id`
 
-Plus a couple of sanity checks: SHOPPING/DONE lists never count as candidates,
-and the membership endpoint surfaces `quick_add_target_list_id` mirroring the
-same rule.
+Plus sanity checks: DONE lists never count as candidates (a list with ticks
+on it does, since UX v5), and the membership endpoint surfaces
+`quick_add_target_list_id` mirroring the same rule.
 """
 from uuid import uuid4
 
@@ -38,7 +38,7 @@ def levels_by_sequence():
 @pytest.fixture
 def fresh_state(api):
     # Clear every existing active list so each test starts with a known
-    # draft-count. The seed leaves several active lists around. (FU-227 chunk 5
+    # active-list count. The seed leaves several active lists around. (FU-227 chunk 5
     # removed the PATCH status=done back-door this used to ride — done is now
     # /finish-only — so we DELETE the active lists instead, which is all the
     # resolver cares about.)
@@ -66,7 +66,7 @@ def _create_stock_item(name: str, level_id: str) -> str:
 #endregion fixtures
 
 
-def test__quick_add__zero_drafts__returns_no_draft(
+def test__quick_add__zero_active_lists__returns_no_list(
     fresh_state, levels_by_sequence
 ):
     item_id = _create_stock_item(
@@ -74,7 +74,7 @@ def test__quick_add__zero_drafts__returns_no_draft(
     )
     resp = requests.post(QUICK_ADD, json={"stock_item_id": item_id})
     assert resp.status_code == 200, resp.text
-    assert resp.json() == {"result": "no_draft"}
+    assert resp.json() == {"result": "no_list"}
 
 
 def test__quick_add__single_draft__adds_silently(
@@ -118,39 +118,34 @@ def test__quick_add__two_drafts__returns_ambiguous_with_candidates(
     assert added["shopping_list_id"] == b
 
 
-def test__quick_add__shopping_list_does_not_count_as_draft(
+def test__quick_add__list_with_ticks_still_counts(
     fresh_state, levels_by_sequence
 ):
-    # One DRAFT + one SHOPPING — resolver still sees a single DRAFT, so
-    # quick-add lands silently on the draft. SHOPPING is for in-store ticking,
-    # not the quick-add target.
-    draft = _create_list(f"draft-{uuid4()}")
-    shopping = _create_list(f"shopping-{uuid4()}")
-    r = requests.post(f"{SHOPPING_LISTS}/{shopping}/start")
-    assert r.status_code == 204, r.text
-
-    item_id = _create_stock_item(
-        f"draft-vs-shopping-{uuid4()}", levels_by_sequence[0]
+    # UX v5: there is no "mid-shop" status to skip. One active list with a
+    # ticked line is still the only target.
+    list_id = _create_list(f"ticked-{uuid4()}")
+    first = _create_stock_item(f"ticked-first-{uuid4()}", levels_by_sequence[0])
+    added = requests.post(f"{SHOPPING_LISTS}/{list_id}/lines", json={"stock_item_id": first})
+    requests.patch(
+        f"{SHOPPING_LISTS}/{list_id}/lines/{added.json()['line_id']}", json={"is_ticked": True},
     )
+
+    item_id = _create_stock_item(f"ticked-second-{uuid4()}", levels_by_sequence[0])
     resp = requests.post(QUICK_ADD, json={"stock_item_id": item_id})
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["result"] == "added"
-    assert body["shopping_list_id"] == draft
+    assert body["shopping_list_id"] == list_id
 
 
-def test__quick_add__hint_invalid_for_non_draft(
+def test__quick_add__hint_invalid_for_a_finished_list(
     fresh_state, levels_by_sequence
 ):
-    # If the client sends a hint that no longer points to a draft (e.g. the
-    # remembered sessionStorage pick after the user moved that list on), the
-    # server rejects with a business-rule violation so the client can clear
-    # the pick and re-prompt. (FU-227 chunk 5 made `done` /finish-only, so we
-    # move the list to the non-draft `shopping` status here — the resolver
-    # only cares that the hint no longer points at a draft.)
-    list_id = _create_list(f"non-draft-{uuid4()}")
-    r = requests.patch(f"{SHOPPING_LISTS}/{list_id}", json={"status": "shopping"})
-    assert r.status_code == 204, r.text
+    # A hint that points at a list finished since (e.g. the remembered
+    # sessionStorage pick) is refused so the client can clear it and
+    # re-prompt.
+    list_id = _create_list(f"finished-{uuid4()}")
+    assert requests.post(f"{SHOPPING_LISTS}/{list_id}/finish").status_code == 200
 
     item_id = _create_stock_item(
         f"hint-invalid-{uuid4()}", levels_by_sequence[0]
@@ -164,16 +159,16 @@ def test__quick_add__hint_invalid_for_non_draft(
 def test__membership__quick_add_target_mirrors_inference(
     fresh_state, levels_by_sequence
 ):
-    # Zero drafts -> no target.
+    # Zero active lists -> no target.
     resp = requests.get(MEMBERSHIP).json()
     assert resp["quick_add_target_list_id"] is None
 
-    # One draft -> that draft is the target.
+    # One active list -> that list is the target.
     list_id = _create_list(f"membership-draft-{uuid4()}")
     resp = requests.get(MEMBERSHIP).json()
     assert resp["quick_add_target_list_id"] == list_id
 
-    # Two drafts -> ambiguous, so the target is cleared.
+    # Two active lists -> ambiguous, so the target is cleared.
     _create_list(f"membership-second-{uuid4()}")
     resp = requests.get(MEMBERSHIP).json()
     assert resp["quick_add_target_list_id"] is None

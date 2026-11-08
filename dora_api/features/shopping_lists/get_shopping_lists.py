@@ -98,7 +98,7 @@ class GetShoppingListsHandler:
                 ticked_count = ticked,
             ))
         # One time-ordered continuum (UX-v2), **newest first** (2026-08-28
-        # owner call): your drafts and the shop you're on are at the top, and
+        # owner call): your open lists are at the top, and
         # finished lists trail off below them. It ran oldest-first until then,
         # which put a wall of history above the only lists you can still act on
         # — and got worse the longer the household used Dora. Done and active
@@ -112,21 +112,17 @@ class GetShoppingListsHandler:
 
 def _next_up_list_id(lists: List[ShoppingList]) -> UUID | None:
     """The list the UI should land on / flag as "next up" (UX-v2 §3.3):
-    1. a live shop always wins (earliest if several are mid-shop);
-    2. else the pending list whose effective date comes first on/after the
-       most recent completed list ("first date-wise after the last completed");
-    3. else (only overdue pending lists) the earliest pending one;
-    4. else (everything done) the most recently completed.
+    1. the active list whose effective date comes first on/after the most
+       recent completed list ("first date-wise after the last completed");
+    2. else (only overdue active lists) the earliest active one;
+    3. else (everything done) the most recently completed.
+    (A "live shop always wins" rule went with the shopping status in UX v5.)
     """
     if not lists:
         return None
 
     def time_key(lst: ShoppingList):
         return (lst.effective_date, lst.created_at)
-
-    shopping = [l for l in lists if l.is_shopping]
-    if shopping:
-        return min(shopping, key=time_key).id
 
     pending = [l for l in lists if not l.is_done]
     done = [l for l in lists if l.is_done]

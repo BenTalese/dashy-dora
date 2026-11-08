@@ -2,7 +2,7 @@
     <!--
         C-7 Chunk 1 — the unified add-to-list button.
 
-        Owns the decision tree for "add to a draft list" + "toggle off when
+        Owns the decision tree for "add to a list" + "toggle off when
         already on a list" so every consumer (stock row, recipe ingredient,
         bulk action, …) reads the same behaviour. Visual variants below are
         chrome only — `behaviour is identical across them`.
@@ -13,15 +13,15 @@
           bulk     — variant for batch-add of `items[]`; one summary toast
 
         State-aware render via `cartStateFor` (generalised from
-        useStockFilters): not-on / on_target (current draft) / on_other
-        (a draft we're not currently picking) / on_multiple (>1 unticked
+        useStockFilters): not-on / on_target (current list) / on_other
+        (an open list we're not currently picking) / on_multiple (>1 unticked
         list — popover).
     -->
 
     <!-- ── Inline-product variant ───────────────────────────────────────
          C-7 Chunk 3 — anchored on `productId` rather than `stockItemId`;
          used on the My Products row so unlinked products can be added
-         to a draft list as their own product-only line. -->
+         to a list as their own product-only line. -->
     <!-- Owner 2026-10-15: drawn as the row cart, not a smaller ghost button
          of its own. Linked or not, a product's cart is the same control. -->
     <RowActionButton
@@ -29,10 +29,10 @@
         :icon="ICONS.add_shopping_cart"
         :loading="busy"
         :disable="!productId"
-        aria-label="Add to a draft list"
+        aria-label="Add to a shopping list"
         @click.stop="onInlineProductClick"
     >
-        <BaseTooltip>Add to a draft list</BaseTooltip>
+        <BaseTooltip>Add to a shopping list</BaseTooltip>
     </RowActionButton>
 
     <!-- ── Bulk variant ─────────────────────────────────────────────────
@@ -271,8 +271,6 @@
         }
     });
     const tooltip = computed(() => {
-        // FU-603 — the picker targets any active (non-done) list, not just
-        // drafts, so the copy says "a list", not "a draft list".
         switch (cartState.value) {
             case 'on_target':
                 return 'On your list. Click to remove';
@@ -366,19 +364,19 @@
     // ── Inline-product variant click ────────────────────────────────────
     // adds a *standalone product line* (no stock-item
     // anchor). Resolves the target list via Axis B (membership.active_
-    // lists filtered by status='draft'): 1 draft → silent; 2+ → picker;
-    // 0 → tell the user to create a draft. Skips cart-state tracking
+    // lists, every one of them open): 1 → silent; 2+ → picker;
+    // 0 → tell the user to create a list. Skips cart-state tracking
     // because we have no stock-item id to key membership on.
     async function onInlineProductClick() {
         if (!props.productId) return;
         const drafts = (membership.value?.active_lists ?? []).filter(
-            (l) => l.status === 'draft',
+            (l) => l.status === 'active',
         );
         let targetListId: string | null = null;
         if (drafts.length === 0) {
             $q.notify({
                 type: 'info',
-                message: 'No draft list yet. Create one first to add this product.',
+                message: 'No open list yet. Create one first to add this product.',
             });
             return;
         }
@@ -387,7 +385,7 @@
         } else {
             targetListId = await choose({
                 title: 'Which list?',
-                message: 'Add this product to which draft list?',
+                message: 'Add this product to which list?',
                 items: drafts.map((d) => ({
                     label: d.name,
                     value: d.shopping_list_id,

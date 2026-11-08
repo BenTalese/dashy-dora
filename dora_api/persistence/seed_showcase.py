@@ -36,7 +36,7 @@ from dora_api.domain.entities.meal_plan import MealPlan
 from dora_api.domain.entities.meal_plan_entry import MealPlanEntry
 from dora_api.domain.entities.recipe_collection import RecipeCollection
 from dora_api.domain.entities.shopping_list import (
-    SHOPPING_LIST_STATUS_DONE, SHOPPING_LIST_STATUS_SHOPPING, ShoppingList)
+    SHOPPING_LIST_STATUS_DONE, SHOPPING_LIST_STATUS_ACTIVE, ShoppingList)
 from dora_api.domain.entities.shopping_list_template import (
     ShoppingListTemplate, ShoppingListTemplateLine)
 from dora_api.domain.entities.stock_group import StockGroup
@@ -594,7 +594,7 @@ def seed_showcase_data():
     primary = ShoppingList(name="This week", created_at=now)
     in_progress = ShoppingList(
         name="Saturday shop", created_at=now - timedelta(days=1),
-        status=SHOPPING_LIST_STATUS_SHOPPING,
+        status=SHOPPING_LIST_STATUS_ACTIVE,
     )
     archived = ShoppingList(
         name="Last week", created_at=now - timedelta(days=7),

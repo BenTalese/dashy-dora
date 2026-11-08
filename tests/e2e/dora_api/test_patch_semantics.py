@@ -560,13 +560,12 @@ def test__patch_shopping_list__empty_body__succeeds_and_changes_nothing(api):
     assert _list_detail(list_id) == before
 
 
-def test__patch_shopping_list__status_done__is_rejected_use_finish(api):
-    # E3 guard: /finish is the only path to done (it snapshots + restocks).
+def test__patch_shopping_list__status__is_rejected_use_finish(api):
+    # /finish is the only transition (UX v5): PATCH has no status field.
     list_id = _make_list(name="guard-list")
     resp = requests.patch(f"{BASE}/shopping-lists/{list_id}", json={"status": "done"})
-    assert resp.status_code == 422, resp.text
-    assert "finish" in resp.text.lower()
-    assert _list_detail(list_id)["status"] == "draft"
+    assert resp.status_code == 400, resp.text
+    assert _list_detail(list_id)["status"] == "active"
 
 
 def test__patch_shopping_list__unknown_field__rejected_400(api):

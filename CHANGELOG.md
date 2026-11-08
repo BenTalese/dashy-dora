@@ -5,27 +5,33 @@ bump means a schema or configuration change you need to act on when upgrading.
 
 ## [Unreleased]
 
-## [2.0.0] - 2026-11-07
+## [2.0.0] - 2026-11-08
 
-Upgrading: a database migration adds a per-user setting. It runs on boot like
-every other; nothing to do by hand.
-
-### Added
-
-- Shopping lists have a **Simple** mode beside the usual **Flow**. Simple is one
-  endless list for top-up shopping: add items and tick them off. A tick means
-  bought, so the item goes to Stocked and leaves the list, with Undo. No Shop or
-  Finish step. You can still enter what you paid on a row before ticking it, and
-  it becomes price history; Log price is there too. The switch sits at the top
-  of the list and is saved per person.
+Shopping lists work differently: there is no separate draft and shopping mode
+any more. Upgrading: a database migration turns every open list (draft or mid-shop)
+into an open list, keeping its ticks. It runs on boot; nothing to do by hand.
 
 ### Changed
 
-- On a draft list the quantity steppers and the move up/down arrows are always
-  shown. They used to appear only on hover, which left only the disabled ones
-  visible.
+- **One list from first item to receipt.** You add, edit, price and tick items on
+  the same list. Start shopping and Back to draft are gone.
+- **Ticking restocks straight away.** A ticked item goes to Stocked and moves to
+  a Collected section; unticking puts its old level back. Ticking the last item
+  asks whether you're done, and Not yet unticks it again.
+- **Finish** appears once something is ticked, for a shop that ends with items
+  left over. Those still go to another list or the bin.
+- The summary card switches on its own: Estimated cost becomes Left to spend,
+  and a progress bar appears, from the first tick. Dora's suggestions and the
+  trim-to-budget banner step aside at that point.
+- Lists group by store by default. The other options are Location, Group and
+  A to Z; custom order, drag and drop and the move up/down arrows are gone.
+- Rows are simpler: a tick button on the left, a quantity box without the +/−
+  buttons (here and when amending a receipt), the buy verdict beside delete on
+  a desktop, and price and delete on the same line as the name on a phone.
+- The price on each row is also where you record what you paid.
+- Receipt photos can be added once anything is ticked.
 - The name menu on a list row (offers or preferred buys) is wider on desktop,
-  and names no longer cut off their last letters when there is room for them.
+  and names no longer lose their last letters when there is room for them.
 
 ## [1.0.0] - 2026-11-06
 

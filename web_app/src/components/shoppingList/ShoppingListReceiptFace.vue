@@ -39,7 +39,7 @@
                     :line="line"
                     :amending="amending"
                     @edit-price="emit('edit-price', line)"
-                    @adjust-quantity="emit('adjust-quantity', line, $event)"
+                    @set-quantity="emit('set-quantity', line, $event)"
                 />
             </div>
 
@@ -113,7 +113,7 @@
     const emit = defineEmits<{
         'stop-amend': [];
         'edit-price': [line: ShoppingListLine];
-        'adjust-quantity': [line: ShoppingListLine, delta: -1 | 1];
+        'set-quantity': [line: ShoppingListLine, value: number];
     }>();
 
     const { moneyEnabled } = useMoneyEnabled();

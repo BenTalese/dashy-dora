@@ -3,7 +3,7 @@ import { ICONS } from 'src/style/icons';
 import type { ShoppingListLine } from 'src/models/shoppingList';
 
 /**
- * Sectioning for the shopping-list plan and run faces.
+ * Sectioning for the shopping list's active face.
  *
  * Four peer modes. Three of them read a field that plenty of installs never
  * populate, which drives the two rules that matter here:
@@ -16,43 +16,33 @@ import type { ShoppingListLine } from 'src/models/shoppingList';
  *    everywhere instead of a run-face special case — on a single-store list it
  *    collapses to one section and disables itself.
  *
- * `none` is always available: it is the user's own `sequence` ordering, which
- * needs no data to exist. It was called `manual` and labelled "Manual" until
- * 2026-09-17 — but every other member of this set names *what you are grouped
- * by*, and "Manual" named the mechanism instead, so it read as a fourth way of
- * grouping rather than as the absence of one (owner: *"Manual should not be a
- * sort/group mode. It should just say 'none'"*).
+ * `none` is always available: one ungrouped run, A to Z. It was the user's own
+ * `sequence` order until UX v5 removed custom ordering (owner, 2026-11-08:
+ * *"reordering and custom order is not really that useful and is just noise"*).
+ * Store is the default (*"default sort should be by shop"*).
  */
 export type SectionMode = 'location' | 'group' | 'store' | 'none';
 
 export const SECTION_MODES: SectionMode[] = ['location', 'group', 'store', 'none'];
 
-/** The plan face offers only these two.
- *
- *  Curating a list is a different job from walking a shop. Location groups by
- *  where things live in *your kitchen*, which answers a putting-away question,
- *  not a buying one; Group is a taxonomy you're not shopping by either. Store
- *  earns its place because the plan face already shows the store breakdown, and
- *  Manual is the user's own order. The run face keeps all four — mid-shop,
- *  sectioning is how you walk the place. */
-export const PLAN_SECTION_MODES: SectionMode[] = ['store', 'none'];
+export const DEFAULT_SECTION_MODE: SectionMode = 'store';
 
 export const SECTION_MODE_LABELS: Record<SectionMode, string> = {
     location: 'Location',
     group: 'Group',
     store: 'Store',
-    none: 'None',
+    none: 'A to Z',
 };
 
 /** The glyph that names what a section header is grouping by. Lives here
- *  rather than on each face so the plan and run faces can't drift into using
- *  different icons for the same mode (D-003 one-glyph-one-meaning). */
+ *  rather than on each surface so the list and its overview card can't drift
+ *  into using different icons for the same mode (D-003 one-glyph-one-meaning). */
 export function sectionIconFor(mode: SectionMode): string {
     switch (mode) {
         case 'location': return ICONS.place;
         case 'store': return ICONS.storefront;
         case 'group': return ICONS.category;
-        case 'none': return ICONS.list;
+        case 'none': return ICONS.sort_alpha;
     }
 }
 
@@ -131,39 +121,30 @@ export function withNestedChildren(lines: ShoppingListLine[]): ShoppingListLine[
 }
 
 export type UseLineSectionsOptions = {
-    /** Run face: a ticked line leaves its section entirely (the list shrinks as
-     *  you shop). Plan face leaves them in place, dimmed. */
-    hideTicked?: Ref<boolean> | ComputedRef<boolean>;
-    /** Restricts which modes this caller offers at all (see
-     *  `PLAN_SECTION_MODES`). Enforced here rather than by the caller hiding
-     *  buttons, because `groupBy` is persisted per session: a preference set on
-     *  one face must not strand another face in a mode it can't display a
-     *  control for. Omit for all four.
-     *
-     *  Accepts a ref because one caller's answer changes without it
-     *  remounting: the overview card renders on all three faces and offers a
-     *  different mode list on each, and a list goes draft → shopping in place. */
-    allowedModes?: SectionMode[] | ComputedRef<SectionMode[]>;
+    /** The active face: a ticked line leaves its section for Collected (the
+     *  list shrinks as you shop). The receipt and the overview card count
+     *  every line. */
+    hideTicked?: boolean;
 };
+
+/** A to Z by the name the row shows. The one in-section order since custom
+ *  ordering went (UX v5). */
+function byName(lines: ShoppingListLine[]): ShoppingListLine[] {
+    return [...lines].sort((a, b) => a.stock_item_name.localeCompare(b.stock_item_name));
+}
 
 export function useLineSections(
     lines: Ref<ShoppingListLine[]> | ComputedRef<ShoppingListLine[]>,
     mode: Ref<SectionMode> | ComputedRef<SectionMode>,
     options: UseLineSectionsOptions = {},
 ) {
-    /** Which modes have any data to section by. `none` is always in. A mode
-     *  this caller doesn't offer is reported unavailable, so it can neither be
-     *  rendered nor inherited from a stored preference. */
+    /** Which modes have any data to section by. `none` is always in. */
     const availableModes = computed<Record<SectionMode, boolean>>(() => {
         const source = lines.value;
-        const allowed = Array.isArray(options.allowedModes)
-            ? options.allowedModes
-            : options.allowedModes?.value;
-        const offered = (mode: SectionMode) => !allowed || allowed.includes(mode);
         return {
-            location: offered('location') && source.some((l) => locationKeyFor(l) !== null),
-            group: offered('group') && source.some((l) => l.stock_group_name !== null),
-            store: offered('store') && source.some((l) => l.resolved_store_name !== null),
+            location: source.some((l) => locationKeyFor(l) !== null),
+            group: source.some((l) => l.stock_group_name !== null),
+            store: source.some((l) => l.resolved_store_name !== null),
             none: true,
         };
     });
@@ -177,14 +158,13 @@ export function useLineSections(
 
     const sections = computed<LineSection[]>(() => {
         const active = lines.value;
-        const hideTicked = options.hideTicked?.value ?? false;
-        const visible = hideTicked ? active.filter((l) => !l.is_ticked) : active;
+        const visible = options.hideTicked ? active.filter((l) => !l.is_ticked) : active;
 
         if (effectiveMode.value === 'none') {
             return [{
                 key: 'all',
                 label: null,
-                lines: withNestedChildren(visible),
+                lines: withNestedChildren(byName(visible)),
                 isUnsorted: false,
             }];
         }
@@ -206,10 +186,7 @@ export function useLineSections(
             bucket.lines.push(line);
         }
         for (const bucket of buckets.values()) {
-            // Grouping has already broken the manual sequence, so within a
-            // bucket alphabetical is the only ordering that means anything.
-            bucket.lines.sort((a, b) => a.stock_item_name.localeCompare(b.stock_item_name));
-            bucket.lines = withNestedChildren(bucket.lines);
+            bucket.lines = withNestedChildren(byName(bucket.lines));
         }
         return [...buckets.values()].sort((a, b) => {
             if (a.isUnsorted !== b.isUnsorted) return a.isUnsorted ? 1 : -1;
@@ -224,7 +201,7 @@ export function useLineSections(
     return { sections, orderedLines, availableModes, effectiveMode };
 }
 
-/** Per-section progress for the run face: how many are picked, and whether the
+/** Per-section progress for the active face: how many are picked, and whether the
  *  whole section is cleared (which collapses it to a single line). Counts come
  *  from the unfiltered list so a section that has emptied still knows its size. */
 export function sectionProgress(

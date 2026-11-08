@@ -82,11 +82,7 @@
                             </q-item>
                         </q-list>
                     </BaseDropdown>
-                    <!-- Draft-only, same rule as the card's pencil: naming a
-                         list is part of writing it, not part of shopping it or
-                         of reading the receipt afterwards. -->
                     <BaseButton
-                        v-if="planFace || simpleFace"
                         variant="icon"
                         class="sld-picker__rename"
                         :icon="ICONS.edit"
@@ -148,11 +144,8 @@
                         >
                             <BaseTooltip>Search every stock item and drop it onto this list</BaseTooltip>
                         </BaseButton>
-                        <!-- Draft only. Once you are standing in the shop the
-                             day it was planned for is a fact, not a decision —
-                             the overview card still reports it. -->
                         <BaseButton
-                            v-if="planFace"
+                            v-if="activeFace"
                             variant="secondary"
                             :icon="ICONS.event"
                             :label="compactToolbar ? undefined : 'Shop day'"
@@ -202,7 +195,7 @@
                              finish dialog now demands a decision on. That left
                              a mode whose whole cost was paid for one action
                              available in a better place. -->
-                        <!-- Shop mode and simple mode. This is for the price you notice on
+                        <!-- Any open list. This is for the price you notice on
                              the shelf for something that *isn't* on the list —
                              the per-line price capture already covers everything
                              that is. Same `useLogPrice()` sheet Stock overview
@@ -210,7 +203,7 @@
                              than a third (R-003). Money-gated, like every other
                              price surface on this page. -->
                         <BaseButton
-                            v-if="(runFace || simpleFace) && moneyEnabled"
+                            v-if="activeFace && moneyEnabled"
                             variant="secondary"
                             :icon="ICONS.cash_plus"
                             :label="compactToolbar ? undefined : 'Log price'"
@@ -264,19 +257,6 @@
                             <BaseTooltip>Keep these items as a reusable snapshot</BaseTooltip>
                         </BaseButton>
                     </div>
-                    <!-- Simple or flow (owner, 2026-11-07). Simple is one
-                         endless list where a tick means bought; flow is plan,
-                         shop, finish. Per user, saved on the account. Not on a
-                         receipt: a finished list reads the same either way. -->
-                    <BaseSegmented
-                        v-if="!receiptFace"
-                        class="sld-mode"
-                        dense
-                        aria-label="Shopping mode"
-                        :model-value="simpleMode"
-                        :options="modeOptions"
-                        @update:model-value="onSetSimpleMode"
-                    />
                 </div>
 
                 <q-banner v-if="loadError" class="text-negative q-mb-4 sl-panel sl-panel--error" dense>
@@ -315,56 +295,26 @@
                          action; everything you'd only ask once is behind its
                          caret. See the component for the reasoning. -->
                     <ShoppingListOverviewCard
-                        v-if="!simpleFace"
                         :detail="detail"
                         :lines="baseLines"
                         :mode="groupBy"
                         :amending="amending"
-                        :starting="togglingProgress"
                         :finishing="finishing"
                         @rename="startNameEdit"
                         @update:mode="groupBy = $event"
                         @update:amending="amending = $event"
-                        @start-shopping="onStartShopping"
-                        @back-to-draft="onBackToDraft"
                         @finish="openFinishReview"
                         @put-away="putAwayOpen = true"
                     />
 
 
-                    <!-- One list, three faces. "Start shopping" changes the
-                         page's *composition*, not just its status — that was
-                         the structural defect the redesign set out to fix
-                         ("shopping mode is a costume"; "DONE is DRAFT with
-                         everything disabled"). Each face is its own component
-                         rather than more branches in this template: they share
-                         the list, the sectioning and the mutations (through
-                         `useShoppingListDetail`), and nothing else.
-
-                         The plan face carries everything that exists to curate
-                         a list — the trim-to-budget banner, Dora's suggestions,
-                         the rows with their drag, delete, steppers, buy hints,
-                         offers and provenance, and the deferred-to-fit
-                         section — and no other face has any of it (FU-780). -->
-                    <ShoppingListSimpleFace
-                        v-if="simpleFace"
-                        :lines="detail.lines"
-                        @buy="onSimpleBuy"
-                        @capture-price="openPriceSheet"
-                    />
-                    <ShoppingListPlanFace
-                        v-else-if="planFace"
+                    <!-- Two faces (UX v5): the active list, where building,
+                         ticking and pricing all happen, and the receipt. -->
+                    <ShoppingListActiveFace
+                        v-if="activeFace"
                         :mode="groupBy"
                         :focused-line-id="focusedLineId"
-                    />
-                    <ShoppingListRunFace
-                        v-else-if="runFace"
-                        :lines="baseLines"
-                        :mode="groupBy"
-                        :picked-total="detail.totals.picked_price"
-                        @update:mode="groupBy = $event"
-                        @tick="onRunTick"
-                        @untick="onRunUntick"
+                        @toggle="onToggleLine"
                         @capture-price="openPriceSheet"
                     />
                     <ShoppingListReceiptFace
@@ -373,7 +323,7 @@
                         :amending="amending"
                         @stop-amend="amending = false"
                         @edit-price="openPriceSheet"
-                        @adjust-quantity="onAdjustQuantity"
+                        @set-quantity="onAmendQuantity"
                     />
 
                     <ShoppingListReceiptPhotos />
@@ -618,16 +568,13 @@
     import BaseDropdown from 'src/components/BaseDropdown.vue';
     import BaseDialog from 'src/components/BaseDialog.vue';
     import ShoppingListOverviewCard from 'src/components/shoppingList/ShoppingListOverviewCard.vue';
-    import ShoppingListPlanFace from 'src/components/shoppingList/ShoppingListPlanFace.vue';
-    import ShoppingListSimpleFace from 'src/components/shoppingList/ShoppingListSimpleFace.vue';
-    import BaseSegmented from 'src/components/BaseSegmented.vue';
-    import ShoppingListRunFace from 'src/components/shoppingList/ShoppingListRunFace.vue';
+    import ShoppingListActiveFace from 'src/components/shoppingList/ShoppingListActiveFace.vue';
     import ShoppingListReceiptFace from 'src/components/shoppingList/ShoppingListReceiptFace.vue';
     import ShoppingListReceiptPhotos from 'src/components/shoppingList/ShoppingListReceiptPhotos.vue';
     import ShoppingListPriceSheet from 'src/components/shoppingList/ShoppingListPriceSheet.vue';
     import ShoppingListFinishDialog from 'src/components/shoppingList/ShoppingListFinishDialog.vue';
     import {
-        PLAN_SECTION_MODES, useLineSections, type SectionMode,
+        DEFAULT_SECTION_MODE, useLineSections, type SectionMode,
     } from 'src/composables/useLineSections';
     import FadeTransition from 'src/components/transitions/FadeTransition.vue';
     import NewListDialog from 'src/components/dialogs/NewListDialog.vue';
@@ -646,8 +593,6 @@
         type ShoppingListSummary
     } from 'src/models/shoppingList';
     import ShoppingListTemplateApiService from 'src/services/api/shoppingListTemplateApiService';
-    import type { BoughtLine } from 'src/services/api/shoppingListApiService';
-    import { useAuthStore } from 'src/stores/authStore';
     import { useProductStore } from 'src/stores/productStore';
     import { useShoppingListStore } from 'src/stores/shoppingListStore';
     import { useStockItemStore } from 'src/stores/stockItemStore';
@@ -667,14 +612,13 @@
     // The list, its faces, its re-reads and the trim banner's state are shared
     // with the face components below — see `useShoppingListDetail` (FU-780).
     const {
-        api, listId, detail, simpleMode, simpleFace, planFace, runFace, receiptFace, loading, loadError,
-        baseLines, resetTrim, load, refreshAll, refreshDetailQuietly,
-        refreshAllQuietly, onAdjustQuantity,
+        api, listId, detail, activeFace, receiptFace, hasTicks, loading, loadError,
+        baseLines, resetTrim, load, refreshDetailQuietly,
+        refreshAllQuietly, onAmendQuantity,
     } = provideShoppingListDetail();
     const templateApi = new ShoppingListTemplateApiService();
     const store = useShoppingListStore();
     const stockItemStore = useStockItemStore();
-    const authStore = useAuthStore();
     const stockLevelStore = useStockLevelStore();
     const productStore = useProductStore();
     const { moneyEnabled } = useMoneyEnabled();
@@ -684,12 +628,10 @@
     const compactToolbar = computed(() => $q.screen.lt.sm);
     const { openQuickAdd, isOpen: quickAddOpen } = useQuickAdd();
 
-    // shop-mode wake lock. Holds the screen on while the list is
-    // in 'shopping' status so the phone doesn't blank between aisles. The
-    // computed reads `detail.value?.status` so entering / leaving shop
-    // mode toggles the lock without any explicit acquire/release call.
-    const shopModeActive = computed(() => runFace.value);
-    useWakeLock(shopModeActive);
+    // Wake lock while you're in the shop: an open list with something ticked
+    // (UX v5 Q5), so the phone doesn't blank between aisles.
+    const inShop = computed(() => activeFace.value && hasTicks.value);
+    useWakeLock(inShop);
 
     // Amend is off every time the receipt is opened — a historical record
     // should never come up already unlocked, and the mode must not survive a
@@ -707,51 +649,21 @@
     // FU-354 — wrapped in `useListState` so the picked grouping survives
     // navigate-away-and-back within the session (A8 §3 nav-state
     // policy). Full reload / sign-out (via `clearAllListState` from
-    // FU-355) still resets to `'none'`. Single scope, not per-list — the
+    // FU-355) still resets to Store. Single scope, not per-list: the
     // groupBy is a *view* preference the user re-uses across lists; a
     // per-list scope would silently reset the moment they open a new
     // list, defeating the point.
-    // Four peer modes (Location / Group / Store / None) — see
-    // `useLineSections`. The ungrouped mode was called "Manual" until
-    // 2026-09-17: it named the *mechanism* (your own sequence order) while
-    // every other member named what you're grouped by, so it read as a fourth
-    // grouping rather than the absence of one. Store moved here from the old
-    // toolbar segmented control; the auto-disable rule means a single-store
-    // list greys it out rather than showing one pointless section.
+    // Four peer modes (Store / Location / Group / A to Z), Store by default
+    // (UX v5 S5); see `useLineSections`. A mode a list has no data for greys
+    // itself out rather than showing one pointless section.
     const { groupBy } = useListState('shopping-list-detail', () => ({
-        groupBy: ref<SectionMode>('none'),
+        groupBy: ref<SectionMode>(DEFAULT_SECTION_MODE),
     }));
 
-    // ── Lifecycle: start / finish ────────────────────────────────────
-    const togglingProgress = ref(false);
-
-    async function onStartShopping() {
-        togglingProgress.value = true;
-        try {
-            await api.startShoppingAsync(listId.value);
-            // UX-v2: no separate shop page — the page itself flips into the
-            // shopping state (sticky footer, big ticks, Finish CTA).
-            await refreshAll();
-            $q.notify({
-                type: 'positive',
-                message: 'Shopping started.',
-            });
-        } catch (err) {
-            if (!isAlreadyNotified(err)) {
-                $q.notify({
-                    type: 'negative',
-                    message: 'Could not start shopping.',
-                    caption: toastCaption(err),
-                });
-            }
-        } finally {
-            togglingProgress.value = false;
-        }
-    }
-
-    // ── Finish & restock ────────────────────────────────────────────
-    // `ShoppingListFinishDialog` owns the flow; the page only opens it and
-    // shares `finishing` with the overview card's Finish button.
+    // ── Finish ──────────────────────────────────────────────────────
+    // `ShoppingListFinishDialog` owns the flow; the page opens it from the
+    // overview card's Finish and from the last tick, and shares `finishing`
+    // with the card's button.
     const finishing = ref(false);
     const finishDialog = useTemplateRef<InstanceType<typeof ShoppingListFinishDialog>>('finishDialog');
 
@@ -759,16 +671,11 @@
         finishDialog.value?.show();
     }
 
-    // Render order for the keyboard shortcuts below. The plan face sections
-    // its own rows (same options, its own `useLineSections`); this instance
-    // exists only so arrow-key focus walks the same order the page draws.
-    // Mid-shop, ticked lines leave their section entirely so the list shrinks
-    // as you shop; on the plan face they stay put and dim.
+    // Render order for the keyboard shortcuts below: the face's sections,
+    // which ticked lines leave. This instance exists only so arrow-key focus
+    // walks the same order the page draws.
     const { orderedLines: sectionOrderedLines } = useLineSections(baseLines, groupBy, {
-        hideTicked: computed(() => detail.value?.status === 'shopping'),
-        // Plan face: store + ungrouped only. The run face renders through
-        // `ShoppingListRunFace`, which keeps all four.
-        allowedModes: PLAN_SECTION_MODES,
+        hideTicked: true,
     });
 
     function formatDate(iso: string): string {
@@ -1007,6 +914,8 @@
     // Focus walks render order, so it reads from the same sectioned list the
     // template draws — including the run face's hidden-when-ticked filtering,
     // which keeps arrow-key focus from landing on a row that isn't on screen.
+    // Collected is collapsed, so focus walks only the rows on screen; `u`
+    // is how a ticked line comes back from the keyboard.
     const orderedLines = sectionOrderedLines;
     const focusedLineId = ref<string | null>(null);
     // Shop-mode merge (M14): 'u' unticks the most recent tick from this
@@ -1024,17 +933,17 @@
     // them tick a draft line from the keyboard — a back door into the state
     // the plan face no longer has a control for.
     function tickFocusedLine() {
-        if (!runFace.value) return;
+        if (!activeFace.value) return;
         const line = orderedLines.value.find((l) => l.line_id === focusedLineId.value);
-        if (line) void onToggleTicked(line.line_id, !line.is_ticked);
+        if (line) void onToggleLine(line);
     }
     function untickLastTicked() {
-        if (!runFace.value) return;
+        if (!activeFace.value) return;
         while (recentTickStack.value.length > 0) {
             const lineId = recentTickStack.value.pop()!;
             const line = detail.value?.lines.find((l) => l.line_id === lineId);
             if (line?.is_ticked) {
-                void onToggleTicked(lineId, false);
+                void onToggleTicked(lineId, false).then(() => afterLevelChange(line.stock_item_id));
                 return;
             }
         }
@@ -1043,8 +952,8 @@
     useShortcut([
         { keys: 'n', scope: 'Shopping list', description: 'Add an item', handler: onOpenQuickAdd },
         // Ticking is the run face's (FU-808), so the two keys are off elsewhere.
-        { keys: 'space', scope: 'Shopping list', description: 'Tick / untick the focused line', handler: tickFocusedLine, enabled: () => runFace.value },
-        { keys: 'u', scope: 'Shopping list', description: 'Untick the last item you ticked', handler: untickLastTicked, enabled: () => runFace.value },
+        { keys: 'space', scope: 'Shopping list', description: 'Tick / untick the focused line', handler: tickFocusedLine, enabled: () => activeFace.value },
+        { keys: 'u', scope: 'Shopping list', description: 'Untick the last item you ticked', handler: untickLastTicked, enabled: () => activeFace.value },
         { keys: 'arrowdown', scope: 'Shopping list', description: 'Focus next line', handler: () => moveLineFocus(1) },
         { keys: 'arrowup', scope: 'Shopping list', description: 'Focus previous line', handler: () => moveLineFocus(-1) },
     ]);
@@ -1116,122 +1025,64 @@
         }
     }
 
-    /** Run-face tick. One gesture, and the row leaves the list — so the undo
-     *  has to travel with it. The toast is the only place a mis-tap is
-     *  recoverable now that the row is gone from the section, and it reuses
-     *  the same untick path as the `u` shortcut rather than a second one.
+    /** A tick on the active face. Ticking moves the line to Collected (so the
+     *  undo has to travel with it, as a toast) and restocks the item
+     *  server-side; unticking puts both back. The toast waits for the tick to
+     *  land: offering to undo a tick that failed would undo nothing.
      *
-     *  It waits for the tick to land before offering the undo: on a failure
-     *  `onToggleTicked` undoes the flip and says so, and a cheerful "Picked X · UNDO"
-     *  sitting next to "Could not update line" would be offering to undo
-     *  something that never happened. */
-    async function onRunTick(line: ShoppingListLine) {
-        if (line.is_ticked) return;
-        // The toast outlives a list switch, so its Undo must untick the line
-        // on the list it was picked from, not whichever list is open by then.
+     *  The last unticked line asks whether the shop is done instead (UX v5
+     *  S3): Finish runs the finish flow, Cancel unticks that line again. */
+    async function onToggleLine(line: ShoppingListLine) {
         const id = listId.value;
+        if (line.is_ticked) {
+            await onToggleTicked(line.line_id, false, id);
+            afterLevelChange(line.stock_item_id);
+            return;
+        }
         const ok = await onToggleTicked(line.line_id, true, id);
         if (!ok) return;
+        afterLevelChange(line.stock_item_id);
+        const lastOne = baseLines.value.length > 0 && baseLines.value.every((l) => l.is_ticked);
+        if (lastOne) {
+            finishDialog.value?.show({
+                onCancel: () => {
+                    void onToggleTicked(line.line_id, false, id)
+                        .then(() => afterLevelChange(line.stock_item_id));
+                },
+            });
+            return;
+        }
         $q.notify({
             type: 'positive',
             timeout: 4000,
-            message: `Picked ${line.stock_item_name}`,
+            message: `Got ${line.stock_item_name}`,
             actions: [{
                 label: 'Undo',
                 color: 'white',
-                handler: () => { void onToggleTicked(line.line_id, false, id); },
+                handler: () => {
+                    void onToggleTicked(line.line_id, false, id)
+                        .then(() => afterLevelChange(line.stock_item_id));
+                },
             }],
         });
     }
 
-    // ── Simple mode ─────────────────────────────────────────────────────
-    const modeOptions = [
-        { label: 'Simple', value: true },
-        { label: 'Flow', value: false },
-    ] as const;
-
-    async function onSetSimpleMode(value: boolean) {
-        if (value === simpleMode.value) return;
-        try {
-            await authStore.updateMeAsync({ shopping_simple_mode: value });
-        } catch (err) {
-            if (!isAlreadyNotified(err)) {
-                $q.notify({
-                    type: 'negative',
-                    message: 'Could not switch mode.',
-                    caption: toastCaption(err),
-                });
-            }
-        }
-    }
-
-    /** Simple-mode tick: bought. The server restocks the item and removes the
-     *  line in one request, and echoes what the undo needs to put both back.
-     *  The row leaves straight away; on a failure the list is re-read. Like
-     *  `onRunTick`, the undo is offered only once the buy has landed, and it
-     *  targets the list the item was bought from. */
-    async function onSimpleBuy(line: ShoppingListLine) {
-        const current = detail.value;
-        if (!current) return;
-        const id = listId.value;
-        current.lines = current.lines.filter((l) => l.line_id !== line.line_id);
-        let bought: BoughtLine;
-        try {
-            ({ bought } = await api.buyLineAsync(id, line.line_id));
-        } catch (err) {
-            await refreshDetailQuietly();
-            if (!isAlreadyNotified(err)) {
-                $q.notify({
-                    type: 'negative',
-                    message: `Could not mark ${line.stock_item_name} as bought.`,
-                    caption: toastCaption(err),
-                });
-            }
-            return;
-        }
-        afterSimpleBuy(line.stock_item_id);
-        $q.notify({
-            type: 'positive',
-            timeout: 4000,
-            message: `Bought ${line.stock_item_name}`,
-            actions: [{
-                label: 'Undo',
-                color: 'white',
-                handler: () => { void undoSimpleBuy(id, bought, line.stock_item_id); },
-            }],
-        });
-    }
-
-    async function undoSimpleBuy(id: string, bought: BoughtLine, stockItemId: string | null) {
-        try {
-            await api.unbuyLineAsync(id, bought);
-        } catch (err) {
-            if (!isAlreadyNotified(err)) {
-                $q.notify({
-                    type: 'negative',
-                    message: 'Could not undo.',
-                    caption: toastCaption(err),
-                });
-            }
-            return;
-        }
-        if (id === listId.value) await refreshDetailQuietly();
-        afterSimpleBuy(stockItemId);
-    }
-
-    /** The buy wrote the item's level and the list's membership server-side,
-     *  past the stores that would otherwise know. */
-    function afterSimpleBuy(stockItemId: string | null) {
-        void store.refreshAsync();
-        if (stockItemId) void stockItemStore.refreshItemAsync(stockItemId).catch(() => {});
-    }
-
-    /** Put a picked line back, from the run face's Picked section. No undo
-     *  toast: this *is* the undo, and the row reappears in its section where
-     *  you can see it land. */
-    async function onRunUntick(line: ShoppingListLine) {
-        if (!line.is_ticked) return;
-        await onToggleTicked(line.line_id, false);
+    /** A tick or untick wrote the item's level server-side, past the stores
+     *  that would otherwise know: re-read the touched items and the
+     *  cart-button membership. Batched, so a run of ticks in an aisle costs
+     *  one refresh once it settles rather than one per tap. */
+    const levelChangedIds = new Set<string>();
+    let levelRefresh: ReturnType<typeof setTimeout> | null = null;
+    function afterLevelChange(stockItemId: string | null) {
+        if (stockItemId) levelChangedIds.add(stockItemId);
+        if (levelRefresh) clearTimeout(levelRefresh);
+        levelRefresh = setTimeout(() => {
+            levelRefresh = null;
+            const ids = [...levelChangedIds];
+            levelChangedIds.clear();
+            void store.refreshAsync();
+            ids.forEach((id) => { void stockItemStore.refreshItemAsync(id).catch(() => {}); });
+        }, 800);
     }
 
     // ── Price capture sheet (run + receipt faces) ───────────────────────
@@ -1254,40 +1105,6 @@
 
     function onPrint() {
         exportActions.openPrintView(listId.value);
-    }
-
-    /** Undo for "I pressed Start shopping by accident" (2026-09-17).
-     *
-     *  Names the cost up front rather than in a toast afterwards: a draft has
-     *  no tick model, so going back clears every tick, and the count is the one
-     *  fact that decides whether the user wants to. With nothing ticked the
-     *  dialog is a plain confirmation instead of a warning about nothing.
-     */
-    async function onBackToDraft() {
-        const ticked = detail.value?.lines.filter((l) => l.is_ticked).length ?? 0;
-        const ok = await confirm({
-            title: 'Back to draft?',
-            message: ticked > 0
-                ? `This list goes back to being a draft, and the ${ticked} item${ticked === 1 ? '' : 's'} you've ticked off ${ticked === 1 ? 'is' : 'are'} unticked. Nothing else changes.`
-                : 'This list goes back to being a draft. Nothing else changes.',
-            okLabel: 'Back to draft',
-        });
-        if (!ok) return;
-        togglingProgress.value = true;
-        try {
-            await api.backToDraftAsync(listId.value);
-            await refreshAllQuietly();
-        } catch (err) {
-            if (!isAlreadyNotified(err)) {
-                $q.notify({
-                    type: 'negative',
-                    message: 'Could not go back to draft.',
-                    caption: toastCaption(err),
-                });
-            }
-        } finally {
-            togglingProgress.value = false;
-        }
     }
 
     async function onClearAll() {
@@ -1462,12 +1279,8 @@
     .sld-toolbar__actions > * {
         flex: 0 0 auto;
     }
-    .sld-mode {
-        flex: 0 0 auto;
-        margin-left: auto;
-    }
     /* ── The list, v4 chunk 1 ─────────────────────────────────────────
-       The rows moved to `ShoppingListPlanRow.vue` and took their layout with
+       The rows moved to `ShoppingListRow.vue` and took their layout with
        them. What stays here is the *container* rhythm: a section is a header
        plus one soft slab, rather than a muted caption floating above a
        `q-list bordered separator` nested inside an already-bordered page.

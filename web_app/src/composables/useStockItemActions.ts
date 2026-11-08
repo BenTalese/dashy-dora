@@ -51,13 +51,13 @@ export function useStockItemActions() {
         });
 
     /** Add to a specific list, or resolve the quick-add target. When more than
-     *  one draft list exists Dora always asks which one — the pick is never
+     *  one open list exists Dora always asks which one; the pick is never
      *  remembered across separate adds (owner call 2026-08-13: multiple lists
      *  are deliberate, so silently reusing the last pick was more annoying than
-     *  helpful). `no_draft` opens the lists overview to create one.
+     *  helpful). `no_list` opens the lists overview to create one.
      *
      *  Returns the shopping-list id the item landed on, or `null` when nothing
-     *  was added (no draft, or the user cancelled the picker). A bulk caller
+     *  was added (no open list, or the user cancelled the picker). A bulk caller
      *  uses the return value to batch the remaining items into the same list. */
     async function addToList(
         stockItemId: string,
@@ -85,14 +85,14 @@ export function useStockItemActions() {
                 return listId;
             }
             // No explicit list — resolve the quick-add target. We never send a
-            // remembered hint, so with 2+ drafts the server replies `ambiguous`
+            // remembered hint, so with 2+ open lists the server replies `ambiguous`
             // and we always ask which list.
             let outcome = await shoppingListApi.quickAddAsync(stockItemId);
-            if (outcome.result === 'no_draft') {
+            if (outcome.result === 'no_list') {
                 const go = await confirm({
-                    title: 'No draft list',
+                    title: 'No shopping list',
                     message:
-                        'You have no draft shopping list. Create one to use the cart shortcut.',
+                        'You have no open shopping list. Create one to use the cart shortcut.',
                     okLabel: 'Open lists',
                 });
                 if (go) void router.push('/shopping-lists');
@@ -101,7 +101,7 @@ export function useStockItemActions() {
             if (outcome.result === 'ambiguous') {
                 const choice = await choose({
                     title: 'Which list?',
-                    message: 'You have more than one draft list. Pick one.',
+                    message: 'You have more than one open list. Pick one.',
                     items: outcome.result === 'ambiguous'
                         ? outcome.candidates.map((c) => ({
                               label: c.name,

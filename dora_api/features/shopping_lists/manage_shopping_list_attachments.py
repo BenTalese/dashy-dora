@@ -10,8 +10,9 @@ The bytes endpoint mirrors `/recipes/<id>/step-images/<image_id>`: the
 stored data URL is decoded by `infrastructure/data_url.py`, which serves
 only raster image types.
 
-The lifecycle gate is enforced here (no attaching to a `draft` list); the
-access helper enforces shape + cap. Unlike step images, receipts are
+Any list takes a photo (UX v5 merged draft and shopping, so there is no
+"not yet shopping" state left to refuse); the access helper enforces shape +
+cap. Unlike step images, receipts are
 add/delete one at a time — there is no wholesale replace.
 """
 import logging
@@ -20,8 +21,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from dora_api.domain.entities.shopping_list import (
-    SHOPPING_LIST_STATUS_DRAFT, ShoppingList)
+from dora_api.domain.entities.shopping_list import ShoppingList
 from dora_api.features.routers import SHOPPING_LIST_ROUTER
 from dora_api.features.shopping_lists.shopping_list_attachment_access import (
     MAX_ATTACHMENT_BYTES, add_attachment, delete_attachment,
@@ -50,7 +50,6 @@ class AddShoppingListAttachmentRequest(BaseModel):
 @dataclass(slots=True)
 class AddShoppingListAttachmentResponse:
     not_found: bool = False
-    draft_rejected: bool = False
     invalid_payload: str | None = None
     attachment_id: UUID | None = None
 
@@ -69,8 +68,6 @@ class AddShoppingListAttachmentHandler:
         )
         if lst is None:
             return AddShoppingListAttachmentResponse(not_found=True)
-        if lst.status == SHOPPING_LIST_STATUS_DRAFT:
-            return AddShoppingListAttachmentResponse(draft_rejected=True)
 
         try:
             attachment_id = add_attachment(
@@ -94,11 +91,6 @@ def add_shopping_list_attachment(shopping_list_id: UUID):
     )
     if _Response.not_found:
         return not_found("ShoppingList", shopping_list_id)
-    if _Response.draft_rejected:
-        return business_rule_violation(
-            "Receipts can only be attached to a list that's being shopped or "
-            "finished. Start shopping the list first."
-        )
     if _Response.invalid_payload:
         return business_rule_violation(_Response.invalid_payload)
     _LOGGER.info(

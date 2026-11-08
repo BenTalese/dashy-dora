@@ -415,7 +415,7 @@
             .map((lid) => lookup.get(lid))
             .filter((l): l is NonNullable<typeof l> => !!l && l.status !== 'done');
     });
-    // the server-inferred primary draft list (R-003) — the
+    // the server-inferred primary list (R-003); the
     // Lists tab decorates that row with a styled "Primary" badge instead
     // of plain text.
     const primaryListId = computed(() => shoppingListStore.quickAddTargetListId);

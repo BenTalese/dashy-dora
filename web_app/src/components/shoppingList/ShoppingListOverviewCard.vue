@@ -36,9 +36,9 @@
                     </div>
                 </div>
 
-                <!-- Row 2, mid-shop only: progress as a bar, count inside. -->
+                <!-- Row 2, once anything is ticked: progress as a bar. -->
                 <div
-                    v-if="face === 'run'"
+                    v-if="inShop"
                     class="sl-overview__progress"
                     role="progressbar"
                     :aria-valuenow="tickedCount"
@@ -55,19 +55,22 @@
                 <!-- Row 3: identity on the left, controls on the right. -->
                 <div class="sl-overview__foot">
                     <div class="sl-overview__identity">
-                        <span class="sl-status-pill" :class="`sl-status-pill--${detail.status}`">
+                        <!-- Only a finished list wears a pill: an open list
+                             doesn't need one (UX v5 §5.1). -->
+                        <span
+                            v-if="face === 'receipt'"
+                            class="sl-status-pill sl-status-pill--done"
+                        >
                             <q-icon :name="statusIcon" size="14px" />
                             {{ statusLabel }}
                         </span>
-                        <HelpHint topic="One list, three faces" />
+                        <HelpHint topic="One list, from first item to receipt" />
                         <!-- Desktop only: on a phone the list picker directly
-                             above this card already shows the name. Renaming
-                             is draft-only (2026-09-17). -->
+                             above this card already shows the name. -->
                         <span class="text-subtitle1 text-weight-medium ellipsis gt-sm sl-overview__name">
                             {{ detail.display_name }}
                         </span>
                         <BaseButton
-                            v-if="face === 'plan'"
                             variant="icon"
                             class="gt-sm"
                             :icon="ICONS.edit"
@@ -115,24 +118,10 @@
                             </q-menu>
                         </BaseButton>
 
-                        <!-- Mid-shop's escape hatch, beside the step it undoes. -->
-                        <BaseButton
-                            v-if="face === 'run'"
-                            variant="secondary"
-                            :icon="draftIcon"
-                            :label="$q.screen.lt.sm ? undefined : 'Draft'"
-                            aria-label="Back to draft"
-                            @click="emit('back-to-draft')"
-                        >
-                            <BaseTooltip>
-                                Started this by accident? Goes back to a draft and
-                                unticks anything you've picked up.
-                            </BaseTooltip>
-                        </BaseButton>
                         <!-- A finished list is a record, so correcting it is an
                              explicit mode rather than the default state. -->
                         <BaseButton
-                            v-else-if="face === 'receipt'"
+                            v-if="face === 'receipt'"
                             variant="secondary"
                             :icon="ICONS.edit"
                             :label="$q.screen.lt.sm ? undefined : (amending ? 'Done' : 'Amend')"
@@ -146,39 +135,23 @@
                             </BaseTooltip>
                         </BaseButton>
 
-                        <!-- The step forward, always last. -->
+                        <!-- For a shop that ends with things left over; ticking the
+                             last item asks on its own (UX v5 D2). -->
                         <BaseButton
-                            v-if="face === 'plan'"
-                            variant="primary"
-                            :icon="shopIcon"
-                            label="Shop"
-                            aria-label="Start shopping"
-                            :disable="detail.lines.length === 0"
-                            :loading="starting"
-                            @click="emit('start-shopping')"
-                        >
-                            <BaseTooltip>
-                                Tick items off as you grab them
-                            </BaseTooltip>
-                        </BaseButton>
-                        <!-- Always "Finish", never "Finish early" (2026-08-29). -->
-                        <BaseButton
-                            v-else-if="face === 'run'"
-                            variant="positive"
+                            v-if="face === 'active' && inShop"
+                            variant="secondary"
                             :icon="doneIcon"
                             label="Finish"
                             :loading="finishing"
                             @click="emit('finish')"
                         >
                             <BaseTooltip>
-                                Marks this shop as done: every ticked item moves
-                                back to Stocked in your pantry, and the list is
-                                archived. Anything you didn't buy can move to
-                                another list on the way out.
+                                Done shopping: the list becomes a receipt. Anything
+                                you didn't get can move to another list.
                             </BaseTooltip>
                         </BaseButton>
                         <BaseButton
-                            v-else
+                            v-if="face === 'receipt'"
                             variant="primary"
                             :icon="ICONS.inventory_2"
                             label="Put away"
@@ -232,7 +205,7 @@
     import HelpHint from 'src/components/help/HelpHint.vue';
     import BaseTooltip from 'src/components/BaseTooltip.vue';
     /**
-     * The shopping list's overview card — one component across all three faces.
+     * The shopping list's overview card, on the active list and the receipt.
      *
      * It replaces a top section that had accreted into five separate blocks: a
      * header cluster (name, pill, pencil, a meta row carrying the item count,
@@ -260,7 +233,7 @@
     import { formatDate as formatLocaleDate, formatRelativeDay } from 'src/composables/useDateFormat';
     import { daysFromToday } from 'src/helpers/weekDates';
     import {
-        PLAN_SECTION_MODES, SECTION_MODES, SECTION_MODE_LABELS, sectionIconFor,
+        SECTION_MODES, SECTION_MODE_LABELS, sectionIconFor,
         useLineSections, type SectionMode,
     } from 'src/composables/useLineSections';
     import {
@@ -274,14 +247,11 @@
         lines: ShoppingListLine[];
         mode: SectionMode;
         amending: boolean;
-        starting: boolean;
         finishing: boolean;
     }>();
 
     const emit = defineEmits<{
         rename: [];
-        'start-shopping': [];
-        'back-to-draft': [];
         finish: [];
         'put-away': [];
         'update:amending': [value: boolean];
@@ -290,35 +260,21 @@
 
     const { moneyEnabled } = useMoneyEnabled();
 
-    const face = computed<'plan' | 'run' | 'receipt'>(() => {
-        switch (props.detail.status) {
-            case 'shopping': return 'run';
-            case 'done': return 'receipt';
-            default: return 'plan';
-        }
-    });
+    const face = computed<'active' | 'receipt'>(() =>
+        props.detail.status === 'done' ? 'receipt' : 'active',
+    );
+
+    /** You're in the shop once anything is ticked: the card's figures and
+     *  actions follow on their own (UX v5 S12), there is no mode to enter. */
+    const inShop = computed(() => face.value === 'active' && tickedCount.value > 0);
 
     // ── Identity ──────────────────────────────────────────────────────
-    const statusLabel = computed(() => {
-        switch (props.detail.status) {
-            case 'shopping':
-                return 'Shopping';
-            case 'done':
-                // I1 — a finished list is the receipt of the shop when money
-                // surfaces are on. Pure label swap; status stays 'done'.
-                return moneyEnabled.value ? 'Receipt' : 'Done';
-            default:
-                return 'Draft';
-        }
-    });
+    /** I1: a finished list is the receipt of the shop when money surfaces are
+     *  on. Pure label swap; status stays 'done'. */
+    const statusLabel = computed(() => (moneyEnabled.value ? 'Receipt' : 'Done'));
 
-    /** The pill carries a glyph as well as a colour, so the three states are
-     *  still three states in greyscale (D-013 — colour never alone). */
+    /** The pill carries a glyph as well as a colour (D-013). */
     const statusIcon = computed(() => listStatusIcon(props.detail.status));
-
-    /** The lifecycle buttons wear the glyph of the face they lead to. */
-    const draftIcon = listStatusIcon('draft');
-    const shopIcon = listStatusIcon('shopping');
     const doneIcon = listStatusIcon('done');
 
     // ── The headline figure ───────────────────────────────────────────
@@ -344,7 +300,7 @@
         const count = props.lines.length;
         const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 
-        if (face.value === 'plan') {
+        if (face.value === 'active' && !inShop.value) {
             if (money) {
                 out.push({
                     key: 'cost', value: formatMoney(totals.total_price),
@@ -366,15 +322,19 @@
             return out;
         }
 
-        if (face.value === 'run') {
-            // The progress bar carries the count mid-shop, so the only figure
-            // beside it is the money, and with money off, nothing.
-            if (money) {
-                out.push({
+        if (face.value === 'active') {
+            // The first tick turns the lead figure from what the shop will
+            // cost into what's left of it; the bar carries the count.
+            const left = count - tickedCount.value;
+            out.push(money
+                ? {
                     key: 'left', value: formatMoney(totals.remaining_price),
                     label: 'Left to spend', tone: '', partial: headlineIsPartial.value,
+                }
+                : {
+                    key: 'left', value: String(left),
+                    label: plural(left, 'Item left', 'Items left'), tone: '', partial: false,
                 });
-            }
             if (props.detail.planned_shop_date) out.push(shopDayFigure.value);
             return out;
         }
@@ -407,8 +367,8 @@
         () => moneyEnabled.value && unpricedCount.value > 0,
     );
 
-    // Active lines only (`props.lines`): a deferred-by-budget line isn't on
-    // the run face, so counting it kept the bar from ever reaching 100%.
+    // Active lines only (`props.lines`): a deferred-by-budget line isn't in
+    // the list's sections, so counting it kept the bar from ever reaching 100%.
     const tickedCount = computed(() => props.lines.filter((l) => l.is_ticked).length);
     /** Pure display math over server-owned counts — the sanctioned Type-C case. */
     const progressPct = computed(() => {
@@ -443,32 +403,21 @@
     });
 
     // ── The sort control ──────────────────────────────────────────────
-    // Was two identical bars — one on the plan face, one inside
-    // `ShoppingListRunFace` — which is how they were free to drift. The mode
-    // lists still differ by face (curating a list is a different job from
-    // walking a shop), so that difference is stated here rather than duplicated.
-    /** Plan / shop / receipt — the card's face *is* the tense. */
+    /** The card's state *is* the tense of the store breakdown. */
     const storeSpendTense = computed<'plan' | 'shop' | 'receipt'>(() => {
-        switch (face.value) {
-            case 'run': return 'shop';
-            case 'receipt': return 'receipt';
-            default: return 'plan';
-        }
+        if (face.value === 'receipt') return 'receipt';
+        return inShop.value ? 'shop' : 'plan';
     });
 
-    const sortModes = computed<SectionMode[]>(() => {
-        if (face.value === 'run') return SECTION_MODES;
-        // A receipt is a record. There is nothing to reorder for, and an empty
-        // list means the control never renders.
-        if (face.value === 'receipt') return [];
-        return PLAN_SECTION_MODES;
-    });
+    /** A receipt is a record with nothing to group for; an empty list means
+     *  the control never renders. */
+    const sortModes = computed<SectionMode[]>(() =>
+        face.value === 'receipt' ? [] : SECTION_MODES,
+    );
 
     const linesRef = computed(() => props.lines);
     const modeRef = computed(() => props.mode);
-    const { availableModes, effectiveMode } = useLineSections(linesRef, modeRef, {
-        allowedModes: sortModes,
-    });
+    const { availableModes, effectiveMode } = useLineSections(linesRef, modeRef);
 
     const sortOptions = computed(() => sortModes.value.map((m) => ({
         label: SECTION_MODE_LABELS[m],
@@ -497,7 +446,7 @@
 
         // Mid-shop the lead figure is what's *left*, so the whole trip's figure
         // moves down here rather than disappearing.
-        if (face.value === 'run') {
+        if (inShop.value) {
             figures.push({
                 label: 'Trip total',
                 value: formatMoney(totals.total_price),
@@ -556,8 +505,7 @@
        so the gradient band, and the header padding with it, were being painted
        a second time inside this card's own body. That second band is most of
        what made the store breakdown read as a card within a card. */
-    .sl-overview--plan > :deep(.collapsible-card__header),
-    .sl-overview--run > :deep(.collapsible-card__header) {
+    .sl-overview--active > :deep(.collapsible-card__header) {
         background: var(--hero-gradient);
     }
     /* On `__inner`, not `__body`: the body is the box `q-slide-transition`
@@ -752,21 +700,8 @@
         white-space: nowrap;
         border: 1px solid transparent;
     }
-    /* A draft hasn't happened yet — neutral, and quiet enough not to compete
-       with the "Start shopping" button on the row below it. */
-    .sl-status-pill--draft {
-        background: var(--surface-sunken);
-        color: var(--text-secondary);
-        border-color: var(--border-default);
-    }
-    /* Mid-shop is a state you're in, not an achievement. */
-    .sl-status-pill--shopping {
-        background: var(--semantic-info-soft);
-        color: var(--semantic-info);
-        border-color: var(--semantic-info);
-    }
-    /* Finishing the shop is the success in this lifecycle, so this is the one
-       that earns the positive token. */
+    /* Finishing the shop is the success in this lifecycle, so the receipt's
+       pill earns the positive token. */
     .sl-status-pill--done {
         background: var(--semantic-positive-soft);
         color: var(--semantic-positive);

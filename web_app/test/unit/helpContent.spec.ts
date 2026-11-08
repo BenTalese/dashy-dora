@@ -27,7 +27,7 @@ const DEEP_LINKED_TITLES = [
     'Plan a week',
     'Build my week',
     'Cook mode',
-    'One list, three faces',
+    'One list, from first item to receipt',
     'Back up your install',
     'Import stock items from a spreadsheet',
     'Create an API key',

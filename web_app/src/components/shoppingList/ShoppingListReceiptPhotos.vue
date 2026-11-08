@@ -88,11 +88,11 @@
     import { computed, ref } from 'vue';
 
     const $q = useQuasar();
-    const { api, listId, detail, simpleFace, refreshDetailQuietly } = useShoppingListDetail();
+    const { api, listId, detail, hasTicks, refreshDetailQuietly } = useShoppingListDetail();
 
     // ── Receipt attachments (FU-334) ────────────────────────────────────
-    // Pure record-keeping: attach 1..N receipt photos to a `shopping` or
-    // `done` list; tap to zoom; trash to remove. No OCR. ImageSourcePicker
+    // Pure record-keeping: attach 1..N receipt photos to a list once anything
+    // is ticked (UX v5 Q4: that's when there is a receipt) or to a done list; tap to zoom; trash to remove. No OCR. ImageSourcePicker
     // owns the source-pick UX (Take photo vs Choose image) AND the
     // `processImageFile` chokepoint (R-003) — this handler just receives
     // a `ProcessedImage` and POSTs the data URL.
@@ -100,7 +100,7 @@
     const attachmentZoomId = ref<string | null>(null);
 
     const attachmentSectionVisible = computed(
-        () => !!detail.value && detail.value.status !== 'draft' && !simpleFace.value,
+        () => !!detail.value && (detail.value.status === 'done' || hasTicks.value),
     );
 
     async function onAttachmentPicked(image: ProcessedImage) {

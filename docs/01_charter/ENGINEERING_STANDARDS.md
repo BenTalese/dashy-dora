@@ -1952,7 +1952,7 @@ exceptions, which still must be commented) · **Source** (where it was establish
   second place. See ADR-049.
 
 ### R-054 — A lifecycle phase that changes what the user *does* gets its own composition, not the same surface with controls disabled
-- **Rule:** when an entity has phases (draft / shopping / done, planning / cooking,
+- **Rule:** when an entity has phases (active / done shopping lists, planning / cooking,
   review / walk / sweep) and the user's **task** differs per phase, render a
   different component per phase. Do not render one all-purpose surface and reach
   for `:disable`, `v-if` on individual controls, or a size/colour swap to
@@ -4945,7 +4945,7 @@ one-off, or purely product/UX decisions (those go to the Charter check + worklog
 
 ### ADR-050 — A lifecycle phase is a change of composition, not a disabled copy of one surface
 - **Date / task:** 2026-08-23 (shopping-list run + receipt faces, FU-727)
-- **Status:** accepted
+- **Status:** accepted; the plan/run split it describes was reversed by ADR-103 (the receipt face stands)
 - **Context:** `ShoppingListDetail.vue` rendered all three phases of a list from
   one template. "Start shopping" enlarged the checkbox and added a sticky footer
   and changed nothing else, so a row still carried eleven interactive zones in an
@@ -6556,3 +6556,25 @@ A non-binding cookbook of solutions to recurring problems. Not rules — just a
   (rejected: the user typed the measure, and the form's pack-count field is how to say "a pack of N").
 - **Consequences:** an item bought both loose and boxed reports on whichever basis most of its prices are on;
   the minority basis is left out, as a stray dimension already was (FU-876).
+
+### ADR-103: Draft and shopping were one task; a shopping list is active or done (refines R-054)
+- **Date / task:** 2026-11-08 (Shopping List UX v5, `PROPOSAL_SHOPPING_LIST_UX_V5.md`)
+- **Status:** accepted
+- **Context:** ADR-050 gave draft and shopping their own faces on the reading that planning and shopping are
+  different tasks. In use they weren't: Start shopping switched off delete, the which-one picker, the store
+  picker and the buy verdict at the moment you find out in the aisle that something is out or at another
+  shop, and a Simple mode was added to get around it. The owner's read: *"the only difference between them is
+  being able to tick things off or not"*.
+- **Decision:** `ShoppingList.status` is `active` or `done`. One active face carries every curation control and
+  the tick; ticked lines move to Collected. A tick restocks the item and records the level it replaced on the
+  line (`restocked_at`, `restock_from_level_id`, `restock_from_level_updated_at`) so an untick restores it
+  exactly; `/finish` only freezes the receipt (and restocks lines ticked before this existed). The receipt
+  keeps its own face (R-054 still holds there: reading a record is a different task from shopping).
+- **Alternatives considered:** keep the split and make the run face editable (rejected: two faces converging on
+  the same controls is the split with extra seams); restock at finish (rejected: a list that is never fully
+  finished, the top-up shopper's list, would never restock).
+- **Consequences:** R-054's test is now applied per phase pair, not per status value: a phase that only adds an
+  action (ticking) to the same task is the same composition. What changes with the first tick is driven off
+  one signal (`hasTicks`): the overview's lead figure, the progress bar, Finish, photos, wake lock, and the
+  planning panels stepping aside.
+

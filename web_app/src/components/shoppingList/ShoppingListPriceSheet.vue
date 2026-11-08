@@ -8,7 +8,7 @@
          2026-08-28: it now carries **quantity** too. It was price-only, so
          the one thing you routinely discover at the shelf — "they only had
          the 2-pack", "grab three while they're on special" — could not be
-         recorded without leaving shop mode. -->
+         recorded without leaving the list. -->
     <BaseDialog
         v-model="priceSheetOpen"
         position="bottom"

@@ -74,7 +74,7 @@ from dora_api.domain.entities.nutrition_food import (
 from dora_api.domain.entities.nutrition_portion import NutritionPortion
 from dora_api.domain.entities.recipe_collection import RecipeCollection
 from dora_api.domain.entities.shopping_list import (
-    SHOPPING_LIST_STATUS_DONE, SHOPPING_LIST_STATUS_SHOPPING, ShoppingList)
+    SHOPPING_LIST_STATUS_DONE, SHOPPING_LIST_STATUS_ACTIVE, ShoppingList)
 from dora_api.domain.entities.shopping_list_template import (
     ShoppingListTemplate, ShoppingListTemplateLine)
 from dora_api.domain.entities.stock_group import StockGroup
@@ -1497,7 +1497,7 @@ def seed_dense_data(qa_fixtures: bool = False, money_on: bool = True):
     draft = ShoppingList(name=None, created_at=now - timedelta(hours=6))
     mid_shop = ShoppingList(
         name="Saturday big shop", created_at=now - timedelta(days=1),
-        status=SHOPPING_LIST_STATUS_SHOPPING,
+        status=SHOPPING_LIST_STATUS_ACTIVE,
     )
     done_recent = ShoppingList(
         name=None, created_at=now - timedelta(days=4),

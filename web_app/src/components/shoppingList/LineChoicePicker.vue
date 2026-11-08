@@ -158,6 +158,27 @@
         white-space: nowrap;
         min-width: 0;
     }
+    /* On a phone the row's controls share the name's line (UX v5 S10), which
+       leaves the name a narrow column: two lines before the ellipsis, rather
+       than a few letters. After the rule above so it wins. */
+    @media (max-width: 599px) {
+        /* Fill the column: a wrapping label otherwise shrinks the button to
+           its narrowest word. */
+        .line-choice {
+            flex: 1 1 auto;
+        }
+        .line-choice :deep(.q-btn__content) {
+            justify-content: flex-start;
+        }
+        .line-choice :deep(.block) {
+            white-space: normal;
+            text-align: left;
+            display: -webkit-box !important; /* Quasar's `.block` is `display: block !important` */
+            -webkit-box-orient: vertical;
+            -webkit-line-clamp: 2;
+            line-clamp: 2;
+        }
+    }
     /* On the name it only has to hint that there is a choice. */
     .line-choice :deep(.q-btn-dropdown__arrow) {
         margin-left: 2px;

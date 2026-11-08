@@ -598,7 +598,6 @@ def test__delete_shopping_list__with_lines_and_attachments__cascade_clean(api):
     _Item = _make_item("DelInt Listed")
     _ListId = _make_list()
     _add_line(_ListId, stock_item_id=_Item["stock_item_id"])
-    assert requests.post(f"{SHOPPING_LISTS}/{_ListId}/start").status_code == 204
     _Attach = requests.post(
         f"{SHOPPING_LISTS}/{_ListId}/attachments",
         json={"image_data_url": PNG_DATA_URL},

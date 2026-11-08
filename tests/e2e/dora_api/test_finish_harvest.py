@@ -3,7 +3,7 @@
 Entering a price at the till on a ticked line, then finishing the list, writes
 one StockItemPriceObservation per priced line — provenance via the
 `shopping_list_line_id` FK (A4). Idempotent under finish double-taps (LC-1).
-And PATCH `status=done` is rejected: /finish is the only path to done (E3).
+PATCH no longer takes a status at all (UX v5; see test_shopping_list_lifecycle).
 
 Sized-vs-count harvest math is covered exhaustively by the pure-function tests
 in ``tests/test_line_price_harvest.py``; the count case is asserted here
@@ -154,30 +154,6 @@ def test__prefill__draft_line_shows_last_receipt(api):
     line = requests.get(f"{SHOPPING_LISTS}/{draft}").json()["lines"][0]
     assert line["estimated_unit_price"] == 4.50
     assert line["prefill_source_label"] == "from your last receipt"
-
-
-def test__patch_status_done__is_rejected__use_finish(api):
-    # E3 — the only path to done is POST /finish (it snapshots + restocks).
-    list_id = requests.post(
-        SHOPPING_LISTS, json={"name": f"FU227e3-{uuid.uuid4().hex[:8]}"}
-    ).json()["shopping_list_id"]
-    resp = requests.patch(f"{SHOPPING_LISTS}/{list_id}", json={"status": "done"})
-    # The handler rejects this as a business-rule violation (422); the plan's
-    # prose said "400s" but the implemented contract is 422 with a message
-    # pointing at /finish. What matters is the rejection + the pointer.
-    assert resp.status_code in (400, 422), resp.text
-    assert "finish" in resp.text.lower()
-    assert requests.get(f"{SHOPPING_LISTS}/{list_id}").json()["status"] == "draft"
-
-
-def test__patch_status_shopping__still_allowed(api):
-    # draft⇄shopping still flow through PATCH; only `done` is gated.
-    list_id = requests.post(
-        SHOPPING_LISTS, json={"name": f"FU227e3-{uuid.uuid4().hex[:8]}"}
-    ).json()["shopping_list_id"]
-    resp = requests.patch(f"{SHOPPING_LISTS}/{list_id}", json={"status": "shopping"})
-    assert resp.status_code == 204, resp.text
-    assert requests.get(f"{SHOPPING_LISTS}/{list_id}").json()["status"] == "shopping"
 
 
 # ───── FU-726 — amending a finished list corrects the harvested observation ──

@@ -5,7 +5,7 @@
          date. Never mutates on load; every mutation is a user
          tap. -->
     <q-banner
-        v-if="trimBanner.visible"
+        v-if="trimBanner.visible && !hasTicks"
         class="q-mb-4 sl-panel sl-panel--warn"
         dense
     >
@@ -65,7 +65,7 @@
 
     <!-- Preview: which lines would go, each with a "Keep" opt-out. -->
     <q-card
-        v-if="trimBanner.state === 'previewed' && trimBanner.previewLines.length > 0"
+        v-if="!hasTicks && trimBanner.state === 'previewed' && trimBanner.previewLines.length > 0"
         flat
         class="q-mb-4 sl-panel"
     >
@@ -99,7 +99,10 @@
         </q-card-section>
     </q-card>
 
-    <!-- FU-653 — Dora's suggestions, above the list and
+    <!-- Planning panels (trim, suggestions) step aside at the first tick:
+         mid-aisle they push the list down (UX v5 Q1, Q2).
+
+         FU-653: Dora's suggestions, above the list and
          visibly not part of it: chips you may tap to add,
          never lines that appeared on their own. Empty (and so
          absent) unless the user opted the shopping surface in.
@@ -113,7 +116,7 @@
          doing what it was asked to do.
     -->
     <q-card
-        v-if="visibleSuggestions.length > 0"
+        v-if="visibleSuggestions.length > 0 && !hasTicks"
         flat
         class="q-mb-5 inferred-suggestions sl-panel"
     >
@@ -149,59 +152,70 @@
         </q-card-section>
     </q-card>
 
-    <!-- The "Order by" bar used to sit here, and a second copy
-         of it inside `ShoppingListRunFace`. Both moved into the
-         overview card's control row: it is one view preference,
-         so it should be one control, and two copies were free
-         to drift. -->
     <template v-else>
         <div
-            v-for="section in lineSections"
+            v-for="section in sections"
             :key="section.key"
-            class="q-mb-md"
+            class="sl-section"
         >
-            <!-- Section headers read as headers now: the old
-                 muted `text-subtitle2` floated above a bordered
-                 box and looked like an afterthought rather than
-                 the thing structuring the page. -->
-            <div v-if="section.label" class="sl-section__head">
+            <div v-if="section.label && !section.cleared" class="sl-section__head">
                 <q-icon :name="sectionIcon" size="16px" />
                 <span class="sl-section__title">{{ section.label }}</span>
-                <span class="sl-section__count">{{ section.lines.length }}</span>
+                <span class="sl-section__count">
+                    {{ hasTicks ? `${section.picked}/${section.total}` : section.total }}
+                </span>
             </div>
-            <!-- One soft slab, not `q-list bordered separator`
-                 inside a bordered page. The rows own their own
-                 dividers, inset to the content column. -->
-            <div class="sl-list">
-                <ShoppingListPlanRow
+            <div v-if="section.lines.length > 0" class="sl-list">
+                <ShoppingListRow
                     v-for="line in section.lines"
                     :key="line.line_id"
-                    :line="line"
-                    :line-done="detail?.status === 'done'"
-                    :can-reorder="canReorder"
-                    :is-first="isFirstLine(line)"
-                    :is-last="isLastLine(line)"
-                    :focused="focusedLineId === line.line_id"
-                    :nested="isNestedChild(line)"
-                    :product-only="isProductOnly(line)"
-                    :price="priceForLine(line)"
-                    :store-options="plannedStoreOptionsFor(line)"
-                    :class="lineDnd.bind(line).rowClass"
-                    v-bind="{
-                        ...lineDnd.bind(line).handleProps,
-                        ...lineDnd.bind(line).rowProps,
-                    }"
-                    @move="moveLine(line, $event)"
-                    @remove="onRemoveLine(line.line_id)"
-                    @adjust-quantity="onAdjustQuantity(line, $event)"
-                    @set-quantity="setLineQuantity(line, $event)"
-                    @planned-store="onPlannedStoreChange(line, $event)"
-                    @pick-offer="onPickOffer(line.line_id, $event)"
-                    @pick-hint="onPickHint(line.line_id, $event)"
-                    @verdict-action="onLineVerdictAction(line, $event)"
+                    v-bind="rowProps(line)"
+                    v-on="rowHandlers(line)"
                 />
             </div>
+            <!-- A cleared section collapses to one line rather than
+                 vanishing, so the list doesn't feel like it lost your work. -->
+            <div v-else-if="section.label" class="sl-run-cleared row items-center q-gutter-xs">
+                <q-icon :name="ICONS.check_circle" color="positive" size="18px" />
+                <span class="text-body2">{{ section.label }}: all {{ section.total }} collected</span>
+            </div>
         </div>
+
+        <div v-if="allTicked" class="text-center q-py-lg dora-text-muted">
+            <q-icon :name="ICONS.check_circle" color="positive" size="40px" />
+            <div class="text-subtitle1 q-mt-sm">That's everything.</div>
+        </div>
+
+        <!-- Ticked lines land here, collapsed: a record, not the job (Q7).
+             Their controls stay live so a price can still be entered. -->
+        <q-expansion-item
+            v-if="tickedLines.length > 0"
+            class="q-mt-md sl-panel sl-panel--sunken"
+        >
+            <template #header>
+                <q-item-section avatar>
+                    <q-icon :name="ICONS.check_circle" />
+                </q-item-section>
+                <q-item-section>
+                    <q-item-label>Collected</q-item-label>
+                    <q-item-label v-if="moneyEnabled" caption>
+                        {{ fmtMoney(detail?.totals.picked_price) }} in the trolley
+                    </q-item-label>
+                </q-item-section>
+                <q-item-section side>
+                    <CountBadge
+                        :count="tickedLines.length"
+                        :label="`${tickedLines.length} collected`"
+                    />
+                </q-item-section>
+            </template>
+            <ShoppingListRow
+                v-for="line in tickedLines"
+                :key="line.line_id"
+                v-bind="rowProps(line)"
+                v-on="rowHandlers(line)"
+            />
+        </q-expansion-item>
     </template>
 
     <!-- Deferred-to-fit-budget section
@@ -252,35 +266,26 @@
 
 <script lang="ts" setup>
     /**
-     * The plan face — the list as it is written, before anyone goes shopping.
-     *
-     * Extracted from `ShoppingListDetail.vue` (FU-780), following the shape of
-     * `ShoppingListRunFace`: the page decides which face is showing and owns
-     * the view preference (`mode`) and keyboard focus; this face owns every
-     * affordance that exists to *curate* a list — the trim-to-budget banner,
-     * Dora's suggestions, the sectioned rows with their drag, arrows, delete,
-     * quantity, store, offer and buy-hint controls, and the deferred-to-fit
-     * section. None of it is a thing you do while holding a trolley, so none
-     * of it is on the other two faces.
-     *
-     * The list itself, its re-reads and the trim state come from
-     * `useShoppingListDetail()` rather than ~20 props and emits: the trim
-     * banner's state has to survive this face being unmounted mid-shop, and
-     * the row mutations are optimistic writes onto the page's own `detail`.
+     * The active face (UX v5): the list as it is built, ticked and priced, all
+     * in one place. It merged the plan face (curation: trim, suggestions, the
+     * row controls, deferred-to-fit) and the run face (sections that empty as
+     * you shop, Collected). The page owns ticking, since a tick carries the
+     * undo toast and the last-tick finish prompt.
      */
     import BaseTooltip from 'src/components/BaseTooltip.vue';
     import BaseButton from 'src/components/BaseButton.vue';
-    import ShoppingListPlanRow from 'src/components/shoppingList/ShoppingListPlanRow.vue';
+    import CountBadge from 'src/components/CountBadge.vue';
+    import ShoppingListRow from 'src/components/shoppingList/ShoppingListRow.vue';
     import { ICONS } from 'src/style/icons';
     import {
-        PLAN_SECTION_MODES, useLineSections, isNestedChild,
-        isProductOnly, sectionIconFor, type SectionMode,
+        useLineSections, isNestedChild, isProductOnly, sectionIconFor,
+        sectionProgress, type SectionMode,
     } from 'src/composables/useLineSections';
     import { invalidateBuyVerdict } from 'src/composables/useBuyVerdict';
     import { useBuyVerdictActions } from 'src/composables/useBuyVerdictActions';
     import { useConfirm } from 'src/composables/useConfirm';
-    import { useDragDropList } from 'src/composables/useDragDropList';
     import { formatMoney } from 'src/composables/useMoney';
+    import { useMoneyEnabled } from 'src/composables/useMoneyEnabled';
     import { useShoppingListDetail } from 'src/composables/useShoppingListDetail';
     import {
         priceOfLine,
@@ -292,6 +297,12 @@
     import { describeApiError, isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { useQuasar } from 'quasar';
     import { computed } from 'vue';
+
+    const emit = defineEmits<{
+        /** Tick or untick. The page owns it (toast, undo, finish prompt). */
+        toggle: [line: ShoppingListLine];
+        'capture-price': [line: ShoppingListLine];
+    }>();
 
     const props = defineProps<{
         /** The page's "Group by" preference. Read-only here: the overview card
@@ -309,9 +320,10 @@
         api, listId, detail, baseLines, deferredLines,
         trimBanner, previewTrim, applyTrim, keepFromTrim, dismissTrim,
         refreshDetailQuietly, refreshAllQuietly,
-        setLineQuantity, onAdjustQuantity,
-        addingBackLineIds, addingSuggestionId,
+        setLineQuantity,
+        addingBackLineIds, addingSuggestionId, hasTicks,
     } = useShoppingListDetail();
+    const { moneyEnabled } = useMoneyEnabled();
 
     const modeRef = computed(() => props.mode);
 
@@ -319,117 +331,49 @@
         return formatMoney(v ?? 0);
     }
 
-    // Sectioning. On the plan face ticked lines stay put and dim.
-    // `effectiveMode` falls back to ungrouped when the stored preference points
-    // at a field this list doesn't populate. `availableModes` is not read here:
-    // the overview card owns the "Group by" control and resolves availability
-    // for whichever face is showing. This instance only sections. (The page
-    // keeps a twin with the same options for its keyboard-focus order.)
-    const {
-        sections: lineSections,
-        orderedLines: sectionOrderedLines,
-        effectiveMode,
-    } = useLineSections(baseLines, modeRef, {
-        hideTicked: computed(() => detail.value?.status === 'shopping'),
-        // Plan face: store + ungrouped only. The run face renders through
-        // `ShoppingListRunFace`, which keeps all four.
-        allowedModes: PLAN_SECTION_MODES,
-    });
+    // Sectioning. Ticked lines leave their section for Collected, so a
+    // section empties as you shop; its header counts what's collected once
+    // anything is.
+    const { sections: lineSections, effectiveMode } = useLineSections(
+        baseLines, modeRef, { hideTicked: true },
+    );
+
+    const sections = computed(() =>
+        lineSections.value.map((section) => ({
+            ...section,
+            ...sectionProgress(baseLines.value, section, effectiveMode.value),
+        })),
+    );
 
     const sectionIcon = computed(() => sectionIconFor(effectiveMode.value));
 
-    // ── Drag-to-reorder ───────────────────────────────────────────────
-    // Reordering only means something when grouping is off: in every other
-    // mode the section order is derived from a field, so dragging a row would
-    // either be ignored or silently rewrite a sequence the user can't see.
-    // `effectiveMode` rather than `groupBy`, so a stored preference pointing at
-    // an empty field (which falls back to ungrouped) still gets the affordance.
-    const canReorder = computed(() =>
-        !!detail.value
-            && detail.value.status !== 'done'
-            && detail.value.status !== 'shopping'
-            && effectiveMode.value === 'none'
+    const tickedLines = computed(() => baseLines.value.filter((l) => l.is_ticked));
+    const allTicked = computed(
+        () => baseLines.value.length > 0 && baseLines.value.every((l) => l.is_ticked),
     );
 
-    // R-022 — whole-row DnD via `useDragDropList`. `canDragStart` is gated
-    // on `canReorder` (list not done/shopping, no grouping, not in bulk
-    // mode), so the `draggable` attribute reactively turns off the
-    // browser's drag affordance when reorder isn't allowed. The drop
-    // effect mirrors the historical insert-at-target's-slot pattern
-    // (fixed the off-by-one in P6-01 Chunk 6 / feedback L414).
-    const lineDnd = useDragDropList<ShoppingListLine>({
-        mime: 'application/x-dora-shopping-line',
-        getId: (line) => line.line_id,
-        canDragStart: () => canReorder.value,
-        onDrop: ({ id: draggedId }, { id: targetLineId }) => {
-            if (!detail.value) return;
-            const lines = detail.value.lines;
-            const ids = lines.map((l) => l.line_id);
-            const fromIdx = ids.indexOf(draggedId);
-            const toIdx = ids.indexOf(targetLineId);
-            if (fromIdx < 0 || toIdx < 0) return;
-            ids.splice(fromIdx, 1);
-            ids.splice(toIdx, 0, draggedId);
-            applyLineOrder(ids);
-        },
-    });
-
-    /** Optimistically apply a new line order and persist it. Shared by the
-     *  drag handler and the up/down arrows so there is one definition of what
-     *  reordering does — and one place a failure reloads canonical state. */
-    function applyLineOrder(ids: string[]): void {
-        if (!detail.value) return;
-        const lookup = new Map(detail.value.lines.map((l) => [l.line_id, l]));
-        detail.value.lines = ids
-            .map((id, idx) => {
-                const line = lookup.get(id);
-                if (!line) return null;
-                line.sequence = idx;
-                return line;
-            })
-            .filter((l): l is NonNullable<typeof l> => l !== null);
-
-        void (async () => {
-            try {
-                await api.reorderLinesAsync(listId.value, ids);
-            } catch (err) {
-                await refreshDetailQuietly();
-                if (!isAlreadyNotified(err)) {
-                    $q.notify({
-                        type: 'negative',
-                        message: 'Could not reorder.',
-                        caption: toastCaption(err),
-                    });
-                }
-            }
-        })();
+    function rowProps(line: ShoppingListLine) {
+        return {
+            line,
+            focused: props.focusedLineId === line.line_id,
+            nested: isNestedChild(line),
+            productOnly: isProductOnly(line),
+            storeOptions: plannedStoreOptionsFor(line),
+        };
     }
 
-    // Arrow reordering. Moves within the *visible* ungrouped run rather than the
-    // raw `detail.lines` array, so a deferred-by-budget line sitting between
-    // two visible rows can't swallow a press and make the row appear stuck.
-    function isFirstLine(line: ShoppingListLine): boolean {
-        return sectionOrderedLines.value[0]?.line_id === line.line_id;
-    }
-    function isLastLine(line: ShoppingListLine): boolean {
-        return sectionOrderedLines.value.at(-1)?.line_id === line.line_id;
-    }
-    function moveLine(line: ShoppingListLine, delta: -1 | 1): void {
-        const visible = sectionOrderedLines.value;
-        const from = visible.findIndex((l) => l.line_id === line.line_id);
-        const to = from + delta;
-        if (from < 0 || to < 0 || to >= visible.length) return;
-        // Reorder the visible run, then splice it back over the full line
-        // order so hidden lines keep their relative positions.
-        const movedIds = visible.map((l) => l.line_id);
-        movedIds.splice(from, 1);
-        movedIds.splice(to, 0, line.line_id);
-        const visibleSet = new Set(movedIds);
-        let cursor = 0;
-        const ids = (detail.value?.lines ?? []).map((l) =>
-            visibleSet.has(l.line_id) ? movedIds[cursor++]! : l.line_id
-        );
-        applyLineOrder(ids);
+    function rowHandlers(line: ShoppingListLine) {
+        return {
+            toggle: () => emit('toggle', line),
+            remove: () => onRemoveLine(line.line_id),
+            'set-quantity': (value: number) => setLineQuantity(line, value),
+            'planned-store': (value: string | null) => onPlannedStoreChange(line, value),
+            'pick-offer': (productId: string) => onPickOffer(line.line_id, productId),
+            'pick-hint': (id: string | null) => onPickHint(line.line_id, id),
+            'verdict-action': (kind: Parameters<typeof onLineVerdictAction>[1]) =>
+                onLineVerdictAction(line, kind),
+            'capture-price': () => emit('capture-price', line),
+        };
     }
 
     const deferredTotal = computed(() =>
@@ -464,10 +408,6 @@
             behavior: 'smooth',
             block: 'start',
         });
-    }
-
-    function priceForLine(line: ShoppingListLine): number {
-        return priceOfLine(line);
     }
 
     // ── FU-653: Dora's inferred suggestions ───────────────────────────
@@ -505,7 +445,7 @@
         }
     }
 
-    /** Every store the household has, for the plan face's "where do you plan to
+    /** Every store the household has, for the row's "where do you plan to
      *  buy this" picker.
      *
      *  Deliberately *not* `storeOptionsFor` (below), which lists only stores
@@ -542,7 +482,7 @@
         }));
     }
 
-    /** Writes the plan face's target store. Optimistic with a rollback, like
+    /** Writes the row's target store. Optimistic with a rollback, like
      *  the other row mutations — and it refetches, because the store ladder is
      *  server-owned (R-003): changing this rung can move the line into a
      *  different section under Order-by → Store, and only the server knows
@@ -732,8 +672,8 @@
 
 <style scoped>
     /* The panel slab, the section header and the list slab are shared with the
-       run face from `src/css/shoppingList.scss`; the rows own their own grid
-       (`ShoppingListPlanRow`, R-090). The page's `.q-mb-4` is repeated here
+       receipt face from `src/css/shoppingList.scss`; the rows own their own
+       grid (`ShoppingListRow`, R-090). The page's `.q-mb-4` is repeated here
        because a scoped rule can't reach a child's markup. */
     .q-mb-4 {
         margin-bottom: var(--space-4);
@@ -770,8 +710,11 @@
         color: var(--semantic-warning-ink);
         margin-right: var(--space-1);
     }
-    /* R-022 — DnD affordances live in src/css/dnd.scss
-       (.dora-dnd-row / --dragging / --drop-over). The decorative
-       handle icon-section is non-interactive (whole-row mode), so
-       the grab/grabbing cursors aren't needed here. */
+    /* A section whose lines are all collected, folded to one line. */
+    .sl-run-cleared {
+        padding: var(--space-3) var(--space-4);
+        border-radius: var(--radius-lg);
+        background: var(--surface-sunken);
+        color: var(--text-secondary);
+    }
 </style>

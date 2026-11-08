@@ -32,7 +32,7 @@ function summary(id: string, name: string): ShoppingListSummary {
         shopping_list_id: id,
         name: null,
         display_name: name,
-        status: 'draft',
+        status: 'active',
         created_at: '2026-07-01T00:00:00Z',
         completed_at: null,
         planned_shop_date: null,

@@ -7,21 +7,17 @@ from dora_api.domain.entities.base_entity import BaseEntity
 from dora_api.domain.locale_format import format_list_label
 
 
-# the single source of truth for where a list is
-# in the shop loop, replacing the old is_archived / is_in_progress flags.
-#   draft    : being assembled / edited (the old "planning", non-archived,
-#              not-in-progress state).
-#   shopping : actively being shopped right now (was is_in_progress).
-#   done     : finished or archived (was is_archived). completed_at carries
-#              the timestamp.
+# the single source of truth for where a list is in the shop loop.
+#   active : the list, from first item to last tick. Add, edit, price and
+#            tick all work at once (UX v5 merged the old draft and shopping
+#            states, whose only real difference was being able to tick).
+#   done   : finished; the receipt. completed_at carries the timestamp.
 # Plain str sentinels (not Enum) so SQLAlchemy stores them as varchar.
-SHOPPING_LIST_STATUS_DRAFT = "draft"
-SHOPPING_LIST_STATUS_SHOPPING = "shopping"
+SHOPPING_LIST_STATUS_ACTIVE = "active"
 SHOPPING_LIST_STATUS_DONE = "done"
 
 SHOPPING_LIST_STATUS_VALUES = {
-    SHOPPING_LIST_STATUS_DRAFT,
-    SHOPPING_LIST_STATUS_SHOPPING,
+    SHOPPING_LIST_STATUS_ACTIVE,
     SHOPPING_LIST_STATUS_DONE,
 }
 
@@ -50,11 +46,19 @@ class ShoppingListLine(BaseEntity):
     # sole path to `done`, so it is the one place a list becomes immutable.
     # Deliberately NOT written at add time: ~90% of lines never outlive their
     # referent, so a copy per line would be dead weight and would need
-    # rename-drift handling. Lines on draft/shopping lists are deleted
+    # rename-drift handling. Lines on active lists are deleted
     # outright when their anchor goes, so they never need one.
     display_name_snapshot: str | None = None
     quantity: int | None = None
+    # In the trolley. Ticking restocks the item (UX v5 D1); the three fields
+    # below record that so an untick can put the item's level back exactly.
     is_ticked: bool = False
+    # When this line's tick restocked its item; None when it hasn't (never
+    # ticked, unticked again, or ticked before restock-on-tick existed, which
+    # `/finish` still restocks).
+    restocked_at: datetime | None = None
+    restock_from_level_id: UUID | None = None
+    restock_from_level_updated_at: datetime | None = None
     selected_product_id: UUID | None = None
     sequence: int = 0
     # True only for lines no user action put here directly: the low-stock
@@ -128,6 +132,9 @@ class ShoppingListLine(BaseEntity):
         PRODUCT_ID = "product_id"
         QUANTITY = "quantity"
         IS_TICKED = "is_ticked"
+        RESTOCKED_AT = "restocked_at"
+        RESTOCK_FROM_LEVEL_ID = "restock_from_level_id"
+        RESTOCK_FROM_LEVEL_UPDATED_AT = "restock_from_level_updated_at"
         SELECTED_PRODUCT_ID = "selected_product_id"
         SEQUENCE = "sequence"
         IS_AUTO_ADDED = "is_auto_added"
@@ -152,14 +159,10 @@ class ShoppingList(BaseEntity):
     # planned shop date was set or changed.)
     name: str | None
     created_at: datetime
-    # Lifecycle status (see SHOPPING_LIST_STATUS_* above). Transitions:
-    #   draft    -> shopping : user clicks Start shopping
-    #   draft/shopping -> done : Finish (restock review)
-    # Once a list is done, it's done — there is no Reopen. (UX-v2 removed the
-    # shopping -> draft "stop/pause" transition and the restock-less "archive"
-    # path; the undo posture removal in FU-163 retired Reopen too — lists are
-    # finished or deleted.)
-    status: str = SHOPPING_LIST_STATUS_DRAFT
+    # Lifecycle status (see SHOPPING_LIST_STATUS_* above). The one
+    # transition is active -> done, by `POST /finish`. There is no Reopen
+    # (FU-163): lists are finished or deleted.
+    status: str = SHOPPING_LIST_STATUS_ACTIVE
     completed_at: datetime | None = None
     # Optional shopping day the user is planning this list
     # for. Drives the landing-page pick (today's list wins), the selector's
@@ -205,12 +208,8 @@ class ShoppingList(BaseEntity):
         return self.status == SHOPPING_LIST_STATUS_DONE
 
     @property
-    def is_shopping(self) -> bool:
-        return self.status == SHOPPING_LIST_STATUS_SHOPPING
-
-    @property
-    def is_draft(self) -> bool:
-        return self.status == SHOPPING_LIST_STATUS_DRAFT
+    def is_active(self) -> bool:
+        return self.status == SHOPPING_LIST_STATUS_ACTIVE
 
     class Fields(BaseEntity.Fields):
         NAME = "name"

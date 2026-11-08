@@ -75,7 +75,7 @@ def _normalise_items(raw_items: Any) -> list[dict[str, Any]]:
 
 
 def _primary_list(repo: SqlAlchemyRepository) -> ShoppingList | None:
-    # "Primary" is inferred, not stored (P6-01 Chunk 2): exactly one draft
+    # "Primary" is inferred, not stored (P6-01 Chunk 2): exactly one active
     # list = the target; zero or several = no unambiguous primary, so the
     # assistant asks instead of guessing. (This previously queried the
     # dropped `is_primary` column and would AttributeError at runtime.)

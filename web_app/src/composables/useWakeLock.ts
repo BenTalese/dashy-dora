@@ -4,9 +4,9 @@
 //   - RecipeCookMode.vue keeps the screen on while cooking, so a hands-free
 //     "Next step" or a running timer stays readable without the user
 //     wiping the sink off their hands to tap the display.
-//   - ShoppingListDetail.vue holds the lock while the list is in
-//     `status === 'shopping'` (shop mode), so the phone doesn't sleep
-//     between aisles.
+//   - ShoppingListDetail.vue holds the lock while an open list has at least
+//     one tick (you're in the shop), so the phone doesn't sleep between
+//     aisles.
 //
 // The Wake Lock API is supported in every modern Chromium (desktop, PWA,
 // Capacitor WebView), Safari 16.4+, and Firefox 126+. Where it isn't

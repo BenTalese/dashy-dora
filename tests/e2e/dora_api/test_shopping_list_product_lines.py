@@ -214,47 +214,6 @@ def test__unlinking_a_product__clears_it_as_a_lines_chosen_offer(api):
 # ── Back to draft (2026-09-17) ────────────────────────────────────────────
 
 
-def test__back_to_draft__reverts_the_status_and_unticks_every_line(api):
-    """The undo for pressing Start shopping by accident.
-
-    Pinned on the untick, not just the status: a draft has no tick model (the
-    picker shows a plain count for one), so a revert that left `is_ticked` set
-    would leave a draft holding state no surface can show or clear.
-    """
-    list_id = _make_draft()
-    item = make_stock_item(stock_level_id=_stock_level_id(),
-                           name=f"CartItem {uuid4().hex[:8]}")
-    _add_line(list_id, stock_item_id=item["stock_item_id"])
-    assert requests.post(f"{LISTS}/{list_id}/start").status_code == 204
-
-    line = _lines(list_id)[0]
-    requests.patch(f"{LISTS}/{list_id}/lines/{line['line_id']}", json={"is_ticked": True})
-    assert _lines(list_id)[0]["is_ticked"] is True
-
-    resp = requests.post(f"{LISTS}/{list_id}/back-to-draft")
-    assert resp.status_code == 200, resp.text
-    assert resp.json()["unticked_count"] == 1
-
-    detail = requests.get(f"{LISTS}/{list_id}").json()
-    assert detail["status"] == "draft"
-    assert detail["lines"][0]["is_ticked"] is False
-
-
-def test__back_to_draft__refuses_a_finished_list(api):
-    """`done` is final. The restock a finish drove has already moved stock, and
-    undoing that is a different question from "I mis-tapped Start shopping"."""
-    list_id = _make_draft()
-    item = make_stock_item(stock_level_id=_stock_level_id(),
-                           name=f"CartItem {uuid4().hex[:8]}")
-    _add_line(list_id, stock_item_id=item["stock_item_id"])
-    requests.post(f"{LISTS}/{list_id}/start")
-    requests.post(f"{LISTS}/{list_id}/finish", json={})
-
-    resp = requests.post(f"{LISTS}/{list_id}/back-to-draft")
-    assert_problem(resp, 422)
-    assert requests.get(f"{LISTS}/{list_id}").json()["status"] == "done"
-
-
 def test__quick_add__nested_product_line_does_not_count_as_already_on_list(api):
     """Finalisation 03-R5: quick-add re-implemented the add-line dedupe without
     the `product_id is None` guard, so a product line nested under the item

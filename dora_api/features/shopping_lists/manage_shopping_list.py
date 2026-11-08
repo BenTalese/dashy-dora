@@ -1,7 +1,7 @@
 """Create / update / delete / archive / copy / finish for ShoppingList.
 
 Bundled into one file because most of these handlers are 10-20 lines and
-they share the list-status lifecycle (draft → shopping → done) — keeping
+they share the list-status lifecycle (active → done); keeping
 them together makes that contract obvious. Finish + copy live here too because they're
 shopping-list-scoped actions, not line-scoped.
 """
@@ -14,9 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import update
 
 from dora_api.domain.entities.shopping_list import (
-    SHOPPING_LIST_STATUS_DONE, SHOPPING_LIST_STATUS_DRAFT,
-    SHOPPING_LIST_STATUS_SHOPPING, SHOPPING_LIST_STATUS_VALUES, ShoppingList,
-    ShoppingListLine)
+    SHOPPING_LIST_STATUS_DONE, ShoppingList, ShoppingListLine)
 from dora_api.features.routers import SHOPPING_LIST_ROUTER
 from dora_api.features.shopping_lists._line_retention import \
     snapshot_line_display_names
@@ -27,8 +25,7 @@ from dora_api.features.shopping_lists.manage_shopping_list_lines import \
 from dora_api.features.shopping_lists._observation_sync import (
     sync_line_observations)
 from dora_api.features.shopping_lists._usual_price import snapshot_usual_prices
-from dora_api.infrastructure.api_response import (business_rule_violation,
-                                                  created, no_content,
+from dora_api.infrastructure.api_response import (created, no_content,
                                                   not_found, ok)
 from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.utils import get_request_body
@@ -96,10 +93,6 @@ class UpdateShoppingListRequest(BaseModel):
     # the wire = leave the existing value alone — same convention as
     # planned_shop_date below.
     name: str | None = Field(default=None, max_length=255)
-    # Lifecycle status (draft / shopping / done). Setting it to/from `done`
-    # also manages completed_at. Note: this is the plain status edit — the
-    # restock-and-snapshot Finish flow lives in /finish, not here.
-    status: str | None = None
     # Pass an ISO date to set, or `null` (explicit) to clear.
     # Field unset on the wire = leave the existing value alone.
     planned_shop_date: date | None = None
@@ -108,8 +101,6 @@ class UpdateShoppingListRequest(BaseModel):
 @dataclass(slots=True)
 class UpdateShoppingListResponse:
     not_found: bool = False
-    invalid_status: bool = False
-    done_via_finish: bool = False
 
 
 class UpdateShoppingListHandler:
@@ -126,18 +117,6 @@ class UpdateShoppingListHandler:
         # field absent = no change.
         if "name" in set_fields:
             lst.name = (request.name or "").strip() or None
-        if "status" in set_fields and request.status is not None:
-            if request.status not in SHOPPING_LIST_STATUS_VALUES:
-                return UpdateShoppingListResponse(invalid_status=True)
-            # E3 (FU-227 chunk 5): /finish is the ONLY path to `done` — it's
-            # what snapshots prices, harvests observations and bumps stock
-            # levels. The SPA never PATCHes `status=done`; this guard makes
-            # that contract enforceable (no half-baked done list that skipped
-            # the restock review). draft⇄shopping still flow through here.
-            if request.status == SHOPPING_LIST_STATUS_DONE:
-                return UpdateShoppingListResponse(done_via_finish=True)
-            lst.status = request.status
-            lst.completed_at = None
         # Chunk 7: explicit `null` clears the date; field absent = no change.
         if "planned_shop_date" in set_fields:
             lst.planned_shop_date = request.planned_shop_date
@@ -153,15 +132,6 @@ def update_shopping_list(shopping_list_id: UUID):
     _Response = UpdateShoppingListHandler(SqlAlchemyRepository()).handle(_Request, shopping_list_id)
     if _Response.not_found:
         return not_found("ShoppingList", shopping_list_id)
-    if _Response.invalid_status:
-        return business_rule_violation(
-            "`status` must be one of: draft, shopping."
-        )
-    if _Response.done_via_finish:
-        return business_rule_violation(
-            "A list becomes done by finishing it: POST /finish (which "
-            "snapshots prices and restocks), not PATCH status=done."
-        )
     _LOGGER.info(f"Updated shopping list {shopping_list_id}")
     return no_content()
 
@@ -195,12 +165,11 @@ def delete_shopping_list(shopping_list_id: UUID):
     return no_content()
 
 
-# ───── Finish (restock review) ────────────────────────────────────────────
+# ───── Finish ─────────────────────────────────────────────────────────────
 
 class FinishShoppingListRequest(BaseModel):
-    # Finishing a list means you bought the items, so every ticked line
-    # restocks to Stocked. There is deliberately nothing to configure —
-    # the per-item level picker (UX-v2 M12) was cut, see FU-582.
+    # Nothing to configure: the per-item level picker (UX-v2 M12) was cut,
+    # see FU-582, and leftovers are moved or discarded before this is called.
     model_config = ConfigDict(extra="forbid")
 
 
@@ -211,10 +180,11 @@ class FinishShoppingListResponse:
 
 
 class FinishShoppingListHandler:
-    """Marks the list as done. For every ticked line, set the linked stock
-    item's stock level to Stocked — you just bought it. Untouched lines are
-    left on the now-done list — the caller can copy them to a new list or
-    use the "move unchecked" flow.
+    """Marks the list as done and freezes it as a receipt: prices harvested,
+    names frozen. Ticking already restocked each item (UX v5 D1); a line
+    ticked before restock-on-tick existed (`restocked_at` is None) is
+    restocked here instead, so no tick is ever lost. Unticked lines stay on
+    the done list unless the caller moved or discarded them first.
     """
 
     def __init__(self, repository: Repository) -> None:
@@ -272,9 +242,13 @@ class FinishShoppingListHandler:
         # prices aren't part of their own baseline.
         snapshot_usual_prices(self.repository, ticked_lines, now=now)
 
-        updated = restock_stock_items(
-            self.repository, (l.stock_item_id for l in ticked_lines), now=now,
+        restock_stock_items(
+            self.repository,
+            (l.stock_item_id for l in ticked_lines if l.restocked_at is None),
+            now=now,
         )
+        # Distinct items: a nested product line shares its parent's item.
+        updated = len({l.stock_item_id for l in ticked_lines if l.stock_item_id is not None})
 
         # harvest a price observation per priced ticked line
         # (the closed loop: confirm what you paid at the till → it feeds "Your
@@ -311,107 +285,3 @@ def finish_shopping_list(shopping_list_id: UUID):
         f"{_Response.ticked_lines} items restocked"
     )
     return ok({"items_restocked": _Response.ticked_lines})
-
-
-# ───── Start shopping ─────────────────────────────────────────────────────
-# A dedicated endpoint (not a generic PATCH) because the transition is
-# meaningful enough to log and defend invariants around (e.g. can't start a
-# done list). The old /stop ("pause") endpoint was removed in UX-v2: the
-# lifecycle is Start shopping → Finish & restock (→ Reopen), and the merged
-# single page has no separate shop surface to exit from.
-
-@dataclass(slots=True)
-class StartShoppingResponse:
-    not_found: bool = False
-    archived: bool = False
-
-
-class StartShoppingHandler:
-    def __init__(self, repository: Repository) -> None:
-        self.repository = repository
-
-    def handle(self, shopping_list_id: UUID) -> StartShoppingResponse:
-        lst: ShoppingList | None = self.repository.get(ShoppingList).by_id(shopping_list_id)
-        if lst is None:
-            return StartShoppingResponse(not_found=True)
-        if lst.is_done:
-            return StartShoppingResponse(archived=True)
-        lst.status = SHOPPING_LIST_STATUS_SHOPPING
-        self.repository.save_changes()
-        return StartShoppingResponse()
-
-
-# ───── Back to draft ──────────────────────────────────────────────────────
-# The reverse of Start shopping, added 2026-09-17 (owner: *"No way to go back
-# to draft mode from shop mode? Sometimes there are accidents."*). It is not
-# the old /stop "pause" endpoint coming back: that existed because UX-v2 had a
-# separate shop *surface* to exit from, and it left a half-shopped list in a
-# state of its own. This is an undo for pressing the wrong button.
-#
-# **It unticks everything**, and the client says so before calling. A draft has
-# no tick model at all — the picker shows a plain item count for a draft and a
-# ratio only once shopping starts — so ticks have nowhere to live on the other
-# side of this transition. Keeping them hidden would leave a draft quietly
-# holding state the user can neither see nor edit, which is worse than the
-# honest reset.
-#
-# A finished list is still final: `done` is not reversible here, because the
-# restock it drove has already moved stock and undoing that is a different
-# (and much larger) question than "I mis-tapped".
-
-@dataclass(slots=True)
-class BackToDraftResponse:
-    not_found: bool = False
-    archived: bool = False
-    unticked_count: int = 0
-
-
-class BackToDraftHandler:
-    def __init__(self, repository: Repository) -> None:
-        self.repository = repository
-
-    def handle(self, shopping_list_id: UUID) -> BackToDraftResponse:
-        lst: ShoppingList | None = self.repository.get(ShoppingList).by_id(shopping_list_id)
-        if lst is None:
-            return BackToDraftResponse(not_found=True)
-        if lst.is_done:
-            return BackToDraftResponse(archived=True)
-
-        lines: list[ShoppingListLine] = self.repository.get(ShoppingListLine).all(
-            EntityField(ShoppingListLine, "shopping_list_id").eq(shopping_list_id)
-            & EntityField(ShoppingListLine, ShoppingListLine.Fields.IS_TICKED).eq(True)
-        )
-        for line in lines:
-            line.is_ticked = False
-        lst.status = SHOPPING_LIST_STATUS_DRAFT
-        self.repository.save_changes()
-        return BackToDraftResponse(unticked_count=len(lines))
-
-
-@SHOPPING_LIST_ROUTER.route("/<uuid:shopping_list_id>/back-to-draft", methods=["POST"])
-def back_to_draft(shopping_list_id: UUID):
-    _Response = BackToDraftHandler(SqlAlchemyRepository()).handle(shopping_list_id)
-    if _Response.not_found:
-        return not_found("ShoppingList", shopping_list_id)
-    if _Response.archived:
-        return business_rule_violation(
-            "A finished list can't go back to draft."
-        )
-    _LOGGER.info(
-        f"List {shopping_list_id} returned to draft "
-        f"({_Response.unticked_count} lines unticked)"
-    )
-    return ok({"unticked_count": _Response.unticked_count})
-
-
-@SHOPPING_LIST_ROUTER.route("/<uuid:shopping_list_id>/start", methods=["POST"])
-def start_shopping(shopping_list_id: UUID):
-    _Response = StartShoppingHandler(SqlAlchemyRepository()).handle(shopping_list_id)
-    if _Response.not_found:
-        return not_found("ShoppingList", shopping_list_id)
-    if _Response.archived:
-        return business_rule_violation(
-            "Cannot start shopping on a finished list."
-        )
-    _LOGGER.info(f"Started shopping on list {shopping_list_id}")
-    return no_content()

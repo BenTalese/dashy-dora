@@ -1,7 +1,6 @@
 import type {
     Membership,
     ShoppingListDetail,
-    ShoppingListStatus,
     ShoppingListSummary
 } from 'src/models/shoppingList';
 import AxiosHttpClient from './axiosHttpClient';
@@ -16,10 +15,6 @@ export type UpdateShoppingListCommand = {
     /** UX-v2 — explicit `null` clears the custom name (the list then
      *  self-labels from its dates); omitting leaves it alone. */
     name?: string | null;
-    /** FU-227 chunk 5 (E3) — a list becomes `done` only via POST /finish
-     *  (which snapshots prices + restocks). PATCH can move it between
-     *  draft/shopping; the server 400s on `status: 'done'` here. */
-    status?: Exclude<ShoppingListStatus, 'done'>;
     /** P6-01 Chunk 7 — explicit `null` clears; omitting leaves it alone. */
     planned_shop_date?: string | null;
 };
@@ -39,7 +34,6 @@ export type UpdateLineCommand = {
     is_ticked?: boolean;
     selected_product_id?: string | null;
     clear_selected_product?: boolean;
-    sequence?: number;
     /** P2-02 — what the shopper actually paid per unit. Use
      *  `clear_actual_unit_price` to wipe a prior override (passing `null`
      *  here is treated as "leave alone" by the backend). */
@@ -102,8 +96,8 @@ export type QuickAddCandidate = {
 };
 
 /** Discriminated outcome of the quick-add endpoint. The target list is
- *  inferred from DRAFT count — the server replies with `ambiguous` when 2+
- *  drafts exist, expecting the client to pick (and remember the choice in
+ *  inferred from the open-list count: the server replies with `ambiguous` when
+ *  2+ open lists exist, expecting the client to pick (and remember the choice in
  *  sessionStorage).
  */
 export type QuickAddResult =
@@ -113,7 +107,7 @@ export type QuickAddResult =
           line_id: string | null;
           already_on_list: boolean;
       }
-    | { result: 'no_draft' }
+    | { result: 'no_list' }
     | { result: 'ambiguous'; candidates: QuickAddCandidate[] };
 
 export type AutoGenerateSources = {
@@ -164,14 +158,6 @@ export type MoveUntickedResult = {
     moved_count: number;
     skipped_duplicates: number;
 };
-
-export type BackToDraftResult = {
-    unticked_count: number;
-};
-
-/** Simple mode's buy echo: the line and the item's level before the restock.
- *  Opaque to the client; it goes back verbatim to undo the buy. */
-export type BoughtLine = Record<string, unknown>;
 
 export type ClearListResult = {
     removed_count: number;
@@ -255,19 +241,6 @@ export default class ShoppingListApiService {
     deleteLineAsync = async (listId: string, lineId: string): Promise<void> =>
         await this.httpClient.delete<void>(`/shopping-lists/${listId}/lines/${lineId}`);
 
-    /** Simple mode: restock the item and remove the line in one request. */
-    buyLineAsync = async (listId: string, lineId: string): Promise<{ bought: BoughtLine }> =>
-        await this.httpClient.post<{ bought: BoughtLine }, Record<string, never>>(
-            `/shopping-lists/${listId}/lines/${lineId}/buy`,
-            {},
-        );
-
-    unbuyLineAsync = async (listId: string, bought: BoughtLine): Promise<void> =>
-        await this.httpClient.post<void, BoughtLine>(
-            `/shopping-lists/${listId}/lines/unbuy`,
-            bought,
-        );
-
     // FU-573: returns whether a line was actually removed. The endpoint is an
     // idempotent no-op (success) when the item isn't on the list, so callers
     // fanning out over multiple lists count `removed` rather than every 2xx.
@@ -326,28 +299,6 @@ export default class ShoppingListApiService {
         await this.httpClient.post<{ removed_count: number }, Record<string, never>>(
             `/shopping-lists/${listId}/discard-unticked`,
             {},
-        );
-
-    startShoppingAsync = async (id: string): Promise<void> =>
-        await this.httpClient.post<void, Record<string, never>>(
-            `/shopping-lists/${id}/start`,
-            {},
-        );
-
-    /** The reverse of `startShoppingAsync` — an undo for pressing the wrong
-     *  button, not the old "pause" endpoint. Unticks every line on the way, and
-     *  reports how many, because a draft has no tick model to return them to.
-     *  A finished list is refused server-side. */
-    backToDraftAsync = async (id: string): Promise<BackToDraftResult> =>
-        await this.httpClient.post<BackToDraftResult, Record<string, never>>(
-            `/shopping-lists/${id}/back-to-draft`,
-            {},
-        );
-
-    reorderLinesAsync = async (id: string, lineIdsInOrder: string[]): Promise<void> =>
-        await this.httpClient.post<void, { line_ids: string[] }>(
-            `/shopping-lists/${id}/lines/reorder`,
-            { line_ids: lineIdsInOrder },
         );
 
     clearListAsync = async (id: string): Promise<ClearListResult> =>

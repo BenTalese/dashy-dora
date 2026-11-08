@@ -131,20 +131,6 @@ def test__draft_list__loses_the_line_when_the_stock_item_goes():
     assert _lines(list_id) == [], "a draft line outlived its stock item"
 
 
-def test__shopping_list__also_loses_the_line():
-    """`shopping` is an active status too — only `done` is a receipt."""
-    item_id, _ = _make_item("MidShop")
-    list_id = _make_list()
-    _add_line(list_id, stock_item_id=item_id)
-    assert requests.patch(
-        f"{LISTS}/{list_id}", json={"status": "shopping"},
-    ).status_code == 204
-
-    assert requests.delete(f"{BASE}/stock-items/{item_id}").status_code == 204
-
-    assert _lines(list_id) == []
-
-
 def test__done_and_draft_lists__are_treated_differently_in_one_delete():
     """The same stock item on both a receipt and a live list: one keeps its
     line, the other drops it."""

@@ -22,9 +22,9 @@ top-to-bottom.
 
 ---
 
-## Shopping Simple mode (2026-11-07)
-- [ ] On a phone, switch to Simple, tick an item, confirm it leaves the list and shows Stocked on Stock; Undo puts both back.
-- [ ] Flip modes on one device, reload on another: the same mode shows.
+## Shopping list v5: one active list (2026-11-08)
+- [ ] On a phone, walk a whole shop: tick, untick, Not yet on the last-tick prompt, then Finish; Stock shows the ticked items Stocked.
+- [ ] After upgrading Altair, open a list that was mid-shop: its ticks are kept, and Finish restocks them.
 
 ## Leftovers sweep 2 (2026-11-05)
 - [ ] Stock item, Recent prices: Edit a price (change amount, date, pack count), Remove asks first, Show all appears past 5.

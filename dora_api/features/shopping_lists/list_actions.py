@@ -33,6 +33,7 @@ from dora_api.domain.entities.shopping_list import (ShoppingList,
                                                     ShoppingListLine)
 from dora_api.features.routers import SHOPPING_LIST_ROUTER
 from dora_api.features.shopping_lists._line_anchor import line_anchor_key
+from dora_api.features.shopping_lists._restock import release_lines
 from dora_api.infrastructure.api_response import (business_rule_violation, ok,
                                                   not_found)
 from dora_api.persistence.field import EntityField
@@ -166,6 +167,9 @@ class ClearListHandler:
         lines: List[ShoppingListLine] = self.repository.get(ShoppingListLine).all(
             EntityField(ShoppingListLine, "shopping_list_id").eq(shopping_list_id)
         )
+        # A ticked line's restock goes back with it (UX v5): clearing the list
+        # says none of it was bought.
+        release_lines(self.repository, lines)
         for line in lines:
             self.repository.remove(line)
         self.repository.save_changes()

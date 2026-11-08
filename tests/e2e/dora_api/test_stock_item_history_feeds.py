@@ -127,9 +127,6 @@ def test__purchase_event__ticked_line_on_inflight_list_is_not_bought_yet(api):
     item = _new_stock_item()
     list_id, line_id = _new_list_with_line(item)
     assert requests.patch(
-        f"{SHOPPING_LISTS}/{list_id}", json={"status": "shopping"},
-    ).status_code == 204
-    assert requests.patch(
         f"{SHOPPING_LISTS}/{list_id}/lines/{line_id}", json={"is_ticked": True},
     ).status_code == 204
 

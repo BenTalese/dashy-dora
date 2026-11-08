@@ -5,10 +5,10 @@ Lines are the per-stock-item rows on a list. Endpoints:
   POST   /api/shopping-lists/<id>/lines        — add a line
   PATCH  /api/shopping-lists/<id>/lines/<lid>  — tick, quantity, selected_product
   DELETE /api/shopping-lists/<id>/lines/<lid>
-  POST   /api/shopping-lists/quick-add/lines     — quick-add (DRAFT-count inference)
+  POST   /api/shopping-lists/quick-add/lines     quick-add (active-list-count inference)
 
 P6-01 Chunk 2: there is no user-set "main list" flag — quick-add resolves the
-target by counting DRAFT lists (see quick_add_target_resolver.py). The client may
+target by counting active lists (see quick_add_target_resolver.py). The client may
 pass `shopping_list_id` to disambiguate the 2+ case (and remember the pick in
 sessionStorage).
 """
@@ -22,7 +22,6 @@ from pydantic import BaseModel, ConfigDict, Field
 from dora_api.domain.entities.product import Product
 from dora_api.domain.entities.product_offer import ProductOffer
 from dora_api.domain.entities.shopping_list import (SHOPPING_LIST_STATUS_DONE,
-                                                    SHOPPING_LIST_STATUS_DRAFT,
                                                     ShoppingList,
                                                     ShoppingListLine)
 from dora_api.domain.entities.stock_item import StockItem
@@ -31,6 +30,9 @@ from dora_api.features.routers import SHOPPING_LIST_ROUTER
 from dora_api.features.shopping_lists._line_defaults import apply_line_defaults
 from dora_api.features.shopping_lists._observation_sync import (
     sync_line_observations)
+from dora_api.features.shopping_lists._restock import (release_lines,
+                                                      restock_line,
+                                                      restore_line)
 from dora_api.features.shopping_lists.quick_add_target_resolver import (
     QuickAddTargetCandidate, resolve_quick_add_target)
 from dora_api.infrastructure.api_response import (business_rule_violation, ok,
@@ -238,7 +240,6 @@ class UpdateLineRequest(BaseModel):
     # `None` for selected_product_id is ambiguous (clear vs unset). Use this
     # explicit flag to clear an existing selection.
     clear_selected_product: bool = False
-    sequence: int | None = None
     # Purchase-memory overrides. Same clear-vs-unset story as the
     # selected_product fields: clients send the explicit clear_* flag to
     # blank a previously-recorded actual price/store, otherwise omitted
@@ -247,7 +248,7 @@ class UpdateLineRequest(BaseModel):
     clear_actual_unit_price: bool = False
     purchased_store_id: UUID | None = None
     clear_purchased_store: bool = False
-    # Where the user *plans* to buy this line, set from the plan face. Not a
+    # Where the user *plans* to buy this line. Not a
     # purchase record — it never feeds a price observation, which is why it is
     # absent from `observation_fields_touched` below.
     planned_store_id: UUID | None = None
@@ -307,6 +308,12 @@ class UpdateLineHandler:
             ):
                 return UpdateLineResponse(store_not_found_id=store_id)
 
+        # Loaded once: the tick and the observation re-sync below both branch
+        # on the list's status.
+        parent: ShoppingList | None = self.repository.get(ShoppingList).by_id(
+            line.shopping_list_id
+        )
+
         # Track whether the user is editing substantive fields — qty or
         # selected_product. If so, an auto_ provenance flips back to
         # "manual" (the user has taken ownership of the line). Ticking
@@ -316,13 +323,17 @@ class UpdateLineHandler:
             line.quantity = request.quantity
             user_edited = True
         if "is_ticked" in set_fields and request.is_ticked is not None:
-            # Ticking is "I put it in the trolley" and nothing more. It does
-            # not record a price: an offer's price is the shop's claim, not
-            # the user's, and since 2026-09-17 nothing writes one on their
-            # behalf (see `ShoppingListLine.picked_offer_price`).
+            # Ticking is "I put it in the trolley": on an active list it
+            # restocks the item, and an untick puts its level back (UX v5
+            # D1). It does not record a price: an offer's price is the shop's
+            # claim, not the user's (see `ShoppingListLine.picked_offer_price`).
+            # A done list's ticks are history and move no stock.
+            if parent is not None and parent.is_active:
+                if request.is_ticked and not line.is_ticked:
+                    restock_line(self.repository, line, now=datetime.now(timezone.utc))
+                elif not request.is_ticked and line.is_ticked:
+                    restore_line(self.repository, line)
             line.is_ticked = request.is_ticked
-        if "sequence" in set_fields and request.sequence is not None:
-            line.sequence = request.sequence
         if request.clear_selected_product:
             line.selected_product_id = None
             # Snapshot belongs to the (now-cleared) selection; clear it
@@ -393,9 +404,6 @@ class UpdateLineHandler:
             or request.clear_purchased_store
         )
         if observation_fields_touched:
-            parent: ShoppingList | None = self.repository.get(ShoppingList).by_id(
-                line.shopping_list_id
-            )
             if (
                 parent is not None
                 and parent.status == SHOPPING_LIST_STATUS_DONE
@@ -453,6 +461,7 @@ def _remove_nested_product_lines(
         & EntityField(ShoppingListLine, "stock_item_id").is_null()
         & EntityField(ShoppingListLine, "product_id").in_(product_ids)
     )
+    release_lines(repository, nested)
     for child in nested:
         repository.remove(child)
 
@@ -469,6 +478,7 @@ class DeleteLineHandler:
             return DeleteLineResponse(line_not_found=True)
         if line.stock_item_id is not None and line.product_id is None:
             _remove_nested_product_lines(self.repository, line.shopping_list_id, line.stock_item_id)
+        release_lines(self.repository, [line])
         self.repository.remove(line)
         self.repository.save_changes()
         return DeleteLineResponse()
@@ -517,6 +527,7 @@ class RemoveLineByStockItemHandler:
         )
         if existing is not None:
             _remove_nested_product_lines(self.repository, shopping_list_id, stock_item_id)
+            release_lines(self.repository, [existing])
             self.repository.remove(existing)
             if commit:
                 self.repository.save_changes()
@@ -543,20 +554,20 @@ def remove_line_by_stock_item(shopping_list_id: UUID, stock_item_id: UUID):
     return ok({"removed": _Response.removed})
 
 
-# ───── Quick-add to the inferred draft target ─────────────────────────────
+# ───── Quick-add to the inferred target list ──────────────────────────────
 
 class QuickAddRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     stock_item_id: UUID
-    # If the client has resolved the ambiguous (2+ drafts) case — e.g. via the
-    # sessionStorage pick — it sends the chosen list here. The server still
-    # validates that it's a draft.
+    # If the client has resolved the ambiguous (2+ active lists) case, e.g.
+    # via the sessionStorage pick, it sends the chosen list here. The server
+    # still validates that it's active.
     shopping_list_id: UUID | None = None
 
 
 @dataclass(slots=True)
 class QuickAddResponse:
-    # Discriminator on `result`: "added" | "no_draft" | "ambiguous" |
+    # Discriminator on `result`: "added" | "no_list" | "ambiguous" |
     # "item_not_found" | "hint_invalid".
     result: str = "added"
     line_id: UUID | None = None
@@ -565,11 +576,11 @@ class QuickAddResponse:
     candidates: list[QuickAddTargetCandidate] | None = None
 
 
-class QuickAddToDraftHandler:
-    """Resolves the quick-add target by DRAFT-count inference (Chunk 2) and
-    adds a line. The client may pass `shopping_list_id` to resolve the
-    ambiguous (2+ drafts) case; sessionStorage on the client remembers the
-    pick for the rest of the tab session.
+class QuickAddHandler:
+    """Resolves the quick-add target by active-list-count inference (Chunk 2)
+    and adds a line. The client may pass `shopping_list_id` to resolve the
+    ambiguous (2+ active lists) case; sessionStorage on the client remembers
+    the pick for the rest of the tab session.
     """
 
     def __init__(self, repository: Repository) -> None:
@@ -583,7 +594,7 @@ class QuickAddToDraftHandler:
         target: ShoppingList | None
         if request.shopping_list_id is not None:
             target = self.repository.get(ShoppingList).by_id(request.shopping_list_id)
-            if target is None or target.status != SHOPPING_LIST_STATUS_DRAFT:
+            if target is None or not target.is_active:
                 return QuickAddResponse(result="hint_invalid")
         else:
             active_lists = self.repository.get(ShoppingList).all(
@@ -591,14 +602,14 @@ class QuickAddToDraftHandler:
             )
             outcome = resolve_quick_add_target(active_lists, list_labeller(self.repository))
             if outcome.kind == "none":
-                return QuickAddResponse(result="no_draft")
+                return QuickAddResponse(result="no_list")
             if outcome.kind == "ambiguous":
                 return QuickAddResponse(result="ambiguous", candidates=outcome.candidates)
             target = next(
                 (l for l in active_lists if l.id == outcome.target_list_id), None
             )
             if target is None:  # defensive; resolver guarantees this id is in `lists`
-                return QuickAddResponse(result="no_draft")
+                return QuickAddResponse(result="no_list")
 
         # One dedupe, one construction: `AddLineHandler` owns both. This used
         # to re-implement them — without the `product_id is None` guard, so a
@@ -623,19 +634,19 @@ class QuickAddToDraftHandler:
 
 @SHOPPING_LIST_ROUTER.route("/quick-add/lines", methods=["POST"])
 @has_request_body(QuickAddRequest)
-def quick_add_to_draft():
+def quick_add_to_list():
     _Request: QuickAddRequest = get_request_body()
-    _Response = QuickAddToDraftHandler(SqlAlchemyRepository()).handle(_Request)
+    _Response = QuickAddHandler(SqlAlchemyRepository()).handle(_Request)
     if _Response.result == "item_not_found":
         return not_found("StockItem", _Request.stock_item_id)
     if _Response.result == "hint_invalid":
         return business_rule_violation(
-            "The chosen shopping list is not a draft."
+            "The chosen shopping list is finished."
         )
-    if _Response.result == "no_draft":
-        # Not a 404 — there may be SHOPPING/DONE lists, just no draft. The
-        # client surfaces a "create a list?" prompt.
-        return ok({"result": "no_draft"})
+    if _Response.result == "no_list":
+        # Not a 404: there may be done lists, just no active one. The client
+        # surfaces a "create a list?" prompt.
+        return ok({"result": "no_list"})
     if _Response.result == "ambiguous":
         return ok({
             "result": "ambiguous",

@@ -1263,7 +1263,7 @@
             const primary = shoppingListStore.quickAddTargetListId;
             if (!primary) {
                 pushDoraMessage({
-                    text: "I add to your draft list, and that only works when you have exactly one.",
+                    text: "I add to your open shopping list, and that only works when you have exactly one.",
                     mood: 'sad',
                     navigateTo: { path: '/shopping-lists', label: 'Open shopping lists' },
                 });

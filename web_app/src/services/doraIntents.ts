@@ -101,8 +101,8 @@ export type ShoppingListSnapshot = {
     id: string;
     name: string;
     itemCount: number;
-    /** The draft a quick-add would land on. Inferred from draft count on the
-     *  server, not a flag the user sets — the settable "primary list" was
+    /** The list a quick-add would land on. Inferred from the open-list count
+     *  on the server, not a flag the user sets; the settable "primary list" was
      *  dropped in P6-01. */
     isQuickAddTarget: boolean;
 };

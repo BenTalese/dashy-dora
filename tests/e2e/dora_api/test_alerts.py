@@ -405,7 +405,6 @@ def test__alerts__shopping_day_fires_within_window_and_clears_when_done(api):
         assert alert["stock_item_id"] is None
 
         # Finishing the list (→ done) clears the nudge.
-        assert requests.post(f"{SHOPPING_LISTS}/{list_id}/start").status_code == 204
         assert requests.post(f"{SHOPPING_LISTS}/{list_id}/finish").status_code == 200
         assert _find_kind(_alerts(), "shopping_day", target_id=list_id) is None, \
             "a done list no longer nudges"
@@ -452,7 +451,6 @@ def test__alerts__missed_shop_day_is_its_own_kind(api):
         assert "2 days ago" in alert["detail"], alert["detail"]
         assert alert["started_on"] == (today - timedelta(days=1)).isoformat()
 
-        assert requests.post(f"{SHOPPING_LISTS}/{list_id}/start").status_code == 204
         assert requests.post(f"{SHOPPING_LISTS}/{list_id}/finish").status_code == 200
         assert _find_kind(_alerts(), "shopping_overdue", target_id=list_id) is None, \
             "a finished list stops nudging"

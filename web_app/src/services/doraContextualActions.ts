@@ -17,7 +17,7 @@ export type ContextualAction =
     // the action better than the assistant could (e.g. /meal-plans for
     // scheduling a recipe).
     | { kind: 'navigate'; label: string; icon: string; path: string; query?: Record<string, string> }
-    // "Add this stock item to the user's open draft list" — goes through
+    // "Add this stock item to the user's open list": goes through
     // useStockItemActions so notify/error handling matches the rest of
     // the app.
     | { kind: 'add_to_list'; label: string; icon: string; stockItemId: string }

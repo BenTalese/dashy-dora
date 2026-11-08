@@ -426,17 +426,13 @@ class GetShoppingListDetailHandler:
         _Context = self._load_context(shopping_list_id, _Lines)
         _LineDtos = [self._line_dto(line, _Context) for line in _Lines]
 
-        # receipt-photo metadata. Only fetched for non-draft lists
-        # (the UI hides the section on drafts anyway; saves a query for
-        # the common case).
-        _Attachments: List[ShoppingListAttachmentDto] = []
-        if _List.status != "draft":
-            _Attachments = [
-                ShoppingListAttachmentDto(
-                    attachment_id=row["id"], sequence=row["sequence"],
-                )
-                for row in get_attachment_metadata_for_list(_List.id)
-            ]
+        # Receipt-photo metadata (any list can hold photos since UX v5).
+        _Attachments: List[ShoppingListAttachmentDto] = [
+            ShoppingListAttachmentDto(
+                attachment_id=row["id"], sequence=row["sequence"],
+            )
+            for row in get_attachment_metadata_for_list(_List.id)
+        ]
 
         return ShoppingListDetailDto(
             inferred_suggestions = self._inferred_suggestions(_List, _Lines),

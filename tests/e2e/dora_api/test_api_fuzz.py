@@ -221,7 +221,6 @@ KNOWN_FU528_UUID_500_RULES: frozenset[tuple[str, str]] = frozenset({
     ("PATCH", "/api/shopping-lists/<shopping_list_id>/lines/<line_id>"),
     ("DELETE", "/api/shopping-lists/<shopping_list_id>/lines/by-stock-item/<stock_item_id>"),
     ("GET", "/api/shopping-lists/<shopping_list_id>/print-view"),
-    ("POST", "/api/shopping-lists/<shopping_list_id>/start"),
     ("POST", "/api/shopping-lists/<shopping_list_id>/trim-to-budget"),
     ("DELETE", "/api/stock-groups/<stock_group_id>"),
     ("DELETE", "/api/stock-items/<stock_item_id>"),

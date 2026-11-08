@@ -215,7 +215,7 @@
         // A caller that named an item means "add this one" — with no second
         // step left in this sheet, that is the whole interaction, so the sheet
         // closes and the add goes through the shared cart path: it asks which
-        // draft when there are several and offers to create one when there are
+        // list when there are several and offers to create one when there are
         // none, instead of guessing a list here (or closing silently with no
         // list at all).
         if (presetStockItemId.value) {
@@ -255,14 +255,11 @@
             return;
         }
 
-        // FU-603 — final fallback prefers a planning *draft* over an
-        // in-progress ('shopping') list, so a pantry cart-add doesn't default
-        // into the shop you're mid-way through. An explicit preset or the
-        // remembered per-tab target (quickAddTargetListId) still win first.
-        const fallbackListId =
-            summaries.value.find((s) => s.status === 'draft')?.shopping_list_id
-            ?? listOptions.value[0]?.value
-            ?? null;
+        // An explicit preset or the remembered per-tab target
+        // (quickAddTargetListId) win; otherwise the first open list. (FU-603's
+        // "prefer a draft over the shop in progress" went with the shopping
+        // status in UX v5.)
+        const fallbackListId = listOptions.value[0]?.value ?? null;
         targetListId.value =
             presetListId.value ?? quickAddTargetListId.value ?? fallbackListId;
     });

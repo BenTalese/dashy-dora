@@ -17,11 +17,8 @@
      * into the manifest at build time (it's per-user), so this resolves it on
      * mount and `replace()`s the URL to the right place.
      *
-     * Chunk 2 rule (no stored "primary" anymore), UX-v2 single-page shape
-     * (shop mode is merged into the detail page — no /shop route):
-     *   - exactly one SHOPPING list → open it (the page is mid-shop already)
-     *   - else exactly one DRAFT     → open the draft so the user can Start
-     *   - else                       → overview (let them pick)
+     * Rule (UX v5 Q10): the server's next-up list (today's by shop day,
+     * else the earliest still open) when it is open, else the overview.
      */
     import AppSpinner from 'src/components/AppSpinner.vue';
     import { useShoppingListStore } from 'src/stores/shoppingListStore';
@@ -35,20 +32,11 @@
     onMounted(async () => {
         try {
             await shoppingListStore.refreshAsync();
-            const summaries = shoppingListStore.summaries;
-            const shoppingLists = summaries.filter((s) => s.status === 'shopping');
-            if (shoppingLists.length === 1) {
-                await router.replace(`/shopping-lists/${shoppingLists[0]!.shopping_list_id}`);
+            const next = shoppingListStore.nextUpSummary;
+            if (next && next.status === 'active') {
+                await router.replace(`/shopping-lists/${next.shopping_list_id}`);
                 return;
             }
-            const drafts = summaries.filter((s) => s.status === 'draft');
-            if (shoppingLists.length === 0 && drafts.length === 1) {
-                // Send to the detail so the user can hit "Start shopping". The
-                // detail page owns the transition, not us.
-                await router.replace(`/shopping-lists/${drafts[0]!.shopping_list_id}`);
-                return;
-            }
-            message.value = 'You have more than one list. Pick one.';
             await router.replace('/shopping-lists');
         } catch {
             // Even on a fetch failure, the lists page is a sane fallback —

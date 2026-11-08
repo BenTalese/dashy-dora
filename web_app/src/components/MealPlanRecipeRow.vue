@@ -67,7 +67,7 @@
              wearing the shopping-list row's quantity shape (owner 2026-09-01:
              "I like the style of the +/- count for quantity on shopping lists.
              Make a mini version of that here"). Same contract as
-             `ShoppingListPlanRow`'s: a tile at rest, steppers on approach, the
+             the old shopping-list plan row's: a tile at rest, steppers on approach, the
              buttons always in the layout so revealing them cannot reflow the
              row. Mini because a 44px tile in a rail row would out-weigh the
              recipe name; the tile is 30px.
@@ -140,7 +140,7 @@
     /** The touch equivalent of hover for the pool stepper — CSS reveals the
      *  ± buttons on `:hover`/`:focus-within`, which a phone has neither of, so
      *  focusing the count arms them. Same escape hatch, same reason, as
-     *  `ShoppingListPlanRow`'s `armed`. Per-row and never reset: an armed row
+     *  the old shopping-list plan row's `armed`. Per-row and never reset: an armed row
      *  that disarmed itself would move controls out from under a thumb. */
     const poolArmed = ref(false);
 

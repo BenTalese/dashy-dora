@@ -153,7 +153,8 @@ def test__finish__level_overrides_are_rejected(levels_by_sequence, api):
     assert "level_overrides" in resp.json()["errors"]
     detail = requests.get(f"{SHOPPING_LISTS}/{list_id}").json()
     assert detail["status"] != "done"
-    assert _item_dto(item)["stock_level_sequence"] == OUT_OF_STOCK_SEQUENCE
+    # The tick already restocked it (UX v5); the refused finish moved nothing.
+    assert _item_dto(item)["stock_level_sequence"] == STOCKED_SEQUENCE
 
 #endregion finish → restock
 

@@ -63,16 +63,9 @@
     const statusIcon = computed(() => listStatusIcon(props.summary.status));
     // R-002: "done" is the neutral / finished state — null lets the
     // template apply `dora-text-muted` rather than a `grey-N` literal.
-    const statusColour = computed<string | null>(() => {
-        switch (props.summary.status) {
-            case 'shopping':
-                return 'positive';
-            case 'done':
-                return null;
-            default:
-                return 'primary';
-        }
-    });
+    const statusColour = computed<string | null>(() =>
+        props.summary.status === 'done' ? null : 'primary',
+    );
 
 </script>
 

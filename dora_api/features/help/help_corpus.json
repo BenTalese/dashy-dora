@@ -154,11 +154,11 @@
       {
         "slug": "essentials-auto-add",
         "title": "Essentials and auto-add",
-        "summary": "An essential is chased as soon as it runs low. With auto-add on, a low or out item lands on your draft list by itself.",
+        "summary": "An essential is chased as soon as it runs low. With auto-add on, a low or out item lands on your open list by itself.",
         "how": null,
         "setting": "Admin → Stock",
         "setting_path": "/settings/admin/system/stock",
-        "note": "Nothing is auto-added when you have no draft list, or more than one.",
+        "note": "Nothing is auto-added when you have no open list, or more than one.",
         "path": null
       },
       {
@@ -717,32 +717,22 @@
   {
     "slug": "shopping",
     "title": "Shopping lists",
-    "blurb": "From a draft to the shop to the receipt.",
+    "blurb": "Build it, tick it off, keep the receipt.",
     "entries": [
       {
-        "slug": "three-faces",
-        "title": "One list, three faces",
-        "summary": "A draft while you build it, a shop while you are in the store, a receipt once you finish. Shop starts the trip; Finish ends it.",
+        "slug": "one-list",
+        "title": "One list, from first item to receipt",
+        "summary": "Add, edit, price and tick on the same list. Ticking an item sets it to Stocked and moves it to Collected; untick to put it back. Ticking the last one asks if you are done.",
         "how": null,
         "setting": null,
         "setting_path": null,
-        "note": "Finishing is final. Ticked items restock when you finish, never before.",
-        "path": "/shopping-lists"
-      },
-      {
-        "slug": "simple-mode",
-        "title": "Simple mode",
-        "summary": "One endless list for top-up shopping. Add items and tick them off: a tick means bought, so the item goes to Stocked and leaves the list. No Shop or Finish. Tap a row’s price before ticking to record what you paid.",
-        "how": null,
-        "setting": null,
-        "setting_path": null,
-        "note": "Switch between Simple and Flow at the top of the list. Each person picks their own.",
+        "note": "Finish turns the list into a receipt. Use it when you are done with items left over.",
         "path": "/shopping-lists"
       },
       {
         "slug": "which-list",
         "title": "Which list does the cart button use?",
-        "summary": "Your only draft. With two or more drafts it asks once and remembers for the tab; with none it asks you to create one.",
+        "summary": "Your only open list. With two or more it asks once and remembers for the tab; with none it asks you to create one.",
         "how": null,
         "setting": null,
         "setting_path": null,
@@ -801,8 +791,8 @@
       },
       {
         "slug": "finish-restock",
-        "title": "Finish and restock",
-        "summary": "Ticked items go to Stocked, priced lines become purchase history, names are frozen. Unticked items go to another list or the bin.",
+        "title": "Finish a shop",
+        "summary": "Priced lines become purchase history and names are frozen into a receipt. Unticked items go to another list or the bin.",
         "how": null,
         "setting": null,
         "setting_path": null,
@@ -842,7 +832,7 @@
       {
         "slug": "receipt-photos",
         "title": "Receipt photos",
-        "summary": "Attach up to 20 photos to a shop or a receipt.",
+        "summary": "Attach up to 20 photos to a list once you have ticked something, or to a receipt.",
         "how": null,
         "setting": null,
         "setting_path": null,
@@ -1180,7 +1170,7 @@
       {
         "slug": "add-to-list-basic",
         "title": "Adding to your list by chat",
-        "summary": "Type add milk and eggs. Dora matches the names against your pantry and adds the clear ones to your draft list.",
+        "summary": "Type add milk and eggs. Dora matches the names against your pantry and adds the clear ones to your open list.",
         "how": null,
         "setting": null,
         "setting_path": null,

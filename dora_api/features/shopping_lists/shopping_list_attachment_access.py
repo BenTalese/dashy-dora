@@ -1,6 +1,6 @@
 """FU-334 — read/write helpers for shopping-list receipt attachments.
 
-A shopping list (status='shopping' or 'done') owns 0..N
+A shopping list owns 0..N
 `ShoppingListAttachment` rows ordered by `sequence`. Each row stores
 the same `data:image/...;base64,...` UTF-8 bytes shape as Recipe.image /
 RecipeStepImage (client picks → `processImageFile` → data URL; server

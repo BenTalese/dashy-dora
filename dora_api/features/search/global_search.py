@@ -160,10 +160,8 @@ class GlobalSearchHandler:
             lists = self.repository.get(ShoppingList).all()
             def list_sub(sl: ShoppingList) -> str:
                 if sl.is_done:
-                    return "Archived list"
-                if sl.is_shopping:
-                    return "Shopping in progress"
-                return "Draft list"
+                    return "Finished list"
+                return "Shopping list"
             results.extend(
                 self._score_and_collect(
                     query, "shopping_list", limit,

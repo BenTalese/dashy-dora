@@ -120,7 +120,7 @@ function onLists(listIds: string[], onTarget = false): Membership {
         active_lists: listIds.map((id, i) => ({
             shopping_list_id: id,
             name: `List ${i + 1}`,
-            status: 'draft' as const,
+            status: 'active' as const,
         })),
     });
 }
@@ -235,7 +235,7 @@ describe('AddToListButton — row variant (default)', () => {
     it('records selected_product_id on the line when pre-decided with a target', async () => {
         m.state.membership = membershipWith({
             quick_add_target_list_id: 'L1',
-            active_lists: [{ shopping_list_id: 'L1', name: 'Groceries', status: 'draft' }],
+            active_lists: [{ shopping_list_id: 'L1', name: 'Groceries', status: 'active' }],
         });
         const wrapper = mountButton({
             stockItemId: ITEM,
@@ -351,10 +351,10 @@ describe('AddToListButton — inline-product variant', () => {
         expect(wrapper.find('button').attributes('disabled')).toBeDefined();
     });
 
-    it('adds a product-only line to the single draft and refreshes', async () => {
+    it('adds a product-only line to the single open list and refreshes', async () => {
         m.state.membership = membershipWith({
             active_lists: [
-                { shopping_list_id: 'L1', name: 'Groceries', status: 'draft' },
+                { shopping_list_id: 'L1', name: 'Groceries', status: 'active' },
                 { shopping_list_id: 'L9', name: 'Done', status: 'done' },
             ],
         });
@@ -373,7 +373,7 @@ describe('AddToListButton — inline-product variant', () => {
         }));
     });
 
-    it('does nothing but nudge when no draft list exists', async () => {
+    it('does nothing but nudge when no open list exists', async () => {
         m.state.membership = membershipWith({
             active_lists: [
                 { shopping_list_id: 'L9', name: 'Done', status: 'done' },
@@ -390,7 +390,7 @@ describe('AddToListButton — inline-product variant', () => {
         expect(m.addLineAsync).not.toHaveBeenCalled();
         expect(m.notify).toHaveBeenCalledWith(expect.objectContaining({
             type: 'info',
-            message: 'No draft list yet. Create one first to add this product.',
+            message: 'No open list yet. Create one first to add this product.',
         }));
     });
 });

@@ -1,32 +1,9 @@
 <template>
-    <!-- UX-v2 M12 — restock review. One-click "Restock & finish" with
-         every ticked item listed and individually adjustable (default
-         Stocked). Replaces the old text-only confirm dialog. -->
-    <!-- Finish & restock. 2026-08-26 feedback: the dialog *"asks if you
-         want to move unticked/unpurchased items to another list for
-         later, UI changes based on whether all items are ticked or not"*.
-
-         So it has two shapes. Clean finish: a confirmation of what's
-         about to be restocked. Finishing early: the same, plus the
-         leftovers promoted from a passive grey footnote ("copy or move
-         them later if they're still wanted" — which nobody ever did,
-         because the list was archived by then and the items were
-         stranded) into an actual decision made at the only moment the
-         user is thinking about it.
-
-         This is where the old More → "Move unticked to another list"
-         went. Same server call, offered at the right time instead of
-         hidden in a menu you'd have to think to open.
-
-         The title is a fixed "Finish shopping" as of 2026-08-29, having
-         been "Finish early & restock" / "Finish & restock". Both halves
-         went for the same reason — a heading that narrates back what the
-         user already knows. *"People will understand this also involves
-         restocking"*, and *"people know if they are finishing early or
-         not"*. Neither word is lost: the body lists every item about to be
-         restocked, and the leftovers section below appears precisely when
-         you are finishing early, which is the honest signal — a section
-         you must act on rather than an adjective in a heading. -->
+    <!-- Finish shopping. Two shapes: everything ticked is a confirmation of
+         what you got; finishing with leftovers adds a decision about them
+         (another list or the bin), made at the one moment you're thinking
+         about it (2026-08-26). A finished list is a receipt, so the
+         leftovers can't stay on it. -->
     <BaseDialog
         v-model="finishReviewOpen"
         title="Finish shopping"
@@ -37,8 +14,10 @@
             <div class="text-body2 dora-text-muted">
                 {{
                     finishEntries.length === 0
-                        ? 'No items are ticked, so nothing is restocked.'
-                        : 'These ticked items will be restocked:'
+                        ? 'Nothing is ticked.'
+                        : untickedCount === 0
+                            ? "Everything's ticked. You got:"
+                            : 'You got:'
                 }}
             </div>
         </q-card-section>
@@ -111,7 +90,7 @@
         <template #actions>
             <BaseButton
                 variant="ghost"
-                :label="untickedCount > 0 ? 'Go back' : 'Cancel'"
+                :label="untickedCount > 0 ? 'Go back' : 'Not yet'"
                 v-close-popup
             />
             <BaseButton
@@ -128,10 +107,13 @@
 
 <script lang="ts" setup>
     /**
-     * Finish shopping — restock what was ticked, and decide what happens to
-     * the rest. Extracted from `ShoppingListDetail.vue` (FU-780); the page
-     * opens it through `show()` and mirrors `finishing` onto the overview
-     * card's Finish button.
+     * Finish shopping: the list becomes a receipt, and the unticked lines get
+     * a decision. Ticking already restocked each item (UX v5 D1), so this
+     * lists what you got rather than what is about to restock.
+     *
+     * The page opens it through `show()` from the overview card's Finish and
+     * from the last tick; the last tick passes `onCancel`, which unticks that
+     * line again if the dialog closes without finishing (UX v5 S3).
      */
     import BaseButton from 'src/components/BaseButton.vue';
     import BaseDialog from 'src/components/BaseDialog.vue';
@@ -144,7 +126,7 @@
     import { useStockItemStore } from 'src/stores/stockItemStore';
     import { isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { useQuasar } from 'quasar';
-    import { computed, ref } from 'vue';
+    import { computed, ref, watch } from 'vue';
 
     /** Two-way so the overview card's Finish button can show the spinner too. */
     const finishing = defineModel<boolean>('finishing', { default: false });
@@ -157,11 +139,7 @@
         api, listId, detail, refreshAll, refreshDetailQuietly,
     } = useShoppingListDetail();
 
-    // ── Finish & restock ────────────────────────────────────────────
-    // The dialog previously let you pick a per-item stock level (in case
-    // you'd only partly topped something up). With levels simplified, every
-    // ticked item just restocks to Stocked — the server default when no
-    // overrides are sent.
+    // ── Finish ──────────────────────────────────────────────────────
     const finishReviewOpen = ref(false);
     type FinishEntry = {
         line_id: string;
@@ -208,13 +186,26 @@
     });
 
     const finishCtaLabel = computed(() => {
-        if (untickedCount.value === 0) return 'Restock & finish';
+        if (untickedCount.value === 0) return 'Finish';
         if (leftoverAction.value === 'discard') return 'Discard & finish';
         return 'Move & finish';
     });
 
-    function openFinishReview() {
+    /** Run once each if the dialog closes without finishing. A list: two
+     *  quick ticks can both land as "the last one" and both open the dialog,
+     *  and closing it must untick both. */
+    let cancels: (() => void)[] = [];
+    let finished = false;
+
+    function openFinishReview(options?: { onCancel?: () => void }) {
         if (!detail.value) return;
+        if (finishReviewOpen.value) {
+            // Already up: keep the decision the user is part-way through.
+            if (options?.onCancel) cancels.push(options.onCancel);
+            return;
+        }
+        cancels = options?.onCancel ? [options.onCancel] : [];
+        finished = false;
         // Reset the leftover decision each time the dialog opens — it is a
         // choice about *this* finish, not a remembered preference, and it
         // starts unmade so the dialog can't be confirmed past it.
@@ -286,6 +277,7 @@
                     .map((l) => l.stock_item_id as string),
             )];
             const result = await api.finishAsync(listId.value);
+            finished = true;
             finishReviewOpen.value = false;
             if (moved > 0) {
                 $q.notify({
@@ -318,7 +310,7 @@
                 type: 'positive',
                 message: `Shopping finished. ${result.items_restocked} item${
                     result.items_restocked === 1 ? '' : 's'
-                } restocked.`,
+                } bought.`,
             });
         } catch (err) {
             // The leftovers may already have moved or gone before the finish
@@ -362,6 +354,13 @@
             (s) => s.status !== 'done' && s.shopping_list_id !== listId.value
         )
     );
+
+    watch(finishReviewOpen, (open) => {
+        if (open || finished) return;
+        const pending = cancels;
+        cancels = [];
+        pending.forEach((cancel) => cancel());
+    });
 
     defineExpose({ show: openFinishReview });
 </script>

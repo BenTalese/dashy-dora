@@ -91,6 +91,76 @@ hardcoded colours. No new R-rule. No em dashes in new copy.
 
 ---
 
+## 2026-11-08 (later): **Shopping list UX v5 built: one active list**
+
+**Owner:** go with the §7 recommendations, build it.
+
+**Server:** migration `e8b3f1a6c2d5` (new single head, on top of `d2a7e5c9b1f4`): `draft`/`shopping` -> `active`
+(ticks kept), status default `active`, `ShoppingListLine.restocked_at` / `restock_from_level_id` (plain UUID, no
+FK) / `restock_from_level_updated_at`, drops `User.shopping_simple_mode`. Line PATCH `is_ticked` on an active list
+calls `_restock.restock_line` / `restore_line`; `/finish` restocks only ticked lines with `restocked_at` NULL
+(pre-v5 ticks) and reports every ticked stock line as bought. Removed: `/start`, `/back-to-draft`,
+`/lines/reorder`, `buy_line.py` (buy/unbuy), PATCH `status`, line PATCH `sequence`. Quick-add/auto-add/assistant
+target any active list (`no_draft` -> `no_list`); photos allowed on any list; next-up lost its "live shop wins"
+rule; search subtitle "Shopping list" / "Finished list". Seeds use `ACTIVE`.
+
+**SPA:** `ShoppingListActiveFace` (git-mv of the plan face) merges plan + run: trim and suggestions until the first
+tick, sections that empty into Collected (collapsed), cleared-section line, deferred section. New
+`ShoppingListRow` replaces plan/run rows: tick button, tile-only qty, picker, store, price button (opens the price
+sheet on any active line), verdict beside delete (desktop) / caption line (phone), delete inline with the name on
+phones. Run face, run row, plan row, simple face deleted. Overview card: active/receipt; Estimated cost -> Left to
+spend (or "N left") + bar + Finish from the first tick; no pill on active; rename always. Last tick opens the
+finish dialog (`show({ onCancel })`), closing without finishing unticks. Sort default Store; `none` is "A to Z";
+`PLAN_SECTION_MODES` / `allowedModes` gone. Receipt amend qty is a number field (no stepper). Wake lock and
+space/u keyed to an active list with ticks / any active list. `hasTicks` in `useShoppingListDetail` drives Q1/Q2/
+Q4/Q5. Help: "One list, from first item to receipt"; corpus regenerated. LineChoicePicker clamps to 2 lines on
+phones.
+
+**Verified:** pytest 2796 pass (e2e updated: lifecycle rewritten incl. a tick-restocks/untick-restores test; start/
+back-to-draft/reorder/PATCH-status tests removed or flipped). Vitest 943, vue-tsc, eslint clean. Playwright on the
+:5171 scratch: Store sections; no steppers/reorder; tick -> "Got X" + Undo, card flips to Left to spend + 1/6 bar
++ Finish, suggestions hide, photos appear; Undo reverts all; last tick opens the dialog, Go back unticks; Discard &
+finish -> Receipt pill, Amend/Put away. 375px: controls inline with the name, no overflow.
+
+**Gates:** R-054 refined by new **ADR-103** (draft/shopping were one task; receipt keeps its face); ADR-050 marked
+partly reversed. R-003 (restock + untick snapshot server-side), R-001 (one row component), R-090 (tracks derived).
+No em dashes in added lines.
+
+**Review fixes (owner: QA, then fix):** restock snapshot is per item, not per line: a line ticked while a sibling
+(nested product line, same `stock_item_id`) already restocked the item shares that snapshot, and an untick only
+restores when no other ticked sibling holds it. Untick restores only if the item's `stock_level_last_updated` still
+equals the tick's `restocked_at` (a hand edit or another list's finish since then is left alone). Deleting,
+clearing or remove-by-item on an active list gives the restock back (`_restock.release_lines`). `/finish` counts
+distinct items. Line PATCH loads the parent list once. SPA: the finish dialog collects every `onCancel` (two quick
+last ticks), arrow-key focus skips the collapsed Collected rows, post-tick store refreshes batch after 800ms. Six
+new lifecycle e2e tests (nested, delete, clear, hand edit, done-list tick, pre-v5 tick restocked at finish).
+pytest 2802, Vitest 943.
+
+**Open / next:** D4: move the `v2.0.0` tag from `ab3ae700` to the v5 commit (needs a force-push of the tag, owner
+to OK). Phone name column is narrow (tick+qty+price+delete share the line); the picker clamps to two
+lines. Deploy, then the two DORA_VERIFY v5 checks.
+
+---
+
+## 2026-11-08: **Shopping list UX v5 proposed: merge draft + shopping into one active list (no code)**
+
+**Owner:** flow mode is too cumbersome and Simple mode only patched it. Merge draft and shopping; done = all
+ticked (confirm on last tick, Cancel unticks); drop custom order, reorder arrows, drag and the +/- stepper;
+default sort by shop; tick via a big button not the whole row; verdict beside delete on desktop; phone controls
+inline with the name; Estimated cost turns into Left to spend automatically.
+
+**Done:** audit of every face-specific element (draft / shopping / done) and every server and SPA consumer of the
+statuses; `docs/04_proposals/PROPOSAL_SHOPPING_LIST_UX_V5.md` written. Owner decided: restock on tick (untick
+restores), keep a Finish action for leftovers, remove Simple mode entirely, and hold v2.0.0 (move the tag to the
+v5 commit so Simple mode never ships).
+
+**Open:** §7 Q1-Q10 (suggestions card, trim banner, deferred section, photos, wake lock, shortcuts, Collected,
+rename, cart-button target, Shop Now redirect) carry recommendations awaiting the owner's yes/override.
+
+**Next up:** owner confirms §7, then build chunk 1 (server) per §8. Do not run the Release workflow for v2.0.0.
+
+---
+
 ## 2026-11-07 (latest): **v2.0.0 tagged by hand; Release workflow accepts an existing tag**
 
 **Owner:** tag `v2.0.0` at `ab3ae700` and push (done, with main); then fix the Release workflow so the hand tag

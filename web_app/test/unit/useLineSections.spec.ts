@@ -1,4 +1,4 @@
-// Sectioning for the shopping-list plan/run faces. Pure logic, no Vue
+// Sectioning for the shopping list's active face. Pure logic, no Vue
 // components — the rules worth pinning are the ones that only bite installs
 // that leave location/group/store empty, which is most of them.
 import { computed, ref } from 'vue';
@@ -49,9 +49,7 @@ function line(overrides: Partial<ShoppingListLine> = {}): ShoppingListLine {
 }
 
 function setup(lines: ShoppingListLine[], mode: SectionMode, hideTicked = false) {
-    return useLineSections(computed(() => lines), ref(mode), {
-        hideTicked: computed(() => hideTicked),
-    });
+    return useLineSections(computed(() => lines), ref(mode), { hideTicked });
 }
 
 describe('availability — a mode with no data disables itself', () => {
@@ -137,7 +135,7 @@ describe('sectioning', () => {
         expect(sections.value[0]!.lines.map((l) => l.stock_item_name)).toEqual(['Beans', 'Rice']);
     });
 
-    it('leaves the ungrouped mode as one unlabelled run in sequence order', () => {
+    it('leaves the ungrouped mode as one unlabelled run, A to Z', () => {
         const { sections } = setup([
             line({ stock_item_name: 'Rice' }),
             line({ stock_item_name: 'Beans' }),
@@ -145,11 +143,11 @@ describe('sectioning', () => {
 
         expect(sections.value).toHaveLength(1);
         expect(sections.value[0]!.label).toBeNull();
-        expect(sections.value[0]!.lines.map((l) => l.stock_item_name)).toEqual(['Rice', 'Beans']);
+        expect(sections.value[0]!.lines.map((l) => l.stock_item_name)).toEqual(['Beans', 'Rice']);
     });
 });
 
-describe('hideTicked — the run face shrinks as you shop', () => {
+describe('hideTicked: the active face shrinks as you shop', () => {
     it('drops ticked lines when asked', () => {
         const { orderedLines } = setup([
             line({ stock_item_name: 'Butter', is_ticked: true }),
@@ -184,7 +182,7 @@ describe('nested product lines survive sectioning', () => {
     });
 });
 
-describe('sectionProgress — drives the run face collapse', () => {
+describe('sectionProgress: drives the cleared-section collapse', () => {
     it('reports a section cleared once every member is picked', () => {
         const lines = [
             line({ stock_group_name: 'Dairy', is_ticked: true }),

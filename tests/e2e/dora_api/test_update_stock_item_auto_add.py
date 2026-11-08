@@ -235,15 +235,13 @@ def test__auto_add__already_on_target_draft__does_not_fire(
 def test__auto_add__already_on_other_active_list__does_not_fire(
     fresh_state, levels_by_sequence
 ):
-    # DORA_VERIFY L851 — "any active list" includes a SHOPPING-status list:
-    # the item sits on an in-progress shop, the sole draft stays untouched.
+    # DORA_VERIFY L851: the item already sits on one active list, so the
+    # other one stays untouched.
     _set_mode("essential_only")
     shopping = _create_list(f"dedup-shopping-{uuid4()}")
     item = _create_item(levels_by_sequence[STOCKED_SEQUENCE], flagged=True)
     r = requests.post(f"{SHOPPING_LISTS}/{shopping}/lines", json={"stock_item_id": item})
     assert r.status_code == 200, r.text
-    r = requests.post(f"{SHOPPING_LISTS}/{shopping}/start")
-    assert r.status_code == 204, r.text
     draft = _create_list(f"dedup-second-{uuid4()}")
 
     resp = _patch_level(item, levels_by_sequence[LOW_STOCK_SEQUENCE])
@@ -282,22 +280,5 @@ def test__auto_add__two_drafts__does_not_fire(
     _assert_silent(resp, item, draft_a)
     assert _lines_for_item(draft_b, item) == []
 
-
-def test__auto_add__shopping_list_does_not_count_as_draft(
-    fresh_state, levels_by_sequence
-):
-    # One draft + one SHOPPING list: the resolver still sees a single draft
-    # target, so the add fires — onto the draft, never the in-progress shop.
-    _set_mode("essential_only")
-    draft = _create_list(f"draft-vs-shop-{uuid4()}")
-    shopping = _create_list(f"in-progress-{uuid4()}")
-    r = requests.post(f"{SHOPPING_LISTS}/{shopping}/start")
-    assert r.status_code == 204, r.text
-    item = _create_item(levels_by_sequence[STOCKED_SEQUENCE], flagged=True)
-
-    resp = _patch_level(item, levels_by_sequence[LOW_STOCK_SEQUENCE])
-
-    _assert_fired(resp, item, draft)
-    assert _lines_for_item(shopping, item) == []
 
 #endregion draft-count guard

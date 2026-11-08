@@ -1,27 +1,22 @@
 <template>
     <div class="sl-row sl-rcpt" :class="{ 'sl-rcpt--amending': amending }">
         <!-- The multiplier leads, the way it does on a printed docket. At rest
-             it is type; in amend mode the same cell becomes the stepper, so
-             turning the mode on doesn't move the name. -->
+             it is type; in amend mode the same cell becomes a number field
+             (no stepper, UX v5 S7), so turning the mode on doesn't move the
+             name. -->
         <div class="sl-rcpt__lead">
-            <template v-if="amending">
-                <BaseButton
-                    variant="icon"
-                    size="sm"
-                    :icon="ICONS.remove"
-                    :disable="(line.quantity ?? 1) <= 1"
-                    aria-label="One fewer"
-                    @click="emit('adjust-quantity', -1)"
-                />
-                <span class="sl-rcpt__qtyvalue">{{ line.quantity ?? '–' }}</span>
-                <BaseButton
-                    variant="icon"
-                    size="sm"
-                    :icon="ICONS.add"
-                    aria-label="One more"
-                    @click="emit('adjust-quantity', 1)"
-                />
-            </template>
+            <input
+                v-if="amending"
+                class="sl-rcpt__qtyinput"
+                type="number"
+                inputmode="numeric"
+                min="1"
+                step="1"
+                :value="line.quantity ?? ''"
+                :aria-label="`Quantity of ${line.stock_item_name}`"
+                @change="onQtyChange"
+                @keydown.enter.prevent="($event.target as HTMLInputElement).blur()"
+            />
             <span v-else-if="(line.quantity ?? 0) > 1" class="sl-rcpt__mult">
                 {{ line.quantity }}&times;
             </span>
@@ -105,10 +100,21 @@
 
     const emit = defineEmits<{
         'edit-price': [];
-        'adjust-quantity': [delta: -1 | 1];
+        'set-quantity': [value: number];
     }>();
 
     const { moneyEnabled } = useMoneyEnabled();
+
+    /** A whole number of one or more; anything else is dropped, not guessed. */
+    function onQtyChange(event: Event): void {
+        const input = event.target as HTMLInputElement;
+        const next = Number(input.value.trim());
+        if (!Number.isInteger(next) || next < 1) {
+            input.value = String(props.line.quantity ?? '');
+            return;
+        }
+        if (next !== props.line.quantity) emit('set-quantity', next);
+    }
 
     /** A "~" whenever the number is an estimate rather than one the user
      *  typed — on a receipt, the difference between "what it cost" and "what
@@ -176,7 +182,7 @@
         padding-top: var(--space-3);
     }
     .sl-rcpt--amending {
-        --sl-rcpt-lead: 104px;
+        --sl-rcpt-lead: 56px;
         align-items: center;
     }
 
@@ -191,14 +197,28 @@
     .sl-rcpt--amending .sl-rcpt__lead {
         justify-content: center;
     }
-    .sl-rcpt__mult,
-    .sl-rcpt__qtyvalue {
+    .sl-rcpt__mult {
         font-variant-numeric: tabular-nums;
         color: var(--text-secondary);
     }
-    .sl-rcpt__qtyvalue {
-        min-width: 20px;
+    .sl-rcpt__qtyinput {
+        width: 48px;
+        height: 36px;
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-md);
+        background: var(--surface-sunken);
+        color: var(--text-primary);
+        font: inherit;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
         text-align: center;
+        appearance: textfield;
+        -moz-appearance: textfield;
+    }
+    .sl-rcpt__qtyinput::-webkit-outer-spin-button,
+    .sl-rcpt__qtyinput::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
     }
 
     .sl-rcpt__name {

@@ -1,4 +1,4 @@
-"""Bulk-line and reorder endpoints.
+"""Bulk-line endpoints.
 
 Separated from `manage_shopping_list_lines.py` so the single-line CRUD
 flow stays narrow and these wider-blast-radius operations live together.
@@ -12,10 +12,6 @@ Endpoints:
   POST /api/shopping-lists/<id>/lines/bulk-remove-by-stock-item
       The inverse — remove every line anchored on one of the given stock
       items. Backs the overview's "Remove from list" bulk action.
-
-  POST /api/shopping-lists/<id>/lines/reorder
-      Persist a new line order. The request body lists line_ids in the
-      desired order; the handler writes the `sequence` column accordingly.
 """
 import logging
 from dataclasses import dataclass, field
@@ -24,15 +20,13 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from dora_api.domain.entities.shopping_list import ShoppingList, ShoppingListLine
 from dora_api.features.routers import SHOPPING_LIST_ROUTER
 from dora_api.features.shopping_lists.manage_shopping_list_lines import (
     LIST_DONE_REFUSAL, AddLineHandler, AddLineRequest, RemoveLineByStockItemHandler)
-from dora_api.infrastructure.api_response import (bad_request, business_rule_violation, no_content,
+from dora_api.infrastructure.api_response import (business_rule_violation,
                                                   not_found, ok)
 from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.utils import get_request_body
-from dora_api.persistence.field import EntityField
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.ports import Repository
 
@@ -162,79 +156,3 @@ def bulk_remove_lines_by_stock_item(shopping_list_id: UUID):
         f"{_Response.removed_count} of {len(_Request.stock_item_ids)} requested"
     )
     return ok({"removed_count": _Response.removed_count})
-
-
-# ───── Reorder ────────────────────────────────────────────────────────────
-
-class ReorderRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    # Line ids in the desired display order, top-to-bottom. Missing lines
-    # (any line on the list not in this list) keep their existing sequence
-    # and end up after the reordered ones.
-    line_ids: List[UUID]
-
-
-@dataclass(slots=True)
-class ReorderResponse:
-    list_not_found: bool = False
-    mismatched: List[UUID] = field(default_factory=list)
-    reordered_count: int = 0
-
-
-class ReorderHandler:
-    def __init__(self, repository: Repository) -> None:
-        self.repository = repository
-
-    def handle(self, request: ReorderRequest, shopping_list_id: UUID) -> ReorderResponse:
-        if not self.repository.get(ShoppingList).exists(shopping_list_id):
-            return ReorderResponse(list_not_found=True)
-        # A repeated id keeps its first position (and counts once).
-        line_ids = list(dict.fromkeys(request.line_ids))
-        # Pull every line on the list so we can both validate the request
-        # and assign sequences in a single pass.
-        all_lines: List[ShoppingListLine] = self.repository.get(ShoppingListLine).all(
-            EntityField(ShoppingListLine, "shopping_list_id").eq(shopping_list_id)
-        )
-        by_id = {l.id: l for l in all_lines}
-        mismatched = [lid for lid in line_ids if lid not in by_id]
-        if mismatched:
-            return ReorderResponse(mismatched=mismatched)
-
-        # Assign new sequences in the order the caller specified. Lines
-        # not mentioned keep going after, preserving their relative order.
-        next_seq = 0
-        seen: set[UUID] = set()
-        for lid in line_ids:
-            line = by_id[lid]
-            line.sequence = next_seq
-            next_seq += 1
-            seen.add(lid)
-
-        leftovers = sorted(
-            (l for l in all_lines if l.id not in seen),
-            key=lambda l: l.sequence,
-        )
-        for line in leftovers:
-            line.sequence = next_seq
-            next_seq += 1
-
-        self.repository.save_changes()
-        return ReorderResponse(reordered_count=len(line_ids))
-
-
-@SHOPPING_LIST_ROUTER.route("/<uuid:shopping_list_id>/lines/reorder", methods=["POST"])
-@has_request_body(ReorderRequest)
-def reorder_lines(shopping_list_id: UUID):
-    _Request: ReorderRequest = get_request_body()
-    _Response = ReorderHandler(SqlAlchemyRepository()).handle(_Request, shopping_list_id)
-    if _Response.list_not_found:
-        return not_found("ShoppingList", shopping_list_id)
-    if _Response.mismatched:
-        return bad_request(
-            "Some line ids don't belong to this list.",
-            detail=", ".join(str(lid) for lid in _Response.mismatched),
-        )
-    _LOGGER.info(
-        f"Reordered {_Response.reordered_count} line(s) on list {shopping_list_id}"
-    )
-    return no_content()

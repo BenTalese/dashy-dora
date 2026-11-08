@@ -237,7 +237,7 @@
        `NutritionFoodPicker`, both settings chips) rather than a width
        breakpoint — a desktop window dragged to 375px is still a mouse, and
        mixing the two query families is what produced the 375px overlap
-       recorded in `ShoppingListPlanRow`.
+       recorded in `ShoppingListRow`.
 
        NOTE — this does not reach call sites that pin their own size with
        higher specificity (`.some-row .dora-btn--icon { width: 30px }`). Those

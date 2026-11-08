@@ -46,7 +46,7 @@ from dora_api.features.shopping_lists.manage_shopping_list_lines import (
 from dora_api.features.shopping_lists.trim_to_budget import (
     TrimToBudgetHandler, TrimToBudgetRequest)
 from dora_api.features.app_settings.clock import household_today
-# "Primary" is inferred (exactly one draft list), never stored — this module
+# "Primary" is inferred (exactly one active list), never stored. This module
 # used to carry its own copy querying the dropped `is_primary` column, which
 # made tick / add-recipe / trim raise AttributeError on propose
 # (finalisation 11-R1). One resolver, in `shopping_actions`.
@@ -318,7 +318,7 @@ def propose_tick_shopping_line(args: dict) -> dict[str, Any]:
     primary = _primary_list(repo)
     if primary is None:
         return {"type": "tick_shopping_line", "status": "invalid",
-                "summary": "I add to your draft list, and that only works when you have exactly one.",
+                "summary": "I work on your open shopping list, and that only works when you have exactly one.",
                 "candidates": []}
 
     # Find lines on the primary list whose stock item name matches.

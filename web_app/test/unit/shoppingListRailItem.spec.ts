@@ -25,7 +25,7 @@ function summaryOf(overrides: Partial<ShoppingListSummary> = {}): ShoppingListSu
         shopping_list_id: 'L1',
         name: null,
         display_name: 'Weekly shop',
-        status: 'shopping',
+        status: 'active',
         created_at: '2026-07-01T00:00:00Z',
         completed_at: null,
         planned_shop_date: null,
@@ -58,13 +58,13 @@ describe('ShoppingListRailItem', () => {
     });
 
     it('omits the count chip on an empty list', () => {
-        const wrapper = mountRow(summaryOf({ status: 'draft', line_count: 0, ticked_count: 0 }));
+        const wrapper = mountRow(summaryOf({ status: 'active', line_count: 0, ticked_count: 0 }));
 
         expect(wrapper.find('.sl-rail-item__count').exists()).toBe(false);
     });
 
     it('singularises the count label', () => {
-        const wrapper = mountRow(summaryOf({ status: 'draft', line_count: 1, ticked_count: 0 }));
+        const wrapper = mountRow(summaryOf({ status: 'active', line_count: 1, ticked_count: 0 }));
 
         expect(wrapper.find('.sl-rail-item__count').attributes('aria-label')).toBe('1 item');
     });
@@ -75,9 +75,9 @@ describe('ShoppingListRailItem', () => {
         expect(wrapper.text()).not.toMatch(/2026|10\/07/);
     });
 
-    it('colours the status icon by status (shopping → positive)', () => {
-        const icon = mountRow(summaryOf({ status: 'shopping' })).find('.q-icon');
-        expect(icon.classes()).toContain('text-positive');
+    it('colours the status icon of an open list primary', () => {
+        const icon = mountRow(summaryOf({ status: 'active' })).find('.q-icon');
+        expect(icon.classes()).toContain('text-primary');
     });
 
     it('mutes the status icon and dims the row when done', () => {

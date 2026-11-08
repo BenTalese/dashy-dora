@@ -189,7 +189,7 @@ body {
 // chips: this is about how the user is *pointing*, not how wide the window is.
 // A desktop window dragged narrow keeps its dense menus; a tablet at 1024px
 // gets the bigger ones. Sizing touch affordances off width is what produced the
-// 375px overlap recorded in `ShoppingListPlanRow` — the two queries disagree,
+// 375px overlap recorded in `ShoppingListRow`: the two queries disagree,
 // so pick the one that means what you want and use it consistently.
 //
 // Menus are `--radius-md` slabs positioned by Quasar, so growing a row pushes
