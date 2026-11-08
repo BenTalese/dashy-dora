@@ -137,7 +137,7 @@ new lifecycle e2e tests (nested, delete, clear, hand edit, done-list tick, pre-v
 pytest 2802, Vitest 943.
 
 **Open / next:** D4 done: `v2.0.0` force-moved to `80e3b348` (owner OK). Deploy, then Release with `v2.0.0`;
-to OK). Phone name column is narrow (tick+qty+price+delete share the line); the picker clamps to two
+phone name column is narrow (tick+qty+price+delete share the line); the picker clamps to two
 lines. Deploy, then the two DORA_VERIFY v5 checks.
 
 ---
