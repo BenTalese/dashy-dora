@@ -20,9 +20,9 @@ Status key: ✅ done-clean · ➗ done-with-carve-outs · 🟡 active/in-progres
 
 **Dora 1.0.0 is deployed to Altair (Dora and the companion), and every FU is now resolved: 0 open in `DORA_FOLLOWUPS.md`.** On 11-06 (night) your decisions closed the last nine (FU-636 got built: Settings → Nutrition links USDA's downloads page), and the five companion debts (FU-886/887/891/924/960) were fixed in `../dora-companion`. New tonight: a **first-setup demo**. The one-time setup screen can fill Dora with sample data and sign you in as `demo`, a banner says it's a demo, and "Set up Dora" wipes it back to a fresh install. A security review of the first cut found three holes, all fixed before close.
 
-**Commits:** everything through the setup demo is pushed (Dora `873a2ad9`, companion `2e140de`). Single Alembic head `e8b3f1a6c2d5`. Version **2.0.0** (tag `v2.0.0` pushed on `ab3ae700`, unreleased); shopping list v5 replaces 11-07's Simple mode (pushed 11-08).
+**Commits:** everything through the setup demo is pushed (Dora `873a2ad9`, companion `2e140de`). Single Alembic head `e8b3f1a6c2d5`. Version **2.0.0** (tag `v2.0.0` on `80e3b348`, unreleased); shopping list v5 replaces 11-07's Simple mode (pushed 11-08).
 
-**What's left:** move the `v2.0.0` tag onto the v5 commit, then deploy, run the Release workflow with `v2.0.0` (it builds the tagged commit), and walk `DORA_VERIFY.md`. No FU is waiting on you.
+**What's left:** deploy, run the Release workflow with `v2.0.0` (it builds the tagged commit), and walk `DORA_VERIFY.md`. No FU is waiting on you.
 
 ---
 
@@ -55,7 +55,7 @@ Status key: ✅ done-clean · ➗ done-with-carve-outs · 🟡 active/in-progres
 | **Prices surface** | ✅ | Logged prices are editable. Charts say "price", name their unit and tell "usual" lines apart. | [ASSESSMENT](docs/05_investigations/PRICES_SURFACE_UX_ASSESSMENT.md) |
 | **Email & notifications** | ✅ | Release notices to admins, per-user deals opt-in, nightly alert-dismissal prune. | `CHANGELOG [Unreleased]` |
 | **Recipes & cookbook** | ✅ | Costing, units and nutrition each have one source. Nutrition gaps open the ingredient's editor; kcal is edited in the facts grid; "last updated" moves only on content edits. | `recipe_cost.py` · [INVESTIGATION](docs/05_investigations/RECIPE_PRICE_UNIT_MISMATCH.md) |
-| **Shopping lists (v4)** | ✅ | Built end to end. Bulk add and level changes go in one request. 11-08: v5 built and pushed (one active list, restock on tick, Simple mode removed). Move the v2.0.0 tag to it before releasing. | [PROPOSAL_SHOPPING_LIST_UX_V5](docs/04_proposals/PROPOSAL_SHOPPING_LIST_UX_V5.md) |
+| **Shopping lists (v4)** | ✅ | Built end to end. Bulk add and level changes go in one request. 11-08: v5 built and pushed (one active list, restock on tick, Simple mode removed). Tag `v2.0.0` is on it. | [PROPOSAL_SHOPPING_LIST_UX_V5](docs/04_proposals/PROPOSAL_SHOPPING_LIST_UX_V5.md) |
 | **Dashboard** | ✅ | Nine cards with per-card errors, hide and reorder. Card row-height stretch accepted as fine. | [IMPL_PLAN_DASHBOARD_REBUILD](docs/04_proposals/IMPL_PLAN_DASHBOARD_REBUILD.md) |
 | **Reports** | ✅ | Money-gated; cards hide, widen and reorder; savings against your usual price. | [REVIEW](docs/05_investigations/REPORTS_PAGE_REVIEW.md) |
 | **Shared component anatomy** | ✅ | One segmented control, `BaseSelect`, `MoneyInput`, `CountBadge`, one list-row chrome. Route transitions skipped. | `BaseSegmented.vue` |
