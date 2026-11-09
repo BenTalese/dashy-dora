@@ -52,14 +52,6 @@ long session summary. Distinct from the other logs:
 
 # Open
 
-## [OPEN] FU-989 — Shopping list overview card: whole card toggles, no caret, no help icon
-- **Raised:** 2026-11-09 (owner feedback)
-- **Type:** follow-up
-- **What:** On `ShoppingListOverviewCard.vue`, drop the expand caret and make the whole card tap to expand; remove the `HelpHint` ("One list, from first item to receipt", ~L67) so the card is shorter.
-- **Notes for the build:** `CollapsibleCard` always renders the caret and its `headerToggles` makes the lead a `<button>`, which this header can't use because it holds its own controls (Group by menu, Finish, Amend, Put away, Rename). Needs a `CollapsibleCard` option to hide the caret, plus a lead toggle that ignores taps landing on those controls and still has keyboard/aria-expanded support (D-004/D-005). On phones the foot row still holds the Group by/Finish buttons after the help icon goes, so check the height actually drops; it may need those buttons moved up into the figures row.
-- **Why deferred:** feedback logged, not yet built.
-- **Recommended resolution:** next shopping list pass (with FU-988)
-
 ## [OPEN] FU-988 — Shopping list quick-add can't create a missing stock item
 - **Raised:** 2026-11-09 (owner feedback)
 - **Type:** follow-up
