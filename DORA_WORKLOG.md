@@ -41,6 +41,18 @@ next.
 
 ---
 
+## 2026-11-09 (latest): **Three owner feedback items logged (no code)**
+
+**Owner:** three more items, logged as follow-ups: **FU-991** stock overview still snaps when scrolling on a phone
+(the 2026-08-15 fixed-row-height fix exists; needs measuring); **FU-992** the cookbook loads every recipe and renders
+every card at once, and no list should (window the rendering first, then decide on server-side paging; audit the
+other `getAllPagesAsync` loaders); **FU-993** nutrition food search rows overlap (suspect flex-shrink in the
+scrolling results column).
+
+**Next up:** FU-993 and FU-991 are small; FU-992 part 1 (windowed cookbook grid) next.
+
+---
+
 ## 2026-11-09 (later): **FU-987, FU-988, FU-990 built: nutrition overflow, add missing item from a list, products + preferred buys together**
 
 **Owner:** build all 3 now.
