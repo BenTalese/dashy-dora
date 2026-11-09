@@ -52,6 +52,14 @@ long session summary. Distinct from the other logs:
 
 # Open
 
+## [OPEN] FU-990 — Preferred buys and products side by side; one Products tab for buying
+- **Raised:** 2026-11-09 (owner feedback)
+- **Type:** follow-up
+- **What:** Preferred buys and linked products should both be usable at once, not either/or. Today `usesOffers()` (`web_app/src/models/shoppingList.ts:71`) picks one source: a stock item with linked products (products on) hides its preferred buys on the detail page (`StockItemOverviewTab.vue` ~L578) and in the choice pickers (`LineChoicePicker.vue`, `RecipeIngredientRowEditor.vue`). Owner wants: the stock item's Products tab always shown (today gated on `productsEnabled`, `StockItemDetailPage.vue:95`), with Preferred buys and Your prices moved onto it from the Overview tab, so everything about what you buy sits in one place.
+- **Notes for the build:** the "Owner 2026-11-03" comment that made products override preferred buys gets reversed (ADR worth recording). With products off, the tab shows just Preferred buys + Your prices (label may need a rethink then). Pickers need both lists together; check the line/ingredient choice model (`preferred_buy_id` / `selected_product_id`) still holds one pick from either source.
+- **Why deferred:** feedback logged, not yet built.
+- **Recommended resolution:** next stock detail / products pass
+
 ## [OPEN] FU-988 — Shopping list quick-add can't create a missing stock item
 - **Raised:** 2026-11-09 (owner feedback)
 - **Type:** follow-up

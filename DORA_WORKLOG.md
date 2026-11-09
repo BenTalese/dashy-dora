@@ -47,7 +47,9 @@ next.
 **FU-987** the Nutrition box on the stock item detail page makes the page scroll sideways on phones
 (`StockItemOverviewTab.vue` ~L210-268); **FU-988** the shopping list add dialog (`QuickAddSheet.vue`) dead-ends at
 "No matches." and should let you create the missing stock item there. A third item (overview card: drop caret and
-help icon, whole card toggles) was logged as FU-989 then withdrawn by the owner: card stays as is.
+help icon, whole card toggles) was logged as FU-989 then withdrawn by the owner: card stays as is. **FU-990**: preferred buys and
+linked products usable together (drop the `usesOffers` either/or), Products tab always shown and holding Preferred
+buys + Your prices.
 
 **Next up:** FU-987 (small layout fix, confirm at 375px), then FU-988 on the next shopping list pass.
 
