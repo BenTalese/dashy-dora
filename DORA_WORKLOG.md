@@ -41,6 +41,17 @@ next.
 
 ---
 
+## 2026-11-09: **Two owner feedback items logged (no code)**
+
+**Owner:** two more feedback items. Logged as follow-ups, nothing built:
+**FU-987** the Nutrition box on the stock item detail page makes the page scroll sideways on phones
+(`StockItemOverviewTab.vue` ~L210-268); **FU-988** the shopping list add dialog (`QuickAddSheet.vue`) dead-ends at
+"No matches." and should let you create the missing stock item there.
+
+**Next up:** FU-987 (small layout fix, confirm at 375px), then FU-988 on the next shopping list pass.
+
+---
+
 ## 2026-11-07: **Shopping lists: Simple mode; always-visible row controls; wider pickers on desktop; version 2.0.0**
 
 **Owner:** an endless list for top-up shoppers who don't want the flow, as a persisted Simple/Flow toggle on

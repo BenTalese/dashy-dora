@@ -51,3 +51,17 @@ long session summary. Distinct from the other logs:
 ---
 
 # Open
+
+## [OPEN] FU-988 — Shopping list quick-add can't create a missing stock item
+- **Raised:** 2026-11-09 (owner feedback)
+- **Type:** follow-up
+- **What:** On the shopping list page, the add dialog (`QuickAddSheet.vue`) only lists existing stock items; a search with no hit dead-ends at "No matches." Owner wants to add a missing stock item from there (create it, then add it to the list) without leaving the list.
+- **Why deferred:** feedback logged, not yet built. Reuse the existing create-stock-item path (R-001), don't add a second one.
+- **Recommended resolution:** next shopping list pass
+
+## [OPEN] FU-987 — Stock item nutrition box causes horizontal scroll on phones
+- **Raised:** 2026-11-09 (owner feedback)
+- **Type:** finding
+- **What:** On the stock item detail page (phone width), the Nutrition row in `StockItemOverviewTab.vue` (~L210-268: linked-food summary row with Details / search / unlink buttons, plus the expanded `NutritionFactsList`) pushes the page wider than the viewport and enables horizontal scroll. Suspects: the button row not wrapping beside the food name, or the facts table not shrinking inside the `q-item-section`.
+- **Why deferred:** feedback logged, not yet fixed.
+- **Recommended resolution:** now / next stock detail pass; confirm at 375px after the fix
