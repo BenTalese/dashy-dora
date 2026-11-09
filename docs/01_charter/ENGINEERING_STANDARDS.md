@@ -3052,7 +3052,7 @@ exceptions, which still must be commented) · **Source** (where it was establish
 - **Rule:** a list that can grow past a screenful renders a window or a chunk, not every item. Same-height rows use
   `useFixedRowWindow` (spacers plus a slice, read from `scrollTop`); variable-height items or grids use
   `useIncrementalRender` (a chunk, then more as a sentinel nears the viewport; reset only when the search, filter
-  or sort changes). Neither ever assigns `scrollTop`. `QVirtualScroll` is not used for touch-scrolled page lists.
+  or sort changes). Neither ever assigns `scrollTop`. `QVirtualScroll` is not used for page lists.
 - **Why:** FU-991 / FU-992. The cookbook mounted every card at once. The stock overview's `QVirtualScroll` reset
   `scrollTop` a frame after each slice change (to where the scroll event fired) and measured rows with
   `offsetHeight`, which drops margins; on a phone fling both land behind the finger and kill momentum, the snap
@@ -6625,6 +6625,9 @@ A non-binding cookbook of solutions to recurring problems. Not rules — just a
   `content-visibility` (rejected: still mounts every component); a virtualiser dependency (rejected: two short
   composables cover both shapes without a new library).
 - **Consequences:** measured after: no backward scroll writes in a fling at 1x or 4x CPU, long tasks about 55ms
-  instead of 110 to 190ms at 4x. Other `q-virtual-scroll` uses (`MyProductsPage`, `MealPlanRecipePicker`,
-  `ImportResultDialog`) are left until touched (FU-994). Fetch size is separate: FU-992 step 2.
+  instead of 110 to 190ms at 4x. The other `q-virtual-scroll` uses (`MyProductsPage`, `MealPlanRecipePicker`,
+  `ImportResultDialog`) moved the same day (FU-994); `useIncrementalRender` gained a `root` for lists inside a
+  scrolling box. A chunked list's sentinel lives inside the list element, never beside a transition that swaps
+  the list in, or it fires against an empty page and mounts everything. Fetch size is separate: API JSON is
+  gzipped by `GzipMiddleware` (FU-992 step 2).
 

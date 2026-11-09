@@ -124,6 +124,11 @@ if _ProxyHops > 0:
         app.wsgi_app, x_for=_ProxyHops, x_proto=_ProxyHops, x_host=_ProxyHops, x_prefix=0,
     )
 
+# FU-992: JSON responses are gzipped here, since the API is served directly
+# rather than through the SPA's nginx (see `infrastructure/compression.py`).
+from dora_api.infrastructure.compression import GzipMiddleware
+app.wsgi_app = GzipMiddleware(app.wsgi_app)  # type: ignore[method-assign]
+
 db = SQLAlchemy(metadata=MetaData(naming_convention=NAMING_CONVENTION))
 config_manager.get_data_dir().mkdir(parents=True, exist_ok=True)
 db.init_app(app)

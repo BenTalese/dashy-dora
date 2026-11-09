@@ -133,33 +133,32 @@
         </q-card-section>
         <q-separator />
 
-        <div class="recipe-list">
-            <!-- F21 — one flat filtered list, where the trays capped their
+        <div ref="recipeListRef" class="recipe-list">
+            <!-- F21: one flat filtered list, where the trays capped their
                  shortcuts at 10 and hid what didn't fit behind an accordion.
-                 Above the threshold this virtualises: the item size and the CSS
-                 row height MUST agree exactly or Quasar re-measures mid-scroll
-                 (the trap `StockOverview` documents at its own switch). -->
-            <q-virtual-scroll
-                v-if="visibleRecipes.length > VIRTUAL_SCROLL_THRESHOLD"
-                :items="visibleRecipes"
-                :virtual-scroll-item-size="VIRTUAL_ROW_HEIGHT_PX"
-                separator
-            >
-                <template #default="{ item }">
-                    <div :key="item.recipe_id" class="recipe-list__slot">
-                        <MealPlanRecipeRow
-                            :recipe="item"
-                            :mode="rowMode"
-                            :target-slot="focusedTarget?.slot"
-                            :reason-text="reasonFor(item.recipe_id)"
-                            :cost-text="costTextFor(item)"
-                            :batch-enabled="batchEnabled"
-                            @pick="(id) => emit('recipePick', id)"
-                            @pool-adjust="(id, delta) => emit('paletteMealAdjust', id, delta)"
-                        />
-                    </div>
-                </template>
-            </q-virtual-scroll>
+                 Above the threshold only the rows in view mount
+                 (`useFixedRowWindow`, R-106), so every row must render at
+                 exactly `ROW_HEIGHT_PX`. -->
+            <template v-if="visibleRecipes.length > WINDOW_THRESHOLD">
+                <div :style="{ height: `${rowWindow.padTop.value}px` }" />
+                <div
+                    v-for="recipe in windowedRecipes"
+                    :key="recipe.recipe_id"
+                    class="recipe-list__slot recipe-list__slot--fixed"
+                >
+                    <MealPlanRecipeRow
+                        :recipe="recipe"
+                        :mode="rowMode"
+                        :target-slot="focusedTarget?.slot"
+                        :reason-text="reasonFor(recipe.recipe_id)"
+                        :cost-text="costTextFor(recipe)"
+                        :batch-enabled="batchEnabled"
+                        @pick="(id) => emit('recipePick', id)"
+                        @pool-adjust="(id, delta) => emit('paletteMealAdjust', id, delta)"
+                    />
+                </div>
+                <div :style="{ height: `${rowWindow.padBottom.value}px` }" />
+            </template>
 
             <template v-else>
                 <div
@@ -216,15 +215,15 @@
     import { suggestionReasonText } from 'src/helpers/mealPlanSuggestionCopy';
     import { useMealSlotStore } from 'src/stores/mealSlotStore';
     import { computed, onMounted, ref, watch } from 'vue';
+    import { useFixedRowWindow } from 'src/composables/useFixedRowWindow';
 
     const { batchEnabled } = useBatchEnabled();
 
-    /** Above this many rows the list virtualises. Matches the threshold
+    /** Above this many rows the list is windowed. Matches the threshold
      *  `StockOverview` uses, so the two long lists in the app behave the same. */
-    const VIRTUAL_SCROLL_THRESHOLD = 50;
-    /** Must equal the rendered row height (`.recipe-list__slot` min-height), or
-     *  Quasar re-measures mid-scroll and the list judders. */
-    const VIRTUAL_ROW_HEIGHT_PX = 64;
+    const WINDOW_THRESHOLD = 50;
+    /** Must equal `.recipe-list__slot--fixed`'s height. */
+    const ROW_HEIGHT_PX = 64;
 
     const props = withDefaults(
         defineProps<{
@@ -310,6 +309,16 @@
         const ordered = orderByCost(rawVisibleRecipes.value);
         return ordered;
     });
+
+    const recipeListRef = ref<HTMLElement | null>(null);
+    const rowWindow = useFixedRowWindow({
+        scroller: recipeListRef,
+        count: computed(() => visibleRecipes.value.length),
+        rowHeight: computed(() => ROW_HEIGHT_PX),
+    });
+    const windowedRecipes = computed(() =>
+        visibleRecipes.value.slice(rowWindow.start.value, rowWindow.end.value),
+    );
 
     /**
      * Cheapest-first, when the user asked for it.
@@ -443,13 +452,17 @@
         scrollbar-gutter: stable;
     }
     /* Wraps each row so multi-select can put a checkbox beside it without the
-       row component knowing anything about selection. The min-height must match
-       `VIRTUAL_ROW_HEIGHT_PX`. */
+       row component knowing anything about selection. */
     .recipe-list__slot {
         display: flex;
         align-items: center;
         gap: var(--space-1);
         min-height: 64px;
+    }
+    /* Windowed rows are placed by arithmetic, so their height is fixed rather
+       than a minimum (R-106). */
+    .recipe-list__slot--fixed {
+        height: 64px;
     }
     .recipe-list__slot > :last-child {
         flex: 1 1 auto;

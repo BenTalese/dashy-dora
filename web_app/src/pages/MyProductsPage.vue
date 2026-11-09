@@ -317,93 +317,63 @@
                 />
             </div>
 
-            <!-- Two shapes, one data path — the compact branch is the same
+            <!-- Two shapes, one data path: the compact branch is the same
                  `filteredProducts` the grid renders (the cookbook's shape).
 
-                 FU-968: both shapes are virtualised. A companion that pushes a
-                 few thousand products mounted a card per product — 2,859 cards,
-                 ~5.6 s of main-thread work and 125 MB of heap on a 2000-item
-                 pantry. Only the rows near the viewport mount now. Unlike the
-                 stock list (its own scroll pane, fixed row height) this page
-                 scrolls the window, so `scroll-target="body"`; and card height
-                 follows card width and content, so the item size is an
-                 estimate that Quasar replaces with each row's measured height.
-                 Small lists render whole either way (the slice is bigger than
-                 them), so there is no threshold switch to keep in step. -->
-            <q-virtual-scroll
-                v-else-if="viewMode === 'grid'"
-                key="prod-grid"
-                scroll-target="body"
-                :items="productGridRows"
-                :virtual-scroll-item-size="GRID_ROW_ESTIMATE_PX"
-                :virtual-scroll-slice-size="8"
-            >
-                <!-- One virtual item per grid row: a row of cards stretches to
-                     its tallest card, so rows (not cards) are the unit whose
-                     height Quasar measures. Horizontal gutter only — the
-                     vertical gap is the row's own bottom padding, because a
-                     negative top margin (what `q-col-gutter-md` uses) is not
-                     part of a measured height and would desync the spacers.
-                     Owner 2026-10-15: two to a row on a phone (one card was
-                     the whole screen). -->
-                <template #default="{ item: gridRow }">
-                    <div :key="gridRow.key" class="row q-col-gutter-x-md q-pb-md">
-                        <!-- The key carries a photo version so a replaced
-                             custom-product photo refetches: the card's thumb
-                             only reloads when the id or has-image flag
-                             changes, and a re-upload changes neither. -->
-                        <div
-                            v-for="product in gridRow.products"
-                            :key="`${product.product_id}:${photoVersion.get(product.product_id) ?? 0}`"
-                            class="col-6 col-md-4"
-                        >
-                            <ProductCard
-                                :product="product"
-                                :bulk-mode="bulkMode"
-                                :selected="selectedIds.has(product.product_id)"
-                                :watch-threshold="watchByProduct.get(product.product_id)?.threshold_price ?? null"
-                                @watch-price="openWatch(product)"
-                                @toggle-select="toggleSelect(product.product_id)"
-                                @open-stock-item="goToStockItem"
-                                @link="openLinkDialog(product)"
-                                @unlink="onUnlinkSingle(product)"
-                                @toggle-active="onToggleActive(product)"
-                                @price-history="onViewPriceHistory(product.product_id)"
-                                @photo="openPhoto(product)"
-                                @pack-count="openPackCount(product)"
-                                @delete="onDeleteSingle(product)"
-                            />
-                        </div>
-                    </div>
-                </template>
-            </q-virtual-scroll>
+                 FU-968: a companion that pushes a few thousand products mounted
+                 a card per product (2,859 cards, ~5.6 s of main-thread work on
+                 a 2000-item pantry). Cards mount a chunk at a time as the page
+                 scrolls (R-106); `QVirtualScroll` did this before but re-applied
+                 the scroll position after each slice, snapping a phone fling
+                 back (FU-994). -->
+            <div v-else-if="viewMode === 'grid'" key="prod-grid" class="row q-col-gutter-md">
+                <!-- The key carries a photo version so a replaced custom-product
+                     photo refetches: the card's thumb only reloads when the id
+                     or has-image flag changes, and a re-upload changes neither.
+                     Owner 2026-10-15: two to a row on a phone. -->
+                <div
+                    v-for="product in renderedProducts"
+                    :key="`${product.product_id}:${photoVersion.get(product.product_id) ?? 0}`"
+                    class="col-6 col-md-4"
+                >
+                    <ProductCard
+                        :product="product"
+                        :bulk-mode="bulkMode"
+                        :selected="selectedIds.has(product.product_id)"
+                        :watch-threshold="watchByProduct.get(product.product_id)?.threshold_price ?? null"
+                        @watch-price="openWatch(product)"
+                        @toggle-select="toggleSelect(product.product_id)"
+                        @open-stock-item="goToStockItem"
+                        @link="openLinkDialog(product)"
+                        @unlink="onUnlinkSingle(product)"
+                        @toggle-active="onToggleActive(product)"
+                        @price-history="onViewPriceHistory(product.product_id)"
+                        @photo="openPhoto(product)"
+                        @pack-count="openPackCount(product)"
+                        @delete="onDeleteSingle(product)"
+                    />
+                </div>
+                <!-- Inside the list, so it only exists once the list has faded
+                     in; more products mount as it nears the viewport (R-106). -->
+                <div v-if="hasMoreProducts" ref="productsSentinel" class="col-12 my-products__sentinel" />
+            </div>
 
-            <!-- Each row sits in a padded wrapper rather than taking a
-                 `q-gutter-sm` margin, for the same measured-height reason as
-                 the grid above. The wrapper is block-level, so a long name
+            <!-- Each row sits in a padded wrapper; block-level, so a long name
                  still ellipsises inside the phone's width (owner 2026-10-15). -->
-            <q-virtual-scroll
-                v-else
-                key="prod-rows"
-                scroll-target="body"
-                :items="filteredProducts"
-                :virtual-scroll-item-size="COMPACT_ROW_ESTIMATE_PX"
-                :virtual-scroll-slice-size="30"
-            >
-                <template #default="{ item: product }">
-                    <div :key="product.product_id" class="q-pb-sm">
-                        <ProductRow
-                            :product="product"
-                            :bulk-mode="bulkMode"
-                            :selected="selectedIds.has(product.product_id)"
-                            @toggle-select="toggleSelect(product.product_id)"
-                            @link="openLinkDialog(product)"
-                            @unlink="onUnlinkSingle(product)"
-                            @photo="openPhoto(product)"
-                        />
-                    </div>
-                </template>
-            </q-virtual-scroll>
+            <div v-else key="prod-rows">
+                <div v-for="product in renderedProducts" :key="product.product_id" class="q-pb-sm">
+                    <ProductRow
+                        :product="product"
+                        :bulk-mode="bulkMode"
+                        :selected="selectedIds.has(product.product_id)"
+                        @toggle-select="toggleSelect(product.product_id)"
+                        @link="openLinkDialog(product)"
+                        @unlink="onUnlinkSingle(product)"
+                        @photo="openPhoto(product)"
+                    />
+                </div>
+                <div v-if="hasMoreProducts" ref="productsSentinel" class="my-products__sentinel" />
+            </div>
         </FadeTransition>
 
         <PageCountsFooter v-if="products.length > 0" :counts="footerCounts" />
@@ -594,7 +564,8 @@
     import { ICONS } from 'src/style/icons';
     import { storeToRefs } from 'pinia';
     import { useQuasar } from 'quasar';
-    import { computed, onMounted, ref } from 'vue';
+    import { computed, onMounted, ref, watch } from 'vue';
+    import { useIncrementalRender } from 'src/composables/useIncrementalRender';
     import { useRouter } from 'vue-router';
     import { isOnSpecial } from 'src/helpers/offerLogic';
     import { useConfirm } from 'src/composables/useConfirm';
@@ -746,25 +717,17 @@
         }),
     );
 
-    // ── Virtualised results (FU-968) ────────────────────────────────────
-    // The grid's column count mirrors its `col-6 col-md-4` classes: two
-    // columns below Quasar's md breakpoint, three from md up. The estimates
-    // only seed the spacers until each row is measured; they are not layout.
-    const GRID_ROW_ESTIMATE_PX = 360;
-    const COMPACT_ROW_ESTIMATE_PX = 72;
-    const gridColumns = computed(() => ($q.screen.gt.sm ? 3 : 2));
-    const productGridRows = computed(() => {
-        const columns = gridColumns.value;
-        const rows: { key: string; products: Product[] }[] = [];
-        const list = filteredProducts.value;
-        for (let i = 0; i < list.length; i += columns) {
-            const slice = list.slice(i, i + columns);
-            // Keyed by position: a delete or re-sort shifts products between
-            // rows, and an id-joined key remounted every later row's cards.
-            rows.push({ key: `row-${rows.length}`, products: slice });
-        }
-        return rows;
-    });
+    // ── Chunked results (FU-968, R-106) ─────────────────────────────────
+    const {
+        visible: renderedProducts,
+        hasMore: hasMoreProducts,
+        sentinel: productsSentinel,
+        reset: resetRenderedProducts,
+    } = useIncrementalRender({ items: filteredProducts, key: 'my-products' });
+    watch(
+        [searchText, onDealOnly, includeInactive, storeFilter, linkedStockItemFilter],
+        resetRenderedProducts,
+    );
 
     const footerCounts = computed(() => [
         { label: 'Shown', value: filteredProducts.value.length },
@@ -1246,6 +1209,10 @@
 </script>
 
 <style scoped>
+    .my-products__sentinel {
+        height: 1px;
+    }
+
     /* Same toolbar rules as StockOverview/RecipesOverview: the action band
        scrolls sideways rather than wrapping (the buttons running off the edge
        IS the affordance), and `__find` takes its own full-width line on

@@ -10,6 +10,22 @@ resolutions go at the **top**.
 
 ---
 
+## [RESOLVED] FU-995 — Cookbook doesn't restore its scroll position on back navigation
+- **Raised:** 2026-11-09 (found while building FU-992)
+- **Type:** finding
+- **What:** Scroll the cookbook, open a recipe, go back: it lands at the top. Same on the code before FU-992 (checked), so not caused by chunked rendering; `useIncrementalRender` already remembers the count so the grid is as tall as before. The router returns `savedPosition` (`router/index.ts:37`), likely before the page's fade transition has its content in place.
+- **Why deferred:** pre-existing, outside FU-992's scope.
+- **Recommended resolution:** opportunistic; confirm in browser after a fix
+- **State note:** 2026-11-09. Two causes: the router applied the saved position before the page could hold it, and the layout's route fade (no `out-in`) briefly stacks the old page above the new one, so its removal shifted the position up. `scrollBehavior` now waits (max 1.5s) until the destination is mounted, nothing has `.dora-fade-leave-active`, and the document can reach the position (`router/index.ts`). Cookbook back navigation lands exactly at 2500, 6000 and 15000 px.
+
+## [RESOLVED] FU-994 — Remaining `q-virtual-scroll` lists predate R-106
+- **Raised:** 2026-11-09 (FU-991)
+- **Type:** finding
+- **What:** `MyProductsPage.vue` (two), `MealPlanRecipePicker.vue` and `ImportResultDialog.vue` still use `QVirtualScroll`, which rewrites `scrollTop` after slice changes (R-106). Move to `useFixedRowWindow` / `useIncrementalRender` when touched.
+- **Why deferred:** not reported as snapping; outside this unit.
+- **Recommended resolution:** opportunistic, next time each is touched
+- **State note:** 2026-11-09. All four moved: My Products grid and rows to `useIncrementalRender` (a fling there snapped 2219 to 1800 via `window.scrollTo`; 0 after), `MealPlanRecipePicker` to `useFixedRowWindow` (rows fixed at 64px; content max ~60px), `ImportResultDialog` to `useIncrementalRender` with the dialog box as `root` (new option). No `q-virtual-scroll` left in the SPA.
+
 ## [RESOLVED] FU-993 — Nutrition food search: row text overlaps, unreadable
 - **Raised:** 2026-11-09 (owner feedback)
 - **Type:** finding

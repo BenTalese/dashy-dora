@@ -198,7 +198,7 @@
         font-weight: 500;
         line-height: 1.3;
         /* Name may take two lines, then clamps — a long recipe name must not
-           push the row to four lines and break the virtual scroller's fixed
+           push the row to four lines and break the picker's fixed 64px
            item height. */
         display: -webkit-box;
         -webkit-line-clamp: 2;

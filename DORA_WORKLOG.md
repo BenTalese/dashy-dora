@@ -41,6 +41,42 @@ next.
 
 ---
 
+## 2026-11-09 (final): **FU-992 step 2 (API gzip), FU-994 and FU-995 done**
+
+**Owner:** do step 2 and the other FUs.
+
+**FU-992 step 2:** measured first. Server time for `/recipes` and `/stock-items` is ~70-80ms; the cost was the
+wire: the API is served by gunicorn directly and only the SPA went through nginx's gzip, so JSON went out raw.
+New `dora_api/infrastructure/compression.py` `GzipMiddleware` (WSGI, wrapped after ProxyFix in `app.py`, so it
+runs after every Flask hook, some of which read the body as JSON): JSON/text only, >= 1KB, skips 204/206/304 and
+anything already encoded, adds `Vary: Accept-Encoding`. `/recipes` 365KB -> 30KB, `/stock-items` 398KB -> 24KB.
+Server-side paging was not built (23 files read the shared recipe list; every cookbook filter and sort is
+client-side); FU-992 stays open with "measure first if it is slow again" as the trigger.
+
+**FU-994:** My Products confirmed snapping (2219 -> 1800 via `window.scrollTo` in a fling); grid and rows now
+`useIncrementalRender` (0 backward steps at 1x/4x). First attempt mounted all 109 on load: the sentinel sat beside
+the page's out-in FadeTransition and fired against the empty page; moved inside each list (noted in ADR-105).
+`MealPlanRecipePicker` -> `useFixedRowWindow` (rows fixed 64px; measured content 39px one-line, ~60px worst case;
+total height exact, 0 corrections). `ImportResultDialog` -> `useIncrementalRender` with new `root` option, reset on
+a new result. No `q-virtual-scroll` left.
+
+**FU-995:** the router saved the right position; restoring lost it twice: applied before the cookbook mounted,
+then the layout's route FadeTransition (no `out-in`) stacks the old page above the new one for ~300ms and its
+removal shifted 6000 -> 4399. `scrollBehavior` -> `whenReachable` waits for the destination instance, no
+`.dora-fade-leave-active`, and a reachable height (1.5s cap). Back navigation lands exactly at 2500/6000/15000.
+
+**Verified:** Vitest, vue-tsc, eslint; `tests/test_gzip_middleware.py` (4) + full pytest (see below). Playwright on
+the :5171 bulk scratch as above.
+
+**Gates:** ADR-105 consequences extended (FU-994, sentinel placement, gzip); R-106 wording tightened. R-005 / §7.5:
+compression is in-app and config-free, so it works the same self-hosted, behind a proxy (which won't re-gzip an
+encoded body) or managed. No em dashes in added lines.
+
+**Next up:** deploy; DORA_VERIFY "Scrolling and long lists". New finding FU-996: route transitions overlap both
+pages briefly (layout FadeTransition without `out-in`).
+
+---
+
 ## 2026-11-09 (latest, built): **FU-993 + FU-991 fixed, FU-992 step 1 built (R-106)**
 
 **Owner:** build FU-993, FU-991 and FU-992 step 1. (Machine died before the close-gate; code was intact on disk,

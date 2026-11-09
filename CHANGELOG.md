@@ -24,10 +24,15 @@ bump means a schema or configuration change you need to act on when upgrading.
   name.
 - Scrolling a long stock list on a phone no longer snaps back mid-fling.
 - Results in the food search for nutrition no longer overlap each other.
+- Going back to the cookbook from a recipe returns you to where you were in the list, instead of the top.
+- Scrolling My Products on a phone no longer snaps back mid-fling.
 
 ### Performance
 
-- The cookbook draws recipe cards a batch at a time as you scroll, instead of all of them at once.
+- The cookbook draws recipe cards a batch at a time as you scroll, instead of all of them at once. My
+  Products, the meal planner's recipe list and the import results list work the same way.
+- The server compresses its responses. The cookbook's recipe list and the stock list are over ten times
+  smaller to download.
 
 ## [2.0.0] - 2026-11-08
 

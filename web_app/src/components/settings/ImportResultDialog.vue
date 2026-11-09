@@ -18,13 +18,10 @@
             </q-card-section>
             <q-separator />
             <q-card-section v-if="result?.rows.length" class="q-pa-none">
-                <q-virtual-scroll
-                    :items="result.rows"
-                    :virtual-scroll-item-size="38"
-                    style="max-height: 360px"
-                    v-slot="{ item }"
-                >
-                    <q-item dense>
+                <!-- Rows mount a chunk at a time as the box scrolls (R-106);
+                     an error row's reason makes it taller than the rest. -->
+                <div ref="rowsBox" class="import-result__rows">
+                    <q-item v-for="item in renderedRows" :key="item.row_number" dense>
                         <q-item-section avatar>
                             <q-chip
                                 dense
@@ -49,7 +46,8 @@
                             </q-item-label>
                         </q-item-section>
                     </q-item>
-                </q-virtual-scroll>
+                    <div v-if="hasMoreRows" ref="rowsSentinel" class="import-result__sentinel" />
+                </div>
             </q-card-section>
             <template #actions>
                 <BaseButton
@@ -67,7 +65,8 @@
 <script lang="ts" setup>
     /** The spreadsheet import's per-row report. Split out of
      *  `AdminDataImport` (FU-948 (3)). */
-    import { computed } from 'vue';
+    import { computed, ref, watch } from 'vue';
+    import { useIncrementalRender } from 'src/composables/useIncrementalRender';
     import BaseButton from 'src/components/BaseButton.vue';
     import BaseDialog from 'src/components/BaseDialog.vue';
     import type {
@@ -79,6 +78,21 @@
 
     const open = defineModel<boolean>({ required: true });
     const props = defineProps<{ result: SpreadsheetImportResult | null }>();
+
+    const rowsBox = ref<HTMLElement | null>(null);
+    const {
+        visible: renderedRows,
+        hasMore: hasMoreRows,
+        sentinel: rowsSentinel,
+        reset: resetRenderedRows,
+    } = useIncrementalRender({
+        items: computed(() => props.result?.rows ?? []),
+        key: 'import-result-rows',
+        chunk: 60,
+        rootMargin: '300px 0px',
+        root: rowsBox,
+    });
+    watch(() => props.result, resetRenderedRows);
     const emit = defineEmits<{ close: [] }>();
 
     const errorRows = computed(
@@ -111,3 +125,13 @@
         );
     }
 </script>
+
+<style scoped>
+    .import-result__rows {
+        max-height: 360px;
+        overflow-y: auto;
+    }
+    .import-result__sentinel {
+        height: 1px;
+    }
+</style>

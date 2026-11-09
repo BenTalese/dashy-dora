@@ -52,19 +52,12 @@ long session summary. Distinct from the other logs:
 
 # Open
 
-## [OPEN] FU-995 — Cookbook doesn't restore its scroll position on back navigation
-- **Raised:** 2026-11-09 (found while building FU-992)
+## [OPEN] FU-996 — Route changes briefly stack the old page above the new one
+- **Raised:** 2026-11-09 (found during FU-995)
 - **Type:** finding
-- **What:** Scroll the cookbook, open a recipe, go back: it lands at the top. Same on the code before FU-992 (checked), so not caused by chunked rendering; `useIncrementalRender` already remembers the count so the grid is as tall as before. The router returns `savedPosition` (`router/index.ts:37`), likely before the page's fade transition has its content in place.
-- **Why deferred:** pre-existing, outside FU-992's scope.
-- **Recommended resolution:** opportunistic; confirm in browser after a fix
-
-## [OPEN] FU-994 — Remaining `q-virtual-scroll` lists predate R-106
-- **Raised:** 2026-11-09 (FU-991)
-- **Type:** finding
-- **What:** `MyProductsPage.vue` (two), `MealPlanRecipePicker.vue` and `ImportResultDialog.vue` still use `QVirtualScroll`, which rewrites `scrollTop` after slice changes (R-106). Move to `useFixedRowWindow` / `useIncrementalRender` when touched.
-- **Why deferred:** not reported as snapping; outside this unit.
-- **Recommended resolution:** opportunistic, next time each is touched
+- **What:** `MainLayout.vue`'s route `<FadeTransition>` has no `mode="out-in"` (its own comment recommends it), so for the length of the fade both pages are in the document, the leaving one above the entering one. Measured on cookbook back navigation: document height 9740 during the overlap vs 8139 after. FU-995 works around it in `scrollBehavior`; it may also show as a brief flash of the new page lower down.
+- **Why deferred:** changes the feel of every page transition; not reported.
+- **Recommended resolution:** opportunistic; decide `out-in` (or absolute-positioned leave) with the owner
 
 ## [OPEN] FU-992 — Cookbook loads and renders every recipe at once; no list should
 - **Raised:** 2026-11-09 (owner feedback)
@@ -74,4 +67,5 @@ long session summary. Distinct from the other logs:
 - **Why deferred:** feedback logged; (2) is a design decision (server-side filtering) worth scoping before building.
 - **Recommended resolution:** next performance pass; do (1) first, measure, then decide (2)
 - **Progress (2026-11-09):** step 1 done: the grid and compact list render 24 at a time via `useIncrementalRender` (R-106), resetting only on search/filter/sort. At 72 recipes first-card time was unchanged (~1.3s), so fetching dominates: `/recipes` is 366KB for 72 recipes (about 5KB each, ingredients 170KB of it, used by the client-side filters) and `/stock-items` 421KB for 500 items. Step 2 is slimming the list payload / moving those filters server-side.
-- **Recommended resolution (updated):** step 2 is a design call; scope before building
+- **Progress (2026-11-09, step 2):** the API served JSON uncompressed (gunicorn direct; only the SPA went through nginx's gzip). New `GzipMiddleware` (`infrastructure/compression.py`, wrapped in `app.py`): `/recipes` 365KB to 30KB, `/stock-items` 398KB to 24KB on the wire, server time unchanged (~70-80ms). Pinned by `tests/test_gzip_middleware.py`. Server-side paging of the cookbook was not built: every filter and sort (cookable, kcal, cost, rating, expiring, planned) runs on the client over the shared recipe list, which 23 files read; at ~30KB gzipped the whole-list fetch is no longer the cost.
+- **Recommended resolution (updated):** when a household's cookbook or pantry is slow again with gzip on (measure first); then design server-side paging + filters for the cookbook

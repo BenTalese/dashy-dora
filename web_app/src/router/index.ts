@@ -3,7 +3,7 @@ import { Notify } from 'quasar';
 import { useAuthStore } from 'src/stores/authStore';
 import { hasBackendBaseUrl } from 'src/services/api/backendUrl';
 import { isNativePlatform } from 'src/helpers/platform';
-import { createMemoryHistory, createRouter, createWebHashHistory, createWebHistory } from 'vue-router';
+import { createMemoryHistory, createRouter, createWebHashHistory, createWebHistory, type RouteLocationNormalized } from 'vue-router';
 
 import routes from './routes';
 
@@ -18,6 +18,34 @@ const ONBOARDING_BYPASS = new Set<string>([
     '/errors/not-found',
     '/errors/server',
 ]);
+
+/** On a back navigation the saved position used to be applied while the page
+ *  could not hold it, and the browser clamped it (FU-995): first the old page
+ *  is still on screen, then both sit stacked while the route fade runs (the
+ *  layout's FadeTransition has no `out-in`), and the old one's removal shifts
+ *  everything up. Wait until the destination has mounted, nothing is fading
+ *  out, and the document can reach the position; give up after a moment and
+ *  go as far as it can. */
+function whenReachable(
+    to: RouteLocationNormalized,
+    position: { left: number; top: number },
+): Promise<{ left: number; top: number }> {
+    const deadline = performance.now() + 1500;
+    return new Promise((resolve) => {
+        const check = () => {
+            const el = document.scrollingElement ?? document.documentElement;
+            const mounted = Boolean(to.matched.at(-1)?.instances.default);
+            const settled = document.querySelector('.dora-fade-leave-active') === null;
+            const reachable = el.scrollHeight - el.clientHeight >= position.top;
+            if ((mounted && settled && reachable) || performance.now() > deadline) {
+                resolve(position);
+                return;
+            }
+            requestAnimationFrame(check);
+        };
+        requestAnimationFrame(check);
+    });
+}
 
 export default defineRouter(function (/* { store, ssrContext } */) {
     const createHistory = process.env.SERVER
@@ -35,7 +63,7 @@ export default defineRouter(function (/* { store, ssrContext } */) {
         // A Help deep link (`/help/<topic>?e=<guide>`) scrolls itself to the
         // guide; resetting to the top here ran after it and undid it.
         scrollBehavior: (to, _from, savedPosition) => {
-            if (savedPosition) return savedPosition;
+            if (savedPosition) return whenReachable(to, savedPosition);
             if (to.path.startsWith('/help/') && typeof to.query.e === 'string') return false;
             return { left: 0, top: 0 };
         },
