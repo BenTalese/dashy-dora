@@ -41,6 +41,36 @@ next.
 
 ---
 
+## 2026-11-09 (latest, built): **FU-993 + FU-991 fixed, FU-992 step 1 built (R-106)**
+
+**Owner:** build FU-993, FU-991 and FU-992 step 1. (Machine died before the close-gate; code was intact on disk,
+re-checked green, then closed.)
+
+**FU-993:** reproduced by faking 20 long lookup results in Playwright: rows squashed to 56px against 128-171px of
+text inside the capped, scrolling results column. `flex: 0 0 auto` on `.food-row`.
+
+**FU-991:** row heights still matched the metric (76px), so the August fix held. A frame-sampled synthetic fling on
+the bulk seed (500 items) showed `QVirtualScroll` writing `scrollTop` backwards after each slice change (stack:
+`setVirtualScrollSliceRange` -> `setScroll`), at 1x and 4x CPU; it also measures with `offsetHeight`, missing the 8px
+margin. New `useFixedRowWindow` composable (read-only spacers + slice); slot owns the gap as padding. After: 0
+backward writes, long tasks ~55ms vs 110-190ms at 4x. Added `dora-verify-backend-5171-bulk-linux` to launch.json.
+
+**FU-992 step 1:** new `useIncrementalRender` (24 cards, sentinel 800px ahead, count remembered per key for back nav);
+reset watches the cookbook's search/filter/sort refs only. Driven: 24 -> 48 -> 72 on scroll, search resets to 24.
+First card ~1.3s before and after at 72 recipes: the fetch dominates (`/recipes` 366KB, ingredients 170KB of it;
+`/stock-items` 421KB). FU-992 stays open for step 2. Found FU-995 (cookbook back nav lands at top, pre-existing)
+and FU-994 (other `q-virtual-scroll` lists).
+
+**Verified:** Vitest 943, vue-tsc, eslint clean. Playwright on :5171 as above.
+
+**Gates:** new **R-106 / ADR-105** (long lists window or chunk, never write scroll position). R-001 (two shared
+composables), R-002 (tokens only in new CSS). No em dashes in added lines.
+
+**Next up:** FU-992 step 2 needs a scoping call (slim the list payload / server-side filters); the three new
+DORA_VERIFY checks.
+
+---
+
 ## 2026-11-09 (latest): **Three owner feedback items logged (no code)**
 
 **Owner:** three more items, logged as follow-ups: **FU-991** stock overview still snaps when scrolling on a phone

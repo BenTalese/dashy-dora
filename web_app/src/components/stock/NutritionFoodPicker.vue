@@ -249,6 +249,9 @@
         padding: var(--space-3) 0;
     }
     .food-row {
+        /* The results column scrolls at a capped height; a shrinkable row was
+           squashed below its text, which then overlapped the next (FU-993). */
+        flex: 0 0 auto;
         display: flex;
         align-items: center;
         gap: var(--space-3);

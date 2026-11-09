@@ -22,6 +22,12 @@ bump means a schema or configuration change you need to act on when upgrading.
 
 - The Nutrition row on a stock item no longer pushes the page sideways on a phone when the food has a long
   name.
+- Scrolling a long stock list on a phone no longer snaps back mid-fling.
+- Results in the food search for nutrition no longer overlap each other.
+
+### Performance
+
+- The cookbook draws recipe cards a batch at a time as you scroll, instead of all of them at once.
 
 ## [2.0.0] - 2026-11-08
 

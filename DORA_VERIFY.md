@@ -22,6 +22,11 @@ top-to-bottom.
 
 ---
 
+## Scrolling and long lists (2026-11-09) — origin FU-991, FU-992, FU-993
+- [ ] On a phone, fling the stock overview (over 50 items) up and down: no snap or stall.
+- [ ] Open the cookbook on a phone and scroll to the end: cards keep appearing, no gaps or jumps.
+- [ ] Search a real food in the nutrition link dialog on a phone: every result row is readable.
+
 ## Products and preferred buys together (2026-11-09) — origin FU-990
 - [ ] Template line for an item with a linked product and a preferred buy: name menu lists both; picking one replaces the other.
 - [ ] Recipe ingredient for the same item: "Which one" lists both; picking one replaces the other after save.

@@ -163,7 +163,7 @@
                  (`useRecipeDisplay`) — only the component differs. -->
             <div v-if="viewMode === 'grid'" class="row q-col-gutter-md">
                 <div
-                    v-for="recipe in sortedRecipes"
+                    v-for="recipe in renderedRecipes"
                     :key="recipe.recipe_id"
                     class="col-12 col-sm-6 col-md-4"
                 >
@@ -180,7 +180,7 @@
             </div>
             <div v-else>
                 <RecipeRow
-                    v-for="recipe in sortedRecipes"
+                    v-for="recipe in renderedRecipes"
                     :key="recipe.recipe_id"
                     :recipe="recipeWithExpiringCount(recipe)"
                     :show-expiring-badge="expiringOnly"
@@ -191,6 +191,8 @@
                     @add-all-to-list="onAddAllToList"
                 />
             </div>
+            <!-- More cards mount as this nears the viewport (FU-992). -->
+            <div v-if="hasMoreRecipes" ref="recipesSentinel" class="cookbook__sentinel" />
         </div>
         </FadeTransition>
         </div>
@@ -273,6 +275,7 @@
         type Difficulty,
     } from 'src/helpers/recipeVocabulary';
     import { computed, onMounted, ref, watch } from 'vue';
+    import { useIncrementalRender } from 'src/composables/useIncrementalRender';
     import { useRoute, useRouter } from 'vue-router';
     import { isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { useNutritionMode } from 'src/composables/useNutritionMode';
@@ -666,6 +669,26 @@
         };
         return arr.sort(cmp);
     });
+
+    // FU-992: a large cookbook mounted every card at once. Cards render a
+    // chunk at a time instead; a new search, filter or sort starts again from
+    // the top, while an edit to one recipe leaves the reader where they are.
+    const {
+        visible: renderedRecipes,
+        hasMore: hasMoreRecipes,
+        sentinel: recipesSentinel,
+        reset: resetRenderedRecipes,
+    } = useIncrementalRender({ items: sortedRecipes, key: 'cookbook-overview' });
+    watch(
+        [
+            searchText, favouritesOnly, cookableNowOnly, inStockOnly, plannedFilterState, expiringOnly,
+            mealCountMin, servesMin, kcalMax, ratingMin, collectionFilter, cuisineFilter, categoryFilter,
+            timeOfDayFilter, difficultyFilter, ingredientsMax, usesStockItemIds, excludesStockItemIds,
+            sortBy, sortDir, dietaryTagsInclude, dietaryTagsExclude, toolsInclude, toolsExclude,
+        ],
+        resetRenderedRecipes,
+        { deep: true },
+    );
 
     // NOTE: the collection-bucketing + collapsed-folder state that used to
     // live here is gone. Recipes render as one flat sorted list; the
@@ -1074,6 +1097,10 @@
 </script>
 
 <style scoped>
+    .cookbook__sentinel {
+        height: 1px;
+    }
+
     /* ── Toolbar (2026-08-17 feedback) ────────────────────────────────
        Lifted wholesale from `StockOverview.vue` so both list surfaces
        behave identically: desktop = one row (actions left, filter-toggle

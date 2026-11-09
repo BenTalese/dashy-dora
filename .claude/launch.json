@@ -90,6 +90,24 @@
             }
         },
         {
+            "name": "dora-verify-backend-5171-bulk-linux",
+            "runtimeExecutable": ".venv/bin/python",
+            "runtimeArgs": [
+                "-m",
+                "dora_api.startup"
+            ],
+            "port": 5171,
+            "env": {
+                "DORA_API_PORT": "5171",
+                "DORA_DB_PATH": "data/scratch-verify-bulk.db",
+                "DORA_DEBUG": "true",
+                "DORA_ALLOW_DESTRUCTIVE": "true",
+                "DORA_SEED_BULK_ITEMS": "500",
+                "DORA_LOG_LEVEL": "WARNING",
+                "DORA_SEED_DATASET": "bulk"
+            }
+        },
+        {
             "name": "dora-verify-backend-5171-money-linux",
             "runtimeExecutable": ".venv/bin/python",
             "runtimeArgs": [

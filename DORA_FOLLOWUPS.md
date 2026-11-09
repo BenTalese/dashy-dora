@@ -52,12 +52,19 @@ long session summary. Distinct from the other logs:
 
 # Open
 
-## [OPEN] FU-993 — Nutrition food search: row text overlaps, unreadable
-- **Raised:** 2026-11-09 (owner feedback)
+## [OPEN] FU-995 — Cookbook doesn't restore its scroll position on back navigation
+- **Raised:** 2026-11-09 (found while building FU-992)
 - **Type:** finding
-- **What:** In the food search for linking nutrition (`NutritionFoodPicker.vue`), each result row's text spills past the row and overlaps the next. Suspect: `.food-picker__results` is a flex column with `max-height: 46vh; overflow-y: auto`, and the `.food-row` buttons have the default `flex-shrink: 1`, so with many results they get squashed below their content height. Likely fix: `flex: 0 0 auto` on `.food-row`. Not reproduced yet (needs live USDA / Open Food Facts results).
-- **Why deferred:** feedback logged, not yet fixed.
-- **Recommended resolution:** now (small); confirm at phone width with a real search
+- **What:** Scroll the cookbook, open a recipe, go back: it lands at the top. Same on the code before FU-992 (checked), so not caused by chunked rendering; `useIncrementalRender` already remembers the count so the grid is as tall as before. The router returns `savedPosition` (`router/index.ts:37`), likely before the page's fade transition has its content in place.
+- **Why deferred:** pre-existing, outside FU-992's scope.
+- **Recommended resolution:** opportunistic; confirm in browser after a fix
+
+## [OPEN] FU-994 — Remaining `q-virtual-scroll` lists predate R-106
+- **Raised:** 2026-11-09 (FU-991)
+- **Type:** finding
+- **What:** `MyProductsPage.vue` (two), `MealPlanRecipePicker.vue` and `ImportResultDialog.vue` still use `QVirtualScroll`, which rewrites `scrollTop` after slice changes (R-106). Move to `useFixedRowWindow` / `useIncrementalRender` when touched.
+- **Why deferred:** not reported as snapping; outside this unit.
+- **Recommended resolution:** opportunistic, next time each is touched
 
 ## [OPEN] FU-992 — Cookbook loads and renders every recipe at once; no list should
 - **Raised:** 2026-11-09 (owner feedback)
@@ -66,10 +73,5 @@ long session summary. Distinct from the other logs:
 - **Notes for the build:** two separate costs. (1) Rendering: window the grid (`q-infinite-scroll` in chunks, or `q-virtual-scroll`) so only what's on screen mounts; cheap and likely most of the felt slowness. (2) Fetching: true paging needs the cookbook's filters, sort and search to run server-side, since today they filter the full client-side list. Other whole-list loaders to audit: `getAllPagesAsync` in `stockItemStore`, `productStore`, `mealPlanStore`, `recipeStore` (collections), `stockLevelStore` (tiny, fine). Stock overview already virtualises above 50 rows. Candidate new R-rule: list surfaces window their rendering and page their fetch.
 - **Why deferred:** feedback logged; (2) is a design decision (server-side filtering) worth scoping before building.
 - **Recommended resolution:** next performance pass; do (1) first, measure, then decide (2)
-
-## [OPEN] FU-991 — Stock overview still snaps when scrolling on a phone
-- **Raised:** 2026-11-09 (owner feedback)
-- **Type:** finding
-- **What:** Scrolling the stock overview on mobile still has a jarring snap. The 2026-08-15 fix (`StockItemRow.vue` ~L691, `StockOverview.vue` ~L815) made rows a fixed height equal to `q-virtual-scroll`'s item size so the scroller stops re-measuring mid-scroll. Either a phone row no longer matches `STOCK_ROW_HEIGHT_MOBILE` (content wrapping, group headers, a changed row), or the snap is the hand-off between the ListTransition path and `q-virtual-scroll` (threshold 50), or something else (sticky chrome, `scroll-behavior`).
-- **Why deferred:** feedback logged; needs measuring on a phone-width drive (row heights vs the metric, scroll position over time).
-- **Recommended resolution:** now / next stock overview pass; confirm on a phone
+- **Progress (2026-11-09):** step 1 done: the grid and compact list render 24 at a time via `useIncrementalRender` (R-106), resetting only on search/filter/sort. At 72 recipes first-card time was unchanged (~1.3s), so fetching dominates: `/recipes` is 366KB for 72 recipes (about 5KB each, ingredients 170KB of it, used by the client-side filters) and `/stock-items` 421KB for 500 items. Step 2 is slimming the list payload / moving those filters server-side.
+- **Recommended resolution (updated):** step 2 is a design call; scope before building

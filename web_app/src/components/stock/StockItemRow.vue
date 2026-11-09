@@ -688,23 +688,15 @@
     }
 
     .stock-row {
-        /* 2026-08-15 feedback ("scrolling feels like it's snapping"): the
-           row is now a FIXED height, not a min-height, and that height comes
-           from `--stock-row-height` — the same number the page hands
-           `q-virtual-scroll` as its item size (see `helpers/stockRowMetrics`).
-           Uniform rows are what let the virtual scroller's arithmetic be
-           exact; when it guessed 72px at a 64px row it re-measured mid-scroll
-           and re-padded the spacer, which is the snap the user was seeing.
-           The fallback keeps a sane height for the non-overview consumers
-           that don't set the property. Bottom margin is the row gap and is
-           included in the metric, so it's subtracted here. */
+        /* Fixed height, not min-height: the overview's windowed list
+           (`useFixedRowWindow`) counts on every row being exactly
+           `--stock-row-height` (see `helpers/stockRowMetrics`). The fallback
+           keeps a sane height for consumers that don't set the property.
+           Bottom margin is the row gap and is included in the metric, so it's
+           subtracted here; the windowed list moves the gap onto its slot. */
         height: calc(var(--stock-row-height, 64px) - 8px);
-        /* Intrinsic row gap. The parent used to rely on `q-gutter-y-sm`,
-           but that class is a no-op inside `q-virtual-scroll` (the virtual
-           scroller sets its own item spacing and swallows container
-           gutters), so once a pantry crosses the virtualisation threshold
-           the rows go flush. Owning the gap on the row itself keeps the
-           spacing consistent in both the ListTransition and virtual paths. */
+        /* Intrinsic row gap, so the spacing is the same whichever path
+           renders the list. */
         margin-bottom: var(--space-2);
         /* Border, radius, surface, hover: `.dora-list-row` (app.scss). Its
            overflow: hidden is what clips the essential stripe. */

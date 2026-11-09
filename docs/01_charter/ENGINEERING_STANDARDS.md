@@ -3048,6 +3048,21 @@ exceptions, which still must be commented) · **Source** (where it was establish
   sizeless series.
 - **Established:** 2026-11-05 (FU-983). See ADR-102.
 
+### R-106: A long list mounts only what is near the screen, and never writes the scroll position to do it
+- **Rule:** a list that can grow past a screenful renders a window or a chunk, not every item. Same-height rows use
+  `useFixedRowWindow` (spacers plus a slice, read from `scrollTop`); variable-height items or grids use
+  `useIncrementalRender` (a chunk, then more as a sentinel nears the viewport; reset only when the search, filter
+  or sort changes). Neither ever assigns `scrollTop`. `QVirtualScroll` is not used for touch-scrolled page lists.
+- **Why:** FU-991 / FU-992. The cookbook mounted every card at once. The stock overview's `QVirtualScroll` reset
+  `scrollTop` a frame after each slice change (to where the scroll event fired) and measured rows with
+  `offsetHeight`, which drops margins; on a phone fling both land behind the finger and kill momentum, the snap
+  the owner kept reporting.
+- **How to comply:** reach for one of the two composables; give fixed-height rows their gap as padding inside the
+  measured box; key `useIncrementalRender` so a back navigation renders as much as it had.
+- **Violation signal:** `v-for` over a whole store collection on a list page; a new `q-virtual-scroll` on a page
+  list; code that sets `scrollTop` while the user may be scrolling.
+- **Established:** 2026-11-09 (FU-991, FU-992). See ADR-105.
+
 ## ADR process (evaluate every task)
 
 At the end of each work unit, ask: **did this task make or rely on a decision that
@@ -6593,4 +6608,23 @@ A non-binding cookbook of solutions to recurring problems. Not rules — just a
   one"); enforce the single pick server-side (deferred: every write path already takes the explicit clear,
   and a line carrying both is harmless, it just shows the offer).
 - **Consequences:** no flag hides the Products tab; its count is linked products (when on) plus preferred buys.
+
+### ADR-105: Windowed and chunked list rendering replace QVirtualScroll on page lists (promotes R-106)
+- **Date / task:** 2026-11-09 (FU-991, FU-992)
+- **Status:** accepted
+- **Context:** the 2026-08-15 fix made stock rows a fixed height matching `virtual-scroll-item-size`, but the
+  snap stayed. Traced with a frame-sampled synthetic fling: Quasar's `setVirtualScrollSliceRange` calls
+  `setScroll` in a rAF after every slice change, back to the position captured at the scroll event (1172 to 900,
+  1758 to 1350, ...), with or without CPU throttling; separately its `offsetHeight` measure missed the 8px row
+  margin. Quasar exposes no option to stop the write. The cookbook had no windowing at all.
+- **Decision:** two small composables. `useFixedRowWindow` for uniform rows (stock overview above 50 items):
+  spacers and a slice computed from `scrollTop`, read-only. `useIncrementalRender` for grids and variable rows
+  (cookbook): 24 cards, then 24 more as a sentinel comes within 800px; the count is remembered per key so back
+  navigation renders as much as before.
+- **Alternatives considered:** a larger `virtual-scroll-slice-size` (rejected: fewer snaps, not none); CSS
+  `content-visibility` (rejected: still mounts every component); a virtualiser dependency (rejected: two short
+  composables cover both shapes without a new library).
+- **Consequences:** measured after: no backward scroll writes in a fling at 1x or 4x CPU, long tasks about 55ms
+  instead of 110 to 190ms at 4x. Other `q-virtual-scroll` uses (`MyProductsPage`, `MealPlanRecipePicker`,
+  `ImportResultDialog`) are left until touched (FU-994). Fetch size is separate: FU-992 step 2.
 

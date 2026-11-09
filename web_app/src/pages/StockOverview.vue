@@ -475,7 +475,7 @@
                     <!-- small lists keep the glide-in
                          ListTransition (DS4 perceived-perf masking, see
                          STOCK_OVERVIEW_PERF.md); large lists swap to
-                         q-virtual-scroll so a >50-item pantry actually
+                         a windowed list so a >50-item pantry actually
                          renders smoothly. Threshold matches the legacy
                          page-1 cap so behaviour stays familiar below it. -->
                     <ListTransition
@@ -499,29 +499,33 @@
                             @long-press="onRowLongPress"
                         />
                     </ListTransition>
-                    <q-virtual-scroll
+                    <div
                         v-else-if="filters.filteredStockItems.value.length > VIRTUAL_SCROLL_THRESHOLD"
-                        :items="filters.filteredStockItems.value"
-                        :virtual-scroll-item-size="rowHeight"
-                        :virtual-scroll-slice-size="30"
+                        ref="windowedListRef"
                         class="q-list stock-list"
                         :style="listStyle"
-                        v-slot="{ item, index }"
                     >
-                        <StockItemRow
+                        <div :style="{ height: `${rowWindow.padTop.value}px` }" />
+                        <div
+                            v-for="(item, offset) in windowedItems"
                             :key="item.stock_item_id"
-                            :item="item"
-                            :bulk-mode="bulkMode"
-                            :selected="bulkSelection.has(item.stock_item_id)"
-                            :focused="focusedIndex === index"
-                            :peeking="peekId === item.stock_item_id"
-                            :needs-check="needsCheckIds.has(item.stock_item_id)"
-                            @click="onRowClick"
-                            @bulk-toggle="toggleBulk"
-                            @filter-location="filters.locationFilter.value = $event"
-                            @long-press="onRowLongPress"
-                        />
-                    </q-virtual-scroll>
+                            class="stock-list__slot"
+                        >
+                            <StockItemRow
+                                :item="item"
+                                :bulk-mode="bulkMode"
+                                :selected="bulkSelection.has(item.stock_item_id)"
+                                :focused="focusedIndex === rowWindow.start.value + offset"
+                                :peeking="peekId === item.stock_item_id"
+                                :needs-check="needsCheckIds.has(item.stock_item_id)"
+                                @click="onRowClick"
+                                @bulk-toggle="toggleBulk"
+                                @filter-location="filters.locationFilter.value = $event"
+                                @long-press="onRowLongPress"
+                            />
+                        </div>
+                        <div :style="{ height: `${rowWindow.padBottom.value}px` }" />
+                    </div>
 
                     <!-- Empty state ───────────────────────────────────── -->
                     <!-- Carries its own right margin: the pane's padding moved
@@ -704,6 +708,7 @@
     import { useLocationStore } from 'src/stores/locationStore';
     import StockItemDetailPage from 'src/pages/StockItemDetailPage.vue';
     import { computed, onMounted, ref, watch } from 'vue';
+    import { useFixedRowWindow } from 'src/composables/useFixedRowWindow';
     import { useRoute, useRouter } from 'vue-router';
 
     const $q = useQuasar();
@@ -809,17 +814,13 @@
     // Stock groups load locally — no store yet, only needed by the filter
     // dropdown on this page.
 
-    // virtualisation tuning. Below the
-    // threshold we keep the existing ListTransition glide-in so small
-    // pantries feel unchanged; above it we hand off to q-virtual-scroll
-    // so a 500-item pantry renders smoothly. Item-size is a rough
-    // average — Quasar self-corrects after the first measure.
+    // Windowing (FU-991). Below the threshold the ListTransition glide-in
+    // stays, so small pantries feel unchanged; above it only the rows in view
+    // mount (`useFixedRowWindow`). Row geometry comes from one place
+    // (`stockRowMetrics`) and is used twice: for the window's arithmetic, and
+    // as the `--stock-row-height` custom property the row's CSS sizes itself
+    // from. They must agree exactly or rows drift from their spacers.
     const VIRTUAL_SCROLL_THRESHOLD = 50;
-    // Row geometry comes from one place (`stockRowMetrics`) and is used
-    // twice from here: as `virtual-scroll-item-size`, and as the
-    // `--stock-row-height` custom property the row's CSS sizes itself from.
-    // They must agree exactly or Quasar re-measures mid-scroll and the list
-    // visibly snaps — the 2026-08-15 "jumpy scrolling" report.
     const rowHeight = computed(() =>
         $q.screen.lt.sm ? STOCK_ROW_HEIGHT_MOBILE : STOCK_ROW_HEIGHT_DESKTOP,
     );
@@ -836,6 +837,16 @@
         stockGroups: () => stockGroupStore.stockGroups,
         membership: () => shoppingListStore.membership as Membership | null,
     }, { persistScope: 'stock-overview' });
+
+    const windowedListRef = ref<HTMLElement | null>(null);
+    const rowWindow = useFixedRowWindow({
+        scroller: windowedListRef,
+        count: computed(() => filters.filteredStockItems.value.length),
+        rowHeight,
+    });
+    const windowedItems = computed(() =>
+        filters.filteredStockItems.value.slice(rowWindow.start.value, rowWindow.end.value),
+    );
 
     // Filter panel expanded state — shared between the toolbar's
     // FilterToggleButton and the FilterBar's collapsible panel. Open iff
@@ -1317,7 +1328,7 @@
     /* C-1 Chunk 1 — the virtualised list needs a sized scroll container.
        It now inherits that size from the shell instead of guessing at the
        chrome height with a viewport formula. The two list branches
-       (ListTransition below VIRTUAL_SCROLL_THRESHOLD, QVirtualScroll
+       (ListTransition below VIRTUAL_SCROLL_THRESHOLD, the windowed list
        above it) are mutually exclusive, so exactly one scroller exists at
        a time and the pane can't nest two. */
     .stock-list {
@@ -1334,6 +1345,15 @@
         /* Reserve the gutter so the row width doesn't jump when the list
            crosses from non-scrolling to scrolling (filtering, deleting). */
         scrollbar-gutter: stable;
+    }
+    /* The windowed path's slot is exactly `--stock-row-height`: the row gap is
+       its padding rather than the row's margin, so the box the window counts
+       on is the box that renders (FU-991). */
+    .stock-list__slot {
+        padding-bottom: var(--space-2);
+    }
+    .stock-list__slot > .stock-row {
+        margin-bottom: 0;
     }
     /* Phones paint an overlay scrollbar that takes no layout width, so
        reserving a stable gutter AND a 16px pad just stole ~28px from every

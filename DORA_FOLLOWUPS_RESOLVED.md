@@ -10,6 +10,22 @@ resolutions go at the **top**.
 
 ---
 
+## [RESOLVED] FU-993 — Nutrition food search: row text overlaps, unreadable
+- **Raised:** 2026-11-09 (owner feedback)
+- **Type:** finding
+- **What:** In the food search for linking nutrition (`NutritionFoodPicker.vue`), each result row's text spills past the row and overlaps the next. Suspect: `.food-picker__results` is a flex column with `max-height: 46vh; overflow-y: auto`, and the `.food-row` buttons have the default `flex-shrink: 1`, so with many results they get squashed below their content height. Likely fix: `flex: 0 0 auto` on `.food-row`. Not reproduced yet (needs live USDA / Open Food Facts results).
+- **Why deferred:** feedback logged, not yet fixed.
+- **Recommended resolution:** now (small); confirm at phone width with a real search
+- **State note:** 2026-11-09. Reproduced with 20 long faked results at 375px: rows squashed to 56px against 128-171px of text. `flex: 0 0 auto` on `.food-row`; rows now size to their text. Real-search check left in DORA_VERIFY.
+
+## [RESOLVED] FU-991 — Stock overview still snaps when scrolling on a phone
+- **Raised:** 2026-11-09 (owner feedback)
+- **Type:** finding
+- **What:** Scrolling the stock overview on mobile still has a jarring snap. The 2026-08-15 fix (`StockItemRow.vue` ~L691, `StockOverview.vue` ~L815) made rows a fixed height equal to `q-virtual-scroll`'s item size so the scroller stops re-measuring mid-scroll. Either a phone row no longer matches `STOCK_ROW_HEIGHT_MOBILE` (content wrapping, group headers, a changed row), or the snap is the hand-off between the ListTransition path and `q-virtual-scroll` (threshold 50), or something else (sticky chrome, `scroll-behavior`).
+- **Why deferred:** feedback logged; needs measuring on a phone-width drive (row heights vs the metric, scroll position over time).
+- **Recommended resolution:** now / next stock overview pass; confirm on a phone
+- **State note:** 2026-11-09. Two causes in `QVirtualScroll`: `offsetHeight` dropped the 8px row margin, and it rewrites `scrollTop` a frame after each slice change, behind a fling. Replaced on the stock overview by `useFixedRowWindow` (read-only, gap as slot padding). Synthetic fling on 500 items: 0 backward writes at 1x and 4x CPU. R-106 / ADR-105. Real-phone check in DORA_VERIFY.
+
 ## [RESOLVED] FU-990 — Preferred buys and products side by side; one Products tab for buying
 - **Raised:** 2026-11-09 (owner feedback)
 - **Type:** follow-up
