@@ -515,17 +515,28 @@
         const line = detail.value?.lines.find((l) => l.line_id === lineId);
         if (!line) return;
         const previous = line.preferred_buy_id ?? null;
+        const previousProduct = line.selected_product_id;
         // Toggle: re-picking the chosen hint clears it.
         const next = preferredBuyId === previous ? null : preferredBuyId;
+        // A line holds one pick (FU-990): a hint replaces a picked offer.
+        const replacesOffer = next !== null && previousProduct !== null;
         line.preferred_buy_id = next;
+        if (replacesOffer) line.selected_product_id = null;
         try {
             if (next === null) {
                 await api.updateLineAsync(listId.value, lineId, { clear_preferred_buy: true });
             } else {
-                await api.updateLineAsync(listId.value, lineId, { preferred_buy_id: next });
+                await api.updateLineAsync(listId.value, lineId, {
+                    preferred_buy_id: next,
+                    ...(replacesOffer ? { clear_selected_product: true } : {}),
+                });
             }
+            // Dropping the offer drops its price from the estimate; the
+            // server's ladder says what replaces it (R-003).
+            if (replacesOffer) await refreshDetailQuietly();
         } catch (err) {
             line.preferred_buy_id = previous;
+            line.selected_product_id = previousProduct;
             if (!isAlreadyNotified(err)) {
                 $q.notify({
                     type: 'negative',
@@ -540,10 +551,14 @@
         const line = detail.value?.lines.find((l) => l.line_id === lineId);
         if (!line) return;
         const previous = line.selected_product_id;
+        const previousHint = line.preferred_buy_id ?? null;
         // Toggle: clicking the chosen offer clears the selection (falls
         // back to "cheapest" auto-selection).
         const next = previous === productId ? null : productId;
+        // A line holds one pick (FU-990): an offer replaces a picked hint.
+        const replacesHint = next !== null && previousHint !== null;
         line.selected_product_id = next;
+        if (replacesHint) line.preferred_buy_id = null;
         // Sync `is_selected` flags on the in-memory offers so chips repaint
         // without waiting for the round-trip.
         for (const offer of line.offers) {
@@ -557,6 +572,7 @@
             } else {
                 await api.updateLineAsync(listId.value, lineId, {
                     selected_product_id: next,
+                    ...(replacesHint ? { clear_preferred_buy: true } : {}),
                 });
             }
             // Picking an offer moves the line to the offer's store and prices
@@ -565,6 +581,7 @@
             await refreshDetailQuietly();
         } catch (err) {
             line.selected_product_id = previous;
+            line.preferred_buy_id = previousHint;
             if (!isAlreadyNotified(err)) {
                 $q.notify({
                     type: 'negative',

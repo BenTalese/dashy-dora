@@ -5,6 +5,24 @@ bump means a schema or configuration change you need to act on when upgrading.
 
 ## [Unreleased]
 
+### Changed
+
+- **Linked products and preferred buys work together.** An item with a linked product keeps its preferred buys,
+  and the name menu on a list row, a template line or a recipe ingredient offers both. Picking one replaces
+  the other.
+- **The Products tab holds everything about what you buy.** Linked products, preferred buys and Your prices
+  now sit together on the stock item's Products tab, which is always shown. The Overview tab is shorter.
+
+### Added
+
+- **Add a missing stock item from a shopping list.** In the Add to list sheet, typing a name nothing matches
+  offers Add "name" as a new stock item: it is created as out of stock and goes straight onto the list.
+
+### Fixed
+
+- The Nutrition row on a stock item no longer pushes the page sideways on a phone when the food has a long
+  name.
+
 ## [2.0.0] - 2026-11-08
 
 Shopping lists work differently: there is no separate draft and shopping mode

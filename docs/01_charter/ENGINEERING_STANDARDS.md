@@ -6578,3 +6578,19 @@ A non-binding cookbook of solutions to recurring problems. Not rules — just a
   one signal (`hasTicks`): the overview's lead figure, the progress bar, Finish, photos, wake lock, and the
   planning panels stepping aside.
 
+### ADR-104: Linked products and preferred buys sit side by side; a line holds one pick (FU-990)
+- **Date / task:** 2026-11-09 (owner feedback, FU-990)
+- **Status:** accepted; reverses the owner's 2026-11-03 call that an item with a linked product hides its
+  preferred buys
+- **Context:** `usesOffers()` picked one source per item: a linked product (with products on) hid that item's
+  preferred buys on the stock item page and in every "which one" picker. The owner uses both at once.
+- **Decision:** the stock item's Products tab is always shown and holds linked products (when products are on),
+  preferred buys and Your prices together. The list row, template line and recipe ingredient pickers list both
+  sources (`lineOffers` + `preferredBuys`). A line still holds one pick: picking one kind clears the other in
+  the same write (`clear_selected_product` / `clear_preferred_buy`, or `null` on a template line / ingredient).
+  If a stored line carries both, the offer shows, since it is the one that prices the line.
+- **Alternatives considered:** let a line hold both (rejected: one name on the row, two answers to "which
+  one"); enforce the single pick server-side (deferred: every write path already takes the explicit clear,
+  and a line carrying both is harmless, it just shows the offer).
+- **Consequences:** no flag hides the Products tab; its count is linked products (when on) plus preferred buys.
+

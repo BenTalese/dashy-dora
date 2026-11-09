@@ -84,15 +84,10 @@
                     <StockItemOverviewTab />
                 </q-tab-panel>
 
-                <!-- ── Linked products ──────────────────────────────────
-                     C-1b.3 (L125, L130, L131): Find-deals lives here now,
-                     not in the toolbar. Empty state = a primary CTA; when
-                     products exist, header carries a quieter "Link another"
-                     that goes to the same place. The "Get cheapest" button
-                     is gone — cheaper option is emphasised via card style
-                     and each product carries its own Add-to-list (per §2.4).
-                     Hidden entirely when `products` is off (§2.5). -->
-                <q-tab-panel v-if="productsEnabled" name="products">
+                <!-- ── Products: linked products, preferred buys and Your
+                     prices together (FU-990). Always shown; the linked
+                     products half follows the install's products flag. -->
+                <q-tab-panel name="products">
                     <StockItemProductsTab />
                 </q-tab-panel>
 
@@ -421,13 +416,12 @@
     const primaryListId = computed(() => shoppingListStore.quickAddTargetListId);
 
     // Tab definitions for DoraTabs — counts re-evaluate as detail loads /
-    // mutates. Products tab is gated by the install-wide feature flag.
+    // mutates. Products counts both kinds of "which one I buy" (FU-990).
     const tabDefinitions = computed<DoraTab[]>(() => {
         const d = detail.value;
         const out: DoraTab[] = [{ name: 'overview', label: 'Overview', icon: ICONS.info }];
-        if (productsEnabled.value) {
-            out.push({ name: 'products', label: `Products (${d?.products.length ?? 0})`, icon: ICONS.local_offer });
-        }
+        const productCount = (productsEnabled.value ? d?.products.length ?? 0 : 0) + (d?.preferred_buys?.length ?? 0);
+        out.push({ name: 'products', label: `Products (${productCount})`, icon: ICONS.local_offer });
         out.push({ name: 'recipes', label: `Recipes (${d?.recipes.length ?? 0})`, icon: ICONS.menu_book });
         out.push({ name: 'substitutes', label: `Substitutes (${d?.substitutes.length ?? 0})`, icon: ICONS.swap_horiz });
         // Feedback 2026-08-21: barcodes were buried at the bottom of the

@@ -10,6 +10,31 @@ resolutions go at the **top**.
 
 ---
 
+## [RESOLVED] FU-990 — Preferred buys and products side by side; one Products tab for buying
+- **Raised:** 2026-11-09 (owner feedback)
+- **Type:** follow-up
+- **What:** Preferred buys and linked products should both be usable at once, not either/or. Today `usesOffers()` (`web_app/src/models/shoppingList.ts:71`) picks one source: a stock item with linked products (products on) hides its preferred buys on the detail page (`StockItemOverviewTab.vue` ~L578) and in the choice pickers (`LineChoicePicker.vue`, `RecipeIngredientRowEditor.vue`). Owner wants: the stock item's Products tab always shown (today gated on `productsEnabled`, `StockItemDetailPage.vue:95`), with Preferred buys and Your prices moved onto it from the Overview tab, so everything about what you buy sits in one place.
+- **Notes for the build:** the "Owner 2026-11-03" comment that made products override preferred buys gets reversed (ADR worth recording). With products off, the tab shows just Preferred buys + Your prices (label may need a rethink then). Pickers need both lists together; check the line/ingredient choice model (`preferred_buy_id` / `selected_product_id`) still holds one pick from either source.
+- **Why deferred:** feedback logged, not yet built.
+- **Recommended resolution:** next stock detail / products pass
+- **State note:** 2026-11-09. Products tab always shown and holds linked products, preferred buys (`StockItemPreferredBuys.vue`) and Your prices (`StockItemPrices.vue`); `usesOffers` replaced by `lineOffers`; list row, template and recipe pickers list both, a pick of one kind clears the other in the same write. ADR-104. Driven on :5171 at 375px.
+
+## [RESOLVED] FU-988 — Shopping list quick-add can't create a missing stock item
+- **Raised:** 2026-11-09 (owner feedback)
+- **Type:** follow-up
+- **What:** On the shopping list page, the add dialog (`QuickAddSheet.vue`) only lists existing stock items; a search with no hit dead-ends at "No matches." Owner wants to add a missing stock item from there (create it, then add it to the list) without leaving the list.
+- **Why deferred:** feedback logged, not yet built. Reuse the existing create-stock-item path (R-001), don't add a second one.
+- **Recommended resolution:** next shopping list pass
+- **State note:** 2026-11-09. `QuickAddSheet` offers Add "name" as a new stock item when no item has the typed name; creates it at the out-of-stock level and adds it to the target list. Driven on :5171.
+
+## [RESOLVED] FU-987 — Stock item nutrition box causes horizontal scroll on phones
+- **Raised:** 2026-11-09 (owner feedback)
+- **Type:** finding
+- **What:** On the stock item detail page (phone width), the Nutrition row in `StockItemOverviewTab.vue` (~L210-268: linked-food summary row with Details / search / unlink buttons, plus the expanded `NutritionFactsList`) pushes the page wider than the viewport and enables horizontal scroll. Suspects: the button row not wrapping beside the food name, or the facts table not shrinking inside the `q-item-section`.
+- **Why deferred:** feedback logged, not yet fixed.
+- **Recommended resolution:** now / next stock detail pass; confirm at 375px after the fix
+- **State note:** 2026-11-09. Cause: Quasar `.column` wraps, so the section and the name column sized to the food name. `no-wrap` on both in `StockItemOverviewTab.vue`; measured 0px overflow at 375px (was 123px), linked and suggestion states.
+
 ## [RESOLVED] FU-960 — Onboarding seed endpoint has no first-user gate server-side; companion contract tightened
 - **Raised:** 2026-10-30 (autonomous QA round 2)
 - **Type:** finding

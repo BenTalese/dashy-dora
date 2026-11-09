@@ -55,9 +55,9 @@ export type LineProductOffer = {
 
 export type LinePreferredBuy = { preferred_buy_id: string; label: string };
 
-/** The "which one" choice a list row and a template line both carry. Decided
- *  per item (owner 2026-11-03): an item with linked products offers those,
- *  every other item its preferred buys, so the two coexist on one install. */
+/** The "which one" choice a list row and a template line both carry: the
+ *  item's linked products' offers (when products are on) and its preferred
+ *  buys, side by side (FU-990). A line holds one pick, from either source. */
 export type LineChoice = {
     itemName: string;
     offers: LineProductOffer[];
@@ -66,28 +66,26 @@ export type LineChoice = {
     preferredBuyId: string | null;
 };
 
-/** The one rule for which source an item's choice comes from: its linked
- *  products when products are on and it has any, else its preferred buys. */
-export function usesOffers(offerCount: number, productsEnabled: boolean): boolean {
-    return productsEnabled && offerCount > 0;
+/** Offers only count when the install has products on. */
+export function lineOffers(choice: LineChoice, productsEnabled: boolean): LineProductOffer[] {
+    return productsEnabled ? choice.offers : [];
 }
 
 export function hasLineChoices(choice: LineChoice, productsEnabled: boolean): boolean {
-    return usesOffers(choice.offers.length, productsEnabled) || choice.preferredBuys.length > 0;
+    return lineOffers(choice, productsEnabled).length > 0 || choice.preferredBuys.length > 0;
 }
 
-/** Only an offer the user picked, never the cheapest-offer fallback, which
- *  prices nothing and so must not look chosen. */
+/** The line's one pick. Only an offer the user picked, never the
+ *  cheapest-offer fallback, which prices nothing and so must not look chosen.
+ *  A line that somehow carries both shows the offer, the one that prices it. */
 export function pickedLineChoice(
     choice: LineChoice,
     productsEnabled: boolean,
-): { id: string; label: string } | null {
-    if (usesOffers(choice.offers.length, productsEnabled)) {
-        const offer = choice.offers.find((o) => o.product_id === choice.selectedProductId);
-        return offer ? { id: offer.product_id, label: offer.name } : null;
-    }
+): { kind: 'offer' | 'preferred'; id: string; label: string } | null {
+    const offer = lineOffers(choice, productsEnabled).find((o) => o.product_id === choice.selectedProductId);
+    if (offer) return { kind: 'offer', id: offer.product_id, label: offer.name };
     const pb = choice.preferredBuys.find((p) => p.preferred_buy_id === choice.preferredBuyId);
-    return pb ? { id: pb.preferred_buy_id, label: pb.label } : null;
+    return pb ? { kind: 'preferred', id: pb.preferred_buy_id, label: pb.label } : null;
 }
 
 export type ShoppingListLine = {

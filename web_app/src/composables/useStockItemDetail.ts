@@ -188,17 +188,9 @@ function createStockItemDetail(idSource: () => string) {
             if (typeof section === 'string' && STOCK_ITEM_TAB_NAMES.includes(section)) tab.value = section;
         },
     );
-    // if the URL pointed at ?section=products but products
-    // is off (or the admin flips it off later), fall back to Overview so
-    // we don't strand the user on an invisible tab.
-    watch(
-        [productsEnabled, tab],
-        ([enabled, current]) => {
-            if (!enabled && current === 'products') tab.value = 'overview';
-        },
-        { immediate: true },
-    );
-    // Same guard for the Scanning tab, which is gated on the scanning flag.
+    // The Scanning tab is gated on the scanning flag: a ?section=scanning link
+    // (or the admin flipping it off later) falls back to Overview rather than
+    // stranding the user on an invisible tab.
     watch(
         [scanningEnabled, tab],
         ([enabled, current]) => {

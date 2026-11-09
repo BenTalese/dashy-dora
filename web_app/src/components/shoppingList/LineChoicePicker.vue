@@ -1,9 +1,9 @@
 <template>
-    <!-- The name *is* the "which one" picker (owner, 2026-09-17), and what it
-         offers depends on the item (2026-11-03): one with linked products
-         lists its **offers**, any other its **preferred buys** (`usesOffers`). Shared by the
-         list row and the template editor (2026-10-14), so a template is built
-         with the same control the list is. The caller renders plain text when
+    <!-- The name *is* the "which one" picker (owner, 2026-09-17). It lists the
+         item's linked products' **offers** and its **preferred buys** together
+         (FU-990); the line holds one pick from either. Shared by the list row
+         and the template editor (2026-10-14), so a template is built with the
+         same control the list is. The caller renders plain text when
          `hasLineChoices` is false. -->
     <BaseDropdown
         flat
@@ -19,57 +19,55 @@
                 v-close-popup
                 clickable
                 :active="!picked"
-                @click="onPick(null)"
+                @click="onPick(null, null)"
             >
                 <q-item-section>{{ choice.itemName }}</q-item-section>
             </q-item>
             <q-separator />
-            <template v-if="offersMode">
-                <q-item
-                    v-for="offer in choice.offers"
-                    :key="offer.product_id"
-                    v-close-popup
-                    clickable
-                    :active="picked?.id === offer.product_id"
-                    @click="onPick(offer.product_id)"
-                >
-                    <q-item-section>
-                        <q-item-label>
-                            {{ offer.name }}<span v-if="offer.size" class="dora-text-muted"> · {{ offer.size }}</span>
-                        </q-item-label>
-                        <q-item-label caption>
-                            <template v-if="moneyEnabled && offer.price_now != null">
-                                {{ formatMoney(offer.price_now) }} at
-                            </template>{{ offer.store_name }}
-                            <span v-if="moneyEnabled && offerSavings(offer) > 0" class="line-choice__save">
-                                {{ formatMoney(offerSavings(offer)) }} off
-                            </span>
-                        </q-item-label>
-                    </q-item-section>
-                    <q-item-section side>
-                        <StoreLogo
-                            :name="offer.store_name"
-                            :store-id="offer.store_id"
-                            :height="20"
-                            :width="34"
-                        />
-                    </q-item-section>
-                </q-item>
-            </template>
-            <template v-else>
-                <q-item
-                    v-for="pb in choice.preferredBuys"
-                    :key="pb.preferred_buy_id"
-                    v-close-popup
-                    clickable
-                    :active="picked?.id === pb.preferred_buy_id"
-                    @click="onPick(pb.preferred_buy_id)"
-                >
-                    <q-item-section>{{ pb.label }}</q-item-section>
-                </q-item>
-            </template>
+            <q-item-label v-if="offers.length && choice.preferredBuys.length" header>Products</q-item-label>
+            <q-item
+                v-for="offer in offers"
+                :key="offer.product_id"
+                v-close-popup
+                clickable
+                :active="picked?.id === offer.product_id"
+                @click="onPick('offer', offer.product_id)"
+            >
+                <q-item-section>
+                    <q-item-label>
+                        {{ offer.name }}<span v-if="offer.size" class="dora-text-muted"> · {{ offer.size }}</span>
+                    </q-item-label>
+                    <q-item-label caption>
+                        <template v-if="moneyEnabled && offer.price_now != null">
+                            {{ formatMoney(offer.price_now) }} at
+                        </template>{{ offer.store_name }}
+                        <span v-if="moneyEnabled && offerSavings(offer) > 0" class="line-choice__save">
+                            {{ formatMoney(offerSavings(offer)) }} off
+                        </span>
+                    </q-item-label>
+                </q-item-section>
+                <q-item-section side>
+                    <StoreLogo
+                        :name="offer.store_name"
+                        :store-id="offer.store_id"
+                        :height="20"
+                        :width="34"
+                    />
+                </q-item-section>
+            </q-item>
+            <q-item-label v-if="offers.length && choice.preferredBuys.length" header>Preferred buys</q-item-label>
+            <q-item
+                v-for="pb in choice.preferredBuys"
+                :key="pb.preferred_buy_id"
+                v-close-popup
+                clickable
+                :active="picked?.id === pb.preferred_buy_id"
+                @click="onPick('preferred', pb.preferred_buy_id)"
+            >
+                <q-item-section>{{ pb.label }}</q-item-section>
+            </q-item>
         </q-list>
-        <BaseTooltip>{{ offersMode ? 'Pick an offer' : 'Pick a preferred buy' }}</BaseTooltip>
+        <BaseTooltip>Pick which one</BaseTooltip>
     </BaseDropdown>
 </template>
 
@@ -82,7 +80,7 @@
     import { formatMoney } from 'src/composables/useMoney';
     import { useMoneyEnabled } from 'src/composables/useMoneyEnabled';
     import {
-        pickedLineChoice, usesOffers, type LineChoice, type LineProductOffer,
+        lineOffers, pickedLineChoice, type LineChoice, type LineProductOffer,
     } from 'src/models/shoppingList';
 
     const props = defineProps<{
@@ -91,7 +89,9 @@
         struck?: boolean;
     }>();
 
-    /** `null` clears the choice. Only fires on a change. */
+    /** `null` clears that kind of pick. Only fires on a change. Picking one
+     *  kind replaces a pick of the other: the caller clears it in the same
+     *  write, since a line holds one pick. */
     const emit = defineEmits<{
         'pick-offer': [productId: string | null];
         'pick-hint': [preferredBuyId: string | null];
@@ -100,12 +100,13 @@
     const { moneyEnabled } = useMoneyEnabled();
     const { products: productsEnabled } = useFeatureFlags();
 
-    const offersMode = computed(() => usesOffers(props.choice.offers.length, productsEnabled.value));
+    const offers = computed(() => lineOffers(props.choice, productsEnabled.value));
     const picked = computed(() => pickedLineChoice(props.choice, productsEnabled.value));
 
-    function onPick(id: string | null): void {
+    function onPick(kind: 'offer' | 'preferred' | null, id: string | null): void {
         if (id === (picked.value?.id ?? null)) return;
-        if (offersMode.value) emit('pick-offer', id);
+        const target = kind ?? picked.value?.kind;
+        if (target === 'offer') emit('pick-offer', id);
         else emit('pick-hint', id);
     }
 

@@ -41,6 +41,41 @@ next.
 
 ---
 
+## 2026-11-09 (later): **FU-987, FU-988, FU-990 built: nutrition overflow, add missing item from a list, products + preferred buys together**
+
+**Owner:** build all 3 now.
+
+**FU-987:** cause was Quasar's `.column` (flex-wrap: wrap): the Nutrition `q-item-section` and the food-name column
+sized to the full food name, so the buttons ran 123px past the card. `no-wrap` on both (`StockItemOverviewTab.vue`).
+Measured 0 overflow at 375px, linked and suggestion states.
+
+**FU-988:** `QuickAddSheet` shows Add "name" as a new stock item when no stock item has the typed name (trimmed,
+case-insensitive); creates it at the out-of-stock level (`findLevelBySequence`, no location) and adds it to the
+target list in one tap. Driven: Saffron threads created Out of Stock and on the list; an exact name shows no create row.
+
+**FU-990:** Products tab always shown (watcher that bounced `?section=products` removed); count = linked products
+(when on) + preferred buys. Preferred buys and Your prices lifted out of the Overview tab into
+`StockItemPreferredBuys.vue` / `StockItemPrices.vue` and composed on the Products tab under linked products (empty
+state now a one-line note, not the big CTA). `usesOffers` gone; `lineOffers` + `pickedLineChoice` (now returns
+`kind`) in `models/shoppingList.ts`. `LineChoicePicker` lists Products then Preferred buys (headers only when both);
+ActiveFace pick handlers send `clear_preferred_buy` / `clear_selected_product` with the new pick (and refresh after
+an offer is dropped); templates null the other field; recipe editor merges both into one select ("Which one").
+Server unchanged: every write path already took the explicit clear. Help: preferred-buys, offers-preferred and
+stock-item-page entries; corpus regenerated.
+
+**Verified:** Vitest 943 (lineChoiceSource spec rewritten), vue-tsc, eslint clean; pytest -k help 12 pass. Playwright
+on :5171 at 375px: Overview has no Preferred buys / Your prices; Products tab has all three, no overflow; list picker
+shows both sections; offer then hint leaves only the hint on the line, hint then offer only the product (DB checked).
+Not driven: template and recipe pickers (DORA_VERIFY).
+
+**Gates:** ADR-104 (reverses the 2026-11-03 either/or). R-001 (one shared picker; the moved sections are their own
+components rather than copies), R-003 (price/store after dropping an offer re-read from the server),
+R-035/D-rules: section headers match the existing Preferred buys style. No em dashes in added lines.
+
+**Next up:** deploy when the owner wants; the two new DORA_VERIFY checks.
+
+---
+
 ## 2026-11-09: **Two owner feedback items logged (no code)**
 
 **Owner:** two more feedback items. Logged as follow-ups, nothing built:

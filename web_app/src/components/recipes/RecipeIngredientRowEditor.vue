@@ -99,7 +99,7 @@
                     v-if="choiceOptions.length > 0"
                     v-model="pickedChoice"
                     class="col"
-                    :label="offersMode ? 'Product' : 'Preferred buy'"
+                    :label="choiceLabel"
                     :options="choiceOptions"
                     emit-value
                     map-options
@@ -240,7 +240,6 @@
      * user backed out of.
      */
     import { computed, ref, watch } from 'vue';
-    import { usesOffers } from 'src/models/shoppingList';
     import { useQuasar } from 'quasar';
     import { storeToRefs } from 'pinia';
 
@@ -343,10 +342,9 @@
     );
 
     // ── Which one ───────────────────────────────────────────────────────
-    // The item's preferred buys and linked products, fetched when the item is
-    // picked. Which list is offered follows the item, as on a shopping line
-    // (`usesOffers`): its linked products when it has any, else its
-    // preferred buys.
+    // The item's linked products (when products are on) and preferred buys,
+    // fetched when the item is picked and offered together, as on a shopping
+    // line (FU-990). The row holds one pick from either.
     const preferredBuys = ref<PreferredBuy[]>([]);
     const linkedProducts = ref<LinkedProduct[]>([]);
     const loadingChoices = ref(false);
@@ -383,23 +381,34 @@
         { immediate: true },
     );
 
-    const offersMode = computed(() => usesOffers(linkedProducts.value.length, productsEnabled.value));
-    const choiceOptions = computed(() => (offersMode.value
-        ? linkedProducts.value.map((p) => ({
+    const choiceOptions = computed(() => [
+        ...(productsEnabled.value ? linkedProducts.value : []).map((p) => ({
+            kind: 'offer' as const,
             label: p.size ? `${p.name} · ${p.size}` : p.name,
             value: p.product_id,
             name: p.name,
-        }))
-        : preferredBuys.value.map((pb) => ({
+        })),
+        ...preferredBuys.value.map((pb) => ({
+            kind: 'preferred' as const,
             label: pb.label,
             value: pb.preferred_buy_id,
             name: pb.label,
-        }))));
+        })),
+    ]);
+    const choiceLabel = computed(() => {
+        const kinds = new Set(choiceOptions.value.map((o) => o.kind));
+        if (kinds.size > 1) return 'Which one';
+        return kinds.has('offer') ? 'Product' : 'Preferred buy';
+    });
 
     const pickedChoice = computed<string | null>({
-        get: () => (offersMode.value
-            ? draft.value?.selected_product_id
-            : draft.value?.preferred_buy_id) ?? null,
+        get: () => {
+            const d = draft.value;
+            if (!d) return null;
+            const ids = new Set(choiceOptions.value.map((o) => o.value));
+            if (d.selected_product_id && ids.has(d.selected_product_id)) return d.selected_product_id;
+            return d.preferred_buy_id ?? null;
+        },
         set: (id) => {
             const d = draft.value;
             if (!d) return;
@@ -408,11 +417,11 @@
             // displayed value, so nothing has to choose between label and pick
             // at read time (R-053).
             const before = choiceOptions.value.find((o) => o.value === pickedChoice.value)?.name ?? null;
-            const after = choiceOptions.value.find((o) => o.value === id)?.name ?? null;
+            const option = choiceOptions.value.find((o) => o.value === id) ?? null;
             const label = (d.label ?? '').trim();
-            if (label === '' || label === before) d.label = after;
-            if (offersMode.value) d.selected_product_id = id;
-            else d.preferred_buy_id = id;
+            if (label === '' || label === before) d.label = option?.name ?? null;
+            d.selected_product_id = option?.kind === 'offer' ? option.value : null;
+            d.preferred_buy_id = option?.kind === 'preferred' ? option.value : null;
         },
     });
 

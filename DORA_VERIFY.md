@@ -22,6 +22,10 @@ top-to-bottom.
 
 ---
 
+## Products and preferred buys together (2026-11-09) — origin FU-990
+- [ ] Template line for an item with a linked product and a preferred buy: name menu lists both; picking one replaces the other.
+- [ ] Recipe ingredient for the same item: "Which one" lists both; picking one replaces the other after save.
+
 ## Shopping list v5: one active list (2026-11-08)
 - [ ] On a phone, walk a whole shop: tick, untick, Not yet on the last-tick prompt, then Finish; Stock shows the ticked items Stocked.
 - [ ] After upgrading Altair, open a list that was mid-shop: its ticks are kept, and Finish restocks them.

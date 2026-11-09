@@ -208,7 +208,7 @@ export const HELP_TOPICS: HelpTopic[] = [
             {
                 slug: 'stock-item-page',
                 title: 'The stock item page',
-                summary: 'Every row is its own editor and saves as you change it. Tabs for Products, Recipes, Substitutes, Scanning, Lists and History.',
+                summary: 'Every row is its own editor and saves as you change it. Tabs for Products (linked products, preferred buys and your prices), Recipes, Substitutes, Scanning, Lists and History.',
                 note: 'A tab is hidden when the feature behind it is off for the install.',
                 image: 'stock-item',
                 imageAlt: 'A stock item’s page',
@@ -233,8 +233,8 @@ export const HELP_TOPICS: HelpTopic[] = [
             {
                 slug: 'preferred-buys',
                 title: 'Preferred buys',
-                summary: 'A note of what you actually buy, with no price or store.',
-                note: 'An item with a linked product uses that product instead, since it answers the same question with real prices.',
+                summary: 'A note of what you actually buy, with no price or store. On the item’s Products tab, beside any linked products and your prices.',
+                note: 'A list row or recipe can pick a preferred buy or a linked product, one at a time.',
             },
             {
                 slug: 'nutrition-item',
@@ -575,7 +575,7 @@ export const HELP_TOPICS: HelpTopic[] = [
             {
                 slug: 'offers-preferred',
                 title: 'Picking which one',
-                summary: 'The item’s name on a row is a menu of its linked products’ offers, or its preferred buys when it has no linked product. Picking an offer moves the line to that store.',
+                summary: 'The item’s name on a row is a menu of its linked products’ offers and its preferred buys. Picking an offer moves the line to that store.',
             },
             {
                 slug: 'line-cost-store',

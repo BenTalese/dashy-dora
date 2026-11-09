@@ -1,7 +1,8 @@
 <template>
     <!-- The stock-item page's Overview tab (FU-934 split): Dora's belief, the
-         buy verdict (or planned demand), the inline-edit fact list, preferred
-         buys and Your prices, plus the two dialogs only this tab opens. The
+         buy verdict (or planned demand) and the inline-edit fact list, plus the
+         dialogs only this tab opens (preferred buys and Your prices moved to the
+         Products tab, FU-990). The
          loaded item, the edit form and the save/reload pair are the page's
          (`useStockItemDetail`). Multi-root on purpose: the panel's DOM is
          exactly what it was before the split. -->
@@ -209,7 +210,9 @@
                          rather than shown disabled (R-029). -->
                     <q-item v-if="nutritionIsComplex">
                         <q-item-section class="dora-text-secondary text-weight-bold dora-inline-edit__label">Nutrition</q-item-section>
-                        <q-item-section>
+                        <!-- no-wrap: a wrapping column sizes each state to its widest line, so a
+                             long food name pushed the buttons off a phone screen (FU-987). -->
+                        <q-item-section class="no-wrap">
                             <!-- Feedback 2026-08-16: the full nutrient table
                                  would push every section below it off the
                                  screen, so it lives behind a disclosure on
@@ -218,7 +221,7 @@
                                  from. -->
                             <div v-if="detail.nutrition_food">
                                 <div class="row items-center q-gutter-xs">
-                                    <div class="column items-start stock-detail__shrink">
+                                    <div class="column no-wrap stock-detail__shrink">
                                         <span class="dora-text-primary ellipsis">
                                             {{ detail.nutrition_food.name }}
                                         </span>
@@ -282,7 +285,7 @@
                                         :label="detail.nutrition_suggestion.is_strong
                                             ? 'Suggested' : 'Possible match'"
                                     />
-                                    <span class="dora-text-primary ellipsis">
+                                    <span class="dora-text-primary ellipsis stock-detail__shrink">
                                         {{ detail.nutrition_suggestion.name }}
                                     </span>
                                 </div>
@@ -564,201 +567,9 @@
                         </q-item-section>
                     </q-item>
                 </q-list>
-
-                <!-- Preferred buys (FU-211) — free-text "what I
-                     actually buy" reminders: not a product/SKU,
-                     just a personal memory aid (and a future
-                     shopping-list hint).
-
-                     Owner 2026-11-03: shown and used as normal
-                     unless this item has a linked product, which
-                     then answers "which one do I buy?" with real
-                     SKUs and prices (`usesOffers`). Rows already
-                     stored are kept; unlinking brings them back. -->
-                <template v-if="!usesOffers(detail.products.length, productsEnabled)">
-                <!-- Feedback 2026-06-18 (round 4): the explainer
-                     ("What you actually buy for this — e.g.
-                     Vitasoy Oat Milky 1L") moves to an info-hover
-                     next to the heading. Same pattern as the
-                     toggle rows in the basics list. -->
-                <div class="q-mt-md dora-text-secondary text-weight-bold q-mb-sm row items-center q-gutter-xs">
-                    <span>Preferred buys</span>
-                    <q-icon :name="ICONS.info_outline" size="14px" class="dora-text-muted">
-                        <BaseTooltip max-width="320px">
-                            What you actually buy for this, e.g.
-                            “Vitasoy Oat Milky 1L”.
-                        </BaseTooltip>
-                    </q-icon>
-                </div>
-                <!-- Feedback 2026-06-18 (round 3): the manual
-                     reorder buttons are gone — these reminders
-                     are scanned alphabetically more often than
-                     they're ranked. Backend still stores a
-                     position (kept so historical data isn't
-                     disturbed), but the UI sorts the list
-                     A-Z client-side. -->
-                <q-list
-                    v-if="preferredBuys.length"
-                    separator
-                    bordered
-                    class="rounded-borders q-mb-sm"
-                >
-                    <q-item
-                        v-for="pb in preferredBuys"
-                        :key="pb.preferred_buy_id"
-                    >
-                        <q-item-section>
-                            <q-input
-                                v-if="editingBuyId === pb.preferred_buy_id"
-                                v-model="editingBuyLabel"
-                                dense
-                                outlined
-                                autofocus
-                                maxlength="255"
-                                @blur="saveBuyRename(pb)"
-                                @keydown.enter.prevent="saveBuyRename(pb)"
-                                @keydown.esc.prevent="editingBuyId = null"
-                            />
-                            <q-item-label v-else>{{ pb.label }}</q-item-label>
-                        </q-item-section>
-                        <q-item-section side>
-                            <div class="row items-center no-wrap">
-                                <BaseButton
-                                    :aria-label="`Rename ${pb.label}`"
-                                    variant="icon"
-                                    :icon="ICONS.edit"
-                                    :disable="busy"
-                                    @click="startBuyRename(pb)"
-                                >
-                                    <BaseTooltip>Rename</BaseTooltip>
-                                </BaseButton>
-                                <BaseButton
-                                    :aria-label="`Remove ${pb.label}`"
-                                    variant="icon"
-                                    :icon="ICONS.delete_outline"
-                                    :disable="busy"
-                                    @click="deleteBuy(pb)"
-                                >
-                                    <BaseTooltip>Remove</BaseTooltip>
-                                </BaseButton>
-                            </div>
-                        </q-item-section>
-                    </q-item>
-                </q-list>
-                <div class="row items-center no-wrap q-gutter-sm">
-                    <q-input
-                        v-model="newBuyLabel"
-                        dense
-                        outlined
-                        class="col"
-                        maxlength="255"
-                        placeholder="Add a preferred buy"
-                        @keydown.enter.prevent="addBuy"
-                    />
-                    <BaseButton
-                        variant="primary"
-                        :icon="ICONS.add"
-                        label="Add"
-                        :disable="!newBuyLabel.trim() || busy"
-                        @click="addBuy"
-                    />
-                </div>
-                </template>
-
-                <!-- "Your prices" widget: baseline, latest
-                     price, [Log a price] (the shared PriceEntry
-                     dialog) and Full history. -->
-                <template v-if="moneyEnabled">
-                    <!-- q-mt-lg: owner 2026-10-17, "a bit more
-                         top margin" — it sat tight under the
-                         basics list / preferred buys. -->
-                    <YourPricesWidget
-                        class="q-mt-lg"
-                        :your-prices="detail.your_prices ?? null"
-                        :prefill="detail.price_entry_prefill ?? null"
-                        :stores="storesList"
-                        :busy="busy"
-                        :stock-item-id="stockItemId"
-                        :item-name="detail.name"
-                        @submit="addObservation"
-                    >
-                    <!-- Owner 2026-10-17 restyle: a labelled
-                         section, amounts in one right-hand column
-                         (D-018), the measure + when/where as the
-                         row's text. -->
-                    <div v-if="priceObservations.length" class="dora-your-prices__recent">
-                        <div class="dora-your-prices__label dora-your-prices__recent-label">Recent prices</div>
-                        <q-list separator class="dora-your-prices__list">
-                            <q-item
-                                v-for="obs in shownObservations"
-                                :key="obs.observation_id"
-                            >
-                                <q-item-section>
-                                    <q-item-label>{{ formatObsMeasure(obs) }}</q-item-label>
-                                    <q-item-label caption>
-                                        {{ relativeTime(obs.observed_at) }}
-                                        <span v-if="obs.store_name"> · {{ obs.store_name }}</span>
-                                        <span v-if="obs.shopping_list_name"> · from {{ obs.shopping_list_name }}</span>
-                                    </q-item-label>
-                                </q-item-section>
-                                <q-item-section side class="dora-your-prices__price">
-                                    {{ formatMoney(obs.total_price) }}
-                                </q-item-section>
-                                <q-item-section side>
-                                    <div class="row no-wrap">
-                                        <BaseButton
-                                            variant="icon"
-                                            :icon="ICONS.edit"
-                                            :disable="busy"
-                                            aria-label="Edit price"
-                                            @click="editingObservation = obs"
-                                        >
-                                            <BaseTooltip>Edit</BaseTooltip>
-                                        </BaseButton>
-                                        <BaseButton
-                                            variant="icon"
-                                            :icon="ICONS.delete_outline"
-                                            :disable="busy"
-                                            aria-label="Remove price"
-                                            @click="deleteObservation(obs)"
-                                        >
-                                            <BaseTooltip>Remove</BaseTooltip>
-                                        </BaseButton>
-                                    </div>
-                                </q-item-section>
-                            </q-item>
-                        </q-list>
-                        <BaseButton
-                            v-if="priceObservations.length > RECENT_PRICES_SHOWN"
-                            variant="subtle"
-                            class="q-mt-xs"
-                            :label="showAllObservations ? 'Show fewer' : `Show all ${priceObservations.length}`"
-                            @click="showAllObservations = !showAllObservations"
-                        />
-                    </div>
-                    </YourPricesWidget>
-                </template>
             </div>
         </div>
     </template>
-
-    <BaseDialog
-        :model-value="editingObservation !== null"
-        title="Edit price"
-        closable
-        @update:model-value="(open: boolean) => { if (!open) editingObservation = null; }"
-    >
-        <q-card-section v-if="editingObservation">
-            <PriceEntry
-                mode="shelf"
-                :initial="editingObservation"
-                :stores="storesList"
-                :busy="busy"
-                @submit="updateObservation"
-                @cancel="editingObservation = null"
-            />
-        </q-card-section>
-    </BaseDialog>
 
     <BaseDialog v-model="expiryDialogOpen" title="Set expiry" closable card-style="min-width: 320px">
         <q-card-section>
@@ -781,7 +592,6 @@
 
 <script lang="ts" setup>
     import { computed, ref, watch } from 'vue';
-    import { useQuasar } from 'quasar';
     import BaseTooltip from 'src/components/BaseTooltip.vue';
     import BaseButton from 'src/components/BaseButton.vue';
     import BaseSelect from 'src/components/BaseSelect.vue';
@@ -794,30 +604,17 @@
     import PantryBeliefCard from 'src/components/stock/PantryBeliefCard.vue';
     import PlannedDemandCard from 'src/components/stock/PlannedDemandCard.vue';
     import StockLevelDot from 'src/components/stock/StockLevelDot.vue';
-    import PriceEntry from 'src/components/dora/PriceEntry.vue';
-    import YourPricesWidget from 'src/components/dora/YourPricesWidget.vue';
     import { useBuyVerdictActions } from 'src/composables/useBuyVerdictActions';
-    import { useConfirm } from 'src/composables/useConfirm';
     import { formatDate } from 'src/composables/useDateFormat';
     import { useFeatureFlags } from 'src/composables/useFeatureFlags';
     import { useLocationOptions } from 'src/composables/useLocationOptions';
-    import { formatMoney } from 'src/composables/useMoney';
-    import { useMoneyEnabled } from 'src/composables/useMoneyEnabled';
     import { useNutritionMode } from 'src/composables/useNutritionMode';
     import { usePantryBeliefs } from 'src/composables/usePantryBeliefs';
     import { usePlannedDemand } from 'src/composables/usePlannedDemand';
     import { useStockItemActions } from 'src/composables/useStockItemActions';
     import { useStockItemDetail } from 'src/composables/useStockItemDetail';
     import { expiryIndicatorFor } from 'src/helpers/expiryIndicator';
-    import { formatQuantity } from 'src/helpers/formatQuantity';
     import { relativeTime } from 'src/helpers/relativeTime';
-    import { usesOffers } from 'src/models/shoppingList';
-    import type {
-        PreferredBuy,
-        PriceEntryValue,
-        PriceObservation,
-    } from 'src/models/stockItemDetail';
-    import { isAlreadyNotified, toastCaption } from 'src/services/errorHandling/apiErrorHandler';
     import { useLocationStore } from 'src/stores/locationStore';
     import { useStockGroupStore } from 'src/stores/stockGroupStore';
     import { useStockItemStore } from 'src/stores/stockItemStore';
@@ -826,22 +623,17 @@
     import { ICONS } from 'src/style/icons';
 
     const {
-        stockItemApi,
         stockItemId,
         detail,
         busy,
         form,
         buyVerdict,
         nutritionExpanded,
-        newBuyLabel,
-        editingBuyId,
-        editingBuyLabel,
         loadDetail,
         saveField,
         withBusyReload,
     } = useStockItemDetail();
 
-    const $q = useQuasar();
     const stockItemStore = useStockItemStore();
     const stockLevelStore = useStockLevelStore();
     const stockGroupStore = useStockGroupStore();
@@ -857,8 +649,7 @@
 
     // 2026-08-20 — install-wide stocktake switch; hides the per-item mute
     // toggle when the household doesn't use stocktake at all.
-    const { products: productsEnabled, stocktake: stocktakeEnabled } = useFeatureFlags();
-    const { moneyEnabled } = useMoneyEnabled();
+    const { stocktake: stocktakeEnabled } = useFeatureFlags();
     // Only complex mode gives stock items a food to link; simple mode's kcal
     // is typed on the recipe, so the row is hidden entirely below that (R-029).
     const { isComplex: nutritionIsComplex } = useNutritionMode();
@@ -993,121 +784,6 @@
         void saveField({ expiry_date: null });
     }
 
-    // ── Preferred buys (FU-211) — free-text "what I actually buy" reminders.
-    // Separate from the Product overlay; always available. Mutations reuse
-    // withBusyReload so the list reflects the server after each change. The
-    // server sends them A–Z (R-003: it owns the order).
-    const preferredBuys = computed(() => detail.value?.preferred_buys ?? []);
-
-    async function addBuy() {
-        const label = newBuyLabel.value.trim();
-        if (!label) return;
-        await withBusyReload(() => stockItemApi.addPreferredBuyAsync(stockItemId.value, label));
-        newBuyLabel.value = '';
-    }
-    function startBuyRename(pb: PreferredBuy) {
-        editingBuyId.value = pb.preferred_buy_id;
-        editingBuyLabel.value = pb.label;
-    }
-    async function saveBuyRename(pb: PreferredBuy) {
-        if (editingBuyId.value !== pb.preferred_buy_id) return;
-        const label = editingBuyLabel.value.trim();
-        editingBuyId.value = null;
-        if (!label || label === pb.label) return;
-        await withBusyReload(() =>
-            stockItemApi.updatePreferredBuyAsync(stockItemId.value, pb.preferred_buy_id, label),
-        );
-    }
-    async function deleteBuy(pb: PreferredBuy) {
-        await withBusyReload(() =>
-            stockItemApi.deletePreferredBuyAsync(stockItemId.value, pb.preferred_buy_id),
-        );
-    }
-
-    // ── Prices (FU-227 chunk 3) — YourPricesWidget owns the entry UX via
-    // the shared PriceEntry component. This tab just exposes the list (with
-    // delete) and a submit handler that talks to the API. R-003: server
-    // derives per-unit cost; we never divide here.
-    const priceObservations = computed(() => detail.value?.price_observations ?? []);
-    // FU-706: a frequently logged item ran to hundreds of rows mid-tab.
-    const RECENT_PRICES_SHOWN = 5;
-    const showAllObservations = ref(false);
-    const shownObservations = computed(() => (
-        showAllObservations.value
-            ? priceObservations.value
-            : priceObservations.value.slice(0, RECENT_PRICES_SHOWN)
-    ));
-    const editingObservation = ref<PriceObservation | null>(null);
-    const { confirm } = useConfirm();
-
-    // Stores list for the optional store picker in PriceEntry (A2). Reuses
-    // the `storesStore` instance above (FU-189 — usual store picker).
-    const storesList = computed(() => storesStore.stores);
-
-    async function addObservation(value: PriceEntryValue, done: () => void) {
-        try {
-            await withBusyReload(() => stockItemApi.addPriceObservationAsync(stockItemId.value, value));
-        } catch (err) {
-            // FU-976 — the rejection used to escape to the global handler, so
-            // a 5xx showed the http client's toast *and* the "oopsie": two
-            // toasts for one failure. One now; the dialog stays open.
-            if (!isAlreadyNotified(err)) {
-                $q.notify({
-                    type: 'negative',
-                    message: "Couldn't log the price.",
-                    caption: toastCaption(err),
-                });
-            }
-            return;
-        }
-        stockItemStore.invalidatePriceFacts(stockItemId.value);
-        // Only close the widget's dialog once the save landed (a throw above
-        // keeps it open with the typed values).
-        done();
-    }
-    // Multipack (FU-227 follow-up): "4 × 125g" instead of "500g flat" when
-    // the observation carries a pack count. Per-pack = total / count.
-    function formatObsMeasure(obs: PriceObservation): string {
-        if (obs.pack_count != null && obs.pack_count > 1) {
-            return `${obs.pack_count} × ${formatQuantity(obs.total_measure / obs.pack_count, obs.unit)}`;
-        }
-        return formatQuantity(obs.total_measure, obs.unit);
-    }
-
-    async function updateObservation(value: PriceEntryValue) {
-        const obs = editingObservation.value;
-        if (!obs) return;
-        try {
-            await withBusyReload(() => stockItemApi.updatePriceObservationAsync(
-                stockItemId.value, obs.observation_id, value,
-            ));
-        } catch (err) {
-            if (!isAlreadyNotified(err)) {
-                $q.notify({
-                    type: 'negative',
-                    message: "Couldn't save the price.",
-                    caption: toastCaption(err),
-                });
-            }
-            return;
-        }
-        editingObservation.value = null;
-        stockItemStore.invalidatePriceFacts(stockItemId.value);
-    }
-
-    async function deleteObservation(obs: PriceObservation) {
-        const ok = await confirm({
-            title: 'Remove this price?',
-            message: `${formatMoney(obs.total_price)} for ${formatObsMeasure(obs)}, ${relativeTime(obs.observed_at)}.`,
-            okLabel: 'Remove',
-            destructive: true,
-        });
-        if (!ok) return;
-        await withBusyReload(() =>
-            stockItemApi.deletePriceObservationAsync(stockItemId.value, obs.observation_id),
-        );
-        stockItemStore.invalidatePriceFacts(stockItemId.value);
-    }
     async function onToggleOpen() {
         if (!detail.value) return;
         // DR-5 (FU-578 #2) — mirrors StockItemRow.onToggleOpen. Opening

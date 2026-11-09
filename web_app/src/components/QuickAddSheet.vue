@@ -57,7 +57,23 @@
                         <q-icon v-else :name="ICONS.add" />
                     </q-item-section>
                 </q-item>
-                <q-item v-if="results.length === 0">
+                <!-- A missing item is created at "out" (it's going on the list
+                     because you don't have it) and added in the same tap. -->
+                <q-item
+                    v-if="newItemName"
+                    clickable
+                    :disable="creating"
+                    @click="createAndAdd"
+                >
+                    <q-item-section side>
+                        <q-icon :name="ICONS.add" />
+                    </q-item-section>
+                    <q-item-section>Add "{{ newItemName }}" as a new stock item</q-item-section>
+                    <q-item-section v-if="creating" side>
+                        <q-spinner size="18px" />
+                    </q-item-section>
+                </q-item>
+                <q-item v-if="results.length === 0 && !newItemName">
                     <q-item-section class="dora-text-muted">
                         {{ query ? 'No matches.'
                             : stockItems.length === 0 ? 'No stock items yet.'
@@ -88,6 +104,7 @@
     import { useShoppingListStore } from 'src/stores/shoppingListStore';
     import { useStockItemStore } from 'src/stores/stockItemStore';
     import { useStockLevelStore } from 'src/stores/stockLevelStore';
+    import { OUT_OF_STOCK_SEQUENCE, findLevelBySequence } from 'src/helpers/stockStatus';
     import { computed, ref, watch } from 'vue';
 
     const shoppingListApi = new ShoppingListApiService();
@@ -202,9 +219,52 @@
         }
     }
 
+    /** The typed name when no stock item already has it, matched the way the
+     *  search matches (trimmed, case-insensitive). */
+    const newItemName = computed(() => {
+        const name = query.value?.trim() ?? '';
+        if (!name) return null;
+        const lower = name.toLowerCase();
+        return stockItems.value.some((i) => i.name.toLowerCase() === lower) ? null : name;
+    });
+    const creating = ref(false);
+
+    async function createAndAdd() {
+        const name = newItemName.value;
+        if (!name || !targetListId.value || creating.value) return;
+        const outLevel = findLevelBySequence(stockLevelStore.stockLevels, OUT_OF_STOCK_SEQUENCE);
+        if (!outLevel) {
+            $q.notify({ type: 'negative', message: 'No stock levels configured, so a stock item can\'t be created.' });
+            return;
+        }
+        creating.value = true;
+        try {
+            const created = await stockItemStore.createStockItemAsync({
+                name,
+                stock_level_id: outLevel.stock_level_id,
+                stock_location_id: null,
+            });
+            query.value = '';
+            await addItems(targetListId.value, [
+                { stock_item_id: created.stock_item_id, quantity: 1, selected_product_id: null },
+            ]);
+        } catch (err) {
+            if (!isAlreadyNotified(err)) {
+                $q.notify({
+                    type: 'negative',
+                    message: 'Could not create the stock item.',
+                    caption: toastCaption(err),
+                });
+            }
+        } finally {
+            creating.value = false;
+        }
+    }
+
     function onHide() {
         query.value = '';
         addingId.value = null;
+        creating.value = false;
     }
 
     // When the sheet opens, make sure the supporting data is loaded and apply

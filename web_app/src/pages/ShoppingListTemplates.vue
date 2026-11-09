@@ -227,8 +227,8 @@
                                 <LineChoicePicker
                                     v-if="hasLineChoices(choiceFor(line), productsEnabled)"
                                     :choice="choiceFor(line)"
-                                    @pick-offer="setLineChoice(line, { selected_product_id: $event })"
-                                    @pick-hint="setLineChoice(line, { preferred_buy_id: $event })"
+                                    @pick-offer="pickOffer(line, $event)"
+                                    @pick-hint="pickHint(line, $event)"
                                 />
                                 <span v-else class="ellipsis">{{ line.stock_item_name }}</span>
                             </div>
@@ -530,6 +530,18 @@
      *  preferred buy, else the item. */
     function choiceLabel(line: TemplateLine): string {
         return pickedLineChoice(choiceFor(line), productsEnabled.value)?.label ?? line.stock_item_name;
+    }
+
+    // A line holds one pick (FU-990), so picking one kind clears the other.
+    function pickOffer(line: TemplateLine, productId: string | null) {
+        void setLineChoice(line, productId === null
+            ? { selected_product_id: null }
+            : { selected_product_id: productId, preferred_buy_id: null });
+    }
+    function pickHint(line: TemplateLine, preferredBuyId: string | null) {
+        void setLineChoice(line, preferredBuyId === null
+            ? { preferred_buy_id: null }
+            : { preferred_buy_id: preferredBuyId, selected_product_id: null });
     }
 
     async function setLineChoice(
