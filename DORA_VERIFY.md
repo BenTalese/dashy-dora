@@ -22,6 +22,12 @@ top-to-bottom.
 
 ---
 
+## Pickers, deletes and the companion (2026-11-10) — origin FU-998..1001
+- [ ] On a phone, type in a recipe's ingredient picker and in My Products' Link to stock item: the list filters.
+- [ ] Delete a stock item used by a recipe: the recipe shows it as free text with its amount.
+- [ ] Companion: search Aldi; results have pictures and read in stock.
+- [ ] Companion: save a product, tap Link to stock item, pick one: Dora's stock item shows it under Products.
+
 ## Scrolling and long lists (2026-11-09) — origin FU-991..995
 - [ ] On a phone, fling the stock overview (over 50 items) up and down: no snap or stall.
 - [ ] Open the cookbook on a phone and scroll to the end: cards keep appearing, no gaps or jumps.

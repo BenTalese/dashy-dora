@@ -51,6 +51,7 @@
                             emit-value
                             map-options
                             use-input
+                            type-on-mobile
                             fill-input
                             hide-selected
                             input-debounce="80"

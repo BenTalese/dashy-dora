@@ -219,7 +219,6 @@
         </div>
         </FadeTransition>
 
-        <BlockedByRecipesDialog :recipe-names="blockedByRecipes" @close="blockedByRecipes = []" />
     </component>
 </template>
 <script lang="ts" setup>
@@ -234,7 +233,6 @@
     import { ICONS } from 'src/style/icons';
     import AppSkeleton from 'src/components/AppSkeleton.vue';
     import BaseButton from 'src/components/BaseButton.vue';
-    import BlockedByRecipesDialog from 'src/components/stock/BlockedByRecipesDialog.vue';
     import StockItemHistoryTab from 'src/components/stock/StockItemHistoryTab.vue';
     import StockItemOverviewTab from 'src/components/stock/StockItemOverviewTab.vue';
     import StockItemProductsTab from 'src/components/stock/StockItemProductsTab.vue';
@@ -249,11 +247,10 @@
     import { useStockItemActions } from 'src/composables/useStockItemActions';
     import { provideStockItemDetail } from 'src/composables/useStockItemDetail';
     import type { Recipe } from 'src/models/recipe';
-    import { NormalisedApiError } from 'src/services/api/axiosHttpClient';
     import { useRecipeStore } from 'src/stores/recipeStore';
     import { useShoppingListStore } from 'src/stores/shoppingListStore';
     import { useStockItemStore } from 'src/stores/stockItemStore';
-    import { computed, ref } from 'vue';
+    import { computed } from 'vue';
     import { useRoute, useRouter } from 'vue-router';
     import { useConfirm } from 'src/composables/useConfirm';
 
@@ -453,13 +450,17 @@
     }
 
     // ── Delete ───────────────────────────────────────────────────────────
-    const blockedByRecipes = ref<string[]>([]);
     async function confirmDelete() {
         if (!detail.value) return;
         const item = detail.value;
+        // Recipes keep the ingredient as free text (the server converts it).
+        const recipeCount = item.recipes.length;
+        const recipeNote = recipeCount === 0
+            ? ''
+            : ` ${recipeCount} ${recipeCount === 1 ? 'recipe uses' : 'recipes use'} it and will keep it as a free-text ingredient.`;
         const ok = await confirm({
             title: 'Delete stock item',
-            message: `Delete "${item.name}"? This can't be undone.`,
+            message: `Delete "${item.name}"? This can't be undone.${recipeNote}`,
             okLabel: 'Delete',
             destructive: true,
         });
@@ -478,17 +479,6 @@
             // (FU-969 (8)).
             else void router.replace('/stock');
         } catch (err) {
-            // backend refuses delete when the item is still on a recipe,
-            // returning 422 with a structured `blocked_by_recipes` list.
-            // Surface the recipe names in a dialog rather than a vague toast
-            // so the user knows where to act.
-            if (err instanceof NormalisedApiError) {
-                const blocked = err.details?.blocked_by_recipes;
-                if (Array.isArray(blocked) && blocked.length > 0) {
-                    blockedByRecipes.value = (blocked as Array<{ name: string }>).map((r) => r.name);
-                    return;
-                }
-            }
             notifyErr('Could not delete this stock item.', err);
         }
     }

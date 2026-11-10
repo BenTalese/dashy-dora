@@ -90,6 +90,11 @@
              *  above. Missing that silently disabled the typeahead on the stock
              *  location picker while leaving it looking fine. */
             useInput?: boolean;
+            /** Keep the typeahead on phones. For pickers over an open-ended
+             *  list (stock items) where scrolling to find a row isn't
+             *  workable and the typed text can be the answer (a free-text
+             *  ingredient). See `resolvedUseInput`. */
+            typeOnMobile?: boolean;
             /** Force a behaviour, escaping the rule. Use only with a reason. */
             behavior?: 'default' | 'menu' | 'dialog';
             /** Heading shown beside the close button in the dialog case. */
@@ -119,7 +124,7 @@
              */
             dense?: boolean;
         }>(),
-        { useInput: false, dialogTitle: 'Choose an option', dense: true },
+        { useInput: false, typeOnMobile: false, dialogTitle: 'Choose an option', dense: true },
     );
 
     // Re-exposed so a typeahead that resets its own input text (the recipe
@@ -180,9 +185,15 @@
      * The list is still a dialog rather than an anchored menu — `useInput`
      * keeps driving `resolvedBehavior` above, because a typeahead list is
      * unbounded by definition and needs the room. Only the input is dropped.
+     *
+     * `typeOnMobile` opts back in. Owner report 2026-11-10: the ingredient
+     * picker and the link-to-stock-item picker couldn't be searched on a
+     * phone. Scrolling a few locations works; scrolling hundreds of stock
+     * items doesn't, and the ingredient picker's free-text path needs the
+     * input to exist at all.
      */
     const resolvedUseInput = computed(
-        () => props.useInput && $q.platform.is.mobile !== true,
+        () => props.useInput && (props.typeOnMobile || $q.platform.is.mobile !== true),
     );
 
     /**

@@ -41,6 +41,44 @@ next.
 
 ---
 
+## 2026-11-10: **Owner batch: FU-998..1001 (Aldi, phone pickers, link on save, delete into free text)**
+
+**Owner:** six pasted items (Aldi stock and images; where companion logos come from; link picker and ingredient
+picker unsearchable; link on save from the companion; delete a stock item without recipes blocking it).
+
+**FU-998 (companion):** live Aldi payload: every product has `notForSale: true` (no online shop), read as out of
+stock; `assets` never read. `is_available = not discontinued`; `image_uri` from the first asset template.
+
+**Logos (question, no change):** the companion shows a Dora store's uploaded logo when the merchant is mapped to a
+store that has one (`DoraStoreLogo` via `/api/dora/stores/<id>/image`), else its own bundled SVGs
+(`MerchantLogo`: Aldi, Coles, IGA, Woolworths).
+
+**FU-999:** both pickers are `BaseSelect`s, which drop `use-input` on a phone (user-agent). New `typeOnMobile`
+prop, on for every stock item picker. R-107 / ADR-106. Vitest pins it.
+
+**FU-1000 (both repos):** Dora `GET /api/ingest/stock-items` + optional `stock_item_id` on an ingested product,
+linked through `LinkProductToStockItemHandler` after products and offers, reported as a `link` record. Companion:
+proxy route, `stock_item_id` on `/api/push`, "Link to stock item" action on the save toast (save stays one tap)
+opening `LinkStockItemDialog`, which re-saves the offer with the item. `INGESTION_GUIDE.md` updated. Note: the link
+handler commits mid-batch (it calls `save_changes`); it runs last, so only the counters and idempotency stamp land
+in a second commit.
+
+**FU-1001:** `DeleteStockItemHandler` turns ingredients into free text (`raw_text` kept, else label, else item
+name; choice fields cleared). The FK column is nulled directly: the `stock_item` relationship is `noload`, so
+assigning None to it was a no-op (first attempt hit the RESTRICT). 422 path, `BlockedByRecipesDialog` removed;
+the delete confirm names the recipe count.
+
+**Verified:** Dora pytest 2812 passed, Vitest 944, vue-tsc, eslint; companion pytest 126, vue-tsc, eslint; Aldi
+fix run against a live page. Not driven in a browser; four checks in DORA_VERIFY.
+
+**Gates:** R-107 / ADR-106 added. R-005 carve-out commented on the stock item projection (same shape as
+`get_ingest_stores`). §7.5: the new ingest route is bearer-authed and config-free. No em dashes in added lines.
+PROJECT_STATE not refreshed (feedback batch, no workstream moved).
+
+**Next up:** deploy both repos; DORA_VERIFY "Pickers, deletes and the companion".
+
+---
+
 ## 2026-11-09 (final): **FU-992 step 2 (API gzip), FU-994 and FU-995 done**
 
 **Owner:** do step 2 and the other FUs.

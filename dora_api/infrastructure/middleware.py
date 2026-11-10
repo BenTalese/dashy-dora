@@ -72,6 +72,8 @@ PUBLIC_ENDPOINTS = frozenset({
     # onto them (2026-10-15). Bearer-authed like its siblings.
     "ingest_list_stores",
     "ingest_store_image",
+    # Stock item names, for linking a product as it is saved (2026-11-10).
+    "ingest_list_stock_items",
 })
 
 

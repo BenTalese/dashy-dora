@@ -25,6 +25,7 @@
                     v-model="draft.stock_item_id"
                     clearable
                     use-input
+                    type-on-mobile
                     fill-input
                     hide-selected
                     input-debounce="150"

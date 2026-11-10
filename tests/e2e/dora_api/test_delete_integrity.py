@@ -8,7 +8,7 @@ asserts it still answers without a 500 and shows a sensible state.
 Cascade ground truth (dora_api/persistence/table_mappings.py; SQLite enforces
 these because app.py issues `PRAGMA foreign_keys=ON` per connection):
 
-  StockItem   ← RecipeIngredient.stock_item_id      RESTRICT (handler 422s first)
+  StockItem   ← RecipeIngredient.stock_item_id      RESTRICT (handler moves it to raw_text first)
               ← ShoppingListLine.stock_item_id      CASCADE  (open-list line vanishes)
               ← StockLevelChange / PreferredBuy /
                 StockItemPriceObservation / links   CASCADE
@@ -180,22 +180,26 @@ def _sql_count(table: str, column: str, entity_id: str) -> int:
 #region ---------------- 1. stock item ----------------
 
 
-def test__delete_stock_item__linked_as_recipe_ingredient__blocked_422_listing_recipes(api):
+def test__delete_stock_item__linked_as_recipe_ingredient__ingredient_becomes_free_text(api):
     _Item = _make_item("DelInt Flour")
     _Recipe = _make_recipe("DelInt Bread", ingredients=[
-        {"stock_item_id": _Item["stock_item_id"], "quantity": 2, "unit": "cup"},
+        {"stock_item_id": _Item["stock_item_id"], "quantity": 2, "unit": "cup", "notes": "sifted"},
     ])
 
-    _Response = requests.delete(f"{STOCK_ITEMS}/{_Item['stock_item_id']}")
+    assert requests.delete(f"{STOCK_ITEMS}/{_Item['stock_item_id']}").status_code == 204
 
-    # RecipeIngredient.stock_item_id is ON DELETE RESTRICT; the handler
-    # pre-empts the FK error with a structured 422 (delete_stock_item.py).
-    _Body = assert_problem(_Response, 422, title="Stock item is in use.")
-    assert _Body["blocked_by_recipes"] == [
-        {"recipe_id": _Recipe["recipe_id"], "name": _Recipe["name"]},
-    ]
-    # Item survives the refused delete.
-    assert requests.get(f"{STOCK_ITEMS}/{_Item['stock_item_id']}/detail").status_code == 200
+    # RecipeIngredient.stock_item_id is ON DELETE RESTRICT; the handler moves
+    # the row's anchor to raw_text first, keeping the rest of the row.
+    _Detail = _recipe_detail(_Recipe["recipe_id"])
+    assert _Detail.status_code == 200, _Detail.text
+    _Ingredients = _Detail.json()["ingredients"]
+    assert len(_Ingredients) == 1
+    assert _Ingredients[0]["stock_item_id"] is None
+    assert _Ingredients[0]["raw_text"] == _Item["name"]
+    assert _Ingredients[0]["quantity"] == 2
+    assert _Ingredients[0]["unit"] == "cup"
+    assert _Ingredients[0]["notes"] == "sifted"
+    assert requests.get(f"{STOCK_ITEMS}/{_Item['stock_item_id']}/detail").status_code == 404
 
 
 def test__delete_stock_item__full_reference_web__cascades_and_history_survives(api):

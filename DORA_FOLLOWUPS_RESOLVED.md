@@ -10,6 +10,38 @@ resolutions go at the **top**.
 
 ---
 
+## [RESOLVED] FU-1001 — Deleting a stock item used by recipes is blocked
+- **Raised:** 2026-11-10 (owner feedback)
+- **Type:** follow-up
+- **What:** deleting a stock item that is an ingredient refused with a "Still used by recipes" dialog. Owner: those ingredients should turn into free text instead.
+- **Why deferred:** n/a, done in the same session.
+- **Recommended resolution:** now
+- **State note:** 2026-11-10. `DeleteStockItemHandler` moves each ingredient's anchor to `raw_text` (existing text, else the label, else the item name), clears the label and the buy/product choice, nulls the FK and flushes before the delete. The 422 `blocked_by_recipes` response and `BlockedByRecipesDialog.vue` are gone; the detail page's delete confirm says how many recipes keep it as free text.
+
+## [RESOLVED] FU-1000 — Link a product to a stock item when saving from the companion
+- **Raised:** 2026-11-10 (owner feedback)
+- **Type:** follow-up
+- **What:** the companion could save a product to Dora but not link it to a stock item; that had to be done in Dora afterwards.
+- **Why deferred:** n/a, done in the same session.
+- **Recommended resolution:** now
+- **State note:** 2026-11-10. Dora: `GET /api/ingest/stock-items` (bearer-authed, id + name) and an optional `stock_item_id` on an ingested product, applied after products and offers through `LinkProductToStockItemHandler` and reported as a `link` record (`linked`, `already_linked`, or skipped `stock_item_unknown` / `linked_elsewhere`). Companion: `GET /api/dora/stock-items` proxy, `stock_item_id` on `POST /api/push`, and a "Link to stock item" action on the save toast that opens a typeahead dialog and re-saves the offer with the item. Save stays one tap.
+
+## [RESOLVED] FU-999 — Stock item pickers can't be searched on a phone
+- **Raised:** 2026-11-10 (owner feedback)
+- **Type:** finding
+- **What:** the link-to-stock-item picker (My Products) and the recipe ingredient picker had no input to type into on a phone.
+- **Why deferred:** n/a, done in the same session.
+- **Recommended resolution:** now; confirm on a real phone
+- **State note:** 2026-11-10. `BaseSelect` drops `use-input` on a phone (user-agent based, 2026-08-20). New `typeOnMobile` prop keeps it; on for the ingredient picker, both My Products stock item selects, template lines and unlinked ingredients (R-107 / ADR-106). Unit test pins it; real-phone check in DORA_VERIFY.
+
+## [RESOLVED] FU-998 — Companion: Aldi results all out of stock with no image
+- **Raised:** 2026-11-10 (owner feedback)
+- **Type:** finding
+- **What:** every Aldi search result showed out of stock and had no picture.
+- **Why deferred:** n/a, done in the same session.
+- **Recommended resolution:** now
+- **State note:** 2026-11-10. Live `/products?q=milk`: all 30 products carry `notForSale: true` (Aldi AU has no online shop), which the provider read as out of stock; it never read `assets`. Now `is_available = not discontinued` and `image_uri` fills the first asset's `{width}`/`{slug}` template (500px; a filled URL returned 200 image/jpeg). Two new fixture tests.
+
 ## [RESOLVED] FU-995 — Cookbook doesn't restore its scroll position on back navigation
 - **Raised:** 2026-11-09 (found while building FU-992)
 - **Type:** finding

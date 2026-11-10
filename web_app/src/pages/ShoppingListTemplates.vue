@@ -195,6 +195,7 @@
                     <BaseSelect
                         v-model="lineAddSelection"
                         use-input
+                        type-on-mobile
                         input-debounce="200"
                         :options="addableStockItems"
                         option-value="stock_item_id"

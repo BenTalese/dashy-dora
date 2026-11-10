@@ -7,6 +7,9 @@ bump means a schema or configuration change you need to act on when upgrading.
 
 ### Changed
 
+- **Deleting a stock item no longer gets blocked by recipes.** Recipes that use it keep the ingredient as free
+  text, with its amount and notes. The delete confirm says how many recipes that affects.
+- **Link a product as you save it in Product Search.** After saving, the confirmation offers Link to stock item.
 - **Linked products and preferred buys work together.** An item with a linked product keeps its preferred buys,
   and the name menu on a list row, a template line or a recipe ingredient offers both. Picking one replaces
   the other.
@@ -20,6 +23,8 @@ bump means a schema or configuration change you need to act on when upgrading.
 
 ### Fixed
 
+- On a phone you can type to search the ingredient picker and the link-to-stock-item picker again.
+- Product Search: Aldi results show their picture and are no longer all marked out of stock.
 - The Nutrition row on a stock item no longer pushes the page sideways on a phone when the food has a long
   name.
 - Scrolling a long stock list on a phone no longer snaps back mid-fling.

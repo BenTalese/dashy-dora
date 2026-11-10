@@ -79,6 +79,20 @@ describe('BaseSelect — prop forwarding', () => {
         expect(wrapper.findComponent(QSelect).props('useInput')).toBe(true);
     });
 
+    it('drops the typeahead on a phone unless the call site opts back in', async () => {
+        const { Platform } = await import('quasar');
+        const was = Platform.is.mobile;
+        Platform.is.mobile = true;
+        try {
+            const dropped = mountSelect({ options: longList, useInput: true }, true);
+            expect(dropped.findComponent(QSelect).props('useInput')).toBe(false);
+            const kept = mountSelect({ options: longList, useInput: true, typeOnMobile: true }, true);
+            expect(kept.findComponent(QSelect).props('useInput')).toBe(true);
+        } finally {
+            Platform.is.mobile = was;
+        }
+    });
+
     it('leaves use-input off when the call site did not ask for it', () => {
         const wrapper = mountSelect({ options: longList });
         expect(wrapper.findComponent(QSelect).props('useInput')).toBe(false);

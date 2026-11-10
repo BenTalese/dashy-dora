@@ -73,6 +73,7 @@ already holds:
 |---|---|
 | `GET /api/ingest/stores` | Dora's stores (`store_id`, `name`, `has_image`) — the source of truth for `store_id` |
 | `GET /api/ingest/stores/<store_id>/image` | the store's logo bytes, if it has one |
+| `GET /api/ingest/stock-items` | the household's stock items (`stock_item_id`, `name`), for linking a product as it is pushed |
 | `GET /api/ingest/products?store_id=…` | the ingested products already in Dora for a store (paged) |
 | `POST /api/ingest/link-status` | for a list of `{ref, store|store_id, merchant_stockcode?, name?}`: whether each is in Dora, its product id, and which stock items it is linked to |
 | `DELETE /api/ingest/products/<product_id>` | remove an ingested product (never a hand-entered custom one — 403) |
@@ -133,6 +134,7 @@ source's id if omitted). Empty arrays are fine — push only what you have.
 | `source`              | no       | Provenance string                  |
 | `image`               | no       | The product picture as a `data:image/…;base64,…` URL (≤ 6 MB). A later push with one replaces it; absent leaves the stored picture alone. |
 | `is_available`        | no       | `false` when the store doesn't have it right now (out of stock, no price). Dora shows it as out of stock. Absent keeps the stored value; a new product defaults to `true`. |
+| `stock_item_id`       | no       | Link the product to this stock item (from `GET /api/ingest/stock-items`), the same as linking it in Dora. Reported as a `link` record under the product's `ref`. Absent leaves links alone. |
 
 Dedupe — a product is matched on **`(store_id, merchant_stockcode)`** first;
 failing that, **`(store_id, name)`**. Hand-entered (custom) products are never
@@ -196,6 +198,12 @@ Stable `reason` codes (will only grow, not change meaning):
 - `duplicate` — same `(product, observed_at, price)` already on file.
 - `product_unknown` — an offer referenced a `ref` not in this batch's
   products and no existing product matched.
+- `stock_item_unknown`: a `link` whose `stock_item_id` names no stock item.
+- `linked_elsewhere`: a `link` for a product already linked to a different
+  stock item; unlink it in Dora first. The product itself is still saved.
+
+An accepted `link` record carries the stock item id and `note` `linked` or
+`already_linked`.
 
 Every batch also bumps the source's **Accepted / Skipped / Failed** counters
 (visible on the API access page) and refreshes its `last_used_at`.

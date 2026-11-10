@@ -258,6 +258,7 @@
                         map-options
                         clearable
                         use-input
+                        type-on-mobile
                         input-debounce="150"
                         :options="linkedStockItemOptions"
                         label="Linked stock item"
@@ -503,6 +504,7 @@
                 <BaseSelect
                     v-model="linkChoiceStockItemId"
                     use-input
+                    type-on-mobile
                     input-debounce="150"
                     :options="linkStockItemOptions"
                     emit-value

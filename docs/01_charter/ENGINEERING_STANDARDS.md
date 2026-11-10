@@ -3063,6 +3063,16 @@ exceptions, which still must be commented) · **Source** (where it was establish
   list; code that sets `scrollTop` while the user may be scrolling.
 - **Established:** 2026-11-09 (FU-991, FU-992). See ADR-105.
 
+### R-107: A picker over stock items keeps its typeahead on a phone
+- **Rule:** `BaseSelect` drops `use-input` on a phone by default. A picker over an open-ended list (stock items,
+  or anything the user may need to type that is not in the list) passes `type-on-mobile` to keep it.
+- **Why:** 2026-11-10 owner report: the ingredient picker and the link-to-stock-item picker could not be
+  searched on a phone, and the ingredient picker's free-text path needs the input to exist. The default drop
+  (2026-08-20) is right for short lists like locations, where scrolling beats thumb-typing.
+- **How to comply:** `use-input type-on-mobile` on a stock item picker; plain `use-input` for short vocabularies.
+- **Violation signal:** a `use-input` `BaseSelect` over stock items, recipes or products without `type-on-mobile`.
+- **Established:** 2026-11-10. See ADR-106.
+
 ## ADR process (evaluate every task)
 
 At the end of each work unit, ask: **did this task make or rely on a decision that
@@ -6631,3 +6641,14 @@ A non-binding cookbook of solutions to recurring problems. Not rules — just a
   the list in, or it fires against an empty page and mounts everything. Fetch size is separate: API JSON is
   gzipped by `GzipMiddleware` (FU-992 step 2).
 
+### ADR-106: Phone typeahead is opt-in per picker (promotes R-107)
+- **Date / task:** 2026-11-10 (owner feedback: pickers not searchable on a phone)
+- **Status:** accepted
+- **Context:** `BaseSelect.resolvedUseInput` turned every typeahead off on a phone (2026-08-20, for the location
+  picker). That also removed search from the stock item pickers, where the list runs to hundreds.
+- **Decision:** keep the default and add an explicit `typeOnMobile` prop. Turned on for the recipe ingredient
+  picker, both stock item selects on My Products, the template line picker and the unlinked-ingredients picker.
+- **Alternatives considered:** drop the phone rule (rejected: reverses the owner's call on short lists); decide
+  by option count (rejected: a filtered list's count says nothing, and an implicit rule is harder to read).
+- **Consequences:** those pickers open as a top-pinned dialog with the keyboard on a phone, the trade the
+  2026-08-20 note described; accepted because the list is unusable without search.

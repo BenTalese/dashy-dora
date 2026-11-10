@@ -57,6 +57,8 @@ from dora_api.features.products.offer_mapping import (OfferOutcome,
 from dora_api.features.ingestion.product_identity import (StoreRef, find_ingested_product,
                                                           find_store_mapping)
 from dora_api.features.routers import INGEST_ROUTER
+from dora_api.features.stock_items.link_product_to_stock_item import (
+    LinkProductRequest, LinkProductToStockItemHandler)
 from dora_api.infrastructure.decorators import has_request_body
 from dora_api.infrastructure.ingestion_auth import (
     authenticate_ingestion_request, stamp_used)
@@ -112,6 +114,10 @@ class _ProductIn(StoreRef):
     # this the product landed as "available at $0.00". Absent keeps the
     # stored value (a new product defaults to available).
     is_available: bool | None = None
+    # Link the product to this stock item once it is saved (owner 2026-11-10:
+    # link on the spot from the companion). Absent leaves links alone. The
+    # outcome is reported as a `link` record under the product's ref.
+    stock_item_id: UUID | None = None
 
     @field_validator("web_url")
     @classmethod
@@ -181,7 +187,7 @@ class IngestBatchRequest(BaseModel):
 
 @dataclass(frozen=True, slots=True)
 class _AcceptedRecord:
-    kind: Literal["product", "offer"]
+    kind: Literal["product", "offer", "link"]
     ref: str
     id: str
     note: str | None = None  # e.g. "created" / "duplicate"
@@ -189,14 +195,14 @@ class _AcceptedRecord:
 
 @dataclass(frozen=True, slots=True)
 class _SkippedRecord:
-    kind: Literal["product", "offer"]
+    kind: Literal["product", "offer", "link"]
     ref: str
     reason: str  # short stable code: duplicate, store_not_mapped, product_unknown, ...
 
 
 @dataclass(frozen=True, slots=True)
 class _FailedRecord:
-    kind: Literal["product", "offer"]
+    kind: Literal["product", "offer", "link"]
     ref: str
     reason: str
 
@@ -225,6 +231,9 @@ class _IngestionContext:
         self.products_by_ref: dict[str, Product] = {}
         # external store name → mapping row (resolved Store or None)
         self.store_cache: dict[str, IngestionStoreMapping] = {}
+        # (ref, product, stock item) links asked for, applied after the
+        # products and offers.
+        self.links: list[tuple[str, Product, UUID]] = []
 
 
 class SubmitIngestionBatchHandler:
@@ -251,6 +260,8 @@ class SubmitIngestionBatchHandler:
             self._apply_product(ctx, raw)
         for raw in payload.offers:
             self._apply_offer(ctx, raw)
+        for ref, product, stock_item_id in ctx.links:
+            self._apply_link(ctx, ref, product, stock_item_id)
         # observations are in-app input only; the producer
         # path was removed (J1). Offer pushes still flow through above.
 
@@ -399,6 +410,8 @@ class SubmitIngestionBatchHandler:
             if raw.is_available is not None:
                 existing.is_available = raw.is_available
             ctx.products_by_ref[raw.ref] = existing
+            if raw.stock_item_id is not None:
+                ctx.links.append((raw.ref, existing, raw.stock_item_id))
             ctx.result.accepted.append(_AcceptedRecord(
                 kind="product", ref=raw.ref, id=str(existing.id), note="updated",
             ))
@@ -432,11 +445,36 @@ class SubmitIngestionBatchHandler:
         self.repository.add(initial_offer)
         self.repository.add(product)
         ctx.products_by_ref[raw.ref] = product
+        if raw.stock_item_id is not None:
+            ctx.links.append((raw.ref, product, raw.stock_item_id))
         # Provenance is recorded on the offer rows (`ProductHistoricOffer.
         # source`), never smuggled into the product's result note.
         ctx.result.accepted.append(_AcceptedRecord(
             kind="product", ref=raw.ref, id=str(product.id), note="created",
         ))
+
+    def _apply_link(
+        self, ctx: _IngestionContext, ref: str, product: Product, stock_item_id: UUID,
+    ) -> None:
+        """Link a saved product through the same handler the SPA's link uses,
+        so a link from a producer behaves exactly like one made in Dora."""
+        self.repository.flush()
+        outcome = LinkProductToStockItemHandler(self.repository).handle(
+            stock_item_id, LinkProductRequest(product_id=product.id),
+        )
+        if outcome.stock_item_not_found:
+            ctx.result.skipped.append(_SkippedRecord(
+                kind="link", ref=ref, reason="stock_item_unknown",
+            ))
+        elif outcome.linked_elsewhere_to is not None:
+            ctx.result.skipped.append(_SkippedRecord(
+                kind="link", ref=ref, reason="linked_elsewhere",
+            ))
+        else:
+            ctx.result.accepted.append(_AcceptedRecord(
+                kind="link", ref=ref, id=str(stock_item_id),
+                note="already_linked" if outcome.already_linked else "linked",
+            ))
 
     def _apply_offer(self, ctx: _IngestionContext, raw: _OfferIn) -> None:
         product = ctx.products_by_ref.get(raw.product_ref)
