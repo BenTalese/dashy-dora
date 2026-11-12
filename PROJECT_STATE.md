@@ -22,7 +22,7 @@ Status key: ✅ done-clean · ➗ done-with-carve-outs · 🟡 active/in-progres
 
 **Release:** 1.0.0 is the official first release (2026-11-12). Version, CHANGELOG and tag `v1.0.0` are on `main`; the old unpublished `v2.0.0` tag is gone. Published by the Release workflow.
 
-**What's left:** the Docker install now uses one port (5174 also proxies `/api/`) and the README setup steps are fixed, on `main` and verified on a throwaway Altair instance; release 1.0.1 next, then redeploy Altair. Open FUs: FU-992, FU-996 and FU-1002, none blocking.
+**What's left:** the Docker install now uses one port (5174 also proxies `/api/`) and the README setup steps are fixed, released as 1.0.1 after a throwaway Altair test; redeploy Altair next. Open FUs: FU-992, FU-996 and FU-1002, none blocking.
 
 ---
 

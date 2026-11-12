@@ -41,6 +41,16 @@ next.
 
 ---
 
+## 2026-11-12 (release): **1.0.1 released**
+
+**Owner:** release the one-port / README fixes as 1.0.1.
+
+Version 1.0.1 in `version_info.py`, `web_app/package.json` (+ lock), `src-capacitor/package.json`; Android
+`versionCode 3`, `versionName "1.0.1"`. CHANGELOG `[Unreleased]` renamed `[1.0.1] - 2026-11-12`. Tagged `v1.0.1`,
+Release workflow run (see below).
+
+**Next up:** redeploy Altair with `deploy-dora.sh`.
+
 ## 2026-11-12 (latest): **README setup audit fixes; one-port Docker install**
 
 **Owner:** check the README's setup instructions; then "fix it all and push it up".
