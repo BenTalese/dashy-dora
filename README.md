@@ -98,13 +98,17 @@ cd dashy-dora
 cp .env.example .env
 ```
 
-Edit `.env` and set the three values production needs:
+Edit `.env` and set the three values production needs. The container always runs
+in production mode, whatever `DORA_ENV` says in `.env`.
 
 | Variable | What to put |
 |---|---|
 | `DORA_SECRET_KEY` | A long random string: `python -c "import secrets; print(secrets.token_urlsafe(48))"` |
 | `DORA_CORS_ORIGINS` | The address you'll open Dora on, e.g. `https://dora.example.com` or `http://192.168.1.20:5174` |
 | `ADMIN_BOOTSTRAP_EMAIL` | Your email. Only this address can create the first admin account |
+
+Opening Dora over plain `http://` (a LAN address with no HTTPS in front)? Also set
+`DORA_SECURE_COOKIES=false`, or sign-in won't stick.
 
 Then build and start it. The build id makes **Settings → About** name the exact
 build you're running:
@@ -113,11 +117,12 @@ build you're running:
 DORA_BUILD_ID=$(git rev-parse --short HEAD) docker compose up -d --build
 ```
 
-Open **http://&lt;your-server&gt;:5174**. The first visit opens a one-time
-page that creates the admin account; after that it's gone.
+Open **http://&lt;your-server&gt;:5174**. That one port serves the app and its
+API. The first visit opens a one-time page that creates the admin account;
+after that it's gone.
 
 **Data** lives in the named volumes `dora_data`, `dora_cache` and `dora_logs`.
-**Settings → Backup & restore** downloads a full backup; take one before you
+**Settings → Admin → Backup & restore** downloads a full backup; take one before you
 upgrade. To upgrade, `git pull` and run the same `docker compose up -d --build`;
 database migrations run on start.
 
@@ -127,21 +132,21 @@ Dora is built for a household on a home network, or behind a reverse proxy you
 control. It isn't hardened as a public multi-tenant service.
 
 - **Sign-ups are closed.** People only get an account when the admin adds them on
-  **Settings → Users**. You can open self-registration there, but anyone who can
+  **Settings → Admin → Users**. You can open self-registration there, but anyone who can
   reach Dora could then make an account and see your kitchen.
 - **Put it behind HTTPS** if it's reachable from outside your network: use a
   reverse proxy (Caddy, Traefik, nginx) or a VPN such as Tailscale. Cookies are
-  `Secure` by default. A plain-`http://` LAN install needs
-  `DORA_SECURE_COOKIES=false` in `.env`, or sign-in won't stick.
-- **Behind a proxy**, route `/` to port 5174 and `/api/` to port 5170, set
+  `Secure` by default, which is why a plain-`http://` install needs
+  `DORA_SECURE_COOKIES=false`.
+- **Behind a proxy**, send everything to port 5174, set
   `DORA_TRUSTED_PROXY_HOPS=1`, and publish both ports on localhost only: in
-  `compose.yml`, change `"5170:5170"` to `"127.0.0.1:5170:5170"` (and the same
-  for 5174). Otherwise a client that reaches the API port directly can forge
+  `compose.yml`, change `"5174:5174"` to `"127.0.0.1:5174:5174"` (and the same
+  for 5170). Otherwise a client that reaches the container directly can forge
   its address.
 - **Password-reset and verify emails** need SMTP *and* a public URL
-  (**Settings → Email**). Links are only ever built from that URL. Until it's
+  (**Settings → Admin → Email**). Links are only ever built from that URL. Until it's
   set, those mails aren't sent and "Forgot password?" is hidden. An admin can
-  still reset a password on **Settings → Users**.
+  still reset a password on **Settings → Admin → Users**.
 - **File ownership:** the API runs as `PUID`/`PGID` (default `1000:1000`, set in
   `compose.yml`), not root, so files it writes to a bind mount belong to that
   user.
@@ -270,7 +275,7 @@ Alerts that fire while the SPA is closed are delivered via the Web Push protocol
    python -m py_vapid --gen --applicationServerKey
    ```
    Writes `private_key.pem` to the current directory and prints the matching base64url-encoded public key to stdout. Treat the private key like any other secret.
-2. **Configure the keys** at **Settings → Admin → System → Push notifications** (all three fields live on `AppSetting`; the private key is stored encrypted-at-rest, wrapped by `DORA_SECRET_ENCRYPTION_KEY`). Paste the public key + private key into the admin form and set `Subject` to your contact URL. All fields flip to dry-run when either half is missing.
+2. **Configure the keys** at **Settings → Admin → Push notifications** (all three fields live on `AppSetting`; the private key is stored encrypted-at-rest, wrapped by `DORA_SECRET_ENCRYPTION_KEY`). Paste the public key + private key into the admin form and set `Subject` to your contact URL. All fields flip to dry-run when either half is missing.
 3. No restart needed — the resolver picks up the row on the next call. The **Settings → Notifications → Push** toggle appears once both halves are configured.
 
 ### AI assistant (optional, bring-your-own-LLM, per-user)

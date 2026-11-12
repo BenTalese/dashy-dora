@@ -41,6 +41,31 @@ next.
 
 ---
 
+## 2026-11-12 (latest): **README setup audit fixes; one-port Docker install**
+
+**Owner:** check the README's setup instructions; then "fix it all and push it up".
+
+Found and fixed: (1) `compose.yml` took `DORA_ENV` from `.env`, and `.env.example` says `development`, so a
+copied `.env` ran the server container in dev mode; now `DORA_ENV=production` fixed. (2) Reverse-proxy steps
+could not work: the nginx-served SPA always called `<host>:5170/api`. nginx now proxies `location ^~ /api/` to
+127.0.0.1:5170 (Host kept, XFF appended, X-Forwarded-Proto/Host passed through, no body limit, 130s timeouts) and
+`sub_filter`s the `dora-api-same-origin` meta into index.html, so the SPA uses `${origin}/api`. Server-level
+`add_header`s moved into `location /` so `/api/` doesn't double the API's own headers. New
+`infrastructure/proxy_hops.py` `TrustedProxyHops` replaces the bare ProxyFix: loopback peers (the container's
+nginx) get `x_for = DORA_TRUSTED_PROXY_HOPS + 1`, everyone else the configured count; pinned by
+`tests/test_proxy_hops.py` (5). (3) README: plain-HTTP `DORA_SECURE_COOKIES=false` moved into the setup steps.
+(4) `.env.example` set `DORA_DATA_DIR/CACHE_DIR/LOG_DIR` to `/app/...`, breaking a from-source run; now blank.
+Also: README Settings paths (Admin → ...), stale `.env.example` comments (bootstrap email, AI assistant, admin
+pages), compose comment names the ghcr image. `tests/test_deploy_files.py` pins the nginx proxy + marker
+(matches `serve_spa.SAME_ORIGIN_META`) and compose's fixed production profile.
+
+**Verified:** full pytest (2819 passed), web lint + vue-tsc + vitest (944). **Not verified:** the container itself:
+no Docker socket access or nginx binary in this session, so the nginx config (incl. `sub_filter`, which Debian's
+nginx builds in) is untested at runtime. Three operator checks added to DORA_VERIFY.
+
+**Next up:** deploy to Altair and walk the new operator checks; if good, release 1.0.1 (bump version, rename
+`[Unreleased]`, run Release).
+
 ## 2026-11-12 (later): **1.0.0 released**
 
 **Owner:** repurpose the 1.0.0 tag and version; this is the official first release (owner deleted the old GitHub

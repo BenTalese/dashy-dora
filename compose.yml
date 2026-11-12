@@ -28,9 +28,9 @@ name: dashy-dora
 services:
   dashy_dora:
     container_name: dashy_dora
-    # image: <IMAGE HOSTING SERVICE>/dashydora:latest
-    # ↑ Once the image lives in a registry, drop the `build:` block and
-    # use this instead.
+    # To run the published image instead of building from source, replace
+    # the `build:` block with:
+    #   image: ghcr.io/bentalese/dashy-dora:latest
     build:
       context: .
       dockerfile: Dockerfile
@@ -62,11 +62,10 @@ services:
       - TZ=${TZ:-Australia/Sydney}
 
       # ── Profile (D3) ───────────────────────────────────────────────
-      # Containers default to `production` so a `docker compose up`
-      # behaves prod-strict out of the box (fails fast on missing
-      # required vars). Set DORA_ENV=development in your local .env
-      # for the open-CORS / debug-log / seed-allowed dev defaults.
-      - DORA_ENV=${DORA_ENV:-production}
+      # Always production. Not read from `.env`: the shared `.env.example`
+      # says `development` for running from source, and copying it for a
+      # server install must not turn this stack into a dev one.
+      - DORA_ENV=production
 
       # ── Secrets / auth ─────────────────────────────────────────────
       - DORA_SECRET_KEY=${DORA_SECRET_KEY:-}
@@ -183,12 +182,14 @@ services:
       # means it — this list documents intent, it isn't a lock.
 
     ports:
-      # With DORA_TRUSTED_PROXY_HOPS > 0 the API trusts X-Forwarded-For, so it
-      # must ONLY be reachable through that proxy: a client hitting 5170
-      # directly could forge its IP. In that setup drop this publish (or bind
-      # it to 127.0.0.1:5170:5170) and expose only the proxy.
+      # 5174 is the one port to open: nginx serves the SPA and proxies
+      # `/api/` to the API. 5170 is the API directly, for the Android app or
+      # anything that already points at it. Behind a reverse proxy
+      # (DORA_TRUSTED_PROXY_HOPS > 0) bind both to 127.0.0.1, e.g.
+      # "127.0.0.1:5174:5174", so nothing reaches them except the proxy: a
+      # client hitting 5170 directly could forge its IP.
       - "5170:5170"   # dora_api
-      - "5174:5174"   # nginx (SPA)
+      - "5174:5174"   # nginx (SPA + /api/)
 
     # Named volumes per data type so backups / migrations can target
     # one without dragging the others along. `docker compose down -v`

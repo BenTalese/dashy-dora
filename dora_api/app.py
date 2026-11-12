@@ -116,13 +116,12 @@ else:
 # client and the audit log recorded the proxy IP for everyone. Opt-in by
 # hop count — trusting `X-Forwarded-*` unconditionally would let any direct
 # client spoof its address, which is worse than the bug. Set
-# `DORA_TRUSTED_PROXY_HOPS=1` for one proxy in front of the API.
-_ProxyHops = config_manager.get_trusted_proxy_hops()
-if _ProxyHops > 0:
-    from werkzeug.middleware.proxy_fix import ProxyFix
-    app.wsgi_app = ProxyFix(  # type: ignore[method-assign]
-        app.wsgi_app, x_for=_ProxyHops, x_proto=_ProxyHops, x_host=_ProxyHops, x_prefix=0,
-    )
+# `DORA_TRUSTED_PROXY_HOPS=1` for one proxy in front of Dora. The container's
+# own nginx hop (loopback) is counted on top; see `proxy_hops.py`.
+from dora_api.infrastructure.proxy_hops import TrustedProxyHops
+app.wsgi_app = TrustedProxyHops(  # type: ignore[method-assign]
+    app.wsgi_app, config_manager.get_trusted_proxy_hops(),
+)
 
 # FU-992: JSON responses are gzipped here, since the API is served directly
 # rather than through the SPA's nginx (see `infrastructure/compression.py`).

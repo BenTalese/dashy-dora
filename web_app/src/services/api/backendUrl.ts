@@ -1,12 +1,13 @@
 // runtime-configurable Dora API base URL.
 //
 // The SPA runs in three shapes:
-//   - web (dev / prod PWA): baseURL follows the current origin. A page the
-//     API served itself (Flask's SPA routes: the desktop bundle, a
-//     single-origin deploy) carries a `dora-api-same-origin` meta tag and
-//     uses `${origin}/api`; otherwise the env-baked `VITE_API_BASE_URL` if
-//     provided, else `${protocol}//${hostname}:5170/api` (the shipped
-//     split-port compose: nginx on 5174, API on 5170). QA2-21.
+//   - web (dev / prod PWA): baseURL follows the current origin. A page
+//     served next to its API (the Docker image's nginx, which proxies
+//     `/api/`; Flask's SPA routes in the desktop bundle) carries a
+//     `dora-api-same-origin` meta tag and uses `${origin}/api`; otherwise
+//     the env-baked `VITE_API_BASE_URL` if provided, else
+//     `${protocol}//${hostname}:5170/api` (`quasar dev` on 5174 beside the
+//     API on 5170). QA2-21.
 //   - Capacitor native (Android APK / iOS): the app is served from
 //     `capacitor://localhost` (Android WebView remaps to `https://localhost`),
 //     so it CANNOT infer a backend from `window.location`. The user picks

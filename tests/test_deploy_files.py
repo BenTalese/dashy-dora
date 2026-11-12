@@ -61,3 +61,17 @@ def test__spa_package_version__matches_current_version():
     root = Path(__file__).resolve().parents[1]
     package = json.loads((root / "web_app" / "package.json").read_text(encoding="utf-8"))
     assert package["version"] == CURRENT_VERSION
+
+
+def test__nginx__proxies_the_api_and_marks_index_same_origin():
+    from dora_api.features.spa.serve_spa import SAME_ORIGIN_META
+
+    live = "\n".join(_uncommented(_read("nginx.conf")))
+    assert "location ^~ /api/" in live, "nginx must proxy /api/ (and win over the asset regex)"
+    assert "proxy_pass http://127.0.0.1:5170" in live
+    assert SAME_ORIGIN_META in live, "nginx's index.html marker must match serve_spa.SAME_ORIGIN_META"
+
+
+def test__compose__always_runs_production():
+    lines = [ln.strip() for ln in _uncommented(_read("compose.yml"))]
+    assert "- DORA_ENV=production" in lines, "compose must not take DORA_ENV from .env"

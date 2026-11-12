@@ -3,6 +3,22 @@
 All notable changes to Dashy Dora live here. Versions follow semver: a major
 bump means a schema or configuration change you need to act on when upgrading.
 
+## [Unreleased]
+
+### Changed
+
+- **One port for the Docker install.** The container's port 5174 now serves the API under `/api/` as well
+  as the app, so a reverse proxy only needs to forward to 5174, and the app works on whatever address you
+  open it on. Port 5170 still answers directly. Behind a proxy, client addresses (login limits, the audit log)
+  come through correctly.
+
+### Fixed
+
+- Copying `.env.example` for a server install no longer starts the container in development mode: the
+  Docker stack always runs in production.
+- Running from source with the copied `.env.example` no longer fails creating `/app/data`.
+- The README's Settings paths, plain-HTTP note and reverse-proxy steps match the app.
+
 ## [1.0.0] - 2026-11-12
 
 The first official release. Dora keeps track of everything edible in the house
