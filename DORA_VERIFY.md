@@ -2665,11 +2665,11 @@ _(Needs a destructive re-seed to load the "Belief: …" demo items — restart t
 - [ ] Settings → System → Features (products ON): type a URL in **Product search → Search URL**, blur → toast confirms; the main-menu **Product Search** entry appears and opens the URL in a new tab. Clear it and blur → the entry disappears again.
 
 ## Donation buttons + restored support links (FU-608) — origin FU-608
-- [ ] **Menu bar (logged in):** the pink **Support Dora** heart shows in the header cluster (next to the alerts bell / help / avatar), gently pulses, and reads well against the toolbar colour on each theme; clicking opens the popover with PayPal and GitHub Sponsors. *(Auth-shell floating button + the shared popover already verified live 2026-07-31 — this is the header trigger, which needs login.)*
-- [ ] **Settings (logged in):** the **Support Dora** pink pill sits beside **Sign out** in the Settings header; opens the same popover.
+- [ ] **Menu bar (logged in):** the pink **Support Dora** heart shows in the header cluster (next to the alerts bell / help / avatar), gently pulses, and reads well against the toolbar colour on each theme; clicking opens PayPal in a new tab. *(Auth-shell floating button verified live 2026-07-31 (as a popover; now a direct link) — this is the header trigger, which needs login.)*
+- [ ] **Settings (logged in):** the **Support Dora** pink pill sits beside **Sign out** in the Settings header; opens PayPal in a new tab.
 - [ ] **Pulse feel:** confirm the pulse "pops" without feeling naggy across the menu-bar + floating buttons; with OS reduced-motion on, the pulse is off (static button).
 - [ ] **Settings → About:** the **Project & source** section shows Source-code (→ github.com/BenTalese/dashy-dora), **Report a bug** (only when a support channel is set), and **Support Dora** rows.
-- [ ] The PayPal and GitHub Sponsors rows open their pages in a new tab; the repo's Sponsor button lists both; Help "Report an issue", the full-page-error "Report this", and DoraBot's report link all reach the live issue tracker; the issue templates resolve.
+- [ ] The repo's Sponsor button goes to PayPal; Help "Report an issue", the full-page-error "Report this", and DoraBot's report link all reach the live issue tracker; the issue templates resolve.
 
 ## Shopping-list / dashboard quick fixes (FU-573, FU-585)
 - [ ] **FU-573 remove-count:** put a stock item on exactly **one** open list, then use the buy-verdict card's "remove from list" (or the multi-list popover's "remove from all") → the toast says **"Removed from 1 list."**, not an inflated count. Remove again with it on none → "It was already off your lists." *(Server contract is backend-test-pinned; this is the toast-wording eyeball.)*

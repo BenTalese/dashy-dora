@@ -45,7 +45,7 @@
 
                 <!-- Support Dora — donation CTA. Dora is free & open-source;
                      this is the gentle, always-available "chip in" affordance
-                     (own --donate pink, own DonateMenu). -->
+                     (own --donate pink, links straight to PayPal). -->
                 <DonateButton
                     v-if="currentUser"
                     variant="header"

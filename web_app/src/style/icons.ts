@@ -194,7 +194,6 @@ export const ICONS = {
     map: 'mdi-map',
     favorite: 'mdi-heart',
     favorite_border: 'mdi-heart-outline',
-    volunteer_activism: 'mdi-hand-heart',
     keyboard: 'mdi-keyboard',
     play_circle: 'mdi-play-circle',
     add_box: 'mdi-plus-box',

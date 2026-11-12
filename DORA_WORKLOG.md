@@ -41,6 +41,19 @@ next.
 
 ---
 
+## 2026-11-12: **Support button links straight to PayPal**
+
+**Owner:** GitHub Sponsors just routes to PayPal, so make the support button a direct PayPal link, no dropdown.
+
+`donationLinks.ts` is now a single `DONATION_URL`; `DonateMenu.vue` deleted; `DonateButton.vue`'s three variants
+are `<a target="_blank">` links (same styling, `text-decoration: none`); About page reads `DONATION_URL`. Dropped
+the unused `volunteer_activism` icon. `.github/FUNDING.yml` drops `github:` (PayPal `custom:` only); README support
+section is PayPal only. DORA_VERIFY donation items reworded for the direct link.
+
+**Verified:** vue-tsc + eslint clean. Not driven in the browser.
+
+**Next up:** release.
+
 ## 2026-11-10: **Owner batch: FU-998..1001 (Aldi, phone pickers, link on save, delete into free text)**
 
 **Owner:** six pasted items (Aldi stock and images; where companion logos come from; link picker and ingredient

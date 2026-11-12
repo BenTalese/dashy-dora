@@ -337,10 +337,8 @@ Dora is free and open-source, built by one person in their spare time. If it sav
 you time or money, chipping in keeps it alive and caffeinated — but it's always
 optional, and every feature is free for everyone regardless.
 
-- 🅿️ **[Donate with PayPal](https://www.paypal.com/donate/?business=BBEWWLKS6MY2G&no_recurring=1&currency_code=AUD)**, a one-off thank-you.
-- 💖 **[GitHub Sponsors](https://github.com/sponsors/BenTalese)**, recurring support.
-
-The in-app **Support Dora** button and the repo's **Sponsor** button list the same two.
+🅿️ **[Donate with PayPal](https://www.paypal.com/donate/?business=BBEWWLKS6MY2G&no_recurring=1&currency_code=AUD)**.
+The in-app **Support Dora** button and the repo's **Sponsor** button go to the same place.
 
 <br/>
 

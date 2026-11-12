@@ -131,7 +131,7 @@
                 <q-item
                     clickable
                     tag="a"
-                    :href="PRIMARY_DONATION.url"
+                    :href="DONATION_URL"
                     target="_blank"
                     rel="noopener noreferrer"
                 >
@@ -262,7 +262,7 @@
     import DashboardApiService from 'src/services/api/dashboardApiService';
     import type { UsageStats } from 'src/services/api/dashboardApiService';
     import { formatMoney, formatNumber } from 'src/composables/useMoney';
-    import { PRIMARY_DONATION } from 'src/config/donationLinks';
+    import { DONATION_URL } from 'src/config/donationLinks';
     import { getBackendBaseUrl } from 'src/services/api/backendUrl';
     import HealthApiService from 'src/services/api/healthApiService';
     import { isNativePlatform } from 'src/helpers/platform';

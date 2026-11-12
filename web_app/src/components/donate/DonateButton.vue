@@ -1,52 +1,55 @@
 <template>
     <!-- Toolbar: compact pink disc in the header's right-hand cluster. -->
-    <button
+    <a
         v-if="variant === 'header'"
-        type="button"
         class="donate-btn donate-btn--header"
+        :href="DONATION_URL"
+        target="_blank"
+        rel="noopener noreferrer"
         aria-label="Support Dora"
     >
         <span class="donate-btn__disc donate-btn__disc--pulse">
             <q-icon :name="ICONS.favorite" size="20px" />
         </span>
         <BaseTooltip>Support Dora 💗</BaseTooltip>
-        <DonateMenu />
-    </button>
+    </a>
 
     <!-- Settings: labelled pink pill, sits beside Sign out. -->
-    <button
+    <a
         v-else-if="variant === 'settings'"
-        type="button"
         class="donate-btn donate-btn--settings"
+        :href="DONATION_URL"
+        target="_blank"
+        rel="noopener noreferrer"
         aria-label="Support Dora"
     >
         <q-icon :name="ICONS.favorite" size="18px" />
         <span>Support Dora</span>
-        <DonateMenu />
-    </button>
+    </a>
 
     <!-- Auth shell: fixed, gently pulsing FAB in the bottom-left corner. -->
-    <button
+    <a
         v-else
-        type="button"
         class="donate-btn donate-btn--floating"
+        :href="DONATION_URL"
+        target="_blank"
+        rel="noopener noreferrer"
         aria-label="Support Dora"
     >
         <q-icon :name="ICONS.favorite" size="26px" />
         <BaseTooltip anchor="center right" self="center left">Support Dora 💗</BaseTooltip>
-        <DonateMenu anchor="top left" self="bottom left" />
-    </button>
+    </a>
 </template>
 
 <script lang="ts" setup>
     import BaseTooltip from 'src/components/BaseTooltip.vue';
     import { ICONS } from 'src/style/icons';
-    import DonateMenu from 'src/components/donate/DonateMenu.vue';
+    import { DONATION_URL } from 'src/config/donationLinks';
 
-    // One donation control, three placements. All open the same DonateMenu
-    // (R-003). Its own pink --donate token (not a semantic role, not the
-    // sparingly-used --brand-accent) with white glyph so contrast holds on any
-    // toolbar/theme colour; aria-label + tooltip per D-005; the pulse is
+    // One donation control, three placements, all linking straight to the
+    // single DONATION_URL (R-003) in a new tab. Its own pink --donate token
+    // (not a semantic role, not the sparingly-used --brand-accent) with white
+    // glyph so contrast holds on any toolbar/theme colour; aria-label + tooltip per D-005; the pulse is
     // neutralised by the global prefers-reduced-motion kill-switch (motion.scss)
     // and an explicit override below.
     withDefaults(
@@ -65,6 +68,7 @@
         padding: 0;
         cursor: pointer;
         color: var(--donate-contrast);
+        text-decoration: none;
     }
 
     /* ── Shared pink disc (header + the FAB reuse the same fill/glow) ── */

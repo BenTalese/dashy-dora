@@ -7,6 +7,8 @@ bump means a schema or configuration change you need to act on when upgrading.
 
 ### Changed
 
+- **Support Dora goes straight to PayPal.** The pink heart, the Settings pill and the sign-in screen button
+  open PayPal in a new tab instead of a two-option menu. GitHub Sponsors is gone from the repo and README too.
 - **Deleting a stock item no longer gets blocked by recipes.** Recipes that use it keep the ingredient as free
   text, with its amount and notes. The delete confirm says how many recipes that affects.
 - **Link a product as you save it in Product Search.** After saving, the confirmation offers Link to stock item.
