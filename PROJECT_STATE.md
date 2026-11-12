@@ -1,6 +1,6 @@
 ﻿# Dashy Dora — Project State
 
-**Last reviewed: 2026-11-06.**
+**Last reviewed: 2026-11-12.**
 
 This is the single front door: where every phase and workstream is up
 to, and what needs your attention. For *where things stand* this doc
@@ -20,9 +20,9 @@ Status key: ✅ done-clean · ➗ done-with-carve-outs · 🟡 active/in-progres
 
 **Dora 1.0.0 is deployed to Altair (Dora and the companion), and every FU is now resolved: 0 open in `DORA_FOLLOWUPS.md`.** On 11-06 (night) your decisions closed the last nine (FU-636 got built: Settings → Nutrition links USDA's downloads page), and the five companion debts (FU-886/887/891/924/960) were fixed in `../dora-companion`. New tonight: a **first-setup demo**. The one-time setup screen can fill Dora with sample data and sign you in as `demo`, a banner says it's a demo, and "Set up Dora" wipes it back to a fresh install. A security review of the first cut found three holes, all fixed before close.
 
-**Commits:** everything through the setup demo is pushed (Dora `873a2ad9`, companion `2e140de`). Single Alembic head `e8b3f1a6c2d5`. Version **2.0.0** (tag `v2.0.0` on `80e3b348`, unreleased); shopping list v5 replaces 11-07's Simple mode (pushed 11-08).
+**Release:** 1.0.0 is the official first release (2026-11-12). Version, CHANGELOG and tag `v1.0.0` are on `main`; the old unpublished `v2.0.0` tag is gone. Published by the Release workflow.
 
-**What's left:** deploy, run the Release workflow with `v2.0.0` (it builds the tagged commit), and walk `DORA_VERIFY.md`. No FU is waiting on you.
+**What's left:** deploy to Altair and walk `DORA_VERIFY.md`. Open FUs: FU-992 and FU-996, neither blocking.
 
 ---
 
@@ -34,7 +34,7 @@ Status key: ✅ done-clean · ➗ done-with-carve-outs · 🟡 active/in-progres
 | **1 — Close the loop** | Shopping lists, cook mode, stock, cookbook, meal planner, suggestions, costing, stocktake | ✅ | Nothing open. Only the sweep 2/3, batch 5 and demo verify lines remain. |
 | **2 — Ingestion API + companion** | `/api/ingest` seam, standalone companion, Merchant→Store | ✅ | Products program complete. Companion debts done (uncommitted in `../dora-companion`). The producer contract is written down (PROPOSAL_INGESTION_API §2.2), and ingest routes check the key before the body. |
 | **3 — Champion** | Zero-Input Pantry, buy/wait oracles, barcode-add, Dora Score, culinary memory, native app | ➗ | P8-01..P8-10 built. Android cleartext built; iOS is won't-do. Nothing open. |
-| **4 — Open-source release** *(was Commercialize)* | README/showcase, release process, support channel, ops/CI | 🟡 1.0.0 deployed | Support links live (PayPal + Sponsors). CI workflows are back, but Actions is off until you switch it on. Launch gates and the showcase image recipe were closed as "good enough" / skip. |
+| **4 — Open-source release** *(was Commercialize)* | README/showcase, release process, support channel, ops/CI | ✅ 1.0.0 released | Support links live (PayPal). CI workflows are back, but Actions is off until you switch it on. Launch gates and the showcase image recipe were closed as "good enough" / skip. |
 
 ---
 

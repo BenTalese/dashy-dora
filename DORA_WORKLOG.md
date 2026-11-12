@@ -41,6 +41,22 @@ next.
 
 ---
 
+## 2026-11-12 (later): **1.0.0 released**
+
+**Owner:** repurpose the 1.0.0 tag and version; this is the official first release (owner deleted the old GitHub
+Release and enabled Actions).
+
+Version back to `1.0.0` in `version_info.py`, `web_app/package.json` (+ lock), `src-capacitor/package.json`;
+Android `versionName "1.0"` (`versionCode` stays 2, it can't go down on installed devices). CHANGELOG is one
+`[1.0.0] - 2026-11-12` section: the feature tour, with Shopping lists rewritten for v5 and the Unreleased features
+folded in (Products tab, add a missing item from a list, link on save); fixes and perf deltas dropped as they
+don't apply to a first release. Tag `v2.0.0` deleted (never published); `v1.0.0` on the release commit.
+
+**Verified:** full pytest (2812 passed, 1 skipped, 1 xfailed), web lint + vue-tsc + vitest (944) + build, before the
+version bump; version-pair tests after.
+
+**Next up:** deploy to Altair; walk `DORA_VERIFY.md`.
+
 ## 2026-11-12: **Support button links straight to PayPal**
 
 **Owner:** GitHub Sponsors just routes to PayPal, so make the support button a direct PayPal link, no dropdown.

@@ -3,79 +3,13 @@
 All notable changes to Dashy Dora live here. Versions follow semver: a major
 bump means a schema or configuration change you need to act on when upgrading.
 
-## [Unreleased]
-
-### Changed
-
-- **Support Dora goes straight to PayPal.** The pink heart, the Settings pill and the sign-in screen button
-  open PayPal in a new tab instead of a two-option menu. GitHub Sponsors is gone from the repo and README too.
-- **Deleting a stock item no longer gets blocked by recipes.** Recipes that use it keep the ingredient as free
-  text, with its amount and notes. The delete confirm says how many recipes that affects.
-- **Link a product as you save it in Product Search.** After saving, the confirmation offers Link to stock item.
-- **Linked products and preferred buys work together.** An item with a linked product keeps its preferred buys,
-  and the name menu on a list row, a template line or a recipe ingredient offers both. Picking one replaces
-  the other.
-- **The Products tab holds everything about what you buy.** Linked products, preferred buys and Your prices
-  now sit together on the stock item's Products tab, which is always shown. The Overview tab is shorter.
-
-### Added
-
-- **Add a missing stock item from a shopping list.** In the Add to list sheet, typing a name nothing matches
-  offers Add "name" as a new stock item: it is created as out of stock and goes straight onto the list.
-
-### Fixed
-
-- On a phone you can type to search the ingredient picker and the link-to-stock-item picker again.
-- Product Search: Aldi results show their picture and are no longer all marked out of stock.
-- The Nutrition row on a stock item no longer pushes the page sideways on a phone when the food has a long
-  name.
-- Scrolling a long stock list on a phone no longer snaps back mid-fling.
-- Results in the food search for nutrition no longer overlap each other.
-- Going back to the cookbook from a recipe returns you to where you were in the list, instead of the top.
-- Scrolling My Products on a phone no longer snaps back mid-fling.
-
-### Performance
-
-- The cookbook draws recipe cards a batch at a time as you scroll, instead of all of them at once. My
-  Products, the meal planner's recipe list and the import results list work the same way.
-- The server compresses its responses. The cookbook's recipe list and the stock list are over ten times
-  smaller to download.
-
-## [2.0.0] - 2026-11-08
-
-Shopping lists work differently: there is no separate draft and shopping mode
-any more. Upgrading: a database migration turns every open list (draft or mid-shop)
-into an open list, keeping its ticks. It runs on boot; nothing to do by hand.
-
-### Changed
-
-- **One list from first item to receipt.** You add, edit, price and tick items on
-  the same list. Start shopping and Back to draft are gone.
-- **Ticking restocks straight away.** A ticked item goes to Stocked and moves to
-  a Collected section; unticking puts its old level back. Ticking the last item
-  asks whether you're done, and Not yet unticks it again.
-- **Finish** appears once something is ticked, for a shop that ends with items
-  left over. Those still go to another list or the bin.
-- The summary card switches on its own: Estimated cost becomes Left to spend,
-  and a progress bar appears, from the first tick. Dora's suggestions and the
-  trim-to-budget banner step aside at that point.
-- Lists group by store by default. The other options are Location, Group and
-  A to Z; custom order, drag and drop and the move up/down arrows are gone.
-- Rows are simpler: a tick button on the left, a quantity box without the +/−
-  buttons (here and when amending a receipt), the buy verdict beside delete on
-  a desktop, and price and delete on the same line as the name on a phone.
-- The price on each row is also where you record what you paid.
-- Receipt photos can be added once anything is ticked.
-- The name menu on a list row (offers or preferred buys) is wider on desktop,
-  and names no longer lose their last letters when there is room for them.
-
-## [1.0.0] - 2026-11-06
+## [1.0.0] - 2026-11-12
 
 The first official release. Dora keeps track of everything edible in the house
 without making you count tea bags, and builds shopping, cooking, meal planning
 and price tracking on top of that. It is free, open source and self-hosted.
 
-Earlier version numbers (0.1.0 to 0.7.0) were development builds and never
+Earlier version numbers (0.1.0 to 0.7.0, and 2.0.0) were development builds and never
 released. Their history is in the git log.
 
 ### Stock
@@ -85,8 +19,9 @@ released. Their history is in the git log.
 - Stock overview with search, filters, sorting, bulk actions and one-tap
   add-to-list from any row.
 - A detail page per item with its history, the recipes, lists and meal plans
-  that use it, its substitutes, the prices you've paid, and how much your
-  upcoming meals will need.
+  that use it, its substitutes, and how much your upcoming meals will need. Its
+  Products tab holds the products linked to it, your preferred buys and the
+  prices you've paid.
 - Stocktake mode with Review, Walk and Sweep phases. It asks about the items
   Dora is least sure of first.
 - Optional inference (off by default): Dora estimates what you've probably run
@@ -97,13 +32,17 @@ released. Their history is in the git log.
 
 ### Shopping lists
 
-- Lists move through Draft, Shopping and Done. A finished list reads as a
-  receipt you can still amend.
+- One list from first item to receipt: add, price and tick items on the same
+  list. Ticking an item restocks it straight away, and unticking puts its old
+  level back. A finished list reads as a receipt you can still amend.
 - Lists can be built from what's running low, a recipe or a meal plan. Items
-  can be added automatically when they drop to Low.
-- Plan which store each item comes from, set a shop day, and see the total and
-  where the money goes.
-- Prices you enter while shopping become your own price history.
+  can be added automatically when they drop to Low, and a name nothing matches
+  can be added as a new stock item straight onto the list.
+- Group a list by store, location, group or A to Z. Plan which store each item
+  comes from, set a shop day, and see the total, then what's left to spend once
+  you start ticking.
+- Prices you enter while shopping become your own price history, and receipt
+  photos can be attached.
 - List templates for the shops you repeat.
 
 ### Recipes and cook mode
@@ -139,7 +78,8 @@ released. Their history is in the git log.
   per-100g/100ml comparisons, and loose and boxed buys kept apart.
 - "Should I buy this?" judges a price against what you usually pay.
 - My Products links real store products to your stock items, including
-  products you add yourself for shops Dora can't check.
+  products you add yourself for shops Dora can't check. A product can be linked
+  as you save it from Product Search.
 - Price alerts, price drops and a weekly deals email.
 - Store prices come from the separate, self-hosted Dora companion, which pushes
   products in through an ingestion API with its own access keys. Dora never
