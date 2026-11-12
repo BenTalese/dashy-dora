@@ -55,6 +55,10 @@ don't apply to a first release. Tag `v2.0.0` deleted (never published); `v1.0.0`
 **Verified:** full pytest (2812 passed, 1 skipped, 1 xfailed), web lint + vue-tsc + vitest (944) + build, before the
 version bump; version-pair tests after.
 
+**Published:** owner set Actions to allow all actions; Release run 43208171979 passed (4m). GitHub Release
+`v1.0.0` is live with the CHANGELOG section as its body; `ghcr.io/bentalese/dashy-dora` has `v1.0.0` and `latest`,
+pullable anonymously. Logged FU-1002 (actions on Node 20).
+
 **Next up:** deploy to Altair; walk `DORA_VERIFY.md`.
 
 ## 2026-11-12: **Support button links straight to PayPal**

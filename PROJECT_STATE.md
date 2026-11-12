@@ -22,7 +22,7 @@ Status key: ✅ done-clean · ➗ done-with-carve-outs · 🟡 active/in-progres
 
 **Release:** 1.0.0 is the official first release (2026-11-12). Version, CHANGELOG and tag `v1.0.0` are on `main`; the old unpublished `v2.0.0` tag is gone. Published by the Release workflow.
 
-**What's left:** deploy to Altair and walk `DORA_VERIFY.md`. Open FUs: FU-992 and FU-996, neither blocking.
+**What's left:** deploy to Altair and walk `DORA_VERIFY.md`. Open FUs: FU-992, FU-996 and FU-1002, none blocking.
 
 ---
 

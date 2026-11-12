@@ -52,6 +52,12 @@ long session summary. Distinct from the other logs:
 
 # Open
 
+## [OPEN] FU-1002 — Workflow actions target Node 20
+- **Raised:** 2026-11-12 (1.0.0 Release run)
+- **Type:** follow-up
+- **What:** the Release run warns that `actions/checkout@v4`, `docker/build-push-action@v6`, `docker/login-action@v3`, `docker/setup-buildx-action@v3` and `softprops/action-gh-release@v2` target Node 20 and are forced onto Node 24. It still passes. Bump to the Node 24 majors in `ci.yml` and `release.yml`.
+- **Recommended resolution:** before the next release
+
 ## [OPEN] FU-996 — Route changes briefly stack the old page above the new one
 - **Raised:** 2026-11-09 (found during FU-995)
 - **Type:** finding
