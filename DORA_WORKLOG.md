@@ -59,12 +59,13 @@ Also: README Settings paths (Admin → ...), stale `.env.example` comments (boot
 pages), compose comment names the ghcr image. `tests/test_deploy_files.py` pins the nginx proxy + marker
 (matches `serve_spa.SAME_ORIGIN_META`) and compose's fixed production profile.
 
-**Verified:** full pytest (2819 passed), web lint + vue-tsc + vitest (944). **Not verified:** the container itself:
-no Docker socket access or nginx binary in this session, so the nginx config (incl. `sub_filter`, which Debian's
-nginx builds in) is untested at runtime. Three operator checks added to DORA_VERIFY.
+**Verified:** full pytest (2819 passed), web lint + vue-tsc + vitest (944), CI green. Then, at the owner's request,
+a throwaway instance on Altair (fresh clone, README steps, ports 6170/6174, own project name) driven by headless
+Chromium: production profile despite `DORA_ENV=development` in `.env`, same-origin `/api` only, sign-in sticks over
+HTTP, 20 MB chunk, backup round trip + restore, real client IP in the audit log, forged XFF ignored. Torn down
+(container, image, volumes, folder); the real `dashy_dora` untouched. Details in DORA_VERIFY_TRIAGE.
 
-**Next up:** deploy to Altair and walk the new operator checks; if good, release 1.0.1 (bump version, rename
-`[Unreleased]`, run Release).
+**Next up:** release 1.0.1 (bump version, rename `[Unreleased]`, run Release).
 
 ## 2026-11-12 (later): **1.0.0 released**
 

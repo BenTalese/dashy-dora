@@ -4312,9 +4312,3 @@ device or a real file picker.
       *not* in AU/NZ and confirm the rating prompt does **not** appear.
 - [ ] With the rating on but nutrition in **simple** mode, confirm the admin
       page's warning banner reads correctly and no stars appear anywhere.
-
-## Operator: one-port Docker install (2026-11-12)
-- [ ] Rebuild on Altair; open `http://altair:5174`, sign in, and in devtools confirm API calls go to `:5174/api/...` (not `:5170`).
-- [ ] Upload a recipe photo and restore a backup through 5174 (nginx body limit + timeouts).
-- [ ] Settings → Admin → Audit log shows your real LAN address for a sign-in, not 127.0.0.1.
-

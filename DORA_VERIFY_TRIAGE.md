@@ -145,6 +145,9 @@ device packs for hardware items.
 
 ---
 
+## Verified live — one-port Docker install on Altair (2026-11-12)
+Fresh clone of `a48b1238` in `~/dora-test` on Altair (project `dora-test`, ports 6170/6174), set up per the README with `.env.example` left at `DORA_ENV=development`; driven by headless Chromium from the LAN, then torn down. Booted gunicorn/production; nginx has `http_sub_module`; index.html carries the same-origin meta; every one of 20 API calls went to `:6174/api/`, none to 6170; sign-in survived a reload over plain HTTP; a 20 MB upload chunk passed nginx; backup create, download, upload + restore and library restore all 200; audit log recorded 192.168.1.136 (not 127.0.0.1), and a forged `X-Forwarded-For: 6.6.6.6` on a failed login was ignored. All three operator items deleted.
+
 ## Owner-confirmed — every check from 2026-10-23 to 2026-11-04 (2026-11-04)
 The owner walked the running app and the device/operator checks ("consider all checked off, I've looked through the app"; FU-965 and FU-918 "not worried"). Deleted from DORA_VERIFY.md: every section from "Owner decisions built (2026-11-04)" down to "Finalisation Stage 2 — units 1–10" (about 60 lines: browser rechecks, Android, voice with a real mic, camera, wake lock, install prompt, hosted AI keys, Postgres `upgrade head`, gunicorn export, the FU-965 production row counts). FU-710/715/736/797/729/739/722/751/628/629/389/737 resolved on the same word.
 
