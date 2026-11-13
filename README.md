@@ -87,6 +87,38 @@ it useful, [donations](#-support-dora) are hugely appreciated but never required
 
 <br/>
 
+<a id="install-on-desktop"></a>
+
+## 💻 Install on desktop
+
+Just want Dora on your own computer? Download the file for your system from the
+[latest release](https://github.com/BenTalese/dashy-dora/releases/latest). Dora
+runs quietly in the background and opens in your web browser; your data stays on
+that computer.
+
+| System | Download | Install |
+|---|---|---|
+| Windows 10/11 (64-bit) | `Dora-vX.Y.Z-windows-x64-setup.exe` | Run it and follow the steps. No admin rights needed. |
+| macOS (Apple Silicon) | `Dora-vX.Y.Z-macos-arm64.dmg` | Open it and drag **Dora** onto **Applications**. |
+| Linux (x86_64) | `Dora-vX.Y.Z-linux-x86_64.AppImage` | `chmod +x Dora-*.AppImage`, then run it. |
+
+**The apps aren't code-signed yet**, so the first launch needs one extra step:
+
+- **Windows:** if SmartScreen says *"Windows protected your PC"*, click **More info → Run anyway**.
+- **macOS:** if it says Dora *"can't be opened"* or *"Apple could not verify"*, open
+  **System Settings → Privacy & Security**, scroll down and click **Open Anyway**. (Or run
+  `xattr -dr com.apple.quarantine /Applications/Dora.app` once.)
+- **Linux:** AppImages need FUSE 2. On Ubuntu 22.04 that's `sudo apt install libfuse2`
+  (`libfuse2t64` on 24.04 and later).
+
+**Your data** lives in `%LOCALAPPDATA%\Dora\` (Windows), `~/Library/Application Support/Dora/`
+(macOS) or `~/.local/share/Dora/` (Linux). Uninstalling or upgrading leaves it alone.
+
+**To stop Dora**, end the *Dora* process in Task Manager (Windows), Activity Monitor (macOS)
+or with `pkill Dora` (Linux). There's no quit button yet.
+
+<br/>
+
 ## 🏡 Self-host with Docker
 
 Dora runs as one container (API + web app) on SQLite by default. You need Docker
@@ -311,7 +343,7 @@ pip install -r requirements.txt
 .\packaging\build-windows.ps1 -Clean
 .\dist\Dora\Dora.exe
 ```
-Data persists to `%LOCALAPPDATA%\Dora\`.
+Data persists to `%LOCALAPPDATA%\Dora\`. Add `-Installer` to also build `dist\Dora-vX.Y.Z-windows-x64-setup.exe` (needs [Inno Setup 6](https://jrsoftware.org/isinfo.php): `winget install JRSoftware.InnoSetup`, and `pip install pillow` for the icon).
 
 **macOS:**
 ```bash
@@ -319,7 +351,7 @@ pip install -r requirements.txt
 ./packaging/build-macos.sh --clean
 ./dist/Dora/Dora
 ```
-Auto-detects Apple Silicon vs Intel. Requires Xcode command-line tools. Data persists to `~/Library/Application Support/Dora/`.
+Auto-detects Apple Silicon vs Intel. Requires Xcode command-line tools. Data persists to `~/Library/Application Support/Dora/`. The build also makes `dist/Dora.app`; add `--dmg` to pack it into `dist/Dora-vX.Y.Z-macos-<arch>.dmg`.
 
 ### Releasing (manual, push-the-button)
 
@@ -329,7 +361,7 @@ The CI and Release workflows ([.github/workflows/ci.yml](.github/workflows/ci.ym
 2. Bump `CURRENT_VERSION` in `dora_api/features/help/version_info.py` — the one version source; the web app reads it at build time — and `web_app/package.json` to match (a test pins the pair). Rename the `## [Unreleased]` block in `CHANGELOG.md` to `## [X.Y.Z] - <date>`; the workflow uses that section as the GitHub Release body.
 3. Optionally tag the release commit yourself (`git tag -a v0.3.0 && git push origin v0.3.0`); the workflow then builds the tagged commit. Without a tag it builds the commit you run it on and tags that.
 4. Go to **Actions → Release → Run workflow**, type a version like `v0.3.0`, and run it. It refuses only a version that already has a GitHub Release.
-5. The workflow validates the version, builds the Docker image, pushes to `ghcr.io/bentalese/dashy-dora:vX.Y.Z` **and** `:latest`, then cuts the GitHub Release. Tick **dry_run** to preview without publishing.
+5. The workflow validates the version and builds the three desktop installers (Windows `.exe`, macOS `.dmg`, Linux `.AppImage`, one runner each). Once all three have built, it builds the Docker image, pushes to `ghcr.io/bentalese/dashy-dora:vX.Y.Z` **and** `:latest`, and cuts the GitHub Release with the installers attached. If any installer fails, nothing is published. Tick **dry_run** to build everything without publishing; the installers stay as artifacts on the run page so you can try them first.
 6. After the release lands, move the `[Unreleased]` heading down and start a fresh section.
 
 </details>

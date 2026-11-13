@@ -11,6 +11,12 @@
 #   -SkipSpa            reuse an existing `web_app\dist\spa\` build
 #   -SkipPyInstaller    run only the SPA build (sanity check)
 #   -Clean              wipe dist\ + build\ before starting
+#   -Installer          after pyinstaller, wrap dist\Dora\ into
+#                       dist\Dora-vX.Y.Z-windows-x64-setup.exe with
+#                       Inno Setup 6 (needs ISCC.exe on PATH or in its
+#                       default install folder; Pillow for the icon)
+#   -Version <X.Y.Z>    version stamped on the installer. Default:
+#                       CURRENT_VERSION from version_info.py
 #
 # Designed to be re-runnable; partial output won't poison subsequent
 # runs (PyInstaller's cache handles that). Mirrors `build-linux.sh`
@@ -19,7 +25,9 @@
 param(
     [switch]$SkipSpa,
     [switch]$SkipPyInstaller,
-    [switch]$Clean
+    [switch]$Clean,
+    [switch]$Installer,
+    [string]$Version
 )
 
 $ErrorActionPreference = 'Stop'
@@ -96,3 +104,49 @@ if (-not (Test-Path $binPath)) {
 $sizeMB = [math]::Round((Get-ChildItem -Recurse 'dist\Dora' | Measure-Object -Property Length -Sum).Sum / 1MB, 1)
 Write-Host "[build] OK. Bundle at $binPath ($sizeMB MB)"
 Write-Host "[build] Try it:  .\$binPath"
+
+# --- 4. Optional installer (Inno Setup) ------------------------------
+if (-not $Installer) {
+    Write-Host "[build] (rerun with -Installer to wrap dist\Dora into a setup .exe)"
+    exit 0
+}
+
+if (-not $Version) {
+    $Version = (python -c "from dora_api.features.help.version_info import CURRENT_VERSION; print(CURRENT_VERSION)").Trim()
+    if ($LASTEXITCODE -ne 0 -or -not $Version) { throw "[build] Couldn't read CURRENT_VERSION" }
+}
+$Version = $Version.TrimStart('v')
+
+$iscc = Get-Command iscc -ErrorAction SilentlyContinue
+if ($iscc) {
+    $isccPath = $iscc.Source
+} else {
+    $isccPath = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+    if (-not (Test-Path $isccPath)) {
+        throw "[build] ERROR: Inno Setup 6 not found. Install it (winget install JRSoftware.InnoSetup) or put ISCC.exe on PATH."
+    }
+}
+
+# Setup.exe wants a real .ico; make one from the PNG the app already uses.
+New-Item -ItemType Directory -Force build | Out-Null
+python -c "from PIL import Image; Image.open('packaging/icons/dora.png').save('build/dora.ico', sizes=[(16,16),(32,32),(48,48),(64,64),(128,128),(256,256)])"
+$isccArgs = @(
+    "/DAppVersion=$Version",
+    "/DSourceDir=$((Resolve-Path 'dist\Dora').Path)",
+    "/DOutputDir=$((Resolve-Path 'dist').Path)",
+    "/DOutputBaseFilename=Dora-v$Version-windows-x64-setup"
+)
+if ($LASTEXITCODE -eq 0 -and (Test-Path 'build\dora.ico')) {
+    $isccArgs += "/DIconFile=$((Resolve-Path 'build\dora.ico').Path)"
+} else {
+    Write-Host "[build] WARN: couldn't make build\dora.ico (is Pillow installed?); installer gets Inno's default icon"
+}
+
+Write-Host "[build] Running Inno Setup ($isccPath)"
+& $isccPath @isccArgs 'packaging\windows\dora.iss'
+if ($LASTEXITCODE -ne 0) { throw "[build] Inno Setup failed" }
+
+$setupPath = "dist\Dora-v$Version-windows-x64-setup.exe"
+if (-not (Test-Path $setupPath)) { throw "[build] ERROR: Inno Setup didn't produce $setupPath" }
+$setupMB = [math]::Round((Get-Item $setupPath).Length / 1MB, 1)
+Write-Host "[build] OK. Installer at $setupPath ($setupMB MB)"

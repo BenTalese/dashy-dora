@@ -14,6 +14,10 @@
 #   --skip-spa           reuse an existing `web_app/dist/spa/` build
 #   --skip-pyinstaller   run only the SPA build (sanity check)
 #   --clean              wipe dist/ + build/ before starting
+#   --dmg                after pyinstaller, pack dist/Dora.app into
+#                        dist/Dora-vX.Y.Z-macos-<arch>.dmg
+#   --version <X.Y.Z>    version in the .dmg name. Default:
+#                        CURRENT_VERSION from version_info.py
 #   --arch <ARCH>        force macos_aarch64 (Apple Silicon) or
 #                        macos_x64 (Intel). Default: auto-detect via
 #                        `uname -m` so an Apple Silicon Mac produces
@@ -35,11 +39,21 @@ SKIP_SPA=0
 SKIP_PYI=0
 CLEAN=0
 ARCH_OVERRIDE=""
+DMG=0
+VERSION=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --skip-spa)         SKIP_SPA=1; shift ;;
         --skip-pyinstaller) SKIP_PYI=1; shift ;;
         --clean)            CLEAN=1; shift ;;
+        --dmg)              DMG=1; shift ;;
+        --version)
+            VERSION="${2:-}"
+            if [ -z "$VERSION" ]; then
+                echo "--version needs a value (e.g. 1.0.1)" >&2
+                exit 2
+            fi
+            shift 2 ;;
         --arch)
             ARCH_OVERRIDE="${2:-}"
             if [ -z "$ARCH_OVERRIDE" ]; then
@@ -132,4 +146,35 @@ if [ ! -x "$BIN" ]; then
 fi
 SIZE_MB=$(du -sm dist/Dora | cut -f1)
 echo "[build] OK. Bundle at $BIN (${SIZE_MB} MB)"
-echo "[build] Try it:  ./$BIN"
+echo "[build] Try it:  ./$BIN  (or open dist/Dora.app)"
+
+# ── 4. Optional .dmg (drag Dora.app onto Applications) ───────────────
+if [ "$DMG" = "0" ]; then
+    echo "[build] (rerun with --dmg to pack dist/Dora.app into a .dmg)"
+    exit 0
+fi
+
+if [ ! -d "dist/Dora.app" ]; then
+    echo "[build] ERROR: dist/Dora.app missing — dora.spec's BUNDLE step didn't run" >&2
+    exit 1
+fi
+if [ -z "$VERSION" ]; then
+    VERSION=$(python -c "from dora_api.features.help.version_info import CURRENT_VERSION; print(CURRENT_VERSION)")
+fi
+VERSION="${VERSION#v}"
+case "$PIPER_PLATFORM" in
+    macos_aarch64) DMG_ARCH="arm64" ;;
+    *)             DMG_ARCH="x64" ;;
+esac
+DMG_OUT="dist/Dora-v${VERSION}-macos-${DMG_ARCH}.dmg"
+STAGE="build/dmg"
+
+echo "[build] Packing $DMG_OUT"
+rm -rf "$STAGE" "$DMG_OUT"
+mkdir -p "$STAGE"
+# ditto keeps the bundle's symlinks, permissions and ad-hoc signature intact.
+ditto dist/Dora.app "$STAGE/Dora.app"
+ln -s /Applications "$STAGE/Applications"
+hdiutil create -volname "Dashy Dora" -srcfolder "$STAGE" -ov -format UDZO "$DMG_OUT"
+SIZE_MB=$(du -sm "$DMG_OUT" | cut -f1)
+echo "[build] OK. Disk image at $DMG_OUT (${SIZE_MB} MB)"

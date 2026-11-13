@@ -3,6 +3,17 @@
 All notable changes to Dashy Dora live here. Versions follow semver: a major
 bump means a schema or configuration change you need to act on when upgrading.
 
+## [Unreleased]
+
+### Added
+
+- **Desktop installers on every release.** Each GitHub Release now carries a Windows installer
+  (`Dora-vX.Y.Z-windows-x64-setup.exe`), a macOS disk image for Apple Silicon (`…-macos-arm64.dmg`) and a
+  Linux AppImage (`…-linux-x86_64.AppImage`). The README's new **Install on desktop** section covers
+  installing them, including the one-time step for unsigned apps on Windows and macOS.
+- The Windows build script takes `-Installer` (Inno Setup) and the macOS one `--dmg`; macOS builds now produce
+  `Dora.app`.
+
 ## [1.0.1] - 2026-11-12
 
 ### Changed

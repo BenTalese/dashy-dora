@@ -35,6 +35,8 @@ infer them statically:
    are read from disk at runtime — ship as data.
 """
 import os
+import re
+import sys
 
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
@@ -159,3 +161,25 @@ coll = COLLECT(
     upx_exclude=[],
     name="Dora",
 )
+
+# ── macOS app bundle ────────────────────────────────────────────────
+# On macOS, also wrap the one-folder output into `dist/Dora.app` so it
+# can sit in /Applications and be packed into a .dmg
+# (`build-macos.sh --dmg`). PyInstaller ad-hoc signs it, which Apple
+# Silicon needs before it will run anything.
+if sys.platform == "darwin":
+    _version_src = open("dora_api/features/help/version_info.py", encoding="utf-8").read()
+    _version = re.search(r'^CURRENT_VERSION\s*=\s*"([^"]+)"', _version_src, re.M).group(1)
+    app = BUNDLE(
+        coll,
+        name="Dora.app",
+        icon="packaging/icons/dora.png",
+        bundle_identifier="io.github.bentalese.dashydora",
+        version=_version,
+        info_plist={
+            "CFBundleDisplayName": "Dashy Dora",
+            "CFBundleName": "Dora",
+            "CFBundleShortVersionString": _version,
+            "NSHighResolutionCapable": True,
+        },
+    )

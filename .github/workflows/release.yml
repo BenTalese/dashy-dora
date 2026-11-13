@@ -7,13 +7,23 @@ name: Release
 # What it does:
 #   1. Validates the version is a clean `vMAJOR.MINOR.PATCH` (optional
 #      pre-release suffix accepted: `v0.3.0-rc.1`).
-#   2. Builds the monolithic Docker image (multi-arch: linux/amd64).
-#   3. Pushes to ghcr.io tagged BOTH `vX.Y.Z` AND `latest` so
-#      pin-this-version deploys + self-hosters tracking latest both
-#      work.
-#   4. Cuts a GitHub Release with the matching tag and auto-generated
-#      release notes — the [Unreleased] section of CHANGELOG.md gets
-#      pulled into the body.
+#   2. Builds the desktop installers, one job per OS (PyInstaller can't
+#      cross-compile):
+#        - Windows  Dora-vX.Y.Z-windows-x64-setup.exe   (Inno Setup)
+#        - Linux    Dora-vX.Y.Z-linux-x86_64.AppImage
+#        - macOS    Dora-vX.Y.Z-macos-arm64.dmg         (Apple Silicon)
+#      None are code-signed; the README's install section has the
+#      SmartScreen / Gatekeeper steps.
+#   3. Builds the monolithic Docker image (linux/amd64) and pushes it
+#      to ghcr.io tagged BOTH `vX.Y.Z` AND `latest` so pin-this-version
+#      deploys + self-hosters tracking latest both work. Runs only once
+#      every installer has built, so a broken installer publishes nothing.
+#   4. Cuts a GitHub Release with the matching tag, this version's
+#      CHANGELOG.md section as the body and the installers attached.
+#
+# Dry run: builds everything but pushes no image and cuts no Release.
+# The installers are still kept as workflow artifacts on the run page,
+# so a dry run is how to try them before releasing.
 #
 # The tag may already exist (pushed by hand). Then the release is built
 # from the commit the tag points at, whichever branch the run was started
@@ -32,14 +42,13 @@ on:
                 required: true
                 type: string
             dry_run:
-                description: "Build + tag but don't push to ghcr.io or create the GitHub Release."
+                description: "Build everything but don't push to ghcr.io or create the GitHub Release (installers stay as run artifacts)."
                 required: false
                 default: false
                 type: boolean
 
 permissions:
-    contents: write
-    packages: write
+    contents: read
 
 concurrency:
     # One release at a time. Newer triggers wait rather than cancel
@@ -48,23 +57,31 @@ concurrency:
     cancel-in-progress: false
 
 jobs:
-    release:
-        name: Build + publish ${{ inputs.version }}
+    # ─────────────────────────────────────────────────────────────────
+    # 1. Validate the version + resolve the commit to release
+    # ─────────────────────────────────────────────────────────────────
+    prepare:
+        name: Prepare ${{ inputs.version }}
         runs-on: ubuntu-latest
+        outputs:
+            version: ${{ steps.version.outputs.version }}
+            plain: ${{ steps.version.outputs.plain }}
+            image: ${{ steps.version.outputs.image }}
+            sha: ${{ steps.tag.outputs.sha }}
         steps:
             - uses: actions/checkout@v4
               with:
                   fetch-depth: 0
 
-            # ── 1. Validate the version input ─────────────────────────
             # Reject anything that isn't `vMAJOR.MINOR.PATCH` (with
             # optional pre-release suffix). Catches typos before we do
             # any work that costs time.
             - name: Validate version
               id: version
+              env:
+                  VERSION: ${{ inputs.version }}
               run: |
                   set -e
-                  VERSION="${{ inputs.version }}"
                   if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]]; then
                       echo "::error::Version '$VERSION' isn't a clean vX.Y.Z. Use e.g. v0.3.0 or v0.3.0-rc.1."
                       exit 1
@@ -72,21 +89,23 @@ jobs:
                   # Lowercase the image name (ghcr is case-sensitive).
                   IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}"
                   echo "version=$VERSION" >> $GITHUB_OUTPUT
+                  echo "plain=${VERSION#v}" >> $GITHUB_OUTPUT
                   echo "image=$IMAGE" >> $GITHUB_OUTPUT
                   echo "Releasing $IMAGE:$VERSION"
 
-            # ── 2. Resolve what to release ──────────────────────────
-            # An existing tag is the release point: check it out so the
-            # image, the notes and the Release all come from that commit.
-            # What counts as "already published" is a GitHub Release for
-            # the tag, not the tag itself.
+            # An existing tag is the release point: every later job
+            # checks out this SHA, so the image, the installers, the
+            # notes and the Release all come from that commit. What
+            # counts as "already published" is a GitHub Release for the
+            # tag, not the tag itself.
             - name: Resolve release commit
               id: tag
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  VERSION: ${{ steps.version.outputs.version }}
+                  DRY_RUN: ${{ inputs.dry_run }}
               run: |
                   set -e
-                  VERSION="${{ steps.version.outputs.version }}"
                   if git rev-parse -q --verify "refs/tags/$VERSION" >/dev/null; then
                       git checkout -q --detach "refs/tags/$VERSION^{commit}"
                       echo "Tag $VERSION exists; releasing its commit $(git rev-parse --short HEAD)."
@@ -94,12 +113,134 @@ jobs:
                       echo "No tag $VERSION yet; releasing ${GITHUB_SHA::8} and tagging it."
                   fi
                   echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
-                  if [ "${{ inputs.dry_run }}" != "true" ] && gh release view "$VERSION" >/dev/null 2>&1; then
+                  if [ "$DRY_RUN" != "true" ] && gh release view "$VERSION" >/dev/null 2>&1; then
                       echo "::error::$VERSION already has a GitHub Release. Pick a new version."
                       exit 1
                   fi
 
-            # ── 3. Docker build setup ────────────────────────────────
+            # The app reports CURRENT_VERSION in Settings → About and the
+            # installers carry the tag's version; flag a forgotten bump.
+            - name: Check CURRENT_VERSION matches
+              env:
+                  PLAIN: ${{ steps.version.outputs.plain }}
+              run: |
+                  APP=$(sed -n 's/^CURRENT_VERSION *= *"\([^"]*\)".*/\1/p' dora_api/features/help/version_info.py)
+                  if [ "$APP" != "$PLAIN" ]; then
+                      echo "::warning::version_info.py says CURRENT_VERSION = \"$APP\" but you're releasing $PLAIN. The app will report $APP."
+                  fi
+
+    # ─────────────────────────────────────────────────────────────────
+    # 2. Desktop installers — one native runner per OS
+    # ─────────────────────────────────────────────────────────────────
+    desktop:
+        name: Desktop installer (${{ matrix.label }})
+        needs: prepare
+        runs-on: ${{ matrix.runner }}
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - label: Windows x64
+                      key: windows
+                      runner: windows-latest
+                    # 22.04 on purpose: an AppImage runs on distros at
+                    # least as new as the glibc it was built against.
+                    - label: Linux x86_64
+                      key: linux
+                      runner: ubuntu-22.04
+                    # macos-latest is Apple Silicon (arm64).
+                    - label: macOS arm64
+                      key: macos
+                      runner: macos-latest
+        env:
+            VERSION: ${{ needs.prepare.outputs.version }}
+            PLAIN: ${{ needs.prepare.outputs.plain }}
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  ref: ${{ needs.prepare.outputs.sha }}
+
+            - name: Set up Node
+              uses: actions/setup-node@v4
+              with:
+                  node-version: "22"
+                  cache: npm
+                  cache-dependency-path: web_app/package-lock.json
+
+            - name: Set up Python
+              uses: actions/setup-python@v5
+              with:
+                  python-version: "3.11"
+                  cache: pip
+                  cache-dependency-path: requirements.txt
+
+            - name: Install dependencies
+              shell: bash
+              run: |
+                  set -e
+                  (cd web_app && npm ci)
+                  python -m pip install --upgrade pip
+                  # Pillow turns packaging/icons/dora.png into the .ico /
+                  # .icns the Windows and macOS bundles need.
+                  pip install -r requirements.txt pillow
+
+            # ── Windows: PyInstaller → Inno Setup ─────────────────────
+            - name: Install Inno Setup
+              if: matrix.key == 'windows'
+              shell: pwsh
+              run: |
+                  if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
+                      choco install innosetup -y --no-progress
+                  }
+
+            - name: Build Windows installer
+              if: matrix.key == 'windows'
+              shell: pwsh
+              run: .\packaging\build-windows.ps1 -Installer -Version $env:PLAIN
+
+            # ── Linux: PyInstaller → AppImage ─────────────────────────
+            # appimagetool is itself an AppImage and runners have no
+            # FUSE; extract-and-run sidesteps that.
+            - name: Build Linux AppImage
+              if: matrix.key == 'linux'
+              env:
+                  APPIMAGE_EXTRACT_AND_RUN: "1"
+              run: |
+                  set -e
+                  ./packaging/build-linux.sh --appimage
+                  mv dist/Dora-v*-x86_64.AppImage "dist/Dora-${VERSION}-linux-x86_64.AppImage"
+
+            # ── macOS: PyInstaller → Dora.app → .dmg ──────────────────
+            - name: Build macOS disk image
+              if: matrix.key == 'macos'
+              run: ./packaging/build-macos.sh --dmg --version "$PLAIN"
+
+            - name: Keep the installer
+              uses: actions/upload-artifact@v4
+              with:
+                  name: desktop-${{ matrix.key }}
+                  path: |
+                      dist/Dora-*-setup.exe
+                      dist/Dora-*.AppImage
+                      dist/Dora-*.dmg
+                  if-no-files-found: error
+                  retention-days: 30
+
+    # ─────────────────────────────────────────────────────────────────
+    # 3. Docker image — only once every installer built
+    # ─────────────────────────────────────────────────────────────────
+    docker:
+        name: Docker image
+        needs: [prepare, desktop]
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+            packages: write
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  ref: ${{ needs.prepare.outputs.sha }}
+
             - name: Set up Docker Buildx
               uses: docker/setup-buildx-action@v3
 
@@ -111,7 +252,6 @@ jobs:
                   username: ${{ github.actor }}
                   password: ${{ secrets.GITHUB_TOKEN }}
 
-            # ── 4. Build (+ optional push) ───────────────────────────
             # Single-platform for now; bump to multi-arch when we have
             # a real ARM target. GHA's docker buildx cache keeps repeat
             # builds reasonably fast.
@@ -122,33 +262,53 @@ jobs:
                   file: Dockerfile
                   push: ${{ !inputs.dry_run }}
                   tags: |
-                      ${{ steps.version.outputs.image }}:${{ steps.version.outputs.version }}
-                      ${{ steps.version.outputs.image }}:latest
+                      ${{ needs.prepare.outputs.image }}:${{ needs.prepare.outputs.version }}
+                      ${{ needs.prepare.outputs.image }}:latest
                   build-args: |
-                      DORA_BUILD_ID=${{ steps.tag.outputs.sha }}
+                      DORA_BUILD_ID=${{ needs.prepare.outputs.sha }}
                   cache-from: type=gha
                   cache-to: type=gha,mode=max
                   labels: |
                       org.opencontainers.image.title=DashyDora
                       org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-                      org.opencontainers.image.version=${{ steps.version.outputs.version }}
-                      org.opencontainers.image.revision=${{ steps.tag.outputs.sha }}
+                      org.opencontainers.image.version=${{ needs.prepare.outputs.version }}
+                      org.opencontainers.image.revision=${{ needs.prepare.outputs.sha }}
 
-            # ── 5. Extract this version's CHANGELOG section ──────────
+    # ─────────────────────────────────────────────────────────────────
+    # 4. GitHub Release with the installers attached
+    # ─────────────────────────────────────────────────────────────────
+    publish:
+        name: Publish ${{ inputs.version }}
+        needs: [prepare, desktop, docker]
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+        env:
+            VERSION: ${{ needs.prepare.outputs.version }}
+            PLAIN: ${{ needs.prepare.outputs.plain }}
+            IMAGE: ${{ needs.prepare.outputs.image }}
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  ref: ${{ needs.prepare.outputs.sha }}
+
+            - name: Collect installers
+              uses: actions/download-artifact@v4
+              with:
+                  pattern: desktop-*
+                  path: release-assets
+                  merge-multiple: true
+
             # The release steps rename `## [Unreleased]` to `## [X.Y.Z] - <date>`
             # before running this, so the notes are that section: from its
             # heading to the next `## ` heading. Falls back to [Unreleased]
-            # when no section names the version yet.
+            # when no section names the version yet. An install footer
+            # points people at the right file for their computer.
             - name: Extract release notes from CHANGELOG
               id: notes
               run: |
                   set -e
-                  if [ ! -f CHANGELOG.md ]; then
-                      echo "body=No CHANGELOG.md found." >> $GITHUB_OUTPUT
-                      exit 0
-                  fi
-                  PLAIN="${{ steps.version.outputs.version }}"
-                  PLAIN="${PLAIN#v}"
+                  NOTES="$RUNNER_TEMP/release-notes.md"
                   extract() {
                       awk -v head="$1" '
                           index($0, head) == 1 { in_block=1; next }
@@ -156,20 +316,29 @@ jobs:
                           in_block             { print }
                       ' CHANGELOG.md
                   }
-                  extract "## [$PLAIN]" > /tmp/release-notes.md
-                  if [ ! -s /tmp/release-notes.md ]; then
-                      extract "## [Unreleased]" > /tmp/release-notes.md
+                  if [ -f CHANGELOG.md ]; then
+                      extract "## [$PLAIN]" > "$NOTES"
+                      if [ ! -s "$NOTES" ]; then
+                          extract "## [Unreleased]" > "$NOTES"
+                      fi
                   fi
-                  if [ ! -s /tmp/release-notes.md ]; then
-                      echo "No CHANGELOG section for $PLAIN; using a stub." > /tmp/release-notes.md
+                  if [ ! -s "$NOTES" ]; then
+                      echo "No CHANGELOG section for $PLAIN; using a stub." > "$NOTES"
                   fi
-                  {
-                      echo 'body<<RELEASE_NOTES_EOF'
-                      cat /tmp/release-notes.md
-                      echo 'RELEASE_NOTES_EOF'
-                  } >> $GITHUB_OUTPUT
+                  cat >> "$NOTES" <<EOF
 
-            # ── 6. Cut the GitHub Release ────────────────────────────
+                  ## Install
+
+                  - **Windows:** \`Dora-${VERSION}-windows-x64-setup.exe\`
+                  - **macOS (Apple Silicon):** \`Dora-${VERSION}-macos-arm64.dmg\`
+                  - **Linux:** \`Dora-${VERSION}-linux-x86_64.AppImage\`
+                  - **Server / Docker:** \`docker pull ${IMAGE}:${VERSION}\`
+
+                  The desktop apps aren't code-signed yet, so Windows and macOS warn the first time you open them.
+                  See [Install on desktop](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}#install-on-desktop) for the steps.
+                  EOF
+                  echo "path=$NOTES" >> $GITHUB_OUTPUT
+
             # `softprops/action-gh-release` creates the tag (at the
             # resolved commit) when it doesn't exist yet, and uses it
             # as-is when it does.
@@ -177,21 +346,36 @@ jobs:
               if: ${{ !inputs.dry_run }}
               uses: softprops/action-gh-release@v2
               with:
-                  tag_name: ${{ steps.version.outputs.version }}
-                  target_commitish: ${{ steps.tag.outputs.sha }}
-                  name: ${{ steps.version.outputs.version }}
-                  body: ${{ steps.notes.outputs.body }}
+                  tag_name: ${{ needs.prepare.outputs.version }}
+                  target_commitish: ${{ needs.prepare.outputs.sha }}
+                  name: ${{ needs.prepare.outputs.version }}
+                  body_path: ${{ steps.notes.outputs.path }}
+                  files: release-assets/*
+                  fail_on_unmatched_files: true
                   draft: false
-                  prerelease: ${{ contains(steps.version.outputs.version, '-') }}
+                  prerelease: ${{ contains(needs.prepare.outputs.version, '-') }}
 
-            # ── 7. Summary ───────────────────────────────────────────
             - name: Summary
+              env:
+                  DRY_RUN: ${{ inputs.dry_run }}
               run: |
-                  echo "### Release ${{ steps.version.outputs.version }} ${{ inputs.dry_run && '(DRY RUN)' || '' }}" >> $GITHUB_STEP_SUMMARY
-                  echo "" >> $GITHUB_STEP_SUMMARY
-                  echo "Image: \`${{ steps.version.outputs.image }}:${{ steps.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
-                  if [ "${{ inputs.dry_run }}" = "true" ]; then
-                      echo "_Dry run — nothing was pushed and no GitHub Release was cut._" >> $GITHUB_STEP_SUMMARY
-                  else
-                      echo "Pull with: \`docker pull ${{ steps.version.outputs.image }}:${{ steps.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
-                  fi
+                  {
+                      if [ "$DRY_RUN" = "true" ]; then
+                          echo "### Release $VERSION (DRY RUN)"
+                      else
+                          echo "### Release $VERSION"
+                      fi
+                      echo ""
+                      echo "Image: \`$IMAGE:$VERSION\`"
+                      echo ""
+                      echo "Installers:"
+                      for f in release-assets/*; do
+                          echo "- \`$(basename "$f")\` ($(du -m "$f" | cut -f1) MB)"
+                      done
+                      echo ""
+                      if [ "$DRY_RUN" = "true" ]; then
+                          echo "_Dry run — nothing was pushed and no GitHub Release was cut. The installers are in this run's artifacts._"
+                      else
+                          echo "Pull with: \`docker pull $IMAGE:$VERSION\`"
+                      fi
+                  } >> $GITHUB_STEP_SUMMARY

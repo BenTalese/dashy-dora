@@ -41,6 +41,30 @@ next.
 
 ---
 
+## 2026-11-13: **Desktop installers in the Release workflow** (branch `feature/desktop-installers`)
+
+**Owner:** get installers added to releases so people can install on desktop.
+
+`release.yml` split into four jobs: `prepare` (validate version, resolve SHA, warn if `CURRENT_VERSION` doesn't
+match) → `desktop` matrix (windows-latest / ubuntu-22.04 / macos-latest, each checks out the resolved SHA and
+uploads its installer as an artifact) → `docker` (unchanged build/push, now only after every installer built) →
+`publish` (GitHub Release with the CHANGELOG section, an Install footer, and the installers attached). Dry run
+skips the push and the Release but keeps the installers as run artifacts. New `packaging/windows/dora.iss`
+(Inno Setup, per-user install, fixed AppId, closes a running Dora); `build-windows.ps1 -Installer [-Version]`
+makes the .ico with Pillow and runs ISCC. `dora.spec` adds a macOS `BUNDLE` (`Dora.app`, id
+`io.github.bentalese.dashydora`); `build-macos.sh --dmg [--version]` packs it with hdiutil. Linux reuses
+`build-linux.sh --appimage` with `APPIMAGE_EXTRACT_AND_RUN=1`. README: new "Install on desktop" section
+(unsigned-app steps, data paths, how to stop it) and the release steps; CHANGELOG `[Unreleased]`.
+
+**Verified:** workflow YAML parses; the release-notes step run locally against the 1.0.1 CHANGELOG; `bash -n`
+on build-macos.sh, PowerShell parser on build-windows.ps1, `ast.parse` on dora.spec. **Not run:** any actual
+installer build (no Inno Setup / Mac here) — first real check is a dry run (DORA_VERIFY "Build: desktop installers").
+Spun off FU-1003 (Intel Mac, signing) and FU-1004 (no quit / second instance / random port).
+
+**Next up:** push the branch and run a Release dry run from it with an untagged version.
+
+---
+
 ## 2026-11-12 (release): **1.0.1 released**
 
 **Owner:** release the one-port / README fixes as 1.0.1.
