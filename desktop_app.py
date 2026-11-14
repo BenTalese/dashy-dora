@@ -13,20 +13,26 @@ Boot sequence:
        per-user data dir if not already set — FU-333 Bucket D so a
        double-click end-user never sees an env var.
     3. Tell the production gate to stand down (DORA_SKIP_PROD_VALIDATION).
-    4. Run the Flask app on a random localhost port in a daemon
-       thread using werkzeug.serving.make_server, so we can shut it
-       down cleanly when the window closes.
-    5. Poll /api/health until it answers 200 (max 5s).
-    6. Seed detected bundle paths (piper binary + voices dir) into the
+    4. One copy at a time, on a fixed port (DORA_DESKTOP_PORT, default
+       5180) so the address, and the browser's sign-in and settings for
+       it, stay the same every launch. If Dora already answers there,
+       open the browser on it and exit instead of starting again.
+    5. Run the Flask app in a daemon thread using
+       werkzeug.serving.make_server, so it can be shut down cleanly.
+    6. Poll /api/health until it answers 200.
+    7. Seed detected bundle paths (piper binary + voices dir) into the
        `AppSetting` row when they're empty — FU-333 Bucket B strict
        (no env fallback: the resolver reads only from the DB).
-    7. Launch the SPA in the user's default browser.
-    8. On shutdown signal, stop Flask and exit.
+    8. Launch the SPA in the user's default browser.
+    9. Stay up until Quit: the tray icon's menu where the desktop shows
+       one, Quit Dora in Settings → About everywhere
+       (`features/desktop/quit_desktop.py`), or a shutdown signal.
 
 Nothing here is Docker-aware. Docker keeps using startup.sh.
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
 import secrets
@@ -231,6 +237,14 @@ def _seed_desktop_paths(bin_path: str | None, voice_dir: str | None) -> None:
         log.warning("Piper path seed skipped: %s", exc)
 
 
+DEFAULT_PORT = 5180
+
+
+def _desktop_port() -> int:
+    raw = os.environ.get("DORA_DESKTOP_PORT", "").strip()
+    return int(raw) if raw.isdigit() else DEFAULT_PORT
+
+
 def _pick_free_port() -> int:
     """Bind to port 0 to let the kernel pick, then release. Tiny
     race window between release and Flask binding — acceptable for a
@@ -240,18 +254,82 @@ def _pick_free_port() -> int:
         return sock.getsockname()[1]
 
 
-def _wait_for_health(url: str, timeout_seconds: float = 5.0) -> bool:
-    """Poll /api/health until it returns 2xx or the deadline passes."""
+def _port_is_free(port: int) -> bool:
+    """A plain bind, without SO_REUSEADDR: on Windows a listener that set
+    SO_REUSEADDR (as werkzeug's server does) would otherwise let a second
+    server share the port."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        try:
+            sock.bind(("127.0.0.1", port))
+        except OSError:
+            return False
+        return True
+
+
+def _dora_answers(base_url: str) -> bool:
+    """Is a Dora already serving at `base_url`? Its /api/health carries
+    `schema_version`; anything else on the port is some other program."""
+    try:
+        with urllib.request.urlopen(f"{base_url}api/health", timeout=1) as resp:
+            return "schema_version" in json.loads(resp.read())
+    except (urllib.error.URLError, ConnectionError, OSError, ValueError):
+        return False
+
+
+def _wait_for_dora(base_url: str, timeout_seconds: float) -> bool:
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
-        try:
-            with urllib.request.urlopen(url, timeout=1) as resp:
-                if 200 <= resp.status < 300:
-                    return True
-        except (urllib.error.URLError, ConnectionError, OSError):
-            pass
-        time.sleep(0.1)
+        if _dora_answers(base_url):
+            return True
+        time.sleep(0.25)
     return False
+
+
+def _open_browser(url: str) -> None:
+    # False only for the release workflow's smoke test, which has no browser.
+    if os.environ.get("DORA_DESKTOP_OPEN_BROWSER", "").strip().lower() == "false":
+        return
+    import webbrowser
+    webbrowser.open(url)
+
+
+def _bundled_icon() -> Path | None:
+    roots = []
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        roots.append(Path(meipass) / "icons")
+    roots.append(Path(__file__).resolve().parent / "packaging" / "icons")
+    for root in roots:
+        if (root / "dora.png").is_file():
+            return root / "dora.png"
+    return None
+
+
+def _run_tray(url: str, quit_app, log: logging.Logger):
+    """Show a tray icon with Open Dora and Quit, or return None where the
+    desktop has no tray (no display, GNOME without the AppIndicator
+    extension, a missing backend). The caller then waits on its own; Quit
+    Dora in Settings → About still works."""
+    icon_path = _bundled_icon()
+    if icon_path is None:
+        log.info("No tray icon: icon file not bundled")
+        return None
+    try:
+        import pystray
+        from PIL import Image
+        icon = pystray.Icon(
+            "dora",
+            Image.open(icon_path),
+            "Dashy Dora",
+            menu=pystray.Menu(
+                pystray.MenuItem("Open Dora", lambda: _open_browser(url), default=True),
+                pystray.MenuItem("Quit", lambda: quit_app()),
+            ),
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.info("No tray icon: %s", exc)
+        return None
+    return icon
 
 
 def main() -> int:
@@ -270,7 +348,7 @@ def main() -> int:
         format="%(asctime)s %(levelname)s %(name)s | %(message)s",
         handlers=[
             logging.FileHandler(log_dir / "desktop.log", encoding="utf-8"),
-            logging.StreamHandler(sys.stderr),
+            *([logging.StreamHandler(sys.stderr)] if sys.stderr else []),
         ],
     )
     log = logging.getLogger("dora.desktop")
@@ -282,9 +360,26 @@ def main() -> int:
     log.info("  piper_bin=%s", piper_bin_path or "<not bundled — using PATH>")
     log.info("  piper_voice_dir=%s", piper_voice_dir or "<not bundled>")
 
+    port = _desktop_port()
+    base_url = f"http://127.0.0.1:{port}/"
+    if _dora_answers(base_url):
+        log.info("Dora is already running at %s; opening it", base_url)
+        _open_browser(base_url)
+        return 0
+    if not _port_is_free(port):
+        # Another Dora still starting up, or some other program.
+        if _wait_for_dora(base_url, timeout_seconds=20):
+            log.info("Dora finished starting at %s; opening it", base_url)
+            _open_browser(base_url)
+            return 0
+        port = _pick_free_port()
+        base_url = f"http://127.0.0.1:{port}/"
+        log.warning("Port %s is taken by another program; using %s", _desktop_port(), port)
+
     # Import lazily so the env vars above are already set by the
     # time any `from dora_api...` module runs.
     from dora_api.app import app as dora_app
+    from dora_api.features.desktop.quit_desktop import set_quit_handler
     from dora_api.startup import init_db, register_routers
 
     init_db(is_test_env=False)
@@ -293,49 +388,50 @@ def main() -> int:
 
     from werkzeug.serving import make_server
 
-    dora_port = _pick_free_port()
-    dora_url = f"http://127.0.0.1:{dora_port}/"
-    log.info("dora_api binding to %s", dora_url)
-
-    dora_server = make_server("127.0.0.1", dora_port, dora_app, threaded=True)
-
+    log.info("dora_api binding to %s", base_url)
+    dora_server = make_server("127.0.0.1", port, dora_app, threaded=True)
     dora_thread = threading.Thread(
         target=dora_server.serve_forever, name="dora-flask", daemon=True,
     )
     dora_thread.start()
 
-    if not _wait_for_health(f"{dora_url}api/health"):
-        log.error("dora_api didn't answer /api/health within 5s; aborting")
+    if not _wait_for_dora(base_url, timeout_seconds=30):
+        log.error("dora_api didn't answer /api/health within 30s; aborting")
         dora_server.shutdown()
         return 2
-
-    spa_url = dora_url
-    log.info("Flask ready; launching window at %s", spa_url)
 
     # pywebview/GTK turned out to be a deeper packaging fight than
     # was worth shipping for v1: PyGObject won't reliably install in
     # an isolated venv, and PyInstaller can't bundle the system `gi`
     # cleanly. The bundle opens the SPA in the user's default
-    # browser instead and keeps the local Flask servers alive in the
-    # foreground. Ctrl-C (or closing the launching terminal) shuts
-    # everything down. Less native-feeling than a pywebview window
-    # but reliable across Linux desktops. Revisit when there's time
-    # to wrangle GTK bundling properly.
+    # browser instead and keeps the local Flask server alive in the
+    # background until Quit.
     import signal
-    import webbrowser
-
-    log.info("Opening %s in the default browser", spa_url)
-    webbrowser.open(spa_url)
 
     stop = threading.Event()
-    def _shutdown(*_: object) -> None:
-        log.info("Shutdown signal received")
-        stop.set()
-    signal.signal(signal.SIGINT, _shutdown)
-    signal.signal(signal.SIGTERM, _shutdown)
+    tray = None
 
-    print("[dora] Browser launched. Press Ctrl-C to quit.", flush=True)
+    def quit_app() -> None:
+        log.info("Quit requested")
+        stop.set()
+        if tray is not None:
+            tray.stop()
+
+    set_quit_handler(quit_app)
+    signal.signal(signal.SIGINT, lambda *_: quit_app())
+    signal.signal(signal.SIGTERM, lambda *_: quit_app())
+
+    log.info("Opening %s in the default browser", base_url)
+    _open_browser(base_url)
+
+    tray = _run_tray(base_url, quit_app, log)
     try:
+        if tray is not None:
+            try:
+                tray.run()  # blocks until quit_app() stops it
+            except Exception as exc:  # noqa: BLE001
+                log.info("Tray icon stopped: %s", exc)
+                tray = None
         stop.wait()
     finally:
         log.info("Shutting Flask server down")

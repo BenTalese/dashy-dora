@@ -11,7 +11,7 @@
 ; Installs per-user by default (no admin prompt) into
 ; %LOCALAPPDATA%\Programs\Dora; the first page offers "install for all
 ; users" for people who want Program Files. User data lives in
-; %LOCALAPPDATA%\Dora\ (platformdirs) and is NOT touched by uninstall, so
+; %LOCALAPPDATA%\BenTalese\Dora\ (platformdirs) and is NOT touched by uninstall, so
 ; reinstalling or upgrading keeps the household's data.
 
 #ifndef AppVersion

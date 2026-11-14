@@ -52,19 +52,12 @@ long session summary. Distinct from the other logs:
 
 # Open
 
-## [OPEN] FU-1004 — Installed desktop app can't be quit and starts a second copy on relaunch
-- **Raised:** 2026-11-13 (desktop installers)
-- **Type:** finding
-- **What:** `desktop_app.py` has no window or tray icon, so an installed Dora only stops when killed (README says so for now). Each launch also starts a new server on a random port against the same SQLite data, so clicking the shortcut twice runs two servers, and the browser address changes every launch (bookmarks and per-origin storage don't carry over). Wants a tray icon with Open/Quit (e.g. pystray), a single-instance lock that reopens the browser instead of starting again, and a fixed default port.
-- **Why deferred:** the task was packaging the existing app into installers; this changes the app's runtime behaviour.
-- **Recommended resolution:** before announcing the desktop installers widely
-
-## [OPEN] FU-1003 — Desktop installers: no Intel Mac build, nothing code-signed
+## [OPEN] FU-1003 — Desktop installers: no macOS build, nothing code-signed
 - **Raised:** 2026-11-13 (desktop installers)
 - **Type:** deferred job
-- **What:** the Release workflow builds macOS on `macos-latest` (Apple Silicon) only; Intel Macs need an x64 runner entry. None of the installers are signed, so SmartScreen and Gatekeeper warn (README documents the workaround). Signing needs a Windows code-signing certificate and an Apple Developer account with notarization, both stored as repo secrets.
+- **What:** releases ship Windows and Linux only; macOS was dropped from the Release workflow (owner, 2026-11-14), though `build-macos.sh --dmg` and the `BUNDLE` in `dora.spec` remain for building it yourself (untested). A Mac release would need a `macos-latest` (arm64) and an x64 runner entry, plus signing + notarization to open without Gatekeeper's warning. The Windows installer isn't signed either, so SmartScreen warns (README documents the step); signing needs a code-signing certificate as a repo secret.
 - **Why deferred:** both cost money and are owner decisions (Distribution Spec open questions).
-- **Recommended resolution:** when someone asks for Intel Mac support, or when the owner decides to pay for signing
+- **Recommended resolution:** when someone asks for a Mac build, or when the owner decides to pay for signing
 
 ## [OPEN] FU-1002 — Workflow actions target Node 20
 - **Raised:** 2026-11-12 (1.0.0 Release run)

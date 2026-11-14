@@ -132,11 +132,13 @@ export default class AuthApiService {
     getCapabilitiesAsync = async (): Promise<{
         emailSenderConfigured: boolean; demoMode: boolean; setupDemo: boolean;
         setupDemoAvailable: boolean; registrationEnabled: boolean; minPasswordLength: number;
+        desktop: boolean;
     }> => {
         const result = await this.httpClient.get<{
             email_sender_configured: boolean; demo_mode?: boolean; setup_demo?: boolean;
             setup_demo_available?: boolean;
             registration_enabled?: boolean; min_password_length: number;
+            desktop?: boolean;
         }>(
             '/auth/capabilities',
         );
@@ -152,6 +154,8 @@ export default class AuthApiService {
             // SEC-3 — self-serve sign-up is an admin switch, off by default.
             registrationEnabled: result.registration_enabled ?? false,
             minPasswordLength: result.min_password_length,
+            // Running as the desktop app, which About can quit.
+            desktop: result.desktop ?? false,
         };
     };
 

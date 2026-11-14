@@ -80,8 +80,8 @@ it useful, [donations](#-support-dora) are hugely appreciated but never required
 - **💸 Personal price intelligence** — Dora remembers what *you* paid, so it can tell
   you when something's a genuinely good buy.
 - **🔔 Alerts** — expiry, low-stock, price-watch, e-mail digests, and web push.
-- **📱 Runs everywhere** — installable PWA, a native mobile app, and desktop bundles
-  for Windows / macOS / Linux.
+- **📱 Runs everywhere** — installable PWA, a native mobile app, and desktop apps
+  for Windows and Linux.
 - **🎨 Themes, backup/restore, export/print, multi-user** — and flexible feature
   toggles so you can hide anything you don't care about.
 
@@ -99,23 +99,22 @@ that computer.
 | System | Download | Install |
 |---|---|---|
 | Windows 10/11 (64-bit) | `Dora-vX.Y.Z-windows-x64-setup.exe` | Run it and follow the steps. No admin rights needed. |
-| macOS (Apple Silicon) | `Dora-vX.Y.Z-macos-arm64.dmg` | Open it and drag **Dora** onto **Applications**. |
 | Linux (x86_64) | `Dora-vX.Y.Z-linux-x86_64.AppImage` | `chmod +x Dora-*.AppImage`, then run it. |
 
-**The apps aren't code-signed yet**, so the first launch needs one extra step:
+There's no macOS build; on a Mac, use [Docker](#-self-host-with-docker).
 
-- **Windows:** if SmartScreen says *"Windows protected your PC"*, click **More info → Run anyway**.
-- **macOS:** if it says Dora *"can't be opened"* or *"Apple could not verify"*, open
-  **System Settings → Privacy & Security**, scroll down and click **Open Anyway**. (Or run
-  `xattr -dr com.apple.quarantine /Applications/Dora.app` once.)
+- **Windows:** the installer isn't code-signed yet, so if SmartScreen says *"Windows protected
+  your PC"*, click **More info → Run anyway**.
 - **Linux:** AppImages need FUSE 2. On Ubuntu 22.04 that's `sudo apt install libfuse2`
   (`libfuse2t64` on 24.04 and later).
 
-**Your data** lives in `%LOCALAPPDATA%\Dora\` (Windows), `~/Library/Application Support/Dora/`
-(macOS) or `~/.local/share/Dora/` (Linux). Uninstalling or upgrading leaves it alone.
+Dora opens at **http://127.0.0.1:5180**, the same address every time. Opening it again while
+it's running just brings it back up in the browser.
 
-**To stop Dora**, end the *Dora* process in Task Manager (Windows), Activity Monitor (macOS)
-or with `pkill Dora` (Linux). There's no quit button yet.
+**To stop Dora**, use **Quit** on its tray icon, or **Settings → About → Quit Dora**.
+
+**Your data** lives in `%LOCALAPPDATA%\BenTalese\Dora\` (Windows) or `~/.local/share/Dora/`
+(Linux). Uninstalling or upgrading leaves it alone.
 
 <br/>
 
@@ -343,7 +342,7 @@ pip install -r requirements.txt
 .\packaging\build-windows.ps1 -Clean
 .\dist\Dora\Dora.exe
 ```
-Data persists to `%LOCALAPPDATA%\Dora\`. Add `-Installer` to also build `dist\Dora-vX.Y.Z-windows-x64-setup.exe` (needs [Inno Setup 6](https://jrsoftware.org/isinfo.php): `winget install JRSoftware.InnoSetup`, and `pip install pillow` for the icon).
+Data persists to `%LOCALAPPDATA%\BenTalese\Dora\`. Add `-Installer` to also build `dist\Dora-vX.Y.Z-windows-x64-setup.exe` (needs [Inno Setup 6](https://jrsoftware.org/isinfo.php): `winget install JRSoftware.InnoSetup`, Pillow for the icon comes with `requirements.txt`).
 
 **macOS:**
 ```bash
@@ -361,7 +360,7 @@ The CI and Release workflows ([.github/workflows/ci.yml](.github/workflows/ci.ym
 2. Bump `CURRENT_VERSION` in `dora_api/features/help/version_info.py` — the one version source; the web app reads it at build time — and `web_app/package.json` to match (a test pins the pair). Rename the `## [Unreleased]` block in `CHANGELOG.md` to `## [X.Y.Z] - <date>`; the workflow uses that section as the GitHub Release body.
 3. Optionally tag the release commit yourself (`git tag -a v0.3.0 && git push origin v0.3.0`); the workflow then builds the tagged commit. Without a tag it builds the commit you run it on and tags that.
 4. Go to **Actions → Release → Run workflow**, type a version like `v0.3.0`, and run it. It refuses only a version that already has a GitHub Release.
-5. The workflow validates the version and builds the three desktop installers (Windows `.exe`, macOS `.dmg`, Linux `.AppImage`, one runner each). Once all three have built, it builds the Docker image, pushes to `ghcr.io/bentalese/dashy-dora:vX.Y.Z` **and** `:latest`, and cuts the GitHub Release with the installers attached. If any installer fails, nothing is published. Tick **dry_run** to build everything without publishing; the installers stay as artifacts on the run page so you can try them first.
+5. The workflow validates the version and builds the desktop installers (Windows `.exe`, Linux `.AppImage`, one runner each), then installs and starts each one on its runner to check it boots. Once both pass, it builds the Docker image, pushes to `ghcr.io/bentalese/dashy-dora:vX.Y.Z` **and** `:latest`, and cuts the GitHub Release with the installers attached. If any installer fails, nothing is published. Tick **dry_run** to build everything without publishing; the installers stay as artifacts on the run page so you can try them first.
 6. After the release lands, move the `[Unreleased]` heading down and start a fresh section.
 
 </details>

@@ -41,6 +41,37 @@ next.
 
 ---
 
+## 2026-11-14: **Desktop installers finished: Windows + Linux, bundle fix, quit / single instance**
+
+**Owner:** pull, finish the installer work (Linux + Windows at least; skip macOS). Resumed after a pause.
+
+Fast-forwarded `main` onto `feature/desktop-installers` (pushed; `main` is now protected and the push bypassed
+as the owner). Dry run `v1.0.2-rc.1` (run 43381141187) went green but its AppImage died on first boot:
+`ModuleNotFoundError: dora_api.features.stores` from a migration. The PYZ held 42 of ~300 feature modules,
+`collect_submodules` having come back short on the runner with no warning.
+
+- `dora.spec`: `_package_modules("dora_api")` lists modules from the file tree (skips the migrations, which ship
+  as data); pystray backend hidden imports per OS; tray image bundled as `icons/dora.png`; `gi` excluded.
+- `desktop_app.py` (FU-1004, resolved): fixed port 5180 (`DORA_DESKTOP_PORT`); a second launch opens the running
+  copy and exits; a port held by another program falls back to a random one; tray icon (pystray) with Open Dora /
+  Quit where the desktop has one; `DORA_DESKTOP_OPEN_BROWSER=false` for smoke tests.
+- `features/desktop/quit_desktop.py` + `DESKTOP_ROUTER`: `POST /api/desktop/quit`, 404 unless the desktop app
+  registered a handler; capabilities `desktop`. SPA: About "Quit Dora" row (confirm, toast), `DesktopApiService`,
+  `ICONS.power`. `requirements.txt` + `pystray==0.19.5`.
+- `release.yml`: macOS dropped; per-OS smoke step after the build (Windows: silent per-user install, start,
+  `/api/health` with schema at head, second launch exits 0, stop, silent uninstall; Linux: same on the AppImage),
+  so an installer that can't boot fails the release.
+- README install section: Windows + Linux only, fixed address, how to quit, Windows data path corrected to
+  `%LOCALAPPDATA%\BenTalese\Dora` (platformdirs adds the author; also fixed in `dora.iss`). FU-1003 reworded
+  (no macOS build, no signing). DORA_VERIFY desktop items trimmed to Windows + Linux.
+
+**Verified:** full pytest 2822 passed (3 new quit tests), web lint + vue-tsc + vitest 944. A locally built
+AppImage boots, migrates to head, serves the SPA with `desktop: true`, and hands a second launch over. From source:
+Playwright signed in, Settings → About → Quit Dora → confirm → toast, server and process stopped. (The first walk
+"failed" because a fresh admin is bounced to `/welcome` until the tour is done; not a bug.)
+
+**Next up:** the fresh dry run (see below for its result).
+
 ## 2026-11-13: **Desktop installers in the Release workflow** (branch `feature/desktop-installers`)
 
 **Owner:** get installers added to releases so people can install on desktop.

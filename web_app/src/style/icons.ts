@@ -124,6 +124,7 @@ export const ICONS = {
     lock_open: 'mdi-lock-open',
     lock_reset: 'mdi-lock-reset',
     logout: 'mdi-logout',
+    power: 'mdi-power',
     menu: 'mdi-menu',
     menu_book: 'mdi-book-open-page-variant',
     monitor_heart: 'mdi-heart-pulse',

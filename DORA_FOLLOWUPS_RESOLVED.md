@@ -10,6 +10,14 @@ resolutions go at the **top**.
 
 ---
 
+## [RESOLVED] FU-1004 — Installed desktop app can't be quit and starts a second copy on relaunch
+- **Raised:** 2026-11-13 (desktop installers)
+- **Type:** finding
+- **What:** `desktop_app.py` has no window or tray icon, so an installed Dora only stops when killed (README says so for now). Each launch also starts a new server on a random port against the same SQLite data, so clicking the shortcut twice runs two servers, and the browser address changes every launch (bookmarks and per-origin storage don't carry over). Wants a tray icon with Open/Quit (e.g. pystray), a single-instance lock that reopens the browser instead of starting again, and a fixed default port.
+- **Why deferred:** the task was packaging the existing app into installers; this changes the app's runtime behaviour.
+- **Recommended resolution:** before announcing the desktop installers widely
+- **Resolved 2026-11-14:** fixed port 5180 (`DORA_DESKTOP_PORT`), a second launch opens the running copy and exits, tray icon (pystray) with Open Dora / Quit, and `POST /api/desktop/quit` behind Settings → About → Quit Dora for desktops without a tray.
+
 ## [RESOLVED] FU-1001 — Deleting a stock item used by recipes is blocked
 - **Raised:** 2026-11-10 (owner feedback)
 - **Type:** follow-up

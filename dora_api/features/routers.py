@@ -32,6 +32,7 @@ DATA_ROUTER = Blueprint("DATA_ROUTER", __name__, url_prefix="/api/data")
 CLIENT_LOGS_ROUTER = Blueprint("CLIENT_LOGS_ROUTER", __name__, url_prefix="/api/client-logs")
 AUDIT_ROUTER = Blueprint("AUDIT_ROUTER", __name__, url_prefix="/api/audit")
 STOCKTAKE_ROUTER = Blueprint("STOCKTAKE_ROUTER", __name__, url_prefix="/api/stocktake")
+DESKTOP_ROUTER = Blueprint("DESKTOP_ROUTER", __name__, url_prefix="/api/desktop")
 # Desktop A: pywebview's window points at Flask, so Flask itself has
 # to serve the built SPA. Registered without a url_prefix so the
 # catch-all in features/spa.py can fall back to index.html for any

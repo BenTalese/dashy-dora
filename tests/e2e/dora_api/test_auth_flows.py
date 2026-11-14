@@ -100,6 +100,8 @@ def test__capabilities__unauthenticated_and_reports_email_state(api):
         "min_password_length": 8,
         # The first-setup demo: users exist here, so it's neither on nor offered.
         "setup_demo": False, "setup_demo_available": False,
+        # Not the desktop app: no quit handler is registered.
+        "desktop": False,
     }
 
 

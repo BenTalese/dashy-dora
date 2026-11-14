@@ -7,12 +7,18 @@ bump means a schema or configuration change you need to act on when upgrading.
 
 ### Added
 
-- **Desktop installers on every release.** Each GitHub Release now carries a Windows installer
-  (`Dora-vX.Y.Z-windows-x64-setup.exe`), a macOS disk image for Apple Silicon (`…-macos-arm64.dmg`) and a
-  Linux AppImage (`…-linux-x86_64.AppImage`). The README's new **Install on desktop** section covers
-  installing them, including the one-time step for unsigned apps on Windows and macOS.
-- The Windows build script takes `-Installer` (Inno Setup) and the macOS one `--dmg`; macOS builds now produce
-  `Dora.app`.
+- **Desktop apps for Windows and Linux on every release.** Each GitHub Release carries a Windows installer
+  (`Dora-vX.Y.Z-windows-x64-setup.exe`) and a Linux AppImage (`…-linux-x86_64.AppImage`). The README's new
+  **Install on desktop** section covers installing them.
+- **Quit the desktop app.** It has a tray icon with Open Dora and Quit, and **Settings → About → Quit Dora**
+  works where the desktop shows no tray icons.
+- The desktop app always opens at `http://127.0.0.1:5180`, so your sign-in and settings carry over between
+  launches, and opening it while it's running brings it back up instead of starting a second copy.
+- The Windows build script takes `-Installer` (Inno Setup); the macOS one takes `--dmg` for building yourself.
+
+### Fixed
+
+- The desktop app no longer fails on first start: its bundle now carries all of Dora, not just part of it.
 
 ## [1.0.1] - 2026-11-12
 

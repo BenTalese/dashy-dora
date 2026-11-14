@@ -22,11 +22,9 @@ top-to-bottom.
 
 ---
 
-## Build: desktop installers (2026-11-13)
-- [ ] Release dry run with an untagged version (e.g. `v1.0.2-rc.1`): all three desktop jobs go green and the run's artifacts hold the `.exe`, `.dmg` and `.AppImage`.
-- [ ] Windows: the setup .exe installs without an admin prompt, makes a Start menu entry, opens Dora in the browser, and the data survives an uninstall + reinstall.
-- [ ] macOS: drag Dora.app from the .dmg to Applications, open it via Privacy & Security → Open Anyway, and Dora opens in the browser.
-- [ ] Linux: the AppImage runs on a stock Ubuntu 22.04/24.04 desktop with only libfuse2 added.
+## Build: desktop installers (2026-11-14)
+- [ ] Windows: the setup .exe installs without an admin prompt, makes a Start menu entry, opens Dora in the browser, shows a tray icon whose Quit stops it, and the data survives an uninstall + reinstall.
+- [ ] Linux: the AppImage runs on a stock Ubuntu 22.04/24.04 desktop with only libfuse2 added; Settings → About → Quit Dora stops it.
 
 ## Pickers, deletes and the companion (2026-11-10) — origin FU-998..1001
 - [ ] On a phone, type in a recipe's ingredient picker and in My Products' Link to stock item: the list filters.

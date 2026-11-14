@@ -128,6 +128,16 @@
                     </q-item-section>
                 </q-item>
 
+                <q-item v-if="isDesktop" clickable :disable="quitting" @click="onQuit">
+                    <q-item-section avatar>
+                        <q-icon :name="ICONS.power" size="20px" />
+                    </q-item-section>
+                    <q-item-section>
+                        <q-item-label>Quit Dora</q-item-label>
+                        <q-item-label caption>Stops Dora on this computer. Open it again from your apps.</q-item-label>
+                    </q-item-section>
+                </q-item>
+
                 <q-item
                     clickable
                     tag="a"
@@ -266,6 +276,9 @@
     import { getBackendBaseUrl } from 'src/services/api/backendUrl';
     import HealthApiService from 'src/services/api/healthApiService';
     import { isNativePlatform } from 'src/helpers/platform';
+    import AuthApiService from 'src/services/api/authApiService';
+    import DesktopApiService from 'src/services/api/desktopApiService';
+    import { useConfirm } from 'src/composables/useConfirm';
 
     // Public repo (source-code link). The bug-report target comes from the
     // gated support channel, not hardcoded here.
@@ -293,6 +306,31 @@
             }
         } finally {
             restartingTour.value = false;
+        }
+    }
+
+    // The desktop app runs in the background with no window of its own, so
+    // About is where it can be stopped (the tray icon also can, where the
+    // desktop shows one).
+    const isDesktop = ref(false);
+    const quitting = ref(false);
+    const { confirm } = useConfirm();
+    async function onQuit() {
+        const ok = await confirm({
+            title: 'Quit Dora?',
+            message: 'Dora stops on this computer until you open it again.',
+            okLabel: 'Quit',
+        });
+        if (!ok) return;
+        quitting.value = true;
+        try {
+            await new DesktopApiService().quitAsync();
+            $q.notify({ type: 'info', message: 'Dora has stopped. You can close this tab.', timeout: 0 });
+        } catch (err) {
+            quitting.value = false;
+            if (!isAlreadyNotified(err)) {
+                $q.notify({ type: 'negative', message: "Couldn't quit Dora.", caption: toastCaption(err) });
+            }
         }
     }
 
@@ -346,6 +384,9 @@
     const formatCount = (n: number) => formatNumber(n, { digits: 0 });
 
     onMounted(async () => {
+        void new AuthApiService().getCapabilitiesAsync()
+            .then((caps) => { isDesktop.value = caps.desktop; })
+            .catch(() => { isDesktop.value = false; });
         void new HealthApiService().getInfoAsync()
             .then((info) => { server.value = { version: info.version, build: info.build ?? null }; })
             .catch(() => { server.value = null; });

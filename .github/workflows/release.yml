@@ -11,9 +11,11 @@ name: Release
 #      cross-compile):
 #        - Windows  Dora-vX.Y.Z-windows-x64-setup.exe   (Inno Setup)
 #        - Linux    Dora-vX.Y.Z-linux-x86_64.AppImage
-#        - macOS    Dora-vX.Y.Z-macos-arm64.dmg         (Apple Silicon)
-#      None are code-signed; the README's install section has the
-#      SmartScreen / Gatekeeper steps.
+#      Each is then started on its runner (Windows: installed first) and
+#      must answer /api/health and hand a second launch over to the running
+#      copy, so a bundle that can't boot fails the release. No macOS build
+#      (FU-1003). Neither is code-signed; the README's install section has
+#      the SmartScreen step.
 #   3. Builds the monolithic Docker image (linux/amd64) and pushes it
 #      to ghcr.io tagged BOTH `vX.Y.Z` AND `latest` so pin-this-version
 #      deploys + self-hosters tracking latest both work. Runs only once
@@ -148,10 +150,6 @@ jobs:
                     - label: Linux x86_64
                       key: linux
                       runner: ubuntu-22.04
-                    # macos-latest is Apple Silicon (arm64).
-                    - label: macOS arm64
-                      key: macos
-                      runner: macos-latest
         env:
             VERSION: ${{ needs.prepare.outputs.version }}
             PLAIN: ${{ needs.prepare.outputs.plain }}
@@ -180,9 +178,8 @@ jobs:
                   set -e
                   (cd web_app && npm ci)
                   python -m pip install --upgrade pip
-                  # Pillow turns packaging/icons/dora.png into the .ico /
-                  # .icns the Windows and macOS bundles need.
-                  pip install -r requirements.txt pillow
+                  # Pillow (also pystray's) makes the installer's .ico.
+                  pip install -r requirements.txt
 
             # ── Windows: PyInstaller → Inno Setup ─────────────────────
             - name: Install Inno Setup
@@ -210,10 +207,69 @@ jobs:
                   ./packaging/build-linux.sh --appimage
                   mv dist/Dora-v*-x86_64.AppImage "dist/Dora-${VERSION}-linux-x86_64.AppImage"
 
-            # ── macOS: PyInstaller → Dora.app → .dmg ──────────────────
-            - name: Build macOS disk image
-              if: matrix.key == 'macos'
-              run: ./packaging/build-macos.sh --dmg --version "$PLAIN"
+            # ── Smoke test: install, start, second launch, stop ───────
+            # Port 5180 is the desktop app's fixed port. No browser on a
+            # runner, so DORA_DESKTOP_OPEN_BROWSER=false.
+            - name: Smoke test Windows installer
+              if: matrix.key == 'windows'
+              shell: pwsh
+              env:
+                  DORA_DESKTOP_OPEN_BROWSER: "false"
+              run: |
+                  $ErrorActionPreference = 'Stop'
+                  $setup = Get-ChildItem dist\Dora-*-setup.exe | Select-Object -First 1
+                  $install = Start-Process $setup.FullName -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/CURRENTUSER','/NORESTART' -Wait -PassThru
+                  if ($install.ExitCode -ne 0) { throw "Installer exited $($install.ExitCode)" }
+                  $exe = Join-Path $env:LOCALAPPDATA 'Programs\Dora\Dora.exe'
+                  if (-not (Test-Path $exe)) { throw "Dora.exe not installed at $exe" }
+                  $dora = Start-Process $exe -PassThru
+                  $health = $null
+                  for ($i = 0; $i -lt 120 -and -not $health; $i++) {
+                      Start-Sleep -Seconds 1
+                      try { $health = Invoke-RestMethod http://127.0.0.1:5180/api/health -TimeoutSec 2 } catch { }
+                  }
+                  if (-not $health) {
+                      Get-Content (Join-Path $env:LOCALAPPDATA 'BenTalese\Dora\Logs\desktop.log') -ErrorAction SilentlyContinue
+                      throw "Dora didn't answer /api/health within 120s"
+                  }
+                  Write-Host "Dora $($health.version) up, db=$($health.db), schema=$($health.schema_version_db)"
+                  if ($health.schema_version_db -ne $health.schema_version) { throw "Migrations didn't reach head" }
+                  $second = Start-Process $exe -Wait -PassThru
+                  if ($second.ExitCode -ne 0) { throw "Second launch exited $($second.ExitCode)" }
+                  Stop-Process -Id $dora.Id -Force
+                  Start-Sleep -Seconds 2
+                  $uninstall = Start-Process (Join-Path $env:LOCALAPPDATA 'Programs\Dora\unins000.exe') -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait -PassThru
+                  if ($uninstall.ExitCode -ne 0) { throw "Uninstaller exited $($uninstall.ExitCode)" }
+                  Start-Sleep -Seconds 3
+                  if (Test-Path $exe) { throw "Uninstall left $exe behind" }
+                  Write-Host "Installed, started, handed off a second launch, uninstalled."
+
+            - name: Smoke test Linux AppImage
+              if: matrix.key == 'linux'
+              env:
+                  APPIMAGE_EXTRACT_AND_RUN: "1"
+                  DORA_DESKTOP_OPEN_BROWSER: "false"
+              run: |
+                  set -e
+                  APP=$(ls dist/Dora-*-linux-x86_64.AppImage)
+                  export HOME="$RUNNER_TEMP/dora-home"
+                  mkdir -p "$HOME"
+                  "$APP" > "$RUNNER_TEMP/dora.log" 2>&1 &
+                  DORA_PID=$!
+                  for i in $(seq 1 120); do
+                      curl -sf http://127.0.0.1:5180/api/health > "$RUNNER_TEMP/health.json" && break
+                      if ! kill -0 "$DORA_PID" 2>/dev/null; then break; fi
+                      sleep 1
+                  done
+                  if [ ! -s "$RUNNER_TEMP/health.json" ]; then
+                      cat "$RUNNER_TEMP/dora.log"
+                      echo "::error::Dora didn't answer /api/health within 120s"
+                      exit 1
+                  fi
+                  python -c "import json,sys; h=json.load(open(sys.argv[1])); print('Dora', h['version'], 'db', h['db'], 'schema', h['schema_version_db']); sys.exit(h['schema_version_db'] != h['schema_version'])" "$RUNNER_TEMP/health.json"
+                  timeout 60 "$APP"
+                  kill "$DORA_PID"
+                  echo "Started, handed off a second launch, stopped."
 
             - name: Keep the installer
               uses: actions/upload-artifact@v4
@@ -222,7 +278,6 @@ jobs:
                   path: |
                       dist/Dora-*-setup.exe
                       dist/Dora-*.AppImage
-                      dist/Dora-*.dmg
                   if-no-files-found: error
                   retention-days: 30
 
@@ -330,11 +385,10 @@ jobs:
                   ## Install
 
                   - **Windows:** \`Dora-${VERSION}-windows-x64-setup.exe\`
-                  - **macOS (Apple Silicon):** \`Dora-${VERSION}-macos-arm64.dmg\`
                   - **Linux:** \`Dora-${VERSION}-linux-x86_64.AppImage\`
                   - **Server / Docker:** \`docker pull ${IMAGE}:${VERSION}\`
 
-                  The desktop apps aren't code-signed yet, so Windows and macOS warn the first time you open them.
+                  The desktop apps aren't code-signed yet, so Windows warns the first time you open it.
                   See [Install on desktop](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}#install-on-desktop) for the steps.
                   EOF
                   echo "path=$NOTES" >> $GITHUB_OUTPUT

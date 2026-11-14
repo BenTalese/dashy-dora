@@ -13,6 +13,7 @@ fresh install. Gating it on this flag closes that gap.
 """
 from dora_api.features.app_settings.access import get_or_create_app_setting
 from dora_api.features.auth.setup_demo import is_setup_demo_active, is_setup_demo_available
+from dora_api.features.desktop.quit_desktop import can_quit
 from dora_api.features.routers import AUTH_ROUTER
 from dora_api.persistence.sqlalchemy_repository import SqlAlchemyRepository
 from dora_api.infrastructure.api_response import ok
@@ -45,4 +46,6 @@ def get_auth_capabilities():
         # FU-656: the length rule, so a form can hint it before the save
         # without restating the number (validate_password stays the authority).
         "min_password_length": MIN_PASSWORD_LENGTH,
+        # Running as the desktop app: About offers Quit Dora.
+        "desktop": can_quit(),
     })

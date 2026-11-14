@@ -9,6 +9,9 @@ platformdirs==4.3.6
 # the main requirements (vs a separate `requirements-dev.txt`) so
 # the GitHub Actions matrix doesn't have to install it separately.
 pyinstaller==6.10.0
+# The desktop app's tray icon (Open Dora / Quit). Only `desktop_app.py`
+# imports it; brings Pillow, and python-xlib on Linux.
+pystray==0.19.5
 Flask_Cors==6.0.0
 Flask_Migrate==4.0.5
 # FU-549: pin alembic explicitly (it's transitive via Flask-Migrate). The

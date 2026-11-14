@@ -40,9 +40,35 @@ import sys
 
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
+def _package_modules(package: str) -> list[str]:
+    """Every module of a package in this checkout, read from the files.
+
+    `collect_submodules` imports the package to walk it, and on the release
+    runner that came back with a fraction of the features and no warning:
+    the bundle then lacked every router `startup.py` discovers at runtime,
+    and the `stores` module a migration imports, so the app died on first
+    boot. Reading the tree is explicit and doesn't depend on an import
+    succeeding. The alembic migrations ship as data (alembic loads them by
+    path), so that tree is skipped, as are directories that aren't packages."""
+    modules = []
+    for dirpath, dirnames, filenames in os.walk(package):
+        dirnames[:] = [
+            d for d in dirnames
+            if os.path.isfile(os.path.join(dirpath, d, "__init__.py"))
+            and os.path.join(dirpath, d) != os.path.join("dora_api", "persistence", "migrations")
+        ]
+        prefix = dirpath.replace(os.sep, ".")
+        for name in filenames:
+            if name == "__init__.py":
+                modules.append(prefix)
+            elif name.endswith(".py"):
+                modules.append(f"{prefix}.{name[:-3]}")
+    return modules
+
+
 # ── Hidden imports ──────────────────────────────────────────────────
-# Plus the dynamically-discovered feature modules (every file under
-# */features/ that registers a blueprint or handler).
+# Plus every module of dora_api: the feature routers `startup.py`
+# discovers at runtime, and whatever a migration script imports.
 hiddenimports = [
     "sqlalchemy.dialects.sqlite",
     "alembic.runtime.migration",
@@ -65,11 +91,20 @@ hiddenimports = [
     "dependency_injector.wiring",
     "dependency_injector.providers",
 ]
-hiddenimports += collect_submodules("dora_api.features")
+hiddenimports += _package_modules("dora_api")
 # dependency_injector is a Cython package — PyInstaller's static
 # analysis can't see its internal modules (`errors`, `containers`,
 # `providers` subtypes etc.). Pull them all in explicitly.
 hiddenimports += collect_submodules("dependency_injector")
+# pystray picks its tray backend at runtime, so name the one each OS uses.
+# Linux gets the plain X11 backend; the GTK / AppIndicator ones need the
+# system `gi`, which doesn't bundle (see desktop_app.py).
+if sys.platform.startswith("win"):
+    hiddenimports += ["pystray._win32"]
+elif sys.platform == "darwin":
+    hiddenimports += ["pystray._darwin"]
+else:
+    hiddenimports += ["pystray._xorg"] + collect_submodules("Xlib")
 
 # ── Data files ──────────────────────────────────────────────────────
 # `(source, dest_inside_bundle)` tuples. Paths are relative to the
@@ -91,6 +126,8 @@ datas = [
     ("dora_api/email_templates", "dora_api/email_templates"),
     # The Help guides, exported from the SPA for the assistant's app_help tool.
     ("dora_api/features/help/help_corpus.json", "dora_api/features/help"),
+    # The tray icon's image.
+    ("packaging/icons/dora.png", "icons"),
 ]
 datas += collect_data_files("alembic", subdir="templates")
 
@@ -125,6 +162,8 @@ a = Analysis(
     excludes=[
         # Big stdlib modules we don't use; trimming saves ~30 MB.
         "tkinter",
+        # pystray's GTK / AppIndicator backends; never bundled.
+        "gi",
         "test",
         "unittest",
         "pydoc_data",
