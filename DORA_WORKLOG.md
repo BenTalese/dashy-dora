@@ -41,6 +41,15 @@ next.
 
 ---
 
+## 2026-11-14 (release): **1.0.2 released with the Windows + Linux installers**
+
+**Owner:** release 1.0.2; delete `feature/desktop-installers`; test the Linux app here. Pushing to protected
+`main` via the owner bypass is fine (owner, 2026-11-14).
+
+Version 1.0.2 in `version_info.py`, `web_app/package.json` (+ lock), `src-capacitor/package.json`; Android
+`versionCode 4`, `versionName "1.0.2"`. CHANGELOG `[Unreleased]` renamed `[1.0.2] - 2026-11-14`. Tagged `v1.0.2`
+and ran Release.
+
 ## 2026-11-14: **Desktop installers finished: Windows + Linux, bundle fix, quit / single instance**
 
 **Owner:** pull, finish the installer work (Linux + Windows at least; skip macOS). Resumed after a pause.

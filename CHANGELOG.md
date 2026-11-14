@@ -3,7 +3,7 @@
 All notable changes to Dashy Dora live here. Versions follow semver: a major
 bump means a schema or configuration change you need to act on when upgrading.
 
-## [Unreleased]
+## [1.0.2] - 2026-11-14
 
 ### Added
 
