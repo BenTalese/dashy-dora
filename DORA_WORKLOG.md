@@ -48,7 +48,16 @@ next.
 
 Version 1.0.2 in `version_info.py`, `web_app/package.json` (+ lock), `src-capacitor/package.json`; Android
 `versionCode 4`, `versionName "1.0.2"`. CHANGELOG `[Unreleased]` renamed `[1.0.2] - 2026-11-14`. Tagged `v1.0.2`
-and ran Release.
+and ran Release (run 43564817001, all green, both smoke tests passed): the GitHub Release is Latest with
+`Dora-v1.0.2-windows-x64-setup.exe` (69 MB) and `Dora-v1.0.2-linux-x86_64.AppImage` (96 MB); ghcr `v1.0.2` + `latest`.
+Deleted `feature/desktop-installers` from origin (protected; owner bypass).
+
+**Linux tested here (owner asked):** the released AppImage on Linux Mint 22.1 / Cinnamon X11, real FUSE mount,
+throwaway data dirs: boots on 5180 as 1.0.2, tray icon docked in the panel, Quit Dora from About stops the process,
+tray and mount; relaunch keeps the data. Evidence in DORA_VERIFY_TRIAGE; Linux verify line deleted.
+
+**Next up:** owner tries the Windows installer on a real PC (DORA_VERIFY "Build: desktop installers"); redeploy
+Altair to 1.0.2 when convenient.
 
 ## 2026-11-14: **Desktop installers finished: Windows + Linux, bundle fix, quit / single instance**
 

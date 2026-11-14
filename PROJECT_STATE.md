@@ -20,9 +20,9 @@ Status key: ✅ done-clean · ➗ done-with-carve-outs · 🟡 active/in-progres
 
 **Dora 1.0.0 is deployed to Altair (Dora and the companion), and every FU is now resolved: 0 open in `DORA_FOLLOWUPS.md`.** On 11-06 (night) your decisions closed the last nine (FU-636 got built: Settings → Nutrition links USDA's downloads page), and the five companion debts (FU-886/887/891/924/960) were fixed in `../dora-companion`. New tonight: a **first-setup demo**. The one-time setup screen can fill Dora with sample data and sign you in as `demo`, a banner says it's a demo, and "Set up Dora" wipes it back to a fresh install. A security review of the first cut found three holes, all fixed before close.
 
-**Release:** 1.0.0 is the official first release (2026-11-12). Version, CHANGELOG and tag `v1.0.0` are on `main`; the old unpublished `v2.0.0` tag is gone. Published by the Release workflow.
+**Release:** latest is 1.0.2 (2026-11-14), the first with desktop installers; 1.0.0 was the official first release (2026-11-12). Version, CHANGELOG and tag `v1.0.0` are on `main`; the old unpublished `v2.0.0` tag is gone. Published by the Release workflow.
 
-**What's left:** desktop installers for Windows and Linux are built and smoke-tested in the Release workflow (dry run green, on `main`); release them as 1.0.2, then redeploy Altair. Open FUs: FU-992, FU-996, FU-1002, FU-1003 (no macOS build, nothing signed), none blocking.
+**What's left:** 1.0.2 is out with the Windows installer and Linux AppImage (Linux tested on this machine). Try the Windows installer on a real PC, and redeploy Altair to 1.0.2. Open FUs: FU-992, FU-996, FU-1002, FU-1003 (no macOS build, nothing signed), none blocking.
 
 ---
 

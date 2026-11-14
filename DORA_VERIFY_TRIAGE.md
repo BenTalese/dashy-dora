@@ -145,6 +145,9 @@ device packs for hardware items.
 
 ---
 
+## Verified live — Linux desktop app, 1.0.2 release (2026-11-14)
+Downloaded `Dora-v1.0.2-linux-x86_64.AppImage` from the public release page and ran it on Linux Mint 22.1 (Cinnamon, X11, Ubuntu 24.04 base) with the normal FUSE mount and throwaway XDG data dirs (the owner's real `~/.local/share/Dora` untouched). Booted on 127.0.0.1:5180 as 1.0.2, db ok, schema at head; tray icon embedded in Cinnamon's panel (24x24, reparented, `_NET_SYSTEM_TRAY_S0` owned); headless Chromium created the admin, finished the tour, Settings → About → Quit Dora → Quit → "Dora has stopped" toast, no page errors; process, tray icon and FUSE mount all gone. Relaunch came back on 5180 with the same data (`bootstrap-required: false`). Linux item deleted; the Windows item stays (needs a real PC for SmartScreen and the tray).
+
 ## Verified live — one-port Docker install on Altair (2026-11-12)
 Fresh clone of `a48b1238` in `~/dora-test` on Altair (project `dora-test`, ports 6170/6174), set up per the README with `.env.example` left at `DORA_ENV=development`; driven by headless Chromium from the LAN, then torn down. Booted gunicorn/production; nginx has `http_sub_module`; index.html carries the same-origin meta; every one of 20 API calls went to `:6174/api/`, none to 6170; sign-in survived a reload over plain HTTP; a 20 MB upload chunk passed nginx; backup create, download, upload + restore and library restore all 200; audit log recorded 192.168.1.136 (not 127.0.0.1), and a forged `X-Forwarded-For: 6.6.6.6` on a failed login was ignored. All three operator items deleted.
 
