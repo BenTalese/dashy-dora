@@ -70,7 +70,13 @@ AppImage boots, migrates to head, serves the SPA with `desktop: true`, and hands
 Playwright signed in, Settings → About → Quit Dora → confirm → toast, server and process stopped. (The first walk
 "failed" because a fresh admin is bounced to `/welcome` until the tour is done; not a bug.)
 
-**Next up:** the fresh dry run (see below for its result).
+**Dry run `v1.0.2-rc.2` (run 43555458114): all green.** Windows smoke: installed per-user, Dora 1.0.1 up, db ok,
+schema at head (e8b3f1a6c2d5), second launch handed off, uninstalled clean. Linux smoke: same on the AppImage.
+Artifacts: Windows 68 MB, Linux 96 MB.
+
+**Next up:** release 1.0.2 (bump version, rename `[Unreleased]`, run Release) so the installers ship; delete the
+merged `feature/desktop-installers` branch once the owner OKs it; owner walks the two desktop items in
+DORA_VERIFY on a real Windows PC and Linux desktop.
 
 ## 2026-11-13: **Desktop installers in the Release workflow** (branch `feature/desktop-installers`)
 
