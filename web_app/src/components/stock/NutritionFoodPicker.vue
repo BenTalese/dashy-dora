@@ -209,8 +209,15 @@
         resetSearch();
     }
 
-    // Reset when reopened so a previous search doesn't linger.
-    watch(() => props.modelValue, (isOpen) => { if (isOpen) onHide(); });
+    // Each open starts fresh, prefilled with the item's name and already
+    // searching, so the common case is one tap on the right row. Immediate
+    // because the matching settings page mounts the picker already open.
+    watch(() => props.modelValue, (isOpen) => {
+        if (!isOpen) return;
+        onHide();
+        query.value = props.itemName;
+        void onQueryChange(props.itemName);
+    }, { immediate: true });
 </script>
 
 <style scoped lang="scss">

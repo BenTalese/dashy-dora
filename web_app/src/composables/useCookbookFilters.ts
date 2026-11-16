@@ -46,6 +46,7 @@ export function useCookbookFilters() {
         // expiring-within-14-days in-stock ingredient AND force-sorts by
         // count desc.
         expiringOnly: ref(false),
+        hasPhotoOnly: ref(false),
         // `null` means "no bound". Cleared inputs land as NaN via
         // v-model.number; predicates guard on Number.isFinite.
         mealCountMin: ref<number | null>(null),
@@ -99,6 +100,7 @@ export function useCookbookFilters() {
         toggleFilter(s.inStockOnly),
         stateFilter(s.plannedFilterState, 'off'),
         toggleFilter(s.expiringOnly),
+        toggleFilter(s.hasPhotoOnly),
         numberFilter(s.mealCountMin),
         numberFilter(s.servesMin),
         numberFilter(s.kcalMax),

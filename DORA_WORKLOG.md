@@ -41,6 +41,22 @@ next.
 
 ---
 
+## 2026-11-16 (later): **Has photo filter + prefilled food search (for 1.0.4, unreleased)**
+
+**Owner:** add a cookbook "has photo" filter and prefill Find a food with the stock item name; push to GitHub and
+Altair, no release yet.
+
+- `hasPhotoOnly` toggle in `useCookbookFilters` (counted by the filter registry, so Clear and the badge cover it),
+  a "Has photo" chip in `CookbookFilterPanel`, predicate on `has_image` in `RecipesOverview`.
+- `NutritionFoodPicker` now sets the query to `itemName` and runs the search on every open (`immediate`, since
+  `NutritionMatchingSettings` mounts it already open). All three callers pass the stock item's name.
+- CHANGELOG `[Unreleased]` opened. vue-tsc clean, Vitest 947/947. Not driven live; two lines in DORA_VERIFY.
+- Standards: no rule touched beyond R-001 reuse (same chip/registry pattern); no ADR.
+
+**Next up:** owner walks the two new DORA_VERIFY lines; release 1.0.4 when asked; FU-1002.
+
+---
+
 ## 2026-11-16 (release): **1.0.3 released**
 
 **Owner:** address FU-1005 and FU-1006, commit, then push 1.0.3 with the installers and the Docker image.

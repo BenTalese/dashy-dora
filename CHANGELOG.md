@@ -3,6 +3,18 @@
 All notable changes to Dashy Dora live here. Versions follow semver: a major
 bump means a schema or configuration change you need to act on when upgrading.
 
+## [Unreleased]
+
+### Added
+
+- **Cookbook "Has photo" filter.** A quick filter chip that shows only recipes with a photo.
+
+### Changed
+
+- **Find a food starts searching straight away.** The food picker opens with the pantry item's name already
+  typed in and its results loading, on the stock item page, the recipe nutrition card and the nutrition
+  matching settings.
+
 ## [1.0.3] - 2026-11-16
 
 ### Added

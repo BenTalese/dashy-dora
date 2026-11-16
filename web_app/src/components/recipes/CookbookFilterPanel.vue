@@ -69,6 +69,9 @@
         <FilterChip v-model="expiringOnly" :icon="ICONS.wasteExpired" active-color="warning">
             Uses expiring ingredients
         </FilterChip>
+        <FilterChip v-model="hasPhotoOnly" :icon="ICONS.image" active-color="primary">
+            Has photo
+        </FilterChip>
         </FilterRow>
 
         <!-- ── Row 2: input filters ──────────────────────────────── -->
@@ -334,7 +337,7 @@
 
     const {
         favouritesOnly, cookableNowOnly, inStockOnly,
-        plannedFilterState, expiringOnly, mealCountMin, servesMin, kcalMax,
+        plannedFilterState, expiringOnly, hasPhotoOnly, mealCountMin, servesMin, kcalMax,
         ratingMin,
         collectionFilter, cuisineFilter, categoryFilter, timeOfDayFilter,
         difficultyFilter, ingredientsMax, usesStockItemIds, excludesStockItemIds,

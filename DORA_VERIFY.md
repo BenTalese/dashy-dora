@@ -25,6 +25,10 @@ top-to-bottom.
 ## Build: desktop installers (2026-11-14)
 - [ ] Windows, by double-clicking the setup .exe: SmartScreen lets you through with "More info → Run anyway", the tray icon shows, and its Quit stops Dora.
 
+## Has photo filter, prefilled food search (2026-11-16)
+- [ ] Cookbook: turn on Has photo; only recipes with a photo stay, and the filter count goes up by one.
+- [ ] Recipe nutrition card, tap Find a food on a gap: the search box holds the pantry item's name and results load without typing.
+
 ## Ranges, unit order, collections, phone picker (2026-11-16)
 - [ ] On a real phone, add an ingredient to a recipe: tap Pantry item, the list opens with the keyboard, and typing filters it.
 - [ ] Print a recipe that has a range: the amount reads "1–2".

@@ -340,7 +340,7 @@
     // (fetch-in-flight, fetched-data caches) stays as its own refs below.
     const {
         searchText, favouritesOnly, cookableNowOnly, inStockOnly,
-        plannedFilterState, expiringOnly, mealCountMin, servesMin, kcalMax,
+        plannedFilterState, expiringOnly, hasPhotoOnly, mealCountMin, servesMin, kcalMax,
         ratingMin,
         collectionFilter, cuisineFilter, categoryFilter, timeOfDayFilter,
         difficultyFilter, ingredientsMax, usesStockItemIds, excludesStockItemIds,
@@ -418,6 +418,7 @@
             // only un-planned; off is no constraint.
             if (plannedFilterState.value === 'include' && !r.is_planned) return false;
             if (plannedFilterState.value === 'exclude' && r.is_planned) return false;
+            if (hasPhotoOnly.value && !r.has_image) return false;
 
             // C-waste W4 — narrow to recipes the server flagged as
             // using ≥1 expiring-within-horizon ingredient. The map is
