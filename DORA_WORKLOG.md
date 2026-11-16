@@ -41,6 +41,23 @@ next.
 
 ---
 
+## 2026-11-16 (release): **1.0.3 released**
+
+**Owner:** address FU-1005 and FU-1006, commit, then push 1.0.3 with the installers and the Docker image.
+
+FU-1005 and FU-1006 resolved (see the entry below). Two commits on `main` (pushed via the owner bypass):
+`d0036b9a` the feature batch, `321dfba7` Release 1.0.3 (version 1.0.3 in `version_info.py`, `web_app/package.json`
++ lock, `src-capacitor/package.json`; Android `versionCode 5`, `versionName "1.0.3"`; CHANGELOG `[Unreleased]`
+renamed `[1.0.3] - 2026-11-16`). Tagged `v1.0.3` and ran Release (run 43791775823, all five jobs green, both
+installer smoke tests passed): the GitHub Release is Latest with `Dora-v1.0.3-windows-x64-setup.exe` (69 MB) and
+`Dora-v1.0.3-linux-x86_64.AppImage` (97 MB); ghcr `v1.0.3` + `latest` (one digest, `sha256:8387e59a…`).
+
+Not done: FU-1002 (workflow actions on Node 20) was due "before the next release" and was not asked for; the run
+still passes with the warning. The 1.0.3 installers were smoke-tested by the workflow only, not run by hand.
+
+**Next up:** redeploy Altair to 1.0.3 (one migration, runs on boot); owner walks DORA_VERIFY "Ranges, unit order,
+collections, phone picker" on a real phone; FU-1002.
+
 ## 2026-11-16: **Owner batch: ingredient ranges, unit order, collections page, phone picker; Windows installer tested**
 
 **Owner:** four pasted items (no range on ingredients; the ingredient picker doesn't open on first tap on a phone

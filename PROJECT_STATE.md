@@ -20,9 +20,9 @@ Status key: ✅ done-clean · ➗ done-with-carve-outs · 🟡 active/in-progres
 
 **Dora 1.0.0 is deployed to Altair (Dora and the companion), and every FU is now resolved: 0 open in `DORA_FOLLOWUPS.md`.** On 11-06 (night) your decisions closed the last nine (FU-636 got built: Settings → Nutrition links USDA's downloads page), and the five companion debts (FU-886/887/891/924/960) were fixed in `../dora-companion`. New tonight: a **first-setup demo**. The one-time setup screen can fill Dora with sample data and sign you in as `demo`, a banner says it's a demo, and "Set up Dora" wipes it back to a fresh install. A security review of the first cut found three holes, all fixed before close.
 
-**Release:** latest is 1.0.2 (2026-11-14), the first with desktop installers; 1.0.0 was the official first release (2026-11-12). Version, CHANGELOG and tag `v1.0.0` are on `main`; the old unpublished `v2.0.0` tag is gone. Published by the Release workflow.
+**Release:** latest is 1.0.3 (2026-11-16); 1.0.2 (2026-11-14) was the first with desktop installers; 1.0.0 was the official first release (2026-11-12). Version, CHANGELOG and tag `v1.0.0` are on `main`; the old unpublished `v2.0.0` tag is gone. Published by the Release workflow.
 
-**What's left:** 1.0.2 is out with the Windows installer and Linux AppImage, both now tested from the release (Windows on 11-16: install, launch, second launch, data kept across a reinstall; SmartScreen and the tray icon still need your eyes). Unreleased on `main`'s working tree: ingredient ranges, most-used units first, a Collections settings page and the phone ingredient-picker fix. Redeploy Altair when convenient. Open FUs: FU-992, FU-996, FU-1002, FU-1003, none blocking.
+**What's left:** 1.0.3 is out (2026-11-16) with the Windows installer, Linux AppImage and Docker image: ingredient ranges, most-used units first, a Collections settings page and the phone ingredient-picker fix. The 1.0.2 Windows installer was tested by hand on 11-16 (SmartScreen and the tray icon still need your eyes). Redeploy Altair to 1.0.3. Open FUs: FU-992, FU-996, FU-1002, FU-1003, none blocking.
 
 ---
 
