@@ -13,7 +13,7 @@ name different versions. Keep the assignment a plain string literal.
 """
 import os
 
-CURRENT_VERSION = "1.0.2"
+CURRENT_VERSION = "1.0.3"
 
 
 def build_id() -> str | None:
