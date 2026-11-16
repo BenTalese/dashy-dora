@@ -18,6 +18,8 @@ class RecipeIngredientRequest(BaseModel):
     stock_item_id: UUID | None = None
     raw_text: str | None = Field(default = None, max_length = 500)
     quantity: float | None = None
+    # High end of a range ("1 to 2 carrots"); `quantity` is the low end.
+    quantity_max: float | None = None
     unit: str | None = Field(default = None, max_length = 50)
     notes: str | None = Field(default = None, max_length = 255)
     # Optional client-side identifier (any string) used by
@@ -42,6 +44,11 @@ class RecipeIngredientRequest(BaseModel):
             raise ValueError(
                 "A recipe ingredient needs either stock_item_id or raw_text; both are null."
             )
+        if self.quantity_max is not None:
+            if self.quantity is None:
+                raise ValueError("A quantity range needs its low end: quantity is null.")
+            if self.quantity_max <= self.quantity:
+                raise ValueError("A quantity range's high end must be more than its low end.")
         return self
 
 

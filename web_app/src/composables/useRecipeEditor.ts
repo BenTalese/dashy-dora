@@ -40,6 +40,7 @@ export type IngredientPatch = {
     stock_item_id: string | null;
     raw_text: string | null;
     quantity: number | null;
+    quantity_max: number | null;
     unit: string | null;
     notes: string | null;
     section_client_id: string | null;
@@ -133,6 +134,7 @@ export function hydrateRecipeForm(form: RecipeForm, source: Recipe): void {
         // still shows what it was — without this the row renders nameless.
         raw_text: i.raw_text,
         quantity: i.quantity,
+        quantity_max: i.quantity_max,
         unit: i.unit,
         notes: i.notes,
         client_id: i.recipe_ingredient_id,

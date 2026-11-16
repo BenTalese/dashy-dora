@@ -26,6 +26,8 @@ class ImportedIngredientDto:
     quantity: float | None
     unit: str | None
     notes: str | None
+    # High end of a parsed range ("2-3 cloves"); null for a single amount.
+    quantity_max: float | None = None
 
 
 @dataclass(frozen=True, slots=True)

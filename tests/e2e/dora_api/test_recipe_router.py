@@ -942,3 +942,32 @@ def test__recipe_name__is_stripped_and_blank_refused(api):
     assert name in names
 
     assert requests.post(f"{BASE}/recipes", json={"name": "   "}).status_code == 400
+
+
+def test__create_recipe__QuantityRange__RoundTripsOnTheIngredient(api):
+    # "1 to 2 carrots": `quantity` is the low end, `quantity_max` the high.
+    _Created = _make_recipe("Router Range", ingredients=[
+        {"raw_text": "carrots", "quantity": 1, "quantity_max": 2},
+        {"raw_text": "salt"},
+    ])
+
+    _Row = _by_id(_Created["recipe_id"])
+
+    _ByText = {i["raw_text"]: i for i in _Row["ingredients"]}
+    assert _ByText["carrots"]["quantity"] == 1
+    assert _ByText["carrots"]["quantity_max"] == 2
+    assert _ByText["salt"]["quantity_max"] is None
+
+
+@pytest.mark.parametrize("_Ingredient", [
+    {"raw_text": "carrots", "quantity": 2, "quantity_max": 2},
+    {"raw_text": "carrots", "quantity": 3, "quantity_max": 2},
+    {"raw_text": "carrots", "quantity_max": 2},
+])
+def test__create_recipe__QuantityRangeNotLowThenHigh__IsValidationFailure(api, _Ingredient):
+    _Response = requests.post(RECIPES, json={
+        "name": f"Router Bad Range {uuid4().hex[:8]}",
+        "ingredients": [_Ingredient],
+    })
+
+    assert _Response.status_code == 400, _Response.text

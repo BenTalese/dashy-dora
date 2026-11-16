@@ -835,6 +835,7 @@
                 stock_item_id: i.stock_item_id,
                 raw_text: i.raw_text ?? null,
                 quantity: i.quantity,
+                quantity_max: i.quantity_max,
                 unit: i.unit,
                 notes: i.notes,
                 client_id: newClientId(),

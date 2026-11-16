@@ -382,6 +382,19 @@ export const HELP_TOPICS: HelpTopic[] = [
                 note: 'Ratings are estimates. A missing figure flatters them, and the panel says which.',
             },
             {
+                slug: 'ingredient-ranges',
+                title: 'Amounts that are a range',
+                summary: 'An ingredient can read "1–2 carrots". Cost, nutrition and the planner count the lower amount.',
+                how: 'Edit the ingredients, tap a row, then Make it a range and fill in To.',
+            },
+            {
+                slug: 'collections',
+                title: 'Collections',
+                summary: 'Your own groupings, such as "Weeknight dinners". Pick one on a recipe, then filter the cookbook by it.',
+                setting: { label: 'Kitchen setup → Collections', path: '/settings/kitchen-setup/recipe-collections' },
+                note: 'Deleting a collection keeps its recipes; they just lose the grouping.',
+            },
+            {
                 slug: 'dietary-tags',
                 title: 'Dietary tags',
                 summary: 'A planning aid for the include and exclude filter. Check the ingredient list when food safety matters.',

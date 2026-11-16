@@ -951,6 +951,8 @@ def configure_mappings(db: SQLAlchemy):
         Column("label", String(255), nullable=True),
         Column("preferred_buy_id", UUIDType, nullable=True),
         Column("selected_product_id", UUIDType, ForeignKey("Product.id", ondelete="SET NULL"), nullable=True),
+        # High end of a quantity range (see the entity). NULL = single amount.
+        Column("quantity_max", Float, nullable=True),
         CheckConstraint(
             "stock_item_id IS NOT NULL OR raw_text IS NOT NULL",
             name="recipe_ingredient_anchor",

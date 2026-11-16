@@ -290,6 +290,7 @@ class UpdateRecipeHandler:
                     label = _Choice.label,
                     preferred_buy_id = _Choice.preferred_buy_id,
                     selected_product_id = _Choice.selected_product_id,
+                    quantity_max = _IngredientRequest.quantity_max,
                 )
                 _NewIngredients.append(_NewIngredient)
                 _NewPairs.append((_IngredientRequest.client_id, _NewIngredient))

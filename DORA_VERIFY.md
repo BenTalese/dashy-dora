@@ -23,10 +23,14 @@ top-to-bottom.
 ---
 
 ## Build: desktop installers (2026-11-14)
-- [ ] Windows: the setup .exe installs without an admin prompt, makes a Start menu entry, opens Dora in the browser, shows a tray icon whose Quit stops it, and the data survives an uninstall + reinstall.
+- [ ] Windows, by double-clicking the setup .exe: SmartScreen lets you through with "More info → Run anyway", the tray icon shows, and its Quit stops Dora.
+
+## Ranges, unit order, collections, phone picker (2026-11-16)
+- [ ] On a real phone, add an ingredient to a recipe: tap Pantry item, the list opens with the keyboard, and typing filters it.
+- [ ] Print a recipe that has a range: the amount reads "1–2".
 
 ## Pickers, deletes and the companion (2026-11-10) — origin FU-998..1001
-- [ ] On a phone, type in a recipe's ingredient picker and in My Products' Link to stock item: the list filters.
+- [ ] On a phone, type in My Products' Link to stock item: the list filters.
 - [ ] Delete a stock item used by a recipe: the recipe shows it as free text with its amount.
 - [ ] Companion: search Aldi; results have pictures and read in stock.
 - [ ] Companion: save a product, tap Link to stock item, pick one: Dora's stock item shows it under Products.

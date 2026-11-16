@@ -129,8 +129,25 @@
                     type="number"
                     min="0"
                     step="any"
-                    label="Quantity"
-                    style="max-width: 120px"
+                    :label="rangeOpen ? 'From' : 'Quantity'"
+                    :style="amountStyle"
+                    hide-bottom-space
+                />
+                <!-- A range ("1 to 2 carrots"). Off by default: most rows
+                     are one amount, and a second number box on every row
+                     reads as something to fill in. -->
+                <q-input
+                    v-if="rangeOpen"
+                    v-model.number="draft.quantity_max"
+                    dense
+                    outlined
+                    type="number"
+                    min="0"
+                    step="any"
+                    label="To"
+                    :style="amountStyle"
+                    :error="showRangeError && !!rangeError"
+                    :error-message="rangeError ?? undefined"
                     hide-bottom-space
                 />
                 <!-- The same canonical vocabulary the substitute-ratio and
@@ -176,6 +193,15 @@
                     clearable
                     input-debounce="0"
                     @filter="onUnitFilter"
+                />
+            </div>
+
+            <div class="row">
+                <BaseButton
+                    variant="subtle"
+                    dense
+                    :label="rangeOpen ? 'Use one amount' : 'Make it a range'"
+                    @click="onToggleRange"
                 />
             </div>
 
@@ -303,6 +329,13 @@
      *  opens is the dialog complaining about its own empty state, which is
      *  what the owner flagged. It arms on the first attempt to commit. */
     const showAnchorError = ref(false);
+    /** The second number box is showing. Seeded from the row; a toggle, so a
+     *  single amount stays one field. */
+    const rangeOpen = ref(false);
+    const showRangeError = ref(false);
+    /** Two number boxes share the row with Unit, so each gives up width:
+     *  at 120px apiece a phone left Unit too narrow to show its value. */
+    const amountStyle = computed(() => ({ maxWidth: rangeOpen.value ? '84px' : '120px' }));
     // An ingredient is measured by volume, mass or count — never in kJ or cm,
     // which the unfiltered table also carries. Spelled out rather than reusing
     // the table's `PRICE_DIMENSIONS`: same three today, but that constant means
@@ -326,10 +359,13 @@
             if (!isOpen || !row) return;
             typed.value = '';
             showAnchorError.value = false;
+            showRangeError.value = false;
+            rangeOpen.value = row.quantity_max != null;
             draft.value = {
                 stock_item_id: row.stock_item_id ?? null,
                 raw_text: row.raw_text ?? null,
                 quantity: row.quantity ?? null,
+                quantity_max: row.quantity_max ?? null,
                 unit: row.unit ?? null,
                 notes: row.notes ?? null,
                 section_client_id: row.section_client_id ?? null,
@@ -445,6 +481,29 @@
         }
         return null;
     });
+
+    /** A `type="number"` input hands back `''` when emptied. */
+    function amount(value: unknown): number | null {
+        return typeof value === 'number' && Number.isFinite(value) ? value : null;
+    }
+
+    /** Mirrors the request model: a range needs both ends, low then high. */
+    const rangeError = computed(() => {
+        const d = draft.value;
+        if (!d || !rangeOpen.value) return null;
+        const high = amount(d.quantity_max);
+        if (high === null) return null;
+        const low = amount(d.quantity);
+        if (low === null) return 'Add the lower amount too.';
+        if (high <= low) return 'Must be more than the lower amount.';
+        return null;
+    });
+
+    function onToggleRange() {
+        rangeOpen.value = !rangeOpen.value;
+        showRangeError.value = false;
+        if (!rangeOpen.value && draft.value) draft.value.quantity_max = null;
+    }
 
     const itemOptions = computed(() => {
         const q = typed.value.trim().toLowerCase();
@@ -589,6 +648,10 @@
             showAnchorError.value = true;
             return;
         }
+        if (rangeError.value) {
+            showRangeError.value = true;
+            return;
+        }
         const text = (d.raw_text ?? '').trim();
         // A free-text row has no item to narrow, so it carries no choice.
         const linked = !!d.stock_item_id;
@@ -604,6 +667,8 @@
             // bulk-link leaves both set, which the API explicitly allows),
             // but never store an empty string.
             raw_text: text.length > 0 ? text : null,
+            quantity: amount(d.quantity),
+            quantity_max: rangeOpen.value ? amount(d.quantity_max) : null,
             unit: (d.unit ?? '').trim() || null,
             notes: (d.notes ?? '').trim() || null,
             ...choice,

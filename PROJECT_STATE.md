@@ -1,6 +1,6 @@
 ﻿# Dashy Dora — Project State
 
-**Last reviewed: 2026-11-12.**
+**Last reviewed: 2026-11-16.**
 
 This is the single front door: where every phase and workstream is up
 to, and what needs your attention. For *where things stand* this doc
@@ -22,7 +22,7 @@ Status key: ✅ done-clean · ➗ done-with-carve-outs · 🟡 active/in-progres
 
 **Release:** latest is 1.0.2 (2026-11-14), the first with desktop installers; 1.0.0 was the official first release (2026-11-12). Version, CHANGELOG and tag `v1.0.0` are on `main`; the old unpublished `v2.0.0` tag is gone. Published by the Release workflow.
 
-**What's left:** 1.0.2 is out with the Windows installer and Linux AppImage (Linux tested on this machine). Try the Windows installer on a real PC, and redeploy Altair to 1.0.2. Open FUs: FU-992, FU-996, FU-1002, FU-1003 (no macOS build, nothing signed), none blocking.
+**What's left:** 1.0.2 is out with the Windows installer and Linux AppImage, both now tested from the release (Windows on 11-16: install, launch, second launch, data kept across a reinstall; SmartScreen and the tray icon still need your eyes). Unreleased on `main`'s working tree: ingredient ranges, most-used units first, a Collections settings page and the phone ingredient-picker fix. Redeploy Altair when convenient. Open FUs: FU-992, FU-996, FU-1002, FU-1003, none blocking.
 
 ---
 

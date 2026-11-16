@@ -17,6 +17,7 @@ const SETTINGS_PAGE_ICONS: Record<string, string> = {
     '/settings/kitchen-setup/qr-labels': ICONS.qr_code,
     '/settings/kitchen-setup/unlinked-ingredients': ICONS.link,
     '/settings/kitchen-setup/nutrition-matching': ICONS.monitor_heart,
+    '/settings/kitchen-setup/recipe-collections': ICONS.collection,
     '/settings/kitchen-setup/recipe-cuisines': ICONS.public,
     '/settings/kitchen-setup/recipe-categories': ICONS.category,
     '/settings/kitchen-setup/recipe-tools': ICONS.blender,

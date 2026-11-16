@@ -47,7 +47,7 @@ def test__create_recipe_collection__NewName__CreatedAndListed(api):
     collection_id = _create(name)
 
     row = _get_by_id(collection_id)
-    assert row == {"recipe_collection_id": collection_id, "name": name}
+    assert row == {"recipe_collection_id": collection_id, "name": name, "recipe_count": 0}
 
 
 def test__create_recipe_collection__DuplicateName__IsBusinessRuleViolation(api):
@@ -146,3 +146,15 @@ def test__recipe_collection_endpoints__UnknownId__NotFound(api):
         404, detail=detail,
     )
     assert_problem(requests.delete(f"{COLLECTIONS}/{missing_id}"), 404, detail=detail)
+
+
+def test__get_recipe_collections__RecipeAttached__CountsIt(api):
+    # The Collections settings page shows "used by N recipes" from this.
+    collection_id = _create(_name("Counted"))
+    assert _get_by_id(collection_id)["recipe_count"] == 0
+    recipe = requests.post(f"{BASE}/recipes", json={
+        "name": _name("Counted pie"), "recipe_collection_id": collection_id,
+    })
+    assert recipe.status_code == 201, recipe.text
+
+    assert _get_by_id(collection_id)["recipe_count"] == 1

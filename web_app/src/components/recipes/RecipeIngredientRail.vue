@@ -122,7 +122,7 @@
                             @keydown.space.prevent="onIngredientRowActivate(String(row.client_id))"
                         >
                             <span class="rn__qty">
-                                {{ formatQuantity(row.quantity, row.unit) || '–' }}
+                                {{ formatQuantityRange(row.quantity, row.quantity_max, row.unit) || '–' }}
                             </span>
                             <span class="rn__ingname">
                                 <span class="rn__ingtext">{{ ingredientLabel(row) }}</span>
@@ -326,7 +326,7 @@
     import RecipeMissingIngredientChip from 'src/components/recipes/RecipeMissingIngredientChip.vue';
 
     import { ICONS } from 'src/style/icons';
-    import { formatQuantity } from 'src/helpers/formatQuantity';
+    import { formatQuantityRange } from 'src/helpers/formatQuantity';
     import { newClientId } from 'src/helpers/clientId';
     import { useRecipeDetail } from 'src/composables/useRecipeDetail';
     import type { IngredientForm, IngredientPatch } from 'src/composables/useRecipeEditor';

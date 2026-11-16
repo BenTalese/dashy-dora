@@ -93,6 +93,48 @@ describe('BaseSelect — prop forwarding', () => {
         }
     });
 
+    it('autofocuses the field on desktop but not when the list is a phone dialog', async () => {
+        // Owner 2026-11-16: the ingredient picker's field was focused on a
+        // phone, so typing went into it with the dialog closed and nothing
+        // filtered. The dialog focuses its own input once it is open.
+        const props = { options: longList, useInput: true, typeOnMobile: true, autofocus: true };
+        expect(mountSelect(props).findComponent(QSelect).props('autofocus')).toBe(true);
+        const { Platform } = await import('quasar');
+        const was = Platform.is.mobile;
+        Platform.is.mobile = true;
+        try {
+            expect(mountSelect(props, true).findComponent(QSelect).props('autofocus')).toBe(false);
+        } finally {
+            Platform.is.mobile = was;
+        }
+    });
+
+    it('forwards a slot that only appears after mount', async () => {
+        // FU-1005: the slot names were cached at mount, so the ingredient
+        // picker's conditional `after-options` never reached q-select.
+        const { defineComponent, h, ref } = await import('vue');
+        const show = ref(false);
+        const Host = defineComponent({
+            setup: () => () => h(
+                BaseSelect as never,
+                { modelValue: null, options: longList, label: 'Pick' },
+                show.value ? { 'after-options': () => h('div', 'extra') } : {},
+            ),
+        });
+        const wrapper = mount(Host, {
+            global: {
+                plugins: [Quasar],
+                components: { QSelect },
+                mocks: { $q: { platform: { is: { mobile: false } } } },
+            },
+        });
+        const slotNames = () => Object.keys(wrapper.findComponent(QSelect).vm.$slots);
+        expect(slotNames()).not.toContain('after-options');
+        show.value = true;
+        await wrapper.vm.$nextTick();
+        expect(slotNames()).toContain('after-options');
+    });
+
     it('leaves use-input off when the call site did not ask for it', () => {
         const wrapper = mountSelect({ options: longList });
         expect(wrapper.findComponent(QSelect).props('useInput')).toBe(false);

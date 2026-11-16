@@ -156,3 +156,15 @@ def test__parse_recipe_from_text__taste_video_carousel_cruft_stripped() -> None:
     assert len(result.steps) <= 10, (
         f"expected the real method only, got {len(result.steps)} steps: {step_texts}"
     )
+
+
+@pytest.mark.parametrize("line, expected", [
+    ("2-3 cloves of garlic", (2.0, 3.0, "cloves", "of garlic")),
+    ("1 to 2 carrots", (1.0, 2.0, None, "carrots")),
+    ("1/2 – 3/4 cup sugar", (0.5, 0.75, "cup", "sugar")),
+    ("1 1/2 cups flour", (1.5, None, "cups", "flour")),
+    ("2 tomatoes", (2.0, None, None, "tomatoes")),
+])
+def test__parse_qty_unit__reads_a_range_as_low_and_high(line: str, expected: tuple) -> None:
+    from dora_api.features.recipes._parse_recipe_from_text import _parse_qty_unit
+    assert _parse_qty_unit(line) == expected

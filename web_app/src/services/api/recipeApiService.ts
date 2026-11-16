@@ -25,6 +25,8 @@ export type CreateRecipeIngredientCommand = {
     stock_item_id: string | null;
     raw_text?: string | null;
     quantity: number | null;
+    /** High end of a range; must be more than `quantity` (400 otherwise). */
+    quantity_max?: number | null;
     unit: string | null;
     notes: string | null;
     /** C-4 Chunk 6 — optional client-side identifier so a structured step's
@@ -309,6 +311,7 @@ export type ImportedIngredient = {
     stock_item_name: string | null;
     match_score: number;
     quantity: number | null;
+    quantity_max: number | null;
     unit: string | null;
     notes: string | null;
 };

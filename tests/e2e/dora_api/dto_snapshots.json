@@ -226,7 +226,8 @@
     ],
     "item_keys": [
       "name",
-      "recipe_collection_id"
+      "recipe_collection_id",
+      "recipe_count"
     ]
   },
   "recipes": {

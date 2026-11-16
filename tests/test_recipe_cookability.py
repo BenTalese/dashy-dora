@@ -40,7 +40,7 @@ def _item(level_sequence, name="item"):
 # The RecipeIngredient fields the DTO reads that these stubs don't vary.
 _INGREDIENT_DEFAULTS = dict(
     section_id=None, is_optional=False, raw_text=None,
-    label=None, preferred_buy_id=None, selected_product_id=None,
+    label=None, preferred_buy_id=None, selected_product_id=None, quantity_max=None,
 )
 
 

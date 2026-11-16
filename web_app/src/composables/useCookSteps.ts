@@ -7,7 +7,7 @@
  */
 import { computed, type Ref } from 'vue';
 
-import { formatQuantity } from 'src/helpers/formatQuantity';
+import { formatQuantityRange } from 'src/helpers/formatQuantity';
 import { scaleQuantity } from 'src/helpers/scaleQuantity';
 import { stripLeadingOrdinal } from 'src/helpers/stepOrdinal';
 import type { Recipe, RecipeIngredient } from 'src/models/recipe';
@@ -186,9 +186,13 @@ export function cookQuantityLabel(
     unit: string | null | undefined,
     baseServings: number | null,
     cookingFor: number,
+    /** High end of a range; both ends scale, and a range whose ends round to
+     *  the same amount reads as that one amount. */
+    quantityMax?: number | null,
 ): string {
     const scaled = scaleQuantity(quantity, baseServings, cookingFor, unit);
-    return formatQuantity(scaled, unit);
+    const scaledMax = scaleQuantity(quantityMax, baseServings, cookingFor, unit);
+    return formatQuantityRange(scaled, scaledMax, unit);
 }
 
 export function useCookSteps(recipe: Ref<Recipe | null>, currentStepIndex: Ref<number>) {

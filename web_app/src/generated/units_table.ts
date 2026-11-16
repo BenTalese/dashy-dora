@@ -352,3 +352,6 @@ export const COUNTABLE_UNITS: ReadonlySet<string> = new Set(["bunch", "can", "cl
 
 /** Cooking words the ingredient picker offers beside the table units. */
 export const COOKING_WORD_UNITS: ReadonlyArray<string> = ["bunch", "can", "clove", "drizzle", "egg", "floret", "handful", "head", "knob", "leaf", "piece", "rasher", "scoop", "slice", "splash", "sprig", "stalk", "wedge"];
+
+/** The most-used units, in the order a unit picker lists them first. */
+export const COMMON_COOKING_UNITS: ReadonlyArray<string> = ["tsp", "tbsp", "US tbsp", "cup", "US cup", "g", "kg", "ml", "L", "oz", "lb", "fl oz"];

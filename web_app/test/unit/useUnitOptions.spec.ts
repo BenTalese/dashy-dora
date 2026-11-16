@@ -56,6 +56,17 @@ describe('useUnitOptions', () => {
         }
     });
 
+    it('lists the most-used units first, then the rest A to Z', () => {
+        // Owner 2026-11-16: "I keep having to scroll to the bottom to get 'tsp'".
+        setSystem('metric');
+        const { allUnitOptions } = useUnitOptions(INGREDIENT_DIMENSIONS, undefined, { cookingWords: true });
+        const values = allUnitOptions.value.map((o) => o.value);
+        expect(values.slice(0, 7)).toEqual(['tsp', 'tbsp', 'cup', 'g', 'kg', 'ml', 'L']);
+        const rest = values.slice(7);
+        expect(rest).toEqual([...rest].sort((a, b) => a.localeCompare(b)));
+        expect(rest).toContain('clove');
+    });
+
     it('searches aliases but never escapes the narrowing', () => {
         const { unitOptions, onUnitFilter } = useUnitOptions(INGREDIENT_DIMENSIONS);
 

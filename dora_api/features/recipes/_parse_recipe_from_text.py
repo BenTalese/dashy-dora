@@ -53,14 +53,18 @@ from dora_api.features.recipes.imported_recipe_dtos import (
 # and we'd rather hand the user *something* than refuse to parse. Moved
 # inline in Chunk 5 (was in ``import_recipe_from_url.py`` before the
 # URL importer file was retired).
-_QTY_PATTERN = re.compile(
-    r"""
-    ^\s*
-    (?P<qty>
+_NUMBER = r"""(?:
         \d+\s*\/\s*\d+              # 1/2
       | \d+(?:\.\d+)?\s+\d+\s*\/\s*\d+   # 1 1/2
       | \d+(?:\.\d+)?              # 1.5
-    )?
+    )"""
+
+_QTY_PATTERN = re.compile(
+    rf"""
+    ^\s*
+    (?P<qty>{_NUMBER})?
+    # The high end of a range: "2-3", "2 – 3", "2 to 3".
+    (?:(?:\s*[-–]\s*|\s+to\s+)(?P<qty_max>{_NUMBER}))?
     \s*
     (?P<unit>
         cups?|tbsps?|tsps?|tablespoons?|teaspoons?|
@@ -75,30 +79,38 @@ _QTY_PATTERN = re.compile(
 )
 
 
-def _parse_qty_unit(raw: str) -> tuple[float | None, str | None, str]:
-    """Return (quantity, unit, remainder). Remainder is the readable name."""
+def _parse_number(text: str) -> float | None:
+    text = text.strip()
+    if not text:
+        return None
+    try:
+        if " " in text:  # "1 1/2" mixed form
+            whole, frac = text.split(" ", 1)
+            num, den = frac.split("/", 1)
+            return float(whole) + (float(num) / float(den))
+        if "/" in text:
+            num, den = text.split("/", 1)
+            return float(num) / float(den)
+        return float(text)
+    except (ValueError, ZeroDivisionError):
+        return None
+
+
+def _parse_qty_unit(raw: str) -> tuple[float | None, float | None, str | None, str]:
+    """Return (quantity, quantity_max, unit, remainder). Remainder is the
+    readable name; ``quantity_max`` is the high end of a range, else None."""
     text = raw.strip()
     match = _QTY_PATTERN.match(text)
     if not match:
-        return None, None, text
-    qty_str = (match.group("qty") or "").strip()
+        return None, None, None, text
     unit = match.group("unit")
     rest = (match.group("rest") or "").strip(" ,.-")
-    quantity: float | None = None
-    if qty_str:
-        try:
-            if " " in qty_str:  # "1 1/2" mixed form
-                whole, frac = qty_str.split(" ", 1)
-                num, den = frac.split("/", 1)
-                quantity = float(whole) + (float(num) / float(den))
-            elif "/" in qty_str:
-                num, den = qty_str.split("/", 1)
-                quantity = float(num) / float(den)
-            else:
-                quantity = float(qty_str)
-        except (ValueError, ZeroDivisionError):
-            quantity = None
-    return quantity, unit, rest or text
+    quantity = _parse_number(match.group("qty") or "")
+    quantity_max = _parse_number(match.group("qty_max") or "")
+    # Only a real range: "3-2" or a high end with no low end is not one.
+    if quantity is None or quantity_max is None or quantity_max <= quantity:
+        quantity_max = None
+    return quantity, quantity_max, unit, rest or text
 
 
 # ── Meta block: times + servings ──────────────────────────────────────
@@ -534,7 +546,7 @@ def _extract_ingredients(block: list[str]) -> List[ImportedIngredientDto]:
             continue
         if not _looks_like_ingredient(stripped):
             continue
-        qty, unit, rest = _parse_qty_unit(stripped)
+        qty, qty_max, unit, rest = _parse_qty_unit(stripped)
         rest_norm = rest.lower().strip()
         if last_rest is not None and rest_norm == last_rest:
             # Woolworths double-listed same-line dupe.
@@ -548,6 +560,7 @@ def _extract_ingredients(block: list[str]) -> List[ImportedIngredientDto]:
             quantity=qty,
             unit=unit,
             notes=None,
+            quantity_max=qty_max,
         ))
     return out
 

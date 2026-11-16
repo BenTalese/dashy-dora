@@ -120,3 +120,14 @@ def test__print_format__money_and_dates_follow_the_locale():
     assert fmt.date(date(2026, 12, 29)) == "29.12.2026"
     assert fmt.date(None) == ""
     assert fmt.money(None) == "–"
+
+
+def test__format_quantity_range__writes_both_ends_once():
+    from dora_api.domain.units import format_quantity_range
+    assert format_quantity_range(1, 2, None) == "1–2"
+    assert format_quantity_range(250.0, 300.0, "g") == "250–300g"
+    assert format_quantity_range(0.5, 1, "tsp") == "0.5–1 tsp"
+    # No high end, or nothing to range from: the single-amount form.
+    assert format_quantity_range(2.0, None, "tbsp") == "2 tbsp"
+    assert format_quantity_range(None, 2, "cup") == "cup"
+    assert format_quantity_range(2, 2, "cup") == "2 cup"

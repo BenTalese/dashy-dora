@@ -6,15 +6,19 @@
 import type {
     AddToListRow, AddToListUnlinked, LineChoicePick,
 } from 'src/components/shoppingList/addToListTypes';
-import { formatQuantity } from 'src/helpers/formatQuantity';
+import { formatQuantityRange } from 'src/helpers/formatQuantity';
 import { ingredientDisplayName } from 'src/helpers/recipeIngredientLabel';
 import type { MealPlanIngredient, UnlinkedIngredient } from 'src/models/mealPlan';
 import type { Recipe } from 'src/models/recipe';
 
-function quantityLabel(quantity: number | null, unit: string | null): string | null {
+function quantityLabel(
+    quantity: number | null,
+    unit: string | null,
+    quantityMax: number | null = null,
+): string | null {
     if (quantity === null && !unit) return null;
     // `formatQuantity` rounds to two places itself (R-079).
-    const label = formatQuantity(quantity, unit);
+    const label = formatQuantityRange(quantity, quantityMax, unit);
     return label || null;
 }
 
@@ -45,7 +49,7 @@ export function rowsFromRecipe(recipe: Recipe | null): AddToListRow[] {
             isMissing: ing.is_missing,
             isLowStock: ing.is_low_stock,
             isOptional: ing.is_optional,
-            quantityLabel: quantityLabel(ing.quantity, ing.unit),
+            quantityLabel: quantityLabel(ing.quantity, ing.unit, ing.quantity_max),
             sources: [],
         });
     }

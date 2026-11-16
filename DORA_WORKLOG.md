@@ -41,6 +41,48 @@ next.
 
 ---
 
+## 2026-11-16: **Owner batch: ingredient ranges, unit order, collections page, phone picker; Windows installer tested**
+
+**Owner:** four pasted items (no range on ingredients; the ingredient picker doesn't open on first tap on a phone
+and typing filters nothing; most-used units first; no way to manage collections) plus: test the Windows install and
+attach the Windows installer to the release if missing.
+
+**Range:** `RecipeIngredient.quantity_max` (nullable Float, migration `a4d9c2e7f1b3`, head). `quantity` stays the
+low end and the only number costing, nutrition, scaling maths and planner totals read, so nothing downstream
+changed (my call; the owner didn't say which end to count). Request model refuses a high end without a low end
+or not above it (400). One formatter per side: `units.format_quantity_range` (print view) and
+`formatQuantityRange` (rail, add-to-list, cook mode via `cookQuantityLabel`, which scales both ends). Editor:
+"Make it a range" toggles a To box. Importer grammar reads "2-3" and "1 to 2".
+
+**Picker:** reproduced on a Pixel 7 profile. `autofocus` on a `BaseSelect` that opens as a dialog focuses the
+field's display input: keyboard up, typing lands there, the dialog is closed, nothing filters. `BaseSelect` now
+drops `autofocus` in the dialog case (also covers PutAwayDialog). Found on the way: `Use "…"` never showed beside
+matches because the slot was conditional (FU-1005); fixed at the call site.
+
+**Units:** `units.COMMON_COOKING_UNITS` (one source, emitted by `dump_units.py`); `useUnitOptions` sorts those
+first, then A to Z. **Collections:** the API and store already had create/rename/delete with no caller. New
+`RecipeCollectionsSettings.vue` on `TaxonomyManagerPage`, route + nav + icon; `RecipeCollectionDto.recipe_count`
+via the vocabularies' `counts_by_recipe_fk`.
+
+**Windows installer:** the exe was already on the v1.0.2 release. Downloaded it and ran it here: per-user install
+with no elevation, Start menu entry, boots as 1.0.2 at head, opens the browser, second launch hands over, data
+survives uninstall + reinstall. Evidence in DORA_VERIFY_TRIAGE. Not checked: SmartScreen, the tray icon by eye,
+Quit. The test's data folder was removed; Dora is not left installed.
+
+**Verified:** full pytest 2833 passed, Vitest 946, vue-tsc, eslint; four live walks
+(DORA_VERIFY_TRIAGE). New tests: range round trip + refusal, range formatter, importer ranges, collection count,
+phone autofocus, unit order.
+
+**Gates:** R-001 (one formatter, the shared taxonomy page), R-003 (common-unit list and recipe counts are the
+server's), R-107 unchanged; no new rule (the autofocus guard lives inside `BaseSelect`, nothing for a call site
+to remember). §7.5: one nullable column, portable. D-025: no em dashes in added copy; ranges use an en dash.
+FU-1005, FU-1006 opened, then resolved the same day on the owner's word: `BaseSelect` reads slot names at
+render (Vitest pin, live re-walk), and Help gained two Cookbook entries (corpus re-exported). PROJECT_STATE:
+hand-edited the "What's left" line.
+
+**Next up:** owner tries the four changes on a real phone (DORA_VERIFY "Ranges, unit order, collections, phone
+picker"), then decides whether this ships as 1.0.3. Nothing is committed.
+
 ## 2026-11-14 (release): **1.0.2 released with the Windows + Linux installers**
 
 **Owner:** release 1.0.2; delete `feature/desktop-installers`; test the Linux app here. Pushing to protected

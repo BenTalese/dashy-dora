@@ -52,3 +52,22 @@ export function formatQuantity(
     const noSpace = NO_SPACE_UNITS.has(trimmedUnit.toLowerCase());
     return noSpace ? `${qty}${trimmedUnit}` : `${qty} ${trimmedUnit}`;
 }
+
+/**
+ * A quantity that may be a range: "1–2 carrots", "250–300g".
+ *
+ * `quantityMax` is the high end. With no low end, no high end, or two ends
+ * that print the same, this is `formatQuantity`. Either end may already be a
+ * display string (cook mode's scaled "1½"). The server twin is
+ * `units.format_quantity_range`.
+ */
+export function formatQuantityRange(
+    quantity: number | string | null | undefined,
+    quantityMax: number | string | null | undefined,
+    unit: string | null | undefined,
+): string {
+    const low = formatQuantity(quantity, null);
+    const high = formatQuantity(quantityMax, null);
+    if (!low || !high || low === high) return formatQuantity(quantity, unit);
+    return formatQuantity(`${low}–${high}`, unit);
+}

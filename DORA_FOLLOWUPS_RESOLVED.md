@@ -10,6 +10,22 @@ resolutions go at the **top**.
 
 ---
 
+## [RESOLVED] FU-1006 — Help doesn't mention ingredient ranges or the Collections page
+- **Raised:** 2026-11-16 (owner batch: ranges, units, collections)
+- **Type:** leftover
+- **What:** `web_app/src/help/helpContent.ts` (and the exported corpus the assistant reads) has no entry for "Make it a range" or Settings → Kitchen setup → Collections.
+- **Why deferred:** copy plus a corpus re-export; kept out of the fix batch.
+- **Recommended resolution:** before the next release
+- **State note:** 2026-11-16: "Amounts that are a range" and "Collections" entries added to `helpContent.ts` (Cookbook topic); `help_corpus.json` re-exported.
+
+## [RESOLVED] FU-1005 — BaseSelect never forwards a slot that appears after mount
+- **Raised:** 2026-11-16 (found walking the ingredient picker)
+- **Type:** finding
+- **What:** `BaseSelect.vue` builds `passthroughSlots` in a `computed` over `useSlots()`, which Vue does not track, so a slot behind `v-if` on its `<template>` is never passed to `q-select` once it appears. That hid the ingredient picker's `Use "…"` row whenever the text also matched an item. Fixed at that call site (the `v-if` moved onto the item inside the slot). The other conditional slots on a `BaseSelect` (`BaseFilterField`'s `#prepend`) hang off a prop that is set at mount, so they work; the next one that appears later will fail the same silent way.
+- **Why deferred:** the general fix (read `$slots` in the template, or recompute on update) touches every select in the app and wants its own walk.
+- **Recommended resolution:** opportunistic; until then, R-107's neighbours apply: put the `v-if` inside the slot
+- **State note:** 2026-11-16: `BaseSelect` reads its slot names in a function called from the template instead of a cached `computed`, so a slot that appears later is forwarded. Vitest pins it; the ingredient picker went back to a conditional `#after-options` and `Use "…"` shows on desktop and phone.
+
 ## [RESOLVED] FU-1004 — Installed desktop app can't be quit and starts a second copy on relaunch
 - **Raised:** 2026-11-13 (desktop installers)
 - **Type:** finding

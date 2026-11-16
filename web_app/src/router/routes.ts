@@ -294,6 +294,11 @@ const routes: RouteRecordRaw[] = [
                     // first four share TaxonomyManagerPage; dietary tags keeps
                     // its bespoke editor (grouping field).
                     {
+                        path: 'kitchen-setup/recipe-collections',
+                        component: () => import('pages/settings/RecipeCollectionsSettings.vue'),
+                        meta: { title: 'Collections' }
+                    },
+                    {
                         path: 'kitchen-setup/recipe-cuisines',
                         component: () => import('pages/settings/RecipeCuisinesSettings.vue'),
                         meta: { title: 'Cuisines' }

@@ -548,6 +548,19 @@ def format_quantity(quantity: Any, unit: Any) -> str:
     return f"{qty}{trimmed_unit}" if no_space else f"{qty} {trimmed_unit}"
 
 
+def format_quantity_range(quantity: Any, quantity_max: Any, unit: Any) -> str:
+    """A quantity that may be a range: "1–2 carrots", "250–300g".
+
+    ``quantity_max`` is the high end and is ignored unless both ends are
+    numbers and it is the larger; otherwise this is :func:`format_quantity`.
+    The SPA twin is ``formatQuantityRange`` in ``formatQuantity.ts``.
+    """
+    low, high = _format_number(quantity), _format_number(quantity_max)
+    if not low or not high or low == high:
+        return format_quantity(quantity, unit)
+    return format_quantity(f"{low}–{high}", unit)
+
+
 def find_unit(unit: str) -> UnitDef | None:
     """Return the :class:`UnitDef` for *unit* or None. Plural fallback: ``cups``
     is in the table directly; for one-off plurals not enumerated we'd strip
@@ -702,6 +715,15 @@ COUNTABLE_UNITS: frozenset[str] = (SUB_ITEM_UNITS - _VAGUE_AMOUNTS) | frozenset(
 # reading them exactly as before (the portion-row lookup weighs "3 cloves").
 COOKING_WORD_UNITS: frozenset[str] = frozenset(
     word for word in SUB_ITEM_UNITS | COUNTABLE_UNITS if word not in UNIT_TABLE
+)
+
+
+# The units a recipe reaches for most, in the order a unit picker lists them
+# ahead of the alphabetical rest (owner 2026-11-16: "I keep having to scroll to
+# the bottom to get 'tsp'"). Canonical forms; a picker shows only the ones its
+# measurement system offers. Emitted to the SPA by `scripts/dump_units.py`.
+COMMON_COOKING_UNITS: tuple[str, ...] = (
+    "tsp", "tbsp", "US tbsp", "cup", "US cup", "g", "kg", "ml", "L", "oz", "lb", "fl oz",
 )
 
 

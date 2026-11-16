@@ -34,7 +34,7 @@
         </template>
 
         <!-- Everything else the call site passed through untouched. -->
-        <template v-for="(_, name) in passthroughSlots" #[name]="slotProps">
+        <template v-for="name in passthroughSlotNames()" :key="name" #[name]="slotProps">
             <slot :name="name" v-bind="slotProps ?? {}" />
         </template>
     </q-select>
@@ -224,12 +224,21 @@
     );
 
     const forwardedAttrs = computed(() => {
+        const out: Record<string, unknown> = { ...attrs };
+        // No `autofocus` when the list opens as a dialog. QSelect focuses the
+        // field's own input, which in that mode is a display copy: the phone
+        // keyboard comes up, typing lands in it, and nothing filters because
+        // the list (and the input that drives it) only exists once the dialog
+        // is open. Owner 2026-11-16, on the ingredient picker: "you start
+        // typing without it filtering any options". The dialog focuses its
+        // own input when it opens, so a tap is all it takes.
+        if (showsDialog.value) delete out.autofocus;
         // A caller-supplied placeholder always wins over the empty-state one.
         const placeholder = attrs.placeholder ?? resolvedPlaceholder.value;
         if (resolvedUseInput.value) {
-            return placeholder === undefined ? attrs : { ...attrs, placeholder };
+            if (placeholder !== undefined) out.placeholder = placeholder;
+            return out;
         }
-        const out: Record<string, unknown> = { ...attrs };
         for (const key of ['hide-selected', 'hideSelected', 'fill-input', 'fillInput']) {
             delete out[key];
         }
@@ -288,15 +297,20 @@
      *  would come out blank rather than saying "Any level". Withholding it
      *  costs nothing, because a `selected-item` slot has nothing to render
      *  when there is no selection. */
-    const passthroughSlots = computed(() => {
-        const out: Record<string, true> = {};
-        for (const name of Object.keys(slots)) {
-            if (name === 'before-options') continue;
-            if (name === 'selected-item' && resolvedDisplayValue.value !== undefined) continue;
-            out[name] = true;
-        }
-        return out;
-    });
+    //
+    //  A plain function called from the template, not a `computed`: the
+    //  slots object is not reactive, so a computed over it kept the names it
+    //  saw at mount and a slot that appeared later (the ingredient picker's
+    //  conditional `after-options`) was never forwarded (FU-1005). Vue
+    //  re-renders this component when the parent's slot set changes, and the
+    //  render then reads the current names.
+    function passthroughSlotNames(): string[] {
+        return Object.keys(slots).filter((name) => {
+            if (name === 'before-options') return false;
+            if (name === 'selected-item' && resolvedDisplayValue.value !== undefined) return false;
+            return true;
+        });
+    }
 </script>
 
 <style scoped lang="scss">

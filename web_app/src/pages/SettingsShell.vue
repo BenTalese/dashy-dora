@@ -226,6 +226,7 @@
         // blender for equipment/tools, clock for time-of-day meal slots,
         // leaf for dietary tags.
         base.push(
+            { path: '/settings/kitchen-setup/recipe-collections', label: 'Collections' },
             { path: '/settings/kitchen-setup/recipe-cuisines', label: 'Cuisines' },
             { path: '/settings/kitchen-setup/recipe-categories', label: 'Categories' },
             { path: '/settings/kitchen-setup/recipe-tools', label: 'Tools' },

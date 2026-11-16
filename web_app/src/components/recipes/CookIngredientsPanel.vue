@@ -48,7 +48,7 @@
                         <q-item-section>
                             <div class="row items-center q-gutter-xs no-wrap">
                                 <span class="text-caption dora-text-muted ingredient-quantity">
-                                    {{ displayQuantity(row.ingredient.quantity, row.ingredient.unit) }}
+                                    {{ displayQuantity(row.ingredient) }}
                                 </span>
                                 <!-- IMPL_PLAN_RECIPE_IMPORTER §Chunk 4:
                                      unlinked ingredients (stock_item_id === null) render
@@ -254,8 +254,11 @@
     const stockItemStore = useStockItemStore();
     const stockItemApi = new StockItemApiService();
 
-    function displayQuantity(quantity: number | null | undefined, unit: string | null | undefined): string {
-        return cookQuantityLabel(quantity, unit, props.recipe.servings ?? null, props.cookingFor);
+    function displayQuantity(ingredient: Recipe['ingredients'][number]): string {
+        return cookQuantityLabel(
+            ingredient.quantity, ingredient.unit, props.recipe.servings ?? null, props.cookingFor,
+            ingredient.quantity_max,
+        );
     }
 
     // Resolve location_id → breadcrumb names using the locations tree.

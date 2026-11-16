@@ -783,7 +783,9 @@
             return 'No ingredients are linked to this step.';
         }
         const parts = rows.map((ing) => {
-            const quantity = cookQuantityLabel(ing.quantity, ing.unit, recipe.value?.servings ?? null, cookingFor.value);
+            const quantity = cookQuantityLabel(
+                ing.quantity, ing.unit, recipe.value?.servings ?? null, cookingFor.value, ing.quantity_max,
+            );
             const name = spokenIngredientName(ing);
             const optional = ing.is_optional ? ', optional' : '';
             return quantity ? `${quantity} ${name}${optional}` : `${name}${optional}`;

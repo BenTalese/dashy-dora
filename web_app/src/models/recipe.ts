@@ -12,6 +12,9 @@ export type RecipeIngredient = {
     stock_location_id: string | null;
     stock_location_name: string | null;
     quantity: number | null;
+    /** High end of a range ("1 to 2 carrots"); `quantity` is the low end and
+     *  the number costing, nutrition and the planner use. Null = one amount. */
+    quantity_max: number | null;
     unit: string | null;
     notes: string | null;
     /** Server-derived stock status for this ingredient (§3.1 contract).
@@ -458,4 +461,6 @@ export type RecipeTagCatalogue = {
 export type RecipeCollection = {
     recipe_collection_id: string;
     name: string;
+    /** Recipes filed under it, counted by the server. */
+    recipe_count: number;
 };

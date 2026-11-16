@@ -3,6 +3,32 @@
 All notable changes to Dashy Dora live here. Versions follow semver: a major
 bump means a schema or configuration change you need to act on when upgrading.
 
+## [Unreleased]
+
+### Added
+
+- **Ingredient amounts can be a range.** In an ingredient's editor, **Make it a range** adds a second number
+  ("1–2 carrots", "250–300g"). The range shows on the recipe, in cook mode (both ends scale with the
+  headcount), on the print view and in the add-to-list dialog. Cost, nutrition and the planner count a range
+  as its lower amount. The recipe importer reads "2-3 cloves" and "1 to 2 carrots" as ranges.
+- **Settings → Kitchen setup → Collections.** Create, rename and delete recipe collections, with how many
+  recipes each one holds. Deleting a collection leaves its recipes in the cookbook, unfiled.
+
+### Changed
+
+- **Unit pickers list the most-used units first** (tsp, tbsp, cup, g, kg, ml, L, and oz, lb, fl oz where
+  your measurement system has them), then the rest A to Z.
+
+### Fixed
+
+- On a phone, the ingredient picker no longer starts with the keyboard up and nothing to filter: tap the
+  field and the list opens with the search box ready.
+- The ingredient picker offers **Use "…"** for what you typed even when it also matches existing items.
+
+### Upgrading
+
+- One migration (`a4d9c2e7f1b3`) adds a nullable column; it runs on boot.
+
 ## [1.0.2] - 2026-11-14
 
 ### Added

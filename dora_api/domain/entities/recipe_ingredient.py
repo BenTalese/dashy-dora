@@ -42,6 +42,11 @@ class RecipeIngredient(BaseEntity):
     label: str | None = None
     preferred_buy_id: UUID | None = None
     selected_product_id: UUID | None = None
+    # The top of a range ("1 to 2 carrots"): `quantity` is the low end and
+    # this the high end. Null for a single amount. Display only: costing,
+    # nutrition, scaling maths and the planner's totals all read `quantity`,
+    # so a range counts as its low end everywhere a number is needed.
+    quantity_max: float | None = None
 
     class Fields(BaseEntity.Fields):
         NOTES = "notes"
@@ -54,3 +59,4 @@ class RecipeIngredient(BaseEntity):
         LABEL = "label"
         PREFERRED_BUY_ID = "preferred_buy_id"
         SELECTED_PRODUCT_ID = "selected_product_id"
+        QUANTITY_MAX = "quantity_max"

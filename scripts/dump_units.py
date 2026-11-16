@@ -250,6 +250,11 @@ def _emit_unit_word_lists() -> str:
         + ", ".join(_ts_string(u) for u in sorted(units.COOKING_WORD_UNITS))
         + "];",
         "",
+        "/** The most-used units, in the order a unit picker lists them first. */",
+        "export const COMMON_COOKING_UNITS: ReadonlyArray<string> = ["
+        + ", ".join(_ts_string(u) for u in units.COMMON_COOKING_UNITS)
+        + "];",
+        "",
     ])
 
 

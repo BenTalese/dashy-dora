@@ -1,7 +1,9 @@
 import { computed, ref, watch } from 'vue';
 
 import { useMeasurementSystem } from 'src/composables/useMeasurementSystem';
-import { COOKING_WORD_UNITS, UNIT_TABLE, type Dimension } from 'src/generated/units_table';
+import {
+    COMMON_COOKING_UNITS, COOKING_WORD_UNITS, UNIT_TABLE, type Dimension,
+} from 'src/generated/units_table';
 
 /**
  * The app's unit picker vocabulary.
@@ -43,6 +45,10 @@ import { COOKING_WORD_UNITS, UNIT_TABLE, type Dimension } from 'src/generated/un
  * `cookingWords` adds the parts and counted things recipes are written in
  * (`clove`, `sprig`, `rasher`, from `units.py` `COOKING_WORD_UNITS`). Only the
  * ingredient editor asks for them (FU-902).
+ *
+ * Order: the most-used units first (`units.py` `COMMON_COOKING_UNITS`, in that
+ * order), then the rest A to Z. Owner 2026-11-16: *"I keep having to scroll to
+ * the bottom to get 'tsp'"*. A typed search keeps the same order.
  */
 export interface UnitOption {
     label: string;
@@ -89,7 +95,11 @@ export function useUnitOptions(
         if (kept && !seen.has(kept) && !(kept.toLowerCase() in UNIT_TABLE)) {
             out.push({ label: kept, value: kept });
         }
-        out.sort((a, b) => a.label.localeCompare(b.label));
+        const rank = (o: UnitOption) => {
+            const i = COMMON_COOKING_UNITS.indexOf(o.value);
+            return i === -1 ? COMMON_COOKING_UNITS.length : i;
+        };
+        out.sort((a, b) => rank(a) - rank(b) || a.label.localeCompare(b.label));
         return out;
     });
 

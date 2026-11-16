@@ -141,6 +141,8 @@ class RecipeIngredientDto:
     label: str | None = None
     preferred_buy_id: UUID | None = None
     selected_product_id: UUID | None = None
+    # High end of a quantity range; null for a single amount.
+    quantity_max: float | None = None
 
     @classmethod
     def from_entity(cls, ingredient: RecipeIngredient, levels_by_item=None) -> 'RecipeIngredientDto':
@@ -173,6 +175,7 @@ class RecipeIngredientDto:
             label = ingredient.label,
             preferred_buy_id = ingredient.preferred_buy_id,
             selected_product_id = ingredient.selected_product_id,
+            quantity_max = ingredient.quantity_max,
         )
 
 

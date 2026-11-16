@@ -5,6 +5,7 @@ from uuid import UUID
 from flask import request
 
 from dora_api.domain.entities.recipe_collection import RecipeCollection
+from dora_api.features._vocabulary import counts_by_recipe_fk
 from dora_api.features.routers import RECIPE_COLLECTION_ROUTER
 from dora_api.infrastructure.api_response import bad_request, paginated
 from dora_api.infrastructure.query_options import (InvalidQueryParameter,
@@ -16,17 +17,24 @@ from dora_api.infrastructure.ports import Repository
 
 _LOGGER = logging.getLogger(__name__)
 
+# Recipes per collection, counted here so the Collections settings page never
+# sums the cookbook itself (R-003). Same counter the cuisine and category
+# vocabularies use.
+_RECIPE_COUNTS = counts_by_recipe_fk("recipe_collection")
+
 
 @dataclass(frozen=True, slots=True)
 class RecipeCollectionDto:
     recipe_collection_id: UUID
     name: str
+    recipe_count: int = 0
 
     @classmethod
-    def from_entity(cls, collection: RecipeCollection) -> 'RecipeCollectionDto':
+    def from_entity(cls, collection: RecipeCollection, recipe_count: int = 0) -> 'RecipeCollectionDto':
         return RecipeCollectionDto(
             recipe_collection_id = collection.id,
             name = collection.name,
+            recipe_count = recipe_count,
         )
 
 
@@ -40,13 +48,18 @@ class GetRecipeCollectionsHandler:
         self.repository = repository
 
     def handle(self, options) -> Page[RecipeCollectionDto]:
+        counts = _RECIPE_COUNTS(self.repository)
         return self.repository.get(RecipeCollection).paginate(
-            options, RecipeCollectionDto.from_entity, field_map=_FIELD_MAP
+            options,
+            lambda entity: RecipeCollectionDto.from_entity(entity, counts.get(entity.id, 0)),
+            field_map=_FIELD_MAP,
         )
 
     def handle_by_id(self, recipe_collection_id: UUID) -> RecipeCollectionDto | None:
         entity = self.repository.get(RecipeCollection).by_id(recipe_collection_id)
-        return RecipeCollectionDto.from_entity(entity) if entity else None
+        if not entity:
+            return None
+        return RecipeCollectionDto.from_entity(entity, _RECIPE_COUNTS(self.repository).get(entity.id, 0))
 
 
 @RECIPE_COLLECTION_ROUTER.route("")
